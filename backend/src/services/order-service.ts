@@ -788,11 +788,9 @@ export class OrderService {
                   functionName: 'transferFrom',
                   args: [targetTrader, operatorAddress, tradeCost],
                 });
-                const tfReceipt = await publicClient.waitForTransactionReceipt({ hash: tfHash, timeout: 60_000 });
-                if (tfReceipt.status === 'reverted') {
-                  throw new Error(`transferFrom collateral pull reverted for ${targetTrader} (tx: ${tfHash})`);
+                if (tfHash) {
+                  collateralPulled = true;
                 }
-                collateralPulled = true;
               } catch (tfErr: any) {
                 console.warn(`[OrderService] transferFrom failed for copy-trader ${targetTrader}:`, tfErr.message);
                 return null;

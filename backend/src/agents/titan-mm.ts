@@ -77,12 +77,17 @@ export class TitanMMAgent extends BaseAgent {
       depthImbalance = Math.abs((totalBidQty - totalAskQty) / (totalBidQty + totalAskQty));
     }
 
-    // 2. Volatility and drift adaptive dynamic spread
+    // 2. Volatility, drift, depth imbalance, and tail-adaptive dynamic spread
     const volRatio = (fair.volatilityUsed - 0.50) / 0.50;
     const driftTerm = Math.abs(spotTicker.change1m) * 2.5;
     const imbalanceTerm = depthImbalance * 0.4;
-    const spreadMultiplier = Math.max(0.7, 1.0 + 0.6 * volRatio + driftTerm + imbalanceTerm);
-    const effectiveSpread = Math.max(0.025, Math.min(0.080, Number((this.titanConfig.targetSpread * spreadMultiplier).toFixed(4))));
+
+    // Tail spread expansion: widen spread when fair value drifts into extreme probability wings (>0.70 or <0.30)
+    const tailDistance = Math.abs(fair.fairValueYes - 0.50);
+    const tailExpansion = tailDistance > 0.20 ? (tailDistance - 0.20) * 0.8 : 0;
+
+    const spreadMultiplier = Math.max(0.7, 1.0 + 0.6 * volRatio + driftTerm + imbalanceTerm + tailExpansion);
+    const effectiveSpread = Math.max(0.025, Math.min(0.090, Number((this.titanConfig.targetSpread * spreadMultiplier).toFixed(4))));
     const halfSpread = effectiveSpread / 2.0;
 
     // 3. Super-Linear Inventory Skew: Gamma aversion scales non-linearly with position size
@@ -90,12 +95,27 @@ export class TitanMMAgent extends BaseAgent {
     const absInv = Math.abs(netInventory);
     const inventorySkew = Number((sign * this.titanConfig.inventoryAversion * Math.pow(absInv, 1.25)).toFixed(4));
 
-    // 4. Calculate reservation prices
-    const rawBid = Math.max(0.05, fair.fairValueYes - halfSpread - inventorySkew);
-    const rawAsk = Math.min(0.95, fair.fairValueYes + halfSpread - inventorySkew);
+    // 4. Calculate reservation prices with asymmetric tail shading
+    let rawBid = fair.fairValueYes - halfSpread - inventorySkew;
+    let rawAsk = fair.fairValueYes + halfSpread - inventorySkew;
 
-    let snappedBid = quantizePrice(rawBid);
-    let snappedAsk = quantizePrice(rawAsk);
+    // Asymmetric tail shading: shade bids down when fair is high (>0.70) to avoid buying expensive contracts,
+    // and shade asks up when fair is low (<0.30) to avoid selling cheap contracts
+    if (fair.fairValueYes > 0.70) {
+      const tailShade = (fair.fairValueYes - 0.70) * 0.50;
+      rawBid -= tailShade;
+    } else if (fair.fairValueYes < 0.30) {
+      const tailShade = (0.30 - fair.fairValueYes) * 0.50;
+      rawAsk += tailShade;
+    }
+
+    // Hard bounds: Bids strictly capped at 0.70 (max risk 0.70, minimum R:R ~0.43:1) and floored at 0.05
+    // Asks strictly floored at 0.30 and capped at 0.95
+    const boundedBid = Math.max(0.05, Math.min(0.70, rawBid));
+    const boundedAsk = Math.min(0.95, Math.max(0.30, rawAsk));
+
+    let snappedBid = quantizePrice(boundedBid);
+    let snappedAsk = quantizePrice(boundedAsk);
 
     // Invariant: Bid must strictly be less than Ask
     if (snappedBid >= snappedAsk) {

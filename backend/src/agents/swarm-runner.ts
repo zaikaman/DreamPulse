@@ -321,54 +321,25 @@ export class MultiAgentSwarmRunner {
               isActive: true,
             };
 
-            // Check circuit breaker before burning gas on master order
+            // Check circuit breaker before burning gas on orders
             if (isOnChainCircuitBroken()) {
               continue;
             }
-            const masterResult = await orderService.executeAgentDecision(decision, defaultSession);
-            if (!masterResult) {
-              continue;
-            }
 
-            // Broadcast authentic on-chain execution to main stream
-            if ('txHash' in masterResult && masterResult.txHash) {
-              telemetryWsGateway.broadcastAgentThought({
-                id: `exec-${masterResult.id}`,
-                agent: decision.agentType,
-                marketId: decision.targetMarketId,
-                confidence: decision.confidence,
-                action: decision.action + (decision.targetOutcome ? `_${decision.targetOutcome}` : ''),
-                thought: decision.rationale || `Executed ${decision.action} on ${decision.targetMarketId} at ${(decision.price ?? 0).toFixed(2)}`,
-                txHash: masterResult.txHash,
-                price: masterResult.price ?? decision.price,
-                lotSize: masterResult.lotSize ?? decision.lotSize,
-                outcome: decision.targetOutcome || 'YES',
-                isExecution: true,
-                timestamp: Date.now(),
-              });
-            }
+            // Trigger non-blocking background authorization refresh
+            sessionService.refreshOnChainAuthorizations(systemOperatorAddress).catch(() => {});
 
-            // Autonomous Copy-Trading: only wallets that actually granted this operator on-chain
-            await sessionService.refreshOnChainAuthorizations(systemOperatorAddress);
+            // Fetch active on-chain-authorized copy-trade targets immediately from memory cache
             const delegated = sessionService.getDelegatedCopyTradeSessions(systemOperatorAddress);
-            if (delegated.length === 0) {
-              console.warn(
-                `[SwarmRunner] Master fill ${masterResult.id} has no on-chain-authorized copy-trade sessions`,
-              );
-              continue;
-            }
-
-            // Sort by most recently active first
             const sortedDelegated = [...delegated].sort(
               (a, b) => new Date(b.updatedAt || b.createdAt).getTime() - new Date(a.updatedAt || a.createdAt).getTime(),
             );
             const MAX_COPIES_PER_SIGNAL = 10;
-            const batch = sortedDelegated.slice(0, MAX_COPIES_PER_SIGNAL);
+            const eligibleCopySessions: SessionGrant[] = [];
 
-            let copiesDone = 0;
-            for (const userSession of batch) {
-              if (copiesDone >= MAX_COPIES_PER_SIGNAL) break;
-              if (isOnChainCircuitBroken()) break;
+            for (const userSession of sortedDelegated) {
+              if (eligibleCopySessions.length >= MAX_COPIES_PER_SIGNAL) break;
+              if (userSession.onChainAuthorized !== true || !userSession.isActive) continue;
               const estCost = (decision.price ?? 0.5) * (decision.lotSize ?? 1.0);
               const allowance = sessionService.validateTradeAllowance(userSession.id, estCost);
               if (!allowance.allowed) {
@@ -377,37 +348,66 @@ export class MultiAgentSwarmRunner {
                 );
                 continue;
               }
-              if (userSession.onChainAuthorized !== true || !userSession.isActive) {
-                continue;
-              }
-              try {
-                const sessionGrant: SessionGrant = {
-                  id: userSession.id,
-                  userAddress: userSession.userAddress,
-                  operatorAddress: userSession.operatorAddress,
-                  permissions: userSession.permissions as Array<'placeOrderFor' | 'cancelOrderFor'>,
-                  maxTradeSize: userSession.maxTradeSize,
-                  dailyVolumeCap: userSession.dailyVolumeCap,
-                  spentToday: userSession.spentToday,
-                  expiresAt: userSession.expiresAt,
-                  isActive: userSession.isActive,
-                  onChainTxHash: userSession.onChainTxHash,
-                  vaultDepositAmount: userSession.vaultDepositAmount,
-                  targetPoolAddress: userSession.targetPoolAddress,
-                  onChainAuthorized: userSession.onChainAuthorized,
-                };
-                const copyRes = await orderService.executeAgentDecision(decision, sessionGrant);
-                if (copyRes) {
-                  copiesDone++;
-                  console.log(`[SwarmRunner] Copy-trade executed for user ${userSession.userAddress} (Order: ${copyRes.id}, tx: ${copyRes.txHash || 'filled'})`);
-                }
-                if (copiesDone > 0 && copiesDone < batch.length) {
-                  await new Promise((r) => setTimeout(r, 600));
-                }
-              } catch (copyErr: any) {
-                console.warn(`[SwarmRunner] Copy-trade skipped for user ${userSession.userAddress}:`, copyErr.message);
-              }
+              eligibleCopySessions.push({
+                id: userSession.id,
+                userAddress: userSession.userAddress,
+                operatorAddress: userSession.operatorAddress,
+                permissions: userSession.permissions as Array<'placeOrderFor' | 'cancelOrderFor'>,
+                maxTradeSize: userSession.maxTradeSize,
+                dailyVolumeCap: userSession.dailyVolumeCap,
+                spentToday: userSession.spentToday,
+                expiresAt: userSession.expiresAt,
+                isActive: userSession.isActive,
+                onChainTxHash: userSession.onChainTxHash,
+                vaultDepositAmount: userSession.vaultDepositAmount,
+                targetPoolAddress: userSession.targetPoolAddress,
+                onChainAuthorized: userSession.onChainAuthorized,
+              });
             }
+
+            // Execute Master Order and Copy-Traded Orders concurrently in parallel (instant placement)
+            const masterOrderPromise = orderService.executeAgentDecision(decision, defaultSession).then((masterResult) => {
+              if (masterResult && 'txHash' in masterResult && masterResult.txHash) {
+                telemetryWsGateway.broadcastAgentThought({
+                  id: `exec-${masterResult.id}`,
+                  agent: decision.agentType,
+                  marketId: decision.targetMarketId,
+                  confidence: decision.confidence,
+                  action: decision.action + (decision.targetOutcome ? `_${decision.targetOutcome}` : ''),
+                  thought: decision.rationale || `Executed ${decision.action} on ${decision.targetMarketId} at ${(decision.price ?? 0).toFixed(2)}`,
+                  txHash: masterResult.txHash,
+                  price: masterResult.price ?? decision.price,
+                  lotSize: masterResult.lotSize ?? decision.lotSize,
+                  outcome: decision.targetOutcome || 'YES',
+                  isExecution: true,
+                  timestamp: Date.now(),
+                });
+              }
+              return masterResult;
+            }).catch((err) => {
+              console.warn(`[SwarmRunner] Master order error:`, err?.message || err);
+              return null;
+            });
+
+            const copyTradePromises = eligibleCopySessions.map((sessionGrant) =>
+              orderService
+                .executeAgentDecision(decision, sessionGrant)
+                .then((copyRes) => {
+                  if (copyRes) {
+                    console.log(
+                      `[SwarmRunner] Instant copy-trade executed for user ${sessionGrant.userAddress} (Order: ${copyRes.id}, tx: ${copyRes.txHash || 'filled'})`,
+                    );
+                  }
+                  return copyRes;
+                })
+                .catch((copyErr: any) => {
+                  console.warn(`[SwarmRunner] Copy-trade skipped for user ${sessionGrant.userAddress}:`, copyErr.message);
+                  return null;
+                }),
+            );
+
+            // Await all orders in flight
+            await Promise.allSettled([masterOrderPromise, ...copyTradePromises]);
           }
         }
       }

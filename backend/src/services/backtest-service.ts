@@ -81,9 +81,13 @@ const BINANCE_PAIR_MAPPINGS: Record<string, string> = {
   'BTC/USD': 'BTCUSDT',
   'ETH/USD': 'ETHUSDT',
   'SOL/USD': 'SOLUSDT',
+  'BNB/USD': 'BNBUSDT',
+  'DOGE/USD': 'DOGEUSDT',
   'BTCUSDT': 'BTCUSDT',
   'ETHUSDT': 'ETHUSDT',
   'SOLUSDT': 'SOLUSDT',
+  'BNBUSDT': 'BNBUSDT',
+  'DOGEUSDT': 'DOGEUSDT',
 };
 
 export class BacktestService {
@@ -260,7 +264,19 @@ export class BacktestService {
 
     // 3. Fallback deterministic realistic historical series generator
     if (candles.length === 0) {
-      const basePrice = symbol.startsWith('ETH') ? 2750 : symbol.startsWith('SOL') ? 188 : 96500;
+      let basePrice = 96500;
+      let decimals = 2;
+      if (symbol.startsWith('ETH')) {
+        basePrice = 2750;
+      } else if (symbol.startsWith('SOL')) {
+        basePrice = 188;
+      } else if (symbol.startsWith('BNB')) {
+        basePrice = 624;
+      } else if (symbol.startsWith('DOGE')) {
+        basePrice = 0.25;
+        decimals = 4;
+      }
+
       let stepMs = 5 * 60 * 1000;
       if (interval === '1m') stepMs = 60 * 1000;
       else if (interval === '15m') stepMs = 15 * 60 * 1000;
@@ -278,9 +294,9 @@ export class BacktestService {
         const barReturn = macroTrend + microNoise + impulse;
 
         const open = prevClose;
-        const close = Number((open * (1 + barReturn)).toFixed(2));
-        const high = Number((Math.max(open, close) * (1 + Math.abs(microNoise) * 1.2 + 0.001)).toFixed(2));
-        const low = Number((Math.min(open, close) * (1 - Math.abs(microNoise) * 1.2 - 0.001)).toFixed(2));
+        const close = Number((open * (1 + barReturn)).toFixed(decimals));
+        const high = Number((Math.max(open, close) * (1 + Math.abs(microNoise) * 1.2 + 0.001)).toFixed(decimals));
+        const low = Number((Math.min(open, close) * (1 - Math.abs(microNoise) * 1.2 - 0.001)).toFixed(decimals));
         const volume = Number((80 + Math.abs(Math.sin(i * 0.25)) * 350).toFixed(2));
 
         candles.push({
@@ -474,12 +490,14 @@ export class BacktestService {
               const driftConfirmed = barDriftAbs >= requiredDrift && windowDriftAbs >= requiredDrift * 0.7 && Math.sign(barDrift) === Math.sign(windowDrift);
 
               if (driftConfirmed) {
+                const minRoiHurdle = 0.08;
                 if (spotDrift > 0) {
-                  const priceDiscovery = 0.80;
+                  const priceDiscovery = 0.40; // 40% discovery reflects lagging resting maker quotes during high-frequency snipe
                   const partialLagYes = lagFairYes + (fairYes - lagFairYes) * priceDiscovery;
                   const lagAskYes = quantizePrice(Math.min(0.99, Math.max(0.01, partialLagYes + halfSpread)));
                   const netEdge = calculateNetExecutableEdge(fairYes, lagAskYes) - latencyEdgePenalty;
-                  if (netEdge >= minEdge && lagAskYes <= 0.85 && lagAskYes >= 0.15) {
+                  const roiEdge = lagAskYes > 0 ? netEdge / lagAskYes : 0;
+                  if (netEdge >= minEdge && roiEdge >= minRoiHurdle && lagAskYes <= 0.68 && lagAskYes >= 0.25) {
                     tradeExecuted = true;
                     tradeAction = 'TAKER_SNIPE';
                     tradeOutcome = 'YES';
@@ -487,11 +505,12 @@ export class BacktestService {
                     tradeLots = calculateEdgeProportionalLots(lotSize, netEdge, minEdge, maxTradeSize, lagAskYes);
                   }
                 } else {
-                  const priceDiscovery = 0.80;
+                  const priceDiscovery = 0.40;
                   const partialLagNo = lagFairNo + (fairNo - lagFairNo) * priceDiscovery;
                   const lagAskNo = quantizePrice(Math.min(0.99, Math.max(0.01, partialLagNo + halfSpread)));
                   const netEdge = calculateNetExecutableEdge(fairNo, lagAskNo) - latencyEdgePenalty;
-                  if (netEdge >= minEdge && lagAskNo <= 0.85 && lagAskNo >= 0.15) {
+                  const roiEdge = lagAskNo > 0 ? netEdge / lagAskNo : 0;
+                  if (netEdge >= minEdge && roiEdge >= minRoiHurdle && lagAskNo <= 0.68 && lagAskNo >= 0.25) {
                     tradeExecuted = true;
                     tradeAction = 'TAKER_SNIPE';
                     tradeOutcome = 'NO';
@@ -507,6 +526,7 @@ export class BacktestService {
           // Dynamic time-decay edge scaling (demands higher margin of safety as expiry nears)
           const timeDecayFactor = timeRemainingSec < 300 ? 1.0 + ((300 - timeRemainingSec) / 300) * 0.40 : 1.0;
           const dynamicMinEdge = Number((minEdge * timeDecayFactor).toFixed(4));
+          const minRoiHurdle = 0.08;
 
           // Dynamic volatility-normalized adverse selection drift threshold
           const adverseDriftThreshold = calculateVolatilityNormalizedDriftThreshold(dynamicVol, 1.5, 60, 0.0008, 0.0050);
@@ -525,15 +545,17 @@ export class BacktestService {
 
             const netEdgeYes = calculateNetExecutableEdge(fairYes, marketAskYes);
             const netEdgeNo = calculateNetExecutableEdge(fairNo, marketAskNo);
+            const roiEdgeYes = marketAskYes > 0 ? netEdgeYes / marketAskYes : 0;
+            const roiEdgeNo = marketAskNo > 0 ? netEdgeNo / marketAskNo : 0;
 
-            // Safe probability envelope [0.15, 0.85] + Dynamic adverse selection momentum filter
-            if (netEdgeYes >= dynamicMinEdge && marketAskYes <= 0.85 && marketAskYes >= 0.15 && barDrift >= -adverseDriftThreshold) {
+            // Safe probability envelope [0.25, 0.68] + 8% ROI hurdle + Dynamic adverse selection momentum filter
+            if (netEdgeYes >= dynamicMinEdge && roiEdgeYes >= minRoiHurdle && marketAskYes <= 0.68 && marketAskYes >= 0.25 && barDrift >= -adverseDriftThreshold) {
               tradeExecuted = true;
               tradeAction = 'VOL_ARB';
               tradeOutcome = 'YES';
               tradePrice = marketAskYes;
               tradeLots = calculateEdgeProportionalLots(lotSize, netEdgeYes, dynamicMinEdge, maxTradeSize, marketAskYes);
-            } else if (netEdgeNo >= dynamicMinEdge && marketAskNo <= 0.85 && marketAskNo >= 0.15 && barDrift <= adverseDriftThreshold) {
+            } else if (netEdgeNo >= dynamicMinEdge && roiEdgeNo >= minRoiHurdle && marketAskNo <= 0.68 && marketAskNo >= 0.25 && barDrift <= adverseDriftThreshold) {
               tradeExecuted = true;
               tradeAction = 'VOL_ARB';
               tradeOutcome = 'NO';
@@ -552,16 +574,26 @@ export class BacktestService {
           // 1. Toxic flow protection & expiry horizon
           if (absDrift < toxicDriftThreshold && timeRemainingSec >= 30) {
             const volRatio = (dynamicVol - 0.50) / 0.50;
-            const spreadMultiplier = Math.max(0.7, 1.0 + 0.6 * volRatio + absDrift * 2.5);
-            const effectiveSpread = Math.max(0.025, Math.min(0.080, targetSpread * spreadMultiplier));
+            const tailDistance = Math.abs(fairYes - 0.50);
+            const tailExpansion = tailDistance > 0.20 ? (tailDistance - 0.20) * 0.8 : 0;
+            const spreadMultiplier = Math.max(0.7, 1.0 + 0.6 * volRatio + absDrift * 2.5 + tailExpansion);
+            const effectiveSpread = Math.max(0.025, Math.min(0.090, targetSpread * spreadMultiplier));
             const halfSpreadEffective = effectiveSpread / 2.0;
 
             const sign = netInventory >= 0 ? 1 : -1;
             const absInv = Math.abs(netInventory);
             const skew = sign * inventoryAversion * Math.pow(absInv, 1.25);
 
-            const mmBidYes = quantizePrice(Math.max(0.02, fairYes - halfSpreadEffective - skew));
-            const mmAskYes = quantizePrice(Math.min(0.98, fairYes + halfSpreadEffective - skew));
+            let rawBid = fairYes - halfSpreadEffective - skew;
+            let rawAsk = fairYes + halfSpreadEffective - skew;
+            if (fairYes > 0.70) {
+              rawBid -= (fairYes - 0.70) * 0.50;
+            } else if (fairYes < 0.30) {
+              rawAsk += (0.30 - fairYes) * 0.50;
+            }
+
+            const mmBidYes = quantizePrice(Math.max(0.05, Math.min(0.70, rawBid)));
+            const mmAskYes = quantizePrice(Math.min(0.95, Math.max(0.30, rawAsk)));
 
             const barReturn = (currentCandle.close - currentCandle.open) / (currentCandle.open || 1);
             const absReturn = Math.abs(barReturn);
@@ -583,11 +615,11 @@ export class BacktestService {
               tradeLots = quantizeLotSize(lotSize);
               if (barReturn > 0) {
                 tradeOutcome = 'NO';
-                tradePrice = quantizePrice(Math.min(0.90, Math.max(0.10, 1.0 - mmAskYes)));
+                tradePrice = quantizePrice(Math.min(0.70, Math.max(0.30, 1.0 - mmAskYes)));
                 netInventory -= tradeLots;
               } else {
                 tradeOutcome = 'YES';
-                tradePrice = quantizePrice(Math.min(0.90, Math.max(0.10, mmBidYes)));
+                tradePrice = quantizePrice(Math.min(0.70, Math.max(0.30, mmBidYes)));
                 netInventory += tradeLots;
               }
             }

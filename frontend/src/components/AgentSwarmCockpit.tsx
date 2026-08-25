@@ -425,16 +425,22 @@ export const AgentSwarmCockpit: React.FC<AgentSwarmCockpitProps> = ({
 
             {/* Target Markets */}
             <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
-              <span style={{ fontSize: '10px', color: 'var(--muted-foreground)' }}>Targets:</span>
-              <span style={{ fontSize: '10px', background: 'rgba(0, 240, 255, 0.08)', color: 'var(--brand-cyan)', padding: '2px 6px', borderRadius: '4px', border: '1px solid rgba(0, 240, 255, 0.2)' }}>
-                BTC/USD 5m
-              </span>
-              <span style={{ fontSize: '10px', background: 'rgba(0, 240, 255, 0.08)', color: 'var(--brand-cyan)', padding: '2px 6px', borderRadius: '4px', border: '1px solid rgba(0, 240, 255, 0.2)' }}>
-                ETH/USD 5m
-              </span>
-              <span style={{ fontSize: '10px', background: 'rgba(0, 240, 255, 0.08)', color: 'var(--brand-cyan)', padding: '2px 6px', borderRadius: '4px', border: '1px solid rgba(0, 240, 255, 0.2)' }}>
-                BTC/USD 15m
-              </span>
+              <span style={{ fontSize: '10px', color: 'var(--muted-foreground)' }}>Targets (5):</span>
+              {['BTC/USD 5m', 'ETH/USD 5m', 'SOL/USD 5m', 'BNB/USD 5m', 'DOGE/USD 5m'].map((target) => (
+                <span
+                  key={target}
+                  style={{
+                    fontSize: '10px',
+                    background: 'rgba(0, 240, 255, 0.08)',
+                    color: 'var(--brand-cyan)',
+                    padding: '2px 6px',
+                    borderRadius: '4px',
+                    border: '1px solid rgba(0, 240, 255, 0.2)',
+                  }}
+                >
+                  {target}
+                </span>
+              ))}
             </div>
 
             {/* Strategy Sliders */}
@@ -645,16 +651,22 @@ export const AgentSwarmCockpit: React.FC<AgentSwarmCockpitProps> = ({
 
             {/* Target Markets */}
             <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
-              <span style={{ fontSize: '10px', color: 'var(--muted-foreground)' }}>Targets:</span>
-              <span style={{ fontSize: '10px', background: 'rgba(0, 240, 255, 0.08)', color: 'var(--brand-cyan)', padding: '2px 6px', borderRadius: '4px', border: '1px solid rgba(0, 240, 255, 0.2)' }}>
-                BTC/USD 15m
-              </span>
-              <span style={{ fontSize: '10px', background: 'rgba(0, 240, 255, 0.08)', color: 'var(--brand-cyan)', padding: '2px 6px', borderRadius: '4px', border: '1px solid rgba(0, 240, 255, 0.2)' }}>
-                ETH/USD 15m
-              </span>
-              <span style={{ fontSize: '10px', background: 'rgba(0, 240, 255, 0.08)', color: 'var(--brand-cyan)', padding: '2px 6px', borderRadius: '4px', border: '1px solid rgba(0, 240, 255, 0.2)' }}>
-                BTC/USD 1h
-              </span>
+              <span style={{ fontSize: '10px', color: 'var(--muted-foreground)' }}>Targets (5):</span>
+              {['BTC/USD 15m', 'ETH/USD 15m', 'SOL/USD 1h', 'BNB/USD 15m', 'DOGE/USD 5m'].map((target) => (
+                <span
+                  key={target}
+                  style={{
+                    fontSize: '10px',
+                    background: 'rgba(0, 240, 255, 0.08)',
+                    color: 'var(--brand-cyan)',
+                    padding: '2px 6px',
+                    borderRadius: '4px',
+                    border: '1px solid rgba(0, 240, 255, 0.2)',
+                  }}
+                >
+                  {target}
+                </span>
+              ))}
             </div>
 
             {/* Strategy Sliders */}
@@ -846,13 +858,22 @@ export const AgentSwarmCockpit: React.FC<AgentSwarmCockpitProps> = ({
 
             {/* Target Markets */}
             <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
-              <span style={{ fontSize: '10px', color: 'var(--muted-foreground)' }}>Targets:</span>
-              <span style={{ fontSize: '10px', background: 'rgba(0, 240, 255, 0.08)', color: 'var(--brand-cyan)', padding: '2px 6px', borderRadius: '4px', border: '1px solid rgba(0, 240, 255, 0.2)' }}>
-                BTC/USD 5m
-              </span>
-              <span style={{ fontSize: '10px', background: 'rgba(0, 240, 255, 0.08)', color: 'var(--brand-cyan)', padding: '2px 6px', borderRadius: '4px', border: '1px solid rgba(0, 240, 255, 0.2)' }}>
-                ETH/USD 5m
-              </span>
+              <span style={{ fontSize: '10px', color: 'var(--muted-foreground)' }}>Targets (5):</span>
+              {['BTC/USD 5m', 'ETH/USD 5m', 'SOL/USD 5m', 'BNB/USD 5m', 'DOGE/USD 5m'].map((target) => (
+                <span
+                  key={target}
+                  style={{
+                    fontSize: '10px',
+                    background: 'rgba(0, 240, 255, 0.08)',
+                    color: 'var(--brand-cyan)',
+                    padding: '2px 6px',
+                    borderRadius: '4px',
+                    border: '1px solid rgba(0, 240, 255, 0.2)',
+                  }}
+                >
+                  {target}
+                </span>
+              ))}
             </div>
 
             {/* Strategy Sliders */}

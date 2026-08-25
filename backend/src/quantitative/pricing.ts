@@ -5,6 +5,8 @@ export const DEFAULT_ANNUAL_VOLATILITY: Record<string, number> = {
   'BTC/USD': 0.52,
   'ETH/USD': 0.68,
   'SOL/USD': 0.85,
+  'BNB/USD': 0.65,
+  'DOGE/USD': 0.95,
   DEFAULT: 0.60,
 };
 
@@ -253,6 +255,15 @@ export function calculateNetExecutableEdge(
   const rawEdge = fairValue - executionPrice;
   const totalCostFriction = executionPrice * takerFeeRate + gasHurdle;
   return Number((rawEdge - totalCostFriction).toFixed(4));
+}
+
+/**
+ * Calculates ROI-on-risk edge: netEdge / executionPrice.
+ * Ensures the trade provides sufficient percentage return relative to capital risked.
+ */
+export function calculateRoiEdge(netEdge: number, executionPrice: number): number {
+  if (executionPrice <= 0) return 0;
+  return Number((netEdge / executionPrice).toFixed(4));
 }
 
 export interface FairValueResult {

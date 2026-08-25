@@ -90,7 +90,7 @@ export const MarketMatrix: React.FC<MarketMatrixProps> = ({
           </div>
 
           <div className="filter-pill-group">
-            {['ALL', 'BTC/USD', 'ETH/USD'].map((sym) => (
+            {['ALL', 'BTC/USD', 'ETH/USD', 'SOL/USD', 'BNB/USD', 'DOGE/USD'].map((sym) => (
               <button
                 key={sym}
                 type="button"

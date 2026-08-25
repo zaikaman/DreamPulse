@@ -25,7 +25,7 @@ export class TelemetryWebSocketServer {
       const subscription: ClientSubscription = {
         ws,
         channels: new Set(['markets', 'agent_thoughts']), // Default channels
-        symbols: new Set(['BTC/USD', 'ETH/USD']),
+        symbols: new Set(['BTC/USD', 'ETH/USD', 'SOL/USD', 'BNB/USD', 'DOGE/USD']),
         agentTypes: new Set(['Volt', 'Oracle', 'Titan', 'Sweeper']),
         userAddresses: new Set(),
         isAlive: true,

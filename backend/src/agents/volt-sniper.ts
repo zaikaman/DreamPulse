@@ -9,6 +9,7 @@ import {
   calculateFairValue,
   calculateDepthVWAP,
   calculateNetExecutableEdge,
+  calculateRoiEdge,
   calculateVolatilityNormalizedDriftThreshold,
   calculateEdgeProportionalLots,
 } from '../quantitative/pricing.js';
@@ -92,6 +93,8 @@ export class VoltSniperAgent extends BaseAgent {
       };
     }
 
+    const minRoiHurdle = 0.08; // Minimum 8.0% expected return on capital at risk
+
     // 1. Bullish Spot Spike -> Snipe Lagging YES Asks
     if (drift > 0) {
       // Macro trend confluence: 5-minute trend cannot be crashing against the 1-minute spike
@@ -121,14 +124,14 @@ export class VoltSniperAgent extends BaseAgent {
         const effectivePrice = vwapResult.vwapPrice > 0 ? vwapResult.vwapPrice : topAskYes;
         const snappedPrice = quantizePrice(effectivePrice);
 
-        // Safe probability envelope: avoid extreme tail buying (<0.15 or >0.85)
-        if (snappedPrice < 0.15 || snappedPrice > 0.85) {
+        // Safe probability envelope: restrict taker buys to [0.25, 0.68] to ensure favorable R:R
+        if (snappedPrice < 0.25 || snappedPrice > 0.68) {
           return {
             agentType: 'Volt',
             action: 'HOLD',
             targetMarketId: market.id,
             confidence: 0.5,
-            rationale: `YES ask price (${snappedPrice.toFixed(2)}) is outside the optimal risk/reward boundary [0.15, 0.85]. Holding.`,
+            rationale: `YES ask price (${snappedPrice.toFixed(2)}) is outside the optimal risk/reward boundary [0.25, 0.68]. Holding.`,
           };
         }
 
@@ -145,8 +148,10 @@ export class VoltSniperAgent extends BaseAgent {
 
         // Net edge after fee & gas friction
         const netEdge = calculateNetExecutableEdge(fair.fairValueYes, snappedPrice);
+        const roiEdge = calculateRoiEdge(netEdge, snappedPrice);
 
-        if (netEdge >= this.voltConfig.minEdge) {
+        // Require both absolute probability edge and minimum 8.0% return-on-risk hurdle
+        if (netEdge >= this.voltConfig.minEdge && roiEdge >= minRoiHurdle) {
           const lotSize = calculateEdgeProportionalLots(
             this.voltConfig.lotSize,
             netEdge,
@@ -156,7 +161,7 @@ export class VoltSniperAgent extends BaseAgent {
           );
           const confidence = Math.min(0.99, Number((0.82 + netEdge * 2.5).toFixed(2)));
 
-          const rationale = `[SPOT JUMP] ${market.symbol} surged +${(drift * 100).toFixed(2)}% (5m: ${(spotTicker.change5m * 100).toFixed(2)}%, σ=${(fair.volatilityUsed * 100).toFixed(1)}%). Depth VWAP YES ask at ${snappedPrice.toFixed(2)} is lagging fair value ${fair.fairValueYes.toFixed(2)} (Net Executable Edge: +${(netEdge * 100).toFixed(1)}%). Firing IOC taker buy (${lotSize} lots).`;
+          const rationale = `[SPOT JUMP] ${market.symbol} surged +${(drift * 100).toFixed(2)}% (5m: ${(spotTicker.change5m * 100).toFixed(2)}%, σ=${(fair.volatilityUsed * 100).toFixed(1)}%). Depth VWAP YES ask at ${snappedPrice.toFixed(2)} is lagging fair value ${fair.fairValueYes.toFixed(2)} (Net Edge: +${(netEdge * 100).toFixed(1)}%, ROI/Risk: +${(roiEdge * 100).toFixed(1)}%). Firing IOC taker buy (${lotSize} lots).`;
 
           const decision: IAgentDecision = {
             agentType: 'Volt',
@@ -186,6 +191,7 @@ export class VoltSniperAgent extends BaseAgent {
               bestAsk: topAskYes,
               vwapPrice: snappedPrice,
               netEdge,
+              roiEdge,
               slippage: vwapResult.slippageVsTop,
             },
             createdAt: new Date().toISOString(),
@@ -227,14 +233,14 @@ export class VoltSniperAgent extends BaseAgent {
         const effectivePrice = vwapResult.vwapPrice > 0 ? vwapResult.vwapPrice : topAskNo;
         const snappedPrice = quantizePrice(effectivePrice);
 
-        // Safe probability envelope: avoid extreme tail buying (<0.15 or >0.85)
-        if (snappedPrice < 0.15 || snappedPrice > 0.85) {
+        // Safe probability envelope: restrict taker buys to [0.25, 0.68] to ensure favorable R:R
+        if (snappedPrice < 0.25 || snappedPrice > 0.68) {
           return {
             agentType: 'Volt',
             action: 'HOLD',
             targetMarketId: market.id,
             confidence: 0.5,
-            rationale: `NO ask price (${snappedPrice.toFixed(2)}) is outside the optimal risk/reward boundary [0.15, 0.85]. Holding.`,
+            rationale: `NO ask price (${snappedPrice.toFixed(2)}) is outside the optimal risk/reward boundary [0.25, 0.68]. Holding.`,
           };
         }
 
@@ -251,8 +257,10 @@ export class VoltSniperAgent extends BaseAgent {
 
         // Net edge after fee & gas friction
         const netEdge = calculateNetExecutableEdge(fair.fairValueNo, snappedPrice);
+        const roiEdge = calculateRoiEdge(netEdge, snappedPrice);
 
-        if (netEdge >= this.voltConfig.minEdge) {
+        // Require both absolute probability edge and minimum 8.0% return-on-risk hurdle
+        if (netEdge >= this.voltConfig.minEdge && roiEdge >= minRoiHurdle) {
           const lotSize = calculateEdgeProportionalLots(
             this.voltConfig.lotSize,
             netEdge,
@@ -262,7 +270,7 @@ export class VoltSniperAgent extends BaseAgent {
           );
           const confidence = Math.min(0.99, Number((0.82 + netEdge * 2.5).toFixed(2)));
 
-          const rationale = `[SPOT DUMP] ${market.symbol} dropped ${(drift * 100).toFixed(2)}% (5m: ${(spotTicker.change5m * 100).toFixed(2)}%, σ=${(fair.volatilityUsed * 100).toFixed(1)}%). Depth VWAP NO ask at ${snappedPrice.toFixed(2)} is lagging fair value ${fair.fairValueNo.toFixed(2)} (Net Executable Edge: +${(netEdge * 100).toFixed(1)}%). Firing IOC taker buy (${lotSize} lots).`;
+          const rationale = `[SPOT DUMP] ${market.symbol} dropped ${(drift * 100).toFixed(2)}% (5m: ${(spotTicker.change5m * 100).toFixed(2)}%, σ=${(fair.volatilityUsed * 100).toFixed(1)}%). Depth VWAP NO ask at ${snappedPrice.toFixed(2)} is lagging fair value ${fair.fairValueNo.toFixed(2)} (Net Edge: +${(netEdge * 100).toFixed(1)}%, ROI/Risk: +${(roiEdge * 100).toFixed(1)}%). Firing IOC taker buy (${lotSize} lots).`;
 
           const decision: IAgentDecision = {
             agentType: 'Volt',
@@ -292,6 +300,7 @@ export class VoltSniperAgent extends BaseAgent {
               bestAsk: topAskNo,
               vwapPrice: snappedPrice,
               netEdge,
+              roiEdge,
               slippage: vwapResult.slippageVsTop,
             },
             createdAt: new Date().toISOString(),

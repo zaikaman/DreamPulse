@@ -175,7 +175,7 @@ class TelemetryClient {
         action: 'subscribe',
         channel: 'markets',
         params: {
-          symbols: ['BTC/USD', 'ETH/USD'],
+          symbols: ['BTC/USD', 'ETH/USD', 'SOL/USD', 'BNB/USD', 'DOGE/USD'],
           agentTypes: ['Volt', 'Oracle', 'Titan', 'Sweeper'],
           userAddress: this.userAddress || undefined,
         },

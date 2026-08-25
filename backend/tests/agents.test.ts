@@ -358,6 +358,28 @@ describe('Phase 5 Swarm Strategy & Agent Unit Tests', () => {
       expect(decision.action).toBe('HOLD');
       expect(decision.rationale).toContain('Spot velocity surge');
     });
+
+    it('shades reservation quotes and strictly caps bids at <= 0.70 in high-probability tails', () => {
+      // Spot 98,000 >> Strike 96,500 with 4 min left -> fair value > 0.85
+      const context: IAgentContext = {
+        spotTicker: {
+          symbol: 'BTC/USD',
+          price: 98000.0,
+          change1m: 0.0005,
+          change5m: 0.0010,
+          timestamp: Date.now(),
+        },
+        market: baseMarket,
+        depth: { yesBids: [], yesAsks: [] },
+        activeSessions: [validSession],
+      };
+
+      const quotes = titan.calculateReservationQuotes(context);
+      expect(quotes.fairValueYes).toBeGreaterThan(0.70);
+      expect(quotes.snappedBid).toBeLessThanOrEqual(0.70); // Bids strictly capped at 0.70
+      expect(quotes.snappedAsk).toBeGreaterThanOrEqual(0.30);
+      expect(quotes.snappedBid).toBeLessThan(quotes.snappedAsk);
+    });
   });
 
   // ----------------------------------------------------------------------------

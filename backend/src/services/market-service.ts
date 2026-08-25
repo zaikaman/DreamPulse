@@ -66,7 +66,14 @@ export class MarketService extends EventEmitter {
    * Returns latest spot price for an asset symbol.
    */
   public getSpotPrice(symbol: string): number {
-    return this.spotPrices.get(symbol)?.price || (symbol.startsWith('ETH') ? 2400 : 77000);
+    const ticker = this.spotPrices.get(symbol);
+    if (ticker && ticker.price > 0) return ticker.price;
+    if (symbol === 'BTC/USD') return 96500;
+    if (symbol === 'ETH/USD') return 2750;
+    if (symbol === 'SOL/USD') return 188;
+    if (symbol === 'BNB/USD') return 624;
+    if (symbol === 'DOGE/USD') return 0.25;
+    return 100;
   }
 
   private handleLiveSpotUpdate(ticker: SpotTicker): void {
@@ -509,11 +516,11 @@ export class MarketService extends EventEmitter {
    */
   public ensureRollingMarkets(): void {
     const now = Date.now();
-    const symbols = ['BTC/USD', 'ETH/USD'];
+    const symbols = ['BTC/USD', 'ETH/USD', 'SOL/USD', 'BNB/USD', 'DOGE/USD'];
     const windows: Array<'5m' | '15m' | '1h' | '4h' | '24h' | '7d'> = ['5m', '15m', '1h', '4h', '24h', '7d'];
 
     for (const symbol of symbols) {
-      const spot = this.spotPrices.get(symbol)?.price || (symbol === 'BTC/USD' ? 77000 : 2400);
+      const spot = this.getSpotPrice(symbol);
 
       for (const windowDur of windows) {
         // Check if an active open market with positive time remaining already exists
@@ -530,7 +537,7 @@ export class MarketService extends EventEmitter {
         const windowMs = windowSec * 1000;
         const closeTimeMs = now + windowMs;
         const openTimeMs = now;
-        const strike = Math.round(spot);
+        const strike = symbol === 'DOGE/USD' ? Number(spot.toFixed(3)) : Math.round(spot);
 
         const marketId = `${SOMNIA_ADDRESSES.binaryModule}-${symbol.replace('/', '')}-${windowDur}-${strike}-${closeTimeMs}`;
         if (!this.markets.has(marketId)) {
@@ -577,7 +584,12 @@ export class MarketService extends EventEmitter {
    */
   public simulateSpotMicroTicks(): void {
     for (const [symbol] of this.spotPrices.entries()) {
-      const volatility = symbol === 'BTC/USD' ? 4.5 : symbol === 'ETH/USD' ? 0.45 : 0.08;
+      let volatility = 0.5;
+      if (symbol === 'BTC/USD') volatility = 4.5;
+      else if (symbol === 'ETH/USD') volatility = 0.45;
+      else if (symbol === 'SOL/USD') volatility = 0.25;
+      else if (symbol === 'BNB/USD') volatility = 0.35;
+      else if (symbol === 'DOGE/USD') volatility = 0.001;
       const delta = (Math.random() - 0.498) * volatility;
       priceFeedService.simulateMicroTick(symbol, delta);
     }

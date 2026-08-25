@@ -9,6 +9,7 @@ import {
   calculateFairValue,
   calculateDepthVWAP,
   calculateNetExecutableEdge,
+  calculateRoiEdge,
   calculateVolatilityNormalizedDriftThreshold,
   calculateEdgeProportionalLots,
 } from '../quantitative/pricing.js';
@@ -43,7 +44,8 @@ export class OracleArbAgent extends BaseAgent {
    * 2. Depth VWAP Execution: Evaluates full order book ladder up to target lots.
    * 3. Time-Decay Theta Calibration: Scales required edge dynamically in short horizons (<300s).
    * 4. Adverse Selection Protection: Filters out trades fighting short-term spot momentum dumps/surges.
-   * 5. Expiry Envelope: Avoids gamma pin-risk (<45s) and low-velocity horizon (>7200s).
+   * 5. Optimal Risk/Reward Envelope [0.25, 0.68] & ROI-on-Risk Hurdle (≥8.0% expected return on capital).
+   * 6. Expiry Envelope: Avoids gamma pin-risk (<45s) and low-velocity horizon (>7200s).
    */
   public async evaluate(context: IAgentContext): Promise<IAgentDecision> {
     if (!this.isEnabled) {
@@ -86,6 +88,7 @@ export class OracleArbAgent extends BaseAgent {
       ? 1.0 + ((300 - timeLeftSeconds) / 300) * 0.40 // Up to +40% edge required in final 5m
       : 1.0;
     const dynamicMinEdge = Number((this.oracleConfig.minEdge * timeDecayFactor).toFixed(4));
+    const minRoiHurdle = 0.08; // Minimum 8.0% expected return on capital at risk
 
     // 2. Dynamic Fair Value calculation utilizing real-time EWMA realized volatility
     const fair = calculateFairValue(
@@ -124,7 +127,18 @@ export class OracleArbAgent extends BaseAgent {
       const effectivePrice = vwapResult.vwapPrice > 0 ? vwapResult.vwapPrice : topAskYes;
       const snappedPrice = quantizePrice(effectivePrice);
 
-      if (snappedPrice >= 0.15 && snappedPrice <= 0.85 && vwapResult.slippageVsTop <= this.oracleConfig.maxSlippage) {
+      // Optimal Risk/Reward Envelope: restrict taker buys to [0.25, 0.68]
+      if (snappedPrice < 0.25 || snappedPrice > 0.68) {
+        return {
+          agentType: 'Oracle',
+          action: 'HOLD',
+          targetMarketId: market.id,
+          confidence: 0.5,
+          rationale: `YES ask price (${snappedPrice.toFixed(2)}) is outside the optimal risk/reward boundary [0.25, 0.68]. Holding to avoid asymmetric tail risk.`,
+        };
+      }
+
+      if (vwapResult.slippageVsTop <= this.oracleConfig.maxSlippage) {
         // Adverse selection check: do NOT buy YES if spot is actively dumping hard
         if (spotTicker.change1m < -adverseDriftThreshold) {
           return {
@@ -137,8 +151,10 @@ export class OracleArbAgent extends BaseAgent {
         }
 
         const netEdgeYes = calculateNetExecutableEdge(fair.fairValueYes, snappedPrice);
+        const roiEdgeYes = calculateRoiEdge(netEdgeYes, snappedPrice);
 
-        if (netEdgeYes >= dynamicMinEdge) {
+        // Require both absolute probability edge and ROI-on-risk percentage hurdle
+        if (netEdgeYes >= dynamicMinEdge && roiEdgeYes >= minRoiHurdle) {
           const lotSize = calculateEdgeProportionalLots(
             this.oracleConfig.lotSize,
             netEdgeYes,
@@ -148,7 +164,7 @@ export class OracleArbAgent extends BaseAgent {
           );
           const confidence = Math.min(0.99, Number((0.80 + netEdgeYes * 2.8).toFixed(2)));
 
-          const rationale = `[VOL ARB] Mathematical mispricing (EWMA σ=${volPct}%): Theoretical Φ(d2)=${(fair.fairValueYes * 100).toFixed(1)}% vs Depth VWAP ${(snappedPrice * 100).toFixed(1)}% (Net Executable Edge: +${(netEdgeYes * 100).toFixed(1)}%, Req: ${(dynamicMinEdge * 100).toFixed(1)}%). Buying YES (${lotSize} lots).`;
+          const rationale = `[VOL ARB] Mathematical mispricing (EWMA σ=${volPct}%): Theoretical Φ(d2)=${(fair.fairValueYes * 100).toFixed(1)}% vs Depth VWAP ${(snappedPrice * 100).toFixed(1)}% (Net Edge: +${(netEdgeYes * 100).toFixed(1)}%, ROI/Risk: +${(roiEdgeYes * 100).toFixed(1)}%, Req: ${(dynamicMinEdge * 100).toFixed(1)}%). Buying YES (${lotSize} lots).`;
 
           const decision: IAgentDecision = {
             agentType: 'Oracle',
@@ -177,6 +193,7 @@ export class OracleArbAgent extends BaseAgent {
               askPrice: topAskYes,
               vwapPrice: snappedPrice,
               netEdge: netEdgeYes,
+              roiEdge: roiEdgeYes,
               requiredEdge: dynamicMinEdge,
               spotChange1m: spotTicker.change1m,
               slippage: vwapResult.slippageVsTop,
@@ -206,7 +223,18 @@ export class OracleArbAgent extends BaseAgent {
       const effectivePrice = vwapResult.vwapPrice > 0 ? vwapResult.vwapPrice : topAskNo;
       const snappedPrice = quantizePrice(effectivePrice);
 
-      if (snappedPrice >= 0.15 && snappedPrice <= 0.85 && vwapResult.slippageVsTop <= this.oracleConfig.maxSlippage) {
+      // Optimal Risk/Reward Envelope: restrict taker buys to [0.25, 0.68]
+      if (snappedPrice < 0.25 || snappedPrice > 0.68) {
+        return {
+          agentType: 'Oracle',
+          action: 'HOLD',
+          targetMarketId: market.id,
+          confidence: 0.5,
+          rationale: `NO ask price (${snappedPrice.toFixed(2)}) is outside the optimal risk/reward boundary [0.25, 0.68]. Holding to avoid asymmetric tail risk.`,
+        };
+      }
+
+      if (vwapResult.slippageVsTop <= this.oracleConfig.maxSlippage) {
         // Adverse selection check: do NOT buy NO if spot is actively surging hard
         if (spotTicker.change1m > adverseDriftThreshold) {
           return {
@@ -219,8 +247,10 @@ export class OracleArbAgent extends BaseAgent {
         }
 
         const netEdgeNo = calculateNetExecutableEdge(fair.fairValueNo, snappedPrice);
+        const roiEdgeNo = calculateRoiEdge(netEdgeNo, snappedPrice);
 
-        if (netEdgeNo >= dynamicMinEdge) {
+        // Require both absolute probability edge and ROI-on-risk percentage hurdle
+        if (netEdgeNo >= dynamicMinEdge && roiEdgeNo >= minRoiHurdle) {
           const lotSize = calculateEdgeProportionalLots(
             this.oracleConfig.lotSize,
             netEdgeNo,
@@ -230,7 +260,7 @@ export class OracleArbAgent extends BaseAgent {
           );
           const confidence = Math.min(0.99, Number((0.80 + netEdgeNo * 2.8).toFixed(2)));
 
-          const rationale = `[VOL ARB] Mathematical mispricing (EWMA σ=${volPct}%): Theoretical NO Φ(d2)=${(fair.fairValueNo * 100).toFixed(1)}% vs Depth VWAP ${(snappedPrice * 100).toFixed(1)}% (Net Executable Edge: +${(netEdgeNo * 100).toFixed(1)}%, Req: ${(dynamicMinEdge * 100).toFixed(1)}%). Buying NO (${lotSize} lots).`;
+          const rationale = `[VOL ARB] Mathematical mispricing (EWMA σ=${volPct}%): Theoretical NO Φ(d2)=${(fair.fairValueNo * 100).toFixed(1)}% vs Depth VWAP ${(snappedPrice * 100).toFixed(1)}% (Net Edge: +${(netEdgeNo * 100).toFixed(1)}%, ROI/Risk: +${(roiEdgeNo * 100).toFixed(1)}%, Req: ${(dynamicMinEdge * 100).toFixed(1)}%). Buying NO (${lotSize} lots).`;
 
           const decision: IAgentDecision = {
             agentType: 'Oracle',
@@ -259,6 +289,7 @@ export class OracleArbAgent extends BaseAgent {
               askPrice: topAskNo,
               vwapPrice: snappedPrice,
               netEdge: netEdgeNo,
+              roiEdge: roiEdgeNo,
               requiredEdge: dynamicMinEdge,
               spotChange1m: spotTicker.change1m,
               slippage: vwapResult.slippageVsTop,

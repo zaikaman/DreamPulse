@@ -18,18 +18,24 @@ const SYMBOL_MAPPINGS: Record<string, string> = {
   BTCUSDT: 'BTC/USD',
   ETHUSDT: 'ETH/USD',
   SOLUSDT: 'SOL/USD',
+  BNBUSDT: 'BNB/USD',
+  DOGEUSDT: 'DOGE/USD',
 };
 
 const REVERSE_SYMBOL_MAPPINGS: Record<string, string> = {
   'BTC/USD': 'BTCUSDT',
   'ETH/USD': 'ETHUSDT',
   'SOL/USD': 'SOLUSDT',
+  'BNB/USD': 'BNBUSDT',
+  'DOGE/USD': 'DOGEUSDT',
 };
 
 const COINBASE_PAIRS: Record<string, string> = {
   'BTC/USD': 'BTC-USD',
   'ETH/USD': 'ETH-USD',
   'SOL/USD': 'SOL-USD',
+  'BNB/USD': 'BNB-USD',
+  'DOGE/USD': 'DOGE-USD',
 };
 
 export class PriceFeedService extends EventEmitter {
@@ -53,6 +59,8 @@ export class PriceFeedService extends EventEmitter {
       'BTC/USD': { price: 96450.0, high: 97800.0, low: 95200.0, vol: 18450.2 },
       'ETH/USD': { price: 2745.5, high: 2820.0, low: 2690.0, vol: 84200.5 },
       'SOL/USD': { price: 188.25, high: 196.0, low: 181.5, vol: 320100.0 },
+      'BNB/USD': { price: 624.50, high: 638.0, low: 615.0, vol: 95400.0 },
+      'DOGE/USD': { price: 0.248, high: 0.265, low: 0.235, vol: 1450000.0 },
     };
 
     for (const [symbol, data] of Object.entries(defaults)) {

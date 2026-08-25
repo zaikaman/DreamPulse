@@ -9,6 +9,7 @@ import {
   calculateRealizedVolatility,
   calculateVolatilityNormalizedDriftThreshold,
   calculateEdgeProportionalLots,
+  calculateRoiEdge,
 } from '../src/quantitative/pricing.js';
 import { quantizePrice, quantizeLotSize, toContractUnits, fromContractUnits } from '../src/quantitative/quantizer.js';
 
@@ -327,4 +328,49 @@ describe('Oracle Arbitrage Agent Decision & Filter Invariants', () => {
     expect(decision.action).toBe('HOLD');
     expect(decision.rationale).toContain('pin-risk');
   });
+
+  it('calculates ROI-on-risk edge correctly', () => {
+    expect(calculateRoiEdge(0.04, 0.50)).toBe(0.08); // 8% ROI
+    expect(calculateRoiEdge(0.035, 0.25)).toBe(0.14); // 14% ROI
+    expect(calculateRoiEdge(0.035, 0.70)).toBe(0.05); // 5% ROI (fails 8% hurdle)
+    expect(calculateRoiEdge(0.05, 0)).toBe(0);
+  });
+
+  it('rejects trades outside the [0.25, 0.68] optimal risk/reward envelope', async () => {
+    const { OracleArbAgent } = await import('../src/agents/oracle-arb.js');
+    const agent = new OracleArbAgent({ minEdge: 0.035 });
+
+    const now = Date.now();
+    // High ask price 0.75 (> 0.68)
+    const contextHigh = {
+      spotTicker: { symbol: 'BTC/USD', price: 96500, change1m: 0.0005, change5m: 0.001, timestamp: now },
+      market: {
+        id: 'market-high',
+        symbol: 'BTC/USD',
+        strikePrice: 96000,
+        windowDuration: '15m',
+        openTimestamp: new Date(now - 300000).toISOString(),
+        closeTimestamp: new Date(now + 600000).toISOString(),
+        resolutionTimestamp: new Date(now + 660000).toISOString(),
+        status: 'Open' as const,
+        bestBidYes: 0.73,
+        bestAskYes: 0.75,
+        bestBidNo: 0.25,
+        bestAskNo: 0.27,
+        impliedProbYes: 0.74,
+        fairValueYes: 0.88,
+        edgePercentage: 0.14,
+      },
+      depth: {
+        yesBids: [{ price: 0.73, quantity: 100, total: 73 }],
+        yesAsks: [{ price: 0.75, quantity: 100, total: 75 }],
+      },
+      activeSessions: [],
+    };
+
+    const decision = await agent.evaluate(contextHigh);
+    expect(decision.action).toBe('HOLD');
+    expect(decision.rationale).toContain('optimal risk/reward boundary [0.25, 0.68]');
+  });
 });
+
