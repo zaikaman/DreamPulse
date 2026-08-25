@@ -1,0 +1,31 @@
+import dotenv from 'dotenv';
+import { z } from 'zod';
+
+dotenv.config();
+
+const envSchema = z.object({
+  PORT: z.string().default('5000').transform((val) => parseInt(val, 10)),
+  NODE_ENV: z.enum(['development', 'production', 'test']).default('development'),
+
+  // Supabase
+  SUPABASE_URL: z.string().url().default('https://mock-project.supabase.co'),
+  SUPABASE_SERVICE_ROLE_KEY: z.string().default('mock-service-role-key'),
+  SUPABASE_ANON_KEY: z.string().default('mock-anon-key'),
+
+  // Gemini LLM (OpenAI compatible)
+  GEMINI_BASE_URL: z.string().default('https://generativelanguage.googleapis.com/v1beta/openai/'),
+  GEMINI_API_KEY: z.string().default('mock-gemini-key'),
+  GEMINI_MODEL: z.string().default('gemini-2.5-flash'),
+
+  // Somnia Blockchain
+  SOMNIA_RPC_URL: z.string().default('https://dream-rpc.somnia.network'),
+  SOMNIA_CHAIN_ID: z.string().default('50312').transform((val) => parseInt(val, 10)),
+  OPERATOR_PRIVATE_KEY: z.string().default('0x0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef'),
+
+  // Protocol addresses (Somnia Shannon Testnet)
+  DREAMDEX_REGISTRY_ADDRESS: z.string().default('0x3ecC694Cef705358864a646142ac17A90E29e388'),
+  OPERATOR_PERMISSIONS_REGISTRY_ADDRESS: z.string().default('0x15C7e8CE38F021c5b45d098AaD788f63090bF20A'),
+  DREAMDEX_VENUE_ID: z.string().default('0x679795a0195a1b76cdebb7c51d74e058aee92919b8c3389af86ef24535e8a28c'),
+});
+
+export const env = envSchema.parse(process.env);

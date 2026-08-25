@@ -24,22 +24,22 @@
 
 **Purpose**: Core infrastructure, database schemas, quantitative math library, blockchain connectors, and base agent architecture that MUST be complete before user stories can execute.
 
-- [ ] T009 Create Supabase SQL migration script defining tables (`markets`, `sessions`, `agent_strategies`, `orders`, `sweeps`, `agent_logs`, `backtests`), indices, and Row Level Security (RLS) policies in `backend/src/config/schema.sql`
-- [ ] T010 [P] Implement Supabase client singleton with service-role and anon authentication wrappers in `backend/src/config/supabase.ts`
-- [ ] T011 [P] Implement Somnia Shannon Testnet RPC client, chain definition (Chain ID 50312), and contract address mappings in `backend/src/config/somnia.ts`
-- [ ] T012 [P] Implement high-precision normal Cumulative Distribution Function $\Phi(z)$ and Black-Scholes probability calculator in `backend/src/quantitative/cdf.ts`
-- [ ] T013 [P] Implement quantitative event contract fair-value pricing and spot-drift calculation engine in `backend/src/quantitative/pricing.ts`
-- [ ] T014 [P] Implement tick-size and lot-step snapping quantizer adhering to DreamDEX protocol increments in `backend/src/quantitative/quantizer.ts`
-- [ ] T015 [P] Implement comprehensive unit tests for $\Phi(z)$ CDF, pricing formulas, and quantizers in `backend/tests/quantitative.test.ts`
-- [ ] T016 [P] Implement OpenAI-compatible Gemini LLM client supporting structured JSON reasoning in `backend/src/llm/client.ts`
-- [ ] T017 [P] Implement LLM Prompt templates and real-time reasoning generator in `backend/src/llm/reasoning-service.ts`
-- [ ] T018 Implement abstract base agent class `BaseAgent` with lifecycle hooks, risk guards, and event emitters in `backend/src/agents/base-agent.ts`
-- [ ] T019 Implement WebSocket broadcasting gateway and connection registry in `backend/src/websocket/server.ts`
-- [ ] T020 Implement Express API application entrypoint, CORS, request logging, and error middleware in `backend/src/index.ts`
-- [ ] T021 [P] Implement Cyber-Terminal CSS design system tokens, high-contrast themes, and monospace typography in `frontend/src/styles/terminal.css`
-- [ ] T022 [P] Implement frontend shared TypeScript types matching backend schemas in `frontend/src/types/index.ts`
-- [ ] T023 [P] Implement Supabase browser client and Realtime subscription manager in `frontend/src/services/supabase.ts`
-- [ ] T024 [P] Implement REST API client adapter for backend communication in `frontend/src/services/api.ts`
+- [X] T009 Create Supabase SQL migration script defining tables (`markets`, `sessions`, `agent_strategies`, `orders`, `sweeps`, `agent_logs`, `backtests`), indices, and Row Level Security (RLS) policies in `backend/src/config/schema.sql`
+- [X] T010 [P] Implement Supabase client singleton with service-role and anon authentication wrappers in `backend/src/config/supabase.ts`
+- [X] T011 [P] Implement Somnia Shannon Testnet RPC client, chain definition (Chain ID 50312), and contract address mappings in `backend/src/config/somnia.ts`
+- [X] T012 [P] Implement high-precision normal Cumulative Distribution Function $\Phi(z)$ and Black-Scholes probability calculator in `backend/src/quantitative/cdf.ts`
+- [X] T013 [P] Implement quantitative event contract fair-value pricing and spot-drift calculation engine in `backend/src/quantitative/pricing.ts`
+- [X] T014 [P] Implement tick-size and lot-step snapping quantizer adhering to DreamDEX protocol increments in `backend/src/quantitative/quantizer.ts`
+- [X] T015 [P] Implement comprehensive unit tests for $\Phi(z)$ CDF, pricing formulas, and quantizers in `backend/tests/quantitative.test.ts`
+- [X] T016 [P] Implement OpenAI-compatible Gemini LLM client supporting structured JSON reasoning in `backend/src/llm/client.ts`
+- [X] T017 [P] Implement LLM Prompt templates and real-time reasoning generator in `backend/src/llm/reasoning-service.ts`
+- [X] T018 Implement abstract base agent class `BaseAgent` with lifecycle hooks, risk guards, and event emitters in `backend/src/agents/base-agent.ts`
+- [X] T019 Implement WebSocket broadcasting gateway and connection registry in `backend/src/websocket/server.ts`
+- [X] T020 Implement Express API application entrypoint, CORS, request logging, and error middleware in `backend/src/index.ts`
+- [X] T021 [P] Implement Cyber-Terminal CSS design system tokens, high-contrast themes, and monospace typography in `frontend/src/styles/terminal.css`
+- [X] T022 [P] Implement frontend shared TypeScript types matching backend schemas in `frontend/src/types/index.ts`
+- [X] T023 [P] Implement Supabase browser client and Realtime subscription manager in `frontend/src/services/supabase.ts`
+- [X] T024 [P] Implement REST API client adapter for backend communication in `frontend/src/services/api.ts`
 
 **Checkpoint**: Foundational infrastructure ready. All quantitative math verified with unit tests. User story development can now proceed.
 

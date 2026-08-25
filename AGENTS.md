@@ -11,3 +11,7 @@ Blockchain: Somnia Shannon Testnet (Chain ID 50312), DreamDEX Event Contracts
 - **Main Branch Only**: All development, specifications, plans, and implementations MUST be performed directly on the `main` branch.
 - **No Feature Branches**: Never create or checkout feature branches.
 
+## Coding Rules
+- Do not use mock code, fake code or hardcode, everything must be real and production ready, unless really necessary.
+- When touching UI code, make sure the design stays consistent with other parts of the website, it's recommended to use the impeccable design skill.
+- For relevant docs, i suggest looking at the dreamdex-bot-kit folder and hackathon.md
