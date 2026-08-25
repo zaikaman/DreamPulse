@@ -201,8 +201,9 @@ export class MarketService extends EventEmitter {
         }
 
         const intervalSec = Number(m.intervalSec || 300);
-        let windowDuration: '5m' | '15m' | '1h' | '4h' | '24h' | string = '5m';
-        if (intervalSec >= 86400) windowDuration = '24h';
+        let windowDuration: '5m' | '15m' | '1h' | '4h' | '24h' | '7d' | string = '5m';
+        if (intervalSec >= 604800) windowDuration = '7d';
+        else if (intervalSec >= 86400) windowDuration = '24h';
         else if (intervalSec >= 14400) windowDuration = '4h';
         else if (intervalSec >= 3600) windowDuration = '1h';
         else if (intervalSec >= 900) windowDuration = '15m';
@@ -323,13 +324,16 @@ export class MarketService extends EventEmitter {
           if (!discoveredIds.has(id)) {
             const stale = this.markets.get(id);
             if (stale) {
-              // Mark as Finalized if past close, so syncResolvedOrdersPnL can settle
               const closeMs = new Date(stale.closeTimestamp).getTime();
               if (Date.now() >= closeMs && stale.status !== 'Finalized') {
                 const spot = this.spotPrices.get(stale.symbol)?.price || stale.strikePrice;
                 stale.status = 'Finalized';
                 stale.settlementPrice = spot;
                 stale.winningOutcome = spot >= stale.strikePrice ? 'YES' : 'NO';
+                void this.persistFinalizedMarket(stale).catch(() => {});
+                void import('./order-service.js').then((mod) => {
+                  void mod.orderService.settleOrdersForMarket(stale.id, stale.winningOutcome!, stale.settlementPrice);
+                }).catch(() => {});
               }
               this.historicalMarkets.set(id, { ...stale });
               this.markets.delete(id);
@@ -488,7 +492,7 @@ export class MarketService extends EventEmitter {
   public ensureRollingMarkets(): void {
     const now = Date.now();
     const symbols = ['BTC/USD', 'ETH/USD'];
-    const windows: Array<'5m' | '15m' | '1h' | '4h' | '24h'> = ['5m', '15m', '1h', '4h', '24h'];
+    const windows: Array<'5m' | '15m' | '1h' | '4h' | '24h' | '7d'> = ['5m', '15m', '1h', '4h', '24h', '7d'];
 
     for (const symbol of symbols) {
       const spot = this.spotPrices.get(symbol)?.price || (symbol === 'BTC/USD' ? 77000 : 2400);
@@ -581,6 +585,12 @@ export class MarketService extends EventEmitter {
         this.markets.delete(id);
         this.depthBooks.delete(id);
         expiredCount++;
+
+        // Persist finalized state & settle orders for this market once
+        void this.persistFinalizedMarket(market).catch(() => {});
+        void import('./order-service.js').then((mod) => {
+          void mod.orderService.settleOrdersForMarket(market.id, market.winningOutcome!, market.settlementPrice);
+        }).catch(() => {});
       } else if (market.status === 'Open') {
         const spot = this.spotPrices.get(market.symbol)?.price || market.strikePrice;
         const fair = calculateFairValue(spot, market.strikePrice, timeLeftSeconds, market.symbol);
@@ -594,6 +604,34 @@ export class MarketService extends EventEmitter {
 
     if (expiredCount > 0 || this.markets.size === 0) {
       this.ensureRollingMarkets();
+    }
+
+    if (expiredCount > 0) {
+      this.emit('markets_expired', { expiredCount, timestamp: now });
+    }
+  }
+
+  /**
+   * Persists a finalized market with its authoritative settlement price to Supabase.
+   */
+  public async persistFinalizedMarket(market: Market): Promise<void> {
+    try {
+      const supabase = getServiceSupabase();
+      await supabase.from('markets').upsert({
+        id: market.id,
+        symbol: market.symbol,
+        strike_price: market.strikePrice,
+        window_duration: market.windowDuration,
+        open_timestamp: market.openTimestamp,
+        close_timestamp: market.closeTimestamp,
+        resolution_timestamp: market.resolutionTimestamp,
+        status: 'Finalized',
+        settlement_price: market.settlementPrice ?? null,
+        winning_outcome: market.winningOutcome ?? null,
+        updated_at: new Date().toISOString(),
+      }, { onConflict: 'id' });
+    } catch {
+      // Non-fatal offline dev
     }
   }
 

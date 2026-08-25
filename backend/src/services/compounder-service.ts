@@ -1,5 +1,5 @@
 import { type Address, isAddress, getAddress } from 'viem';
-import { SOMNIA_ADDRESSES, somniaExchange, hasOperatorGas } from '../config/somnia.js';
+import { SOMNIA_ADDRESSES, somniaExchange, hasOperatorGas, executeOperatorTx } from '../config/somnia.js';
 import { sessionService } from './session-service.js';
 
 export interface CompoundedAllocation {
@@ -8,6 +8,7 @@ export interface CompoundedAllocation {
   lastCompoundedAt: string;
   reinvestedCycles: number;
   lastVaultDeposited?: Address;
+  lastTxHash?: `0x${string}`;
 }
 
 export class CompounderService {
@@ -38,8 +39,6 @@ export class CompounderService {
       existing.lastVaultDeposited = poolAddress;
     }
 
-    this.userAllocations.set(key, existing);
-
     // 1. Replenish active session trade allowance in sessionService with 100% trading share
     const activeSession = await sessionService.getUserActiveSession(userAddress).catch(() => null);
     if (activeSession) {
@@ -55,11 +54,13 @@ export class CompounderService {
           const decimals = SOMNIA_ADDRESSES.decimals;
           const rawAmount = BigInt(Math.floor(tradingShare * 10 ** decimals));
           if (rawAmount > 0n) {
-            await somniaExchange.trader.depositVault({
-              vault: poolAddress,
-              token: SOMNIA_ADDRESSES.collateral,
-              amount: rawAmount,
-            }).catch((vaultErr) => {
+            const vaultRes = await executeOperatorTx(() =>
+              somniaExchange.trader.depositVault({
+                vault: poolAddress,
+                token: SOMNIA_ADDRESSES.collateral,
+                amount: rawAmount,
+              }),
+            ).catch((vaultErr) => {
               if (
                 !vaultErr.message?.includes('Missing or invalid parameters') &&
                 !vaultErr.message?.includes('account does not exist') &&
@@ -67,7 +68,11 @@ export class CompounderService {
               ) {
                 console.warn(`[CompounderService] On-chain depositVault notice:`, vaultErr.message);
               }
+              return null;
             });
+            if (vaultRes?.hash) {
+              existing.lastTxHash = vaultRes.hash.startsWith('0x') ? (vaultRes.hash as `0x${string}`) : (`0x${vaultRes.hash}` as `0x${string}`);
+            }
           }
         }
       } catch (err: any) {
@@ -75,8 +80,10 @@ export class CompounderService {
       }
     }
 
+    this.userAllocations.set(key, existing);
+
     console.log(
-      `[CompounderService] 100% Compound: +${tradingShare.toFixed(2)} tUSDC to Trading for ${userAddress} (Cycles: ${existing.reinvestedCycles})`,
+      `[CompounderService] 100% Compound: +${tradingShare.toFixed(2)} tUSDC to Trading for ${userAddress} (Cycles: ${existing.reinvestedCycles})${existing.lastTxHash ? ` [tx: ${existing.lastTxHash}]` : ''}`,
     );
 
     return existing;

@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import {
   Sparkles,
   RefreshCw,
@@ -17,6 +17,7 @@ import { apiClient } from '../services/api.js';
 import { SOMNIA_ADDRESSES } from '../services/web3.js';
 import type { SettlementSweep } from '../types/index.js';
 import { ClaimCelebration } from './ClaimCelebration.js';
+import { Spinner } from './ui/Spinner.js';
 
 interface SweeperControlsProps {
   userAddress?: string;
@@ -29,19 +30,14 @@ export const SweeperControls: React.FC<SweeperControlsProps> = ({
   onRefreshPortfolio,
   onConnectWallet,
 }) => {
-  const [scope, setScope] = useState<'USER' | 'PROTOCOL'>(userAddress ? 'USER' : 'PROTOCOL');
-
-  useEffect(() => {
-    if (userAddress) {
-      setScope('USER');
-    }
-  }, [userAddress]);
-
-  const activeAddress = scope === 'USER' && userAddress ? userAddress : SOMNIA_ADDRESSES.operatorAccount;
-  const isViewingSelf = scope === 'USER' && !!userAddress;
+  // Derive strictly from prop — no internal mutable scope that can race.
+  // When user is connected we show personal settlements; otherwise protocol (swarm).
+  const activeAddress = userAddress ?? SOMNIA_ADDRESSES.operatorAccount;
+  const isViewingSelf = !!userAddress;
 
   const [autoCompound, setAutoCompound] = useState<boolean>(true);
   const [isSweeping, setIsSweeping] = useState<boolean>(false);
+  const [isLoading, setIsLoading] = useState<boolean>(true);
   const [history, setHistory] = useState<SettlementSweep[]>([]);
   const [unclaimedAmount, setUnclaimedAmount] = useState<number>(0);
   const [totalClaimedAllTime, setTotalClaimedAllTime] = useState<number>(0);
@@ -66,12 +62,20 @@ export const SweeperControls: React.FC<SweeperControlsProps> = ({
     amount: '',
   });
 
-  const fetchSweeperData = async () => {
+  // Monotonically increasing request id — stale fetches that resolve out-of-order are ignored.
+  const requestIdRef = useRef(0);
+
+  const fetchSweeperData = useCallback(async () => {
+    const reqId = ++requestIdRef.current;
+    const addr = activeAddress;
     try {
       const [summaryRes, historyRes] = await Promise.all([
-        apiClient.getSweeperSummary(activeAddress).catch(() => null),
-        apiClient.getSweepHistory(activeAddress).catch(() => null),
+        apiClient.getSweeperSummary(addr).catch(() => null),
+        apiClient.getSweepHistory(addr).catch(() => null),
       ]);
+
+      // If a newer request started while we were in-flight, this response is stale — drop it.
+      if (reqId !== requestIdRef.current) return;
 
       if (summaryRes?.success && summaryRes.data) {
         setUnclaimedAmount(summaryRes.data.unclaimedAmount || 0);
@@ -90,17 +94,31 @@ export const SweeperControls: React.FC<SweeperControlsProps> = ({
         setHistory(historyRes.data);
       }
     } catch (err: any) {
+      if (reqId !== requestIdRef.current) return;
       console.warn('[SweeperControls] Fetch data error:', err);
+    } finally {
+      if (reqId === requestIdRef.current) setIsLoading(false);
     }
-  };
+  }, [activeAddress]);
 
   useEffect(() => {
+    // Invalidate any in-flight fetch for the previous address before starting new one.
+    requestIdRef.current++;
+    setIsLoading(true);
+    // Clear stale account's data immediately so we never flash swarm history
+    // while the new address's history is loading (avoids showing operator's
+    // settlements under the user's personal badge).
+    setHistory([]);
+    setUnclaimedAmount(0);
+    setTotalClaimedAllTime(0);
+    setClaimableMarketsCount(0);
+    setCompoundedStats({ totalCompoundedAmount: 0, reinvestedCycles: 0 });
     fetchSweeperData();
     const interval = setInterval(() => {
       fetchSweeperData();
     }, 15000);
     return () => clearInterval(interval);
-  }, [activeAddress, scope]);
+  }, [fetchSweeperData]);
 
   const handleManualSweep = async () => {
     if (!activeAddress) return;
@@ -148,16 +166,15 @@ export const SweeperControls: React.FC<SweeperControlsProps> = ({
           <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
             <Eye size={16} style={{ color: 'var(--brand-cyan)' }} />
             <div style={{ fontSize: '12px', color: 'var(--muted-foreground)' }}>
-              <span style={{ color: 'var(--foreground)', fontWeight: 600 }}>Watch-Only Mode: </span>
-              Displaying the public Somnia Protocol Sweeper daemon. Connect your wallet to scan and claim your personal winning event contracts.
+              Viewing <strong>Protocol Autonomous Sweeper</strong> in public telemetry mode. Connect your wallet to inspect your personal settlement redemptions.
             </div>
           </div>
           {onConnectWallet && (
             <button
               type="button"
+              className="btn-glow"
               onClick={onConnectWallet}
-              className="btn-header-wallet"
-              style={{ fontSize: '11px', padding: '4px 10px' }}
+              style={{ fontSize: '11.5px', padding: '6px 12px' }}
             >
               <Wallet size={12} />
               <span>Connect Wallet</span>
@@ -166,57 +183,48 @@ export const SweeperControls: React.FC<SweeperControlsProps> = ({
         </div>
       )}
 
-      {/* 1. Header Protocol & Stats Summary */}
+      {/* 1. Sweeper Controls Banner */}
       <div className="terminal-panel" style={{ padding: '20px' }}>
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '16px', flexWrap: 'wrap', gap: '12px' }}>
-          <div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-              <div
-                style={{
-                  width: '32px',
-                  height: '32px',
-                  borderRadius: '6px',
-                  background: 'rgba(0, 240, 255, 0.1)',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  color: 'var(--brand-cyan)',
-                }}
-              >
-                <Sparkles size={18} />
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '14px' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+            <div
+              style={{
+                width: '36px',
+                height: '36px',
+                borderRadius: '8px',
+                background: 'rgba(0, 255, 102, 0.12)',
+                border: '1px solid rgba(0, 255, 102, 0.3)',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                color: 'var(--trade-buy)',
+              }}
+            >
+              <Sparkles size={20} />
+            </div>
+            <div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <h2 style={{ fontSize: '18px', fontWeight: 700, margin: 0, color: 'var(--foreground)' }}>
+                  {isViewingSelf ? 'My Settlement Sweeper & Auto-Compounder' : 'Autonomous Protocol Sweeper'}
+                </h2>
+                <span className="stat-pill-tag tag-green">
+                  {autoCompound ? '100% COMPOUNDING' : 'READY'}
+                </span>
               </div>
-              <div>
-                <h3 style={{ fontSize: '16px', fontWeight: 700, margin: 0 }}>
-                  Autonomous Settlement Sweeper & Compounder
-                </h3>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '11px', color: 'var(--muted-foreground)', marginTop: '2px' }}>
-                  <span style={{ color: 'var(--trade-buy)', fontWeight: 600 }}>DAEMON STATUS: ACTIVE (30S SCAN LOOP)</span>
-                  <span>•</span>
-                  <span>100% Collateral Auto-Compounding Enabled</span>
-                </div>
-              </div>
+              <p style={{ margin: '2px 0 0 0', fontSize: '12px', color: 'var(--muted-foreground)' }}>
+                {isViewingSelf
+                  ? 'Automatically claims binary contract payouts & reinvests winnings into high-conviction order flow.'
+                  : 'Automated on-chain engine sweeping resolved Somnia event contracts & compound-allocating payouts into CLOB liquidity.'}
+              </p>
             </div>
           </div>
 
-          <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
             {/* Scope Badge */}
-            <div
-              style={{
-                display: 'flex',
-                alignItems: 'center',
-                gap: '6px',
-                padding: '4px 10px',
-                borderRadius: '6px',
-                background: isViewingSelf ? 'rgba(0, 255, 102, 0.08)' : 'rgba(0, 240, 255, 0.08)',
-                border: `1px solid ${isViewingSelf ? 'rgba(0, 255, 102, 0.25)' : 'rgba(0, 240, 255, 0.25)'}`,
-                fontSize: '11px',
-                color: isViewingSelf ? 'var(--trade-buy)' : 'var(--brand-cyan)',
-                fontWeight: 600,
-              }}
-            >
-              {isViewingSelf ? <User size={12} /> : <Bot size={12} />}
-              <span>{isViewingSelf ? 'Viewing Your Wallet' : 'Viewing Protocol Operator'}</span>
-              <code style={{ fontSize: '10px', opacity: 0.8 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '11px', color: 'var(--muted-foreground)' }}>
+              {isViewingSelf ? <User size={13} style={{ color: 'var(--brand-cyan)' }} /> : <Bot size={13} style={{ color: 'var(--trade-buy)' }} />}
+              <span>{isViewingSelf ? 'Personal Account:' : 'Protocol Account:'}</span>
+              <code style={{ color: isViewingSelf ? 'var(--brand-cyan)' : 'var(--trade-buy)', fontFamily: 'var(--font-mono)' }}>
                 ({activeAddress ? `${activeAddress.slice(0, 6)}...${activeAddress.slice(-4)}` : '0x...'})
               </code>
             </div>
@@ -279,7 +287,7 @@ export const SweeperControls: React.FC<SweeperControlsProps> = ({
                   opacity: unclaimedAmount <= 0 ? 0.6 : 1,
                 }}
               >
-                <RefreshCw size={13} className={isSweeping ? 'animate-spin' : ''} />
+                {isSweeping ? <Spinner size="xs" variant="amber" /> : <RefreshCw size={13} />}
                 <span>{isSweeping ? 'Sweeping Payouts...' : unclaimedAmount > 0 ? `Sweep ${unclaimedAmount.toFixed(2)} tUSDC` : 'Sweep Now'}</span>
               </button>
             ) : (
@@ -297,50 +305,64 @@ export const SweeperControls: React.FC<SweeperControlsProps> = ({
         </div>
 
         {/* 3 Compounding Stats Cards */}
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '12px', marginTop: '16px' }}>
-          {/* Card 1: Pending Unclaimed */}
-          <div style={{ background: 'rgba(255, 255, 255, 0.02)', padding: '14px 18px', borderRadius: '8px', border: '1px solid var(--border)' }}>
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '4px' }}>
-              <span style={{ fontSize: '11px', color: 'var(--muted-foreground)' }}>
-                {isViewingSelf ? 'Pending Personal Unclaimed' : 'Pending Protocol Unclaimed'}
-              </span>
-              {unclaimedAmount > 0 && (
-                <span style={{ fontSize: '9px', background: 'rgba(0, 240, 255, 0.15)', color: 'var(--brand-cyan)', padding: '1px 5px', borderRadius: '4px', fontWeight: 700 }}>
-                  {claimableMarketsCount} MARKETS READY
+        {isLoading && history.length === 0 ? (
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '12px', marginTop: '16px' }}>
+            {[1, 2, 3].map((i) => (
+              <div key={`sw-skel-${i}`} style={{ background: 'rgba(255, 255, 255, 0.02)', padding: '14px 18px', borderRadius: '8px', border: '1px solid var(--border)', display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <span style={{ width: '100px', height: '11px', background: 'rgba(255,255,255,0.06)', borderRadius: '4px' }} className="dreampulse-skeleton skeleton-shimmer" />
+                  <span style={{ width: '50px', height: '14px', background: 'rgba(255,255,255,0.06)', borderRadius: '4px' }} className="dreampulse-skeleton skeleton-shimmer" />
+                </div>
+                <span style={{ width: '120px', height: '22px', background: 'rgba(255,255,255,0.06)', borderRadius: '4px' }} className="dreampulse-skeleton skeleton-shimmer" />
+              </div>
+            ))}
+          </div>
+        ) : (
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '12px', marginTop: '16px' }}>
+            {/* Card 1: Pending Unclaimed */}
+            <div style={{ background: 'rgba(255, 255, 255, 0.02)', padding: '14px 18px', borderRadius: '8px', border: '1px solid var(--border)' }}>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '4px' }}>
+                <span style={{ fontSize: '11px', color: 'var(--muted-foreground)' }}>
+                  {isViewingSelf ? 'Pending Personal Unclaimed' : 'Pending Protocol Unclaimed'}
                 </span>
-              )}
+                {unclaimedAmount > 0 && (
+                  <span style={{ fontSize: '9px', background: 'rgba(0, 240, 255, 0.15)', color: 'var(--brand-cyan)', padding: '1px 5px', borderRadius: '4px', fontWeight: 700 }}>
+                    {claimableMarketsCount} MARKETS READY
+                  </span>
+                )}
+              </div>
+              <div style={{ fontSize: '20px', fontWeight: 700, color: unclaimedAmount > 0 ? 'var(--brand-cyan)' : 'var(--foreground)', fontFamily: 'var(--font-mono)' }}>
+                {unclaimedAmount.toFixed(2)} tUSDC
+              </div>
             </div>
-            <div style={{ fontSize: '20px', fontWeight: 700, color: unclaimedAmount > 0 ? 'var(--brand-cyan)' : 'var(--foreground)', fontFamily: 'var(--font-mono)' }}>
-              {unclaimedAmount.toFixed(2)} tUSDC
-            </div>
-          </div>
 
-          {/* Card 2: Total Claimed All-Time (100%) */}
-          <div style={{ background: 'rgba(0, 255, 102, 0.04)', padding: '14px 18px', borderRadius: '8px', border: '1px solid rgba(0, 255, 102, 0.2)' }}>
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '4px' }}>
-              <span style={{ fontSize: '11px', color: 'var(--trade-buy)' }}>Total Compounded (100%)</span>
-              <span style={{ fontSize: '9px', background: 'rgba(0, 255, 102, 0.15)', color: 'var(--trade-buy)', padding: '1px 5px', borderRadius: '4px', fontWeight: 700 }}>
-                TRADING
-              </span>
+            {/* Card 2: Total Claimed All-Time (100%) */}
+            <div style={{ background: 'rgba(0, 255, 102, 0.04)', padding: '14px 18px', borderRadius: '8px', border: '1px solid rgba(0, 255, 102, 0.2)' }}>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '4px' }}>
+                <span style={{ fontSize: '11px', color: 'var(--trade-buy)' }}>Total Compounded (100%)</span>
+                <span style={{ fontSize: '9px', background: 'rgba(0, 255, 102, 0.15)', color: 'var(--trade-buy)', padding: '1px 5px', borderRadius: '4px', fontWeight: 700 }}>
+                  TRADING
+                </span>
+              </div>
+              <div style={{ fontSize: '20px', fontWeight: 700, color: 'var(--trade-buy)', fontFamily: 'var(--font-mono)' }}>
+                +{totalClaimedAllTime.toFixed(2)} tUSDC
+              </div>
             </div>
-            <div style={{ fontSize: '20px', fontWeight: 700, color: 'var(--trade-buy)', fontFamily: 'var(--font-mono)' }}>
-              +{totalClaimedAllTime.toFixed(2)} tUSDC
-            </div>
-          </div>
 
-          {/* Card 3: Reinvested Trading Capital */}
-          <div style={{ background: 'rgba(0, 240, 255, 0.04)', padding: '14px 18px', borderRadius: '8px', border: '1px solid rgba(0, 240, 255, 0.2)' }}>
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '4px' }}>
-              <span style={{ fontSize: '11px', color: 'var(--brand-cyan)' }}>Reinvested Capital</span>
-              <span style={{ fontSize: '9px', background: 'rgba(0, 240, 255, 0.15)', color: 'var(--brand-cyan)', padding: '1px 5px', borderRadius: '4px', fontWeight: 700 }}>
-                {compoundedStats.reinvestedCycles} CYCLES
-              </span>
-            </div>
-            <div style={{ fontSize: '20px', fontWeight: 700, color: 'var(--brand-cyan)', fontFamily: 'var(--font-mono)' }}>
-              +{(compoundedStats.totalCompoundedAmount || totalClaimedAllTime).toFixed(2)} tUSDC
+            {/* Card 3: Reinvested Trading Capital */}
+            <div style={{ background: 'rgba(0, 240, 255, 0.04)', padding: '14px 18px', borderRadius: '8px', border: '1px solid rgba(0, 240, 255, 0.2)' }}>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '4px' }}>
+                <span style={{ fontSize: '11px', color: 'var(--brand-cyan)' }}>Reinvested Capital</span>
+                <span style={{ fontSize: '9px', background: 'rgba(0, 240, 255, 0.15)', color: 'var(--brand-cyan)', padding: '1px 5px', borderRadius: '4px', fontWeight: 700 }}>
+                  {compoundedStats.reinvestedCycles} CYCLES
+                </span>
+              </div>
+              <div style={{ fontSize: '20px', fontWeight: 700, color: 'var(--brand-cyan)', fontFamily: 'var(--font-mono)' }}>
+                +{(compoundedStats.totalCompoundedAmount || totalClaimedAllTime).toFixed(2)} tUSDC
+              </div>
             </div>
           </div>
-        </div>
+        )}
       </div>
 
       {/* 2. Redemption History Table */}
@@ -391,7 +413,18 @@ export const SweeperControls: React.FC<SweeperControlsProps> = ({
               </tr>
             </thead>
             <tbody>
-              {history.length === 0 ? (
+              {isLoading && history.length === 0 ? (
+                [1, 2, 3, 4, 5].map((i) => (
+                  <tr key={`sweep-skel-${i}`} style={{ borderBottom: '1px solid rgba(255, 255, 255, 0.04)' }}>
+                    <td style={{ padding: '12px 16px' }}><span style={{ width: '110px', height: '12px', background: 'rgba(255,255,255,0.06)', borderRadius: '4px', display: 'inline-block' }} className="dreampulse-skeleton skeleton-shimmer" /></td>
+                    <td style={{ padding: '12px 16px' }}><span style={{ width: '80px', height: '13px', background: 'rgba(255,255,255,0.06)', borderRadius: '4px', display: 'inline-block' }} className="dreampulse-skeleton skeleton-shimmer" /></td>
+                    <td style={{ padding: '12px 16px' }}><span style={{ width: '55px', height: '18px', background: 'rgba(255,255,255,0.06)', borderRadius: '4px', display: 'inline-block' }} className="dreampulse-skeleton skeleton-shimmer" /></td>
+                    <td style={{ padding: '12px 16px', textAlign: 'right' }}><span style={{ width: '75px', height: '13px', background: 'rgba(255,255,255,0.06)', borderRadius: '4px', display: 'inline-block', marginLeft: 'auto' }} className="dreampulse-skeleton skeleton-shimmer" /></td>
+                    <td style={{ padding: '12px 16px', textAlign: 'center' }}><span style={{ width: '70px', height: '16px', background: 'rgba(255,255,255,0.06)', borderRadius: '4px', display: 'inline-block', margin: '0 auto' }} className="dreampulse-skeleton skeleton-shimmer" /></td>
+                    <td style={{ padding: '12px 16px', textAlign: 'right' }}><span style={{ width: '60px', height: '12px', background: 'rgba(255,255,255,0.06)', borderRadius: '4px', display: 'inline-block', marginLeft: 'auto' }} className="dreampulse-skeleton skeleton-shimmer" /></td>
+                  </tr>
+                ))
+              ) : history.length === 0 ? (
                 <tr>
                   <td colSpan={6} style={{ textAlign: 'center', padding: '36px', color: 'var(--muted-foreground)', fontSize: '12px' }}>
                     {isViewingSelf
@@ -455,7 +488,7 @@ export const SweeperControls: React.FC<SweeperControlsProps> = ({
                         </span>
                       </td>
                       <td style={{ padding: '12px 16px', textAlign: 'right' }}>
-                        {sweep.txHash ? (
+                        {sweep.txHash && sweep.txHash.startsWith('0x') && sweep.txHash.length === 66 ? (
                           <a
                             href={explorerUrl}
                             target="_blank"
@@ -474,7 +507,9 @@ export const SweeperControls: React.FC<SweeperControlsProps> = ({
                             <ExternalLink size={11} />
                           </a>
                         ) : (
-                          <span style={{ fontSize: '11px', color: 'var(--muted-foreground)' }}>-</span>
+                          <span style={{ fontSize: '11px', color: 'var(--muted-foreground)', fontFamily: 'var(--font-mono)' }}>
+                            {sweep.isCompounded ? 'Compounded' : 'Settled'}
+                          </span>
                         )}
                       </td>
                     </tr>

@@ -187,6 +187,27 @@ export const ERC20_ABI = [
   },
   {
     type: 'function',
+    name: 'transfer',
+    stateMutability: 'nonpayable',
+    inputs: [
+      { name: 'to', type: 'address' },
+      { name: 'amount', type: 'uint256' },
+    ],
+    outputs: [{ name: '', type: 'bool' }],
+  },
+  {
+    type: 'function',
+    name: 'transferFrom',
+    stateMutability: 'nonpayable',
+    inputs: [
+      { name: 'from', type: 'address' },
+      { name: 'to', type: 'address' },
+      { name: 'amount', type: 'uint256' },
+    ],
+    outputs: [{ name: '', type: 'bool' }],
+  },
+  {
+    type: 'function',
     name: 'allowance',
     stateMutability: 'view',
     inputs: [
@@ -418,6 +439,19 @@ export async function probeOnChainOperatorAuthorization(
         }
       }
     }
+
+    // Check ERC20 operator allowance for TestUSDC (used for copy-trading relay)
+    try {
+      const allowance = await publicClient.readContract({
+        address: SOMNIA_ADDRESSES.testUsdc,
+        abi: ERC20_ABI,
+        functionName: 'allowance',
+        args: [owner, operator],
+      });
+      if (allowance >= 100_000n) {
+        return mark(true);
+      }
+    } catch {}
 
     for (const sel of selectors) {
       try {

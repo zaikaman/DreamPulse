@@ -16,22 +16,24 @@ import {
   Coins,
   Loader2,
 } from 'lucide-react';
-import type { Market, PortfolioSummary } from '../../types/index.js';
+import type { Market, PortfolioSummary, SwarmStatusSummary, SessionGrant } from '../../types/index.js';
 import type { MarketTickData } from '../../hooks/useTelemetry.js';
 import type { AgentDetail } from '../../hooks/useAgentSwarm.js';
 import type { WalletState } from '../../hooks/useSessionKey.js';
-import type { SessionGrant } from '../../types/index.js';
 import { SOMNIA_ADDRESSES } from '../../services/web3.js';
+import { StatCardsGridSkeleton } from '../ui/Skeleton.js';
 
 interface StatCardsGridProps {
   markets: Market[];
   liveTicks: Map<string, MarketTickData>;
   latencyMs: number;
   swarmDetailed?: Record<string, AgentDetail>;
+  swarmSummary?: SwarmStatusSummary;
   ordersCount?: number;
   wallet?: WalletState;
   activeSession?: SessionGrant | null;
   portfolio?: PortfolioSummary | null;
+  isLoading?: boolean;
   isFauceting?: boolean;
   onClaimFaucet?: (amount?: number) => Promise<void>;
   onOpenSessionModal?: () => void;
@@ -43,10 +45,12 @@ export const StatCardsGrid: React.FC<StatCardsGridProps> = ({
   liveTicks,
   latencyMs,
   swarmDetailed,
+  swarmSummary,
   ordersCount,
   wallet,
   activeSession,
   portfolio,
+  isLoading = false,
   isFauceting = false,
   onClaimFaucet,
   onOpenSessionModal,
@@ -56,6 +60,11 @@ export const StatCardsGrid: React.FC<StatCardsGridProps> = ({
   const isOperator =
     isConnected &&
     wallet.address?.toLowerCase() === (SOMNIA_ADDRESSES.operatorAccount || '').toLowerCase();
+
+  // If initial load and no markets or portfolio data yet, render skeleton
+  if (isLoading && markets.length === 0) {
+    return <StatCardsGridSkeleton />;
+  }
 
   // Connected traders default to PORTFOLIO perspective; guest & operator default to SWARM
   const [perspective, setPerspective] = useState<'PORTFOLIO' | 'SWARM'>(
@@ -91,19 +100,25 @@ export const StatCardsGrid: React.FC<StatCardsGridProps> = ({
     return m.status === 'Open' || timeLeft > 0;
   }).length;
 
+  const parsePnlNum = (str?: string): number => {
+    if (!str) return 0;
+    const n = parseFloat(str.replace(/[^0-9.-]/g, ''));
+    return isNaN(n) ? 0 : n;
+  };
+
   // Calculate dynamic swarm PnL and trade fills (Operator Swarm) — accurate realtime net PnL (payout - cost per trade, handles BUY/SELL/VOID)
-  const voltPnl = swarmDetailed?.volt?.pnlAmount ?? 0;
-  const oraclePnl = swarmDetailed?.oracle?.pnlAmount ?? 0;
-  const titanPnl = swarmDetailed?.titan?.pnlAmount ?? 0;
+  const voltPnl = swarmDetailed?.volt?.pnlAmount || parsePnlNum(swarmSummary?.volt?.pnl);
+  const oraclePnl = swarmDetailed?.oracle?.pnlAmount || parsePnlNum(swarmSummary?.oracle?.pnl);
+  const titanPnl = swarmDetailed?.titan?.pnlAmount || parsePnlNum(swarmSummary?.titan?.spreadCaptured);
   // Sweeper gross claimed tracked separately; excluded from net swarm PnL to avoid double counting (void sweeperPnl unused in total)
   void (swarmDetailed?.sweeper?.pnlAmount);
   const totalSwarmPnl = voltPnl + oraclePnl + titanPnl;
 
   // Total all-time trade order fills across swarm (Volt, Oracle & Titan execution agents)
   const agentFills =
-    (swarmDetailed?.volt?.tradesToday ?? 0) +
-    (swarmDetailed?.oracle?.tradesToday ?? 0) +
-    (swarmDetailed?.titan?.tradesToday ?? 0);
+    (swarmDetailed?.volt?.tradesToday || swarmSummary?.volt?.tradesToday || 0) +
+    (swarmDetailed?.oracle?.tradesToday || swarmSummary?.oracle?.tradesToday || 0) +
+    (swarmDetailed?.titan?.tradesToday || (swarmSummary?.titan as any)?.tradesToday || 0);
   const totalSwarmFills = ordersCount !== undefined && ordersCount > 0 ? Math.max(ordersCount, agentFills) : agentFills;
   const isSwarmProfitable = totalSwarmPnl >= 0;
 

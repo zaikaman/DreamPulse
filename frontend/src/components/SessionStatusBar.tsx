@@ -12,12 +12,12 @@ import {
   Clock,
   ChevronRight,
   Coins,
-  Loader2,
   AlertTriangle,
 } from 'lucide-react';
 import type { SessionGrant } from '../types/index.js';
 import type { WalletState } from '../hooks/useSessionKey.js';
 import { SOMNIA_ADDRESSES } from '../services/web3.js';
+import { Spinner } from './ui/Spinner.js';
 
 interface SessionStatusBarProps {
   wallet: WalletState;
@@ -230,7 +230,7 @@ export const SessionStatusBar: React.FC<SessionStatusBarProps> = ({
                       marginLeft: '4px',
                     }}
                   >
-                    {isFauceting ? <Loader2 size={10} className="spin" /> : <Coins size={10} />}
+                    {isFauceting ? <Spinner size="xs" variant="amber" /> : <Coins size={10} />}
                     <span>Claim 1k tUSDC</span>
                   </button>
                 </div>
@@ -288,7 +288,7 @@ export const SessionStatusBar: React.FC<SessionStatusBarProps> = ({
             disabled={isFauceting}
             style={{ background: 'rgba(245, 158, 11, 0.15)', borderColor: 'rgba(245, 158, 11, 0.4)', color: 'var(--color-anomaly)' }}
           >
-            {isFauceting ? <Loader2 size={13} className="spin" /> : <Coins size={13} />}
+            {isFauceting ? <Spinner size="xs" variant="amber" /> : <Coins size={13} />}
             <span>Claim 1,000 tUSDC Faucet</span>
           </button>
         )}

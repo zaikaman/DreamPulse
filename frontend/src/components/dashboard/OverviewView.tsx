@@ -17,6 +17,7 @@ import { useAgentSwarm } from '../../hooks/useAgentSwarm.js';
 import { useUserPortfolio } from '../../hooks/useUserPortfolio.js';
 import { StatCardsGrid } from './StatCardsGrid.js';
 import { SessionStatusBar } from '../SessionStatusBar.js';
+import { OpportunityTableSkeleton, Skeleton } from '../ui/Skeleton.js';
 
 interface OverviewViewProps {
   markets: Market[];
@@ -28,6 +29,7 @@ interface OverviewViewProps {
   onNavigateToTab: (tab: string) => void;
   wallet?: WalletState;
   activeSession?: SessionGrant | null;
+  isLoading?: boolean;
   isFauceting?: boolean;
   onClaimFaucet?: (amount?: number) => Promise<void>;
   onOpenSessionModal?: () => void;
@@ -46,6 +48,7 @@ export const OverviewView: React.FC<OverviewViewProps> = ({
   onNavigateToTab,
   wallet,
   activeSession,
+  isLoading = false,
   isFauceting,
   onClaimFaucet,
   onOpenSessionModal,
@@ -102,7 +105,7 @@ export const OverviewView: React.FC<OverviewViewProps> = ({
     return list;
   }, [agentThoughts]);
 
-  const { detailed: swarmDetailed, orders } = useAgentSwarm();
+  const { detailed: swarmDetailed, summary: swarmSummary, orders } = useAgentSwarm();
   const { portfolio } = useUserPortfolio(wallet);
 
   return (
@@ -127,10 +130,12 @@ export const OverviewView: React.FC<OverviewViewProps> = ({
         liveTicks={liveTicks}
         latencyMs={latencyMs}
         swarmDetailed={swarmDetailed}
+        swarmSummary={swarmSummary}
         ordersCount={orders.length}
         wallet={wallet}
         activeSession={activeSession}
         portfolio={portfolio}
+        isLoading={isLoading}
         isFauceting={isFauceting}
         onClaimFaucet={onClaimFaucet}
         onOpenSessionModal={onOpenSessionModal}
@@ -168,95 +173,99 @@ export const OverviewView: React.FC<OverviewViewProps> = ({
         </div>
 
         {/* High-Signal Clean Opportunity Table */}
-        <div style={{ overflowX: 'auto' }}>
-          <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '13px' }}>
-            <thead>
-              <tr style={{ background: '#0e0e11', borderBottom: '1px solid var(--border)', color: 'var(--muted-foreground)', textAlign: 'left' }}>
-                <th style={{ padding: '10px 20px', fontWeight: 500 }}>ASSET & STRIKE</th>
-                <th style={{ padding: '10px 16px', fontWeight: 500 }}>EXPIRY</th>
-                <th style={{ padding: '10px 16px', fontWeight: 500 }}>IMPLIED PROB</th>
-                <th style={{ padding: '10px 16px', fontWeight: 500 }}>FAIR VALUE Φ(z)</th>
-                <th style={{ padding: '10px 16px', fontWeight: 500 }}>EDGE DELTA</th>
-                <th style={{ padding: '10px 16px', fontWeight: 500 }}>ACTION</th>
-                <th style={{ padding: '10px 20px', textAlign: 'right', fontWeight: 500 }}>INSPECT</th>
-              </tr>
-            </thead>
-            <tbody>
-              {opportunities.length === 0 ? (
-                <tr>
-                  <td colSpan={7} style={{ padding: '32px', textAlign: 'center', color: 'var(--muted-foreground)' }}>
-                    Scanning Somnia Event Contracts for pricing anomalies...
-                  </td>
+        {isLoading && opportunities.length === 0 ? (
+          <OpportunityTableSkeleton rows={5} />
+        ) : (
+          <div style={{ overflowX: 'auto' }}>
+            <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '13px' }}>
+              <thead>
+                <tr style={{ background: '#0e0e11', borderBottom: '1px solid var(--border)', color: 'var(--muted-foreground)', textAlign: 'left' }}>
+                  <th style={{ padding: '10px 20px', fontWeight: 500 }}>ASSET & STRIKE</th>
+                  <th style={{ padding: '10px 16px', fontWeight: 500 }}>EXPIRY</th>
+                  <th style={{ padding: '10px 16px', fontWeight: 500 }}>IMPLIED PROB</th>
+                  <th style={{ padding: '10px 16px', fontWeight: 500 }}>FAIR VALUE Φ(z)</th>
+                  <th style={{ padding: '10px 16px', fontWeight: 500 }}>EDGE DELTA</th>
+                  <th style={{ padding: '10px 16px', fontWeight: 500 }}>ACTION</th>
+                  <th style={{ padding: '10px 20px', textAlign: 'right', fontWeight: 500 }}>INSPECT</th>
                 </tr>
-              ) : (
-                opportunities.map(({ market, edge, implied, fair, action }) => {
-                  const isSelected = selectedMarketId === market.id;
-                  const isYesEdge = edge > 0;
-                  return (
-                    <tr
-                      key={market.id}
-                      style={{
-                        borderBottom: '1px solid var(--border-subtle)',
-                        background: isSelected ? 'rgba(0, 255, 204, 0.04)' : 'transparent',
-                        transition: 'background 0.15s ease',
-                        cursor: 'pointer',
-                      }}
-                      onClick={() => onSelectMarket(market.id)}
-                    >
-                      <td style={{ padding: '12px 20px' }}>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                          <span style={{ fontWeight: 600 }}>{market.symbol}</span>
-                          <span style={{ fontFamily: 'var(--font-mono)', color: 'var(--muted-foreground)', fontSize: '12px' }}>
-                            ${market.strikePrice.toLocaleString()}
+              </thead>
+              <tbody>
+                {opportunities.length === 0 ? (
+                  <tr>
+                    <td colSpan={7} style={{ padding: '32px', textAlign: 'center', color: 'var(--muted-foreground)' }}>
+                      Scanning Somnia Event Contracts for pricing anomalies...
+                    </td>
+                  </tr>
+                ) : (
+                  opportunities.map(({ market, edge, implied, fair, action }) => {
+                    const isSelected = selectedMarketId === market.id;
+                    const isYesEdge = edge > 0;
+                    return (
+                      <tr
+                        key={market.id}
+                        style={{
+                          borderBottom: '1px solid var(--border-subtle)',
+                          background: isSelected ? 'rgba(0, 255, 204, 0.04)' : 'transparent',
+                          transition: 'background 0.15s ease',
+                          cursor: 'pointer',
+                        }}
+                        onClick={() => onSelectMarket(market.id)}
+                      >
+                        <td style={{ padding: '12px 20px' }}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                            <span style={{ fontWeight: 600 }}>{market.symbol}</span>
+                            <span style={{ fontFamily: 'var(--font-mono)', color: 'var(--muted-foreground)', fontSize: '12px' }}>
+                              ${market.strikePrice.toLocaleString()}
+                            </span>
+                          </div>
+                        </td>
+                        <td style={{ padding: '12px 16px' }}>
+                          <span className="badge" style={{ background: '#1e1e24', color: '#d4d4d8', padding: '2px 7px', borderRadius: '4px', fontSize: '11px' }}>
+                            {market.windowDuration}
                           </span>
-                        </div>
-                      </td>
-                      <td style={{ padding: '12px 16px' }}>
-                        <span className="badge" style={{ background: '#1e1e24', color: '#d4d4d8', padding: '2px 7px', borderRadius: '4px', fontSize: '11px' }}>
-                          {market.windowDuration}
-                        </span>
-                      </td>
-                      <td style={{ padding: '12px 16px', fontFamily: 'var(--font-mono)', fontWeight: 600 }}>
-                        {(implied * 100).toFixed(1)}%
-                      </td>
-                      <td style={{ padding: '12px 16px', fontFamily: 'var(--font-mono)', color: 'var(--brand-cyan)' }}>
-                        {(fair * 100).toFixed(1)}%
-                      </td>
-                      <td style={{ padding: '12px 16px', fontFamily: 'var(--font-mono)', fontWeight: 700 }}>
-                        <span style={{ color: isYesEdge ? 'var(--trade-yes)' : 'var(--trade-no)' }}>
-                          {isYesEdge ? '+' : ''}{(edge * 100).toFixed(1)}%
-                        </span>
-                      </td>
-                      <td style={{ padding: '12px 16px' }}>
-                        <span
-                          className={`stat-pill-tag ${
-                            action === 'BUY_YES' ? 'tag-green' : action === 'BUY_NO' ? 'tag-amber' : 'tag-cyan'
-                          }`}
-                        >
-                          {action === 'BUY_YES' ? 'BUY YES (Underpriced)' : action === 'BUY_NO' ? 'BUY NO (Overpriced)' : 'NEUTRAL'}
-                        </span>
-                      </td>
-                      <td style={{ padding: '12px 20px', textAlign: 'right' }}>
-                        <button
-                          type="button"
-                          className="btn-action"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            onSelectMarket(market.id);
-                            onNavigateToTab('Markets & Depth');
-                          }}
-                        >
-                          <span>Inspect</span>
-                          <ExternalLink size={11} />
-                        </button>
-                      </td>
-                    </tr>
-                  );
-                })
-              )}
-            </tbody>
-          </table>
-        </div>
+                        </td>
+                        <td style={{ padding: '12px 16px', fontFamily: 'var(--font-mono)', fontWeight: 600 }}>
+                          {(implied * 100).toFixed(1)}%
+                        </td>
+                        <td style={{ padding: '12px 16px', fontFamily: 'var(--font-mono)', color: 'var(--brand-cyan)' }}>
+                          {(fair * 100).toFixed(1)}%
+                        </td>
+                        <td style={{ padding: '12px 16px', fontFamily: 'var(--font-mono)', fontWeight: 700 }}>
+                          <span style={{ color: isYesEdge ? 'var(--trade-yes)' : 'var(--trade-no)' }}>
+                            {isYesEdge ? '+' : ''}{(edge * 100).toFixed(1)}%
+                          </span>
+                        </td>
+                        <td style={{ padding: '12px 16px' }}>
+                          <span
+                            className={`stat-pill-tag ${
+                              action === 'BUY_YES' ? 'tag-green' : action === 'BUY_NO' ? 'tag-amber' : 'tag-cyan'
+                            }`}
+                          >
+                            {action === 'BUY_YES' ? 'BUY YES (Underpriced)' : action === 'BUY_NO' ? 'BUY NO (Overpriced)' : 'NEUTRAL'}
+                          </span>
+                        </td>
+                        <td style={{ padding: '12px 20px', textAlign: 'right' }}>
+                          <button
+                            type="button"
+                            className="btn-action"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              onSelectMarket(market.id);
+                              onNavigateToTab('Markets & Depth');
+                            }}
+                          >
+                            <span>Inspect</span>
+                            <ExternalLink size={11} />
+                          </button>
+                        </td>
+                      </tr>
+                    );
+                  })
+                )}
+              </tbody>
+            </table>
+          </div>
+        )}
       </div>
 
       {/* 3. Secondary Split: Quick Market Catalog + Latest Swarm Reasoning */}
@@ -281,61 +290,91 @@ export const OverviewView: React.FC<OverviewViewProps> = ({
           </div>
 
           <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-            {markets.slice(0, 4).map((m) => {
-              const tick = liveTicks.get(m.id);
-              const implied = tick?.impliedProb ?? m.impliedProbYes;
-              const isSelected = selectedMarketId === m.id;
-              return (
+            {isLoading && markets.length === 0 ? (
+              [1, 2, 3, 4].map((i) => (
                 <div
-                  key={m.id}
+                  key={`quick-skel-${i}`}
                   style={{
                     display: 'flex',
                     alignItems: 'center',
                     justifyContent: 'space-between',
                     padding: '10px 14px',
-                    background: isSelected ? 'rgba(0, 255, 204, 0.05)' : '#18181b',
-                    border: `1px solid ${isSelected ? 'var(--brand-cyan)' : 'var(--border)'}`,
+                    background: '#18181b',
+                    border: '1px solid var(--border)',
                     borderRadius: '8px',
-                    cursor: 'pointer',
-                    transition: 'all 0.15s ease',
                   }}
-                  onClick={() => onSelectMarket(m.id)}
                 >
                   <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                    <span style={{ fontWeight: 600, fontSize: '13px' }}>{m.symbol}</span>
-                    <span style={{ fontSize: '11px', color: 'var(--muted-foreground)' }}>${m.strikePrice.toLocaleString()}</span>
-                    <span className="badge" style={{ background: '#27272a', color: '#d4d4d8', padding: '1px 5px', fontSize: '10px' }}>
-                      {m.windowDuration}
-                    </span>
+                    <Skeleton variant="text" width={60} height={14} />
+                    <Skeleton variant="text" width={50} height={12} />
+                    <Skeleton variant="badge" width={32} height={16} />
                   </div>
-
                   <div style={{ display: 'flex', alignItems: 'center', gap: '14px' }}>
-                    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', fontSize: '11px' }}>
-                      <span style={{ fontFamily: 'var(--font-mono)', fontWeight: 600 }}>
-                        YES: {(implied * 100).toFixed(0)}%
-                      </span>
-                      <span style={{ color: 'var(--muted-foreground)', fontSize: '10px' }}>
-                        NO: {((1 - implied) * 100).toFixed(0)}%
+                    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '4px' }}>
+                      <Skeleton variant="text" width={48} height={11} />
+                      <Skeleton variant="text" width={48} height={10} />
+                    </div>
+                    <Skeleton variant="rectangular" width={55} height={24} borderRadius={4} />
+                  </div>
+                </div>
+              ))
+            ) : (
+              markets.slice(0, 4).map((m) => {
+                const tick = liveTicks.get(m.id);
+                const implied = tick?.impliedProb ?? m.impliedProbYes;
+                const isSelected = selectedMarketId === m.id;
+                return (
+                  <div
+                    key={m.id}
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'space-between',
+                      padding: '10px 14px',
+                      background: isSelected ? 'rgba(0, 255, 204, 0.05)' : '#18181b',
+                      border: `1px solid ${isSelected ? 'var(--brand-cyan)' : 'var(--border)'}`,
+                      borderRadius: '8px',
+                      cursor: 'pointer',
+                      transition: 'all 0.15s ease',
+                    }}
+                    onClick={() => onSelectMarket(m.id)}
+                  >
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                      <span style={{ fontWeight: 600, fontSize: '13px' }}>{m.symbol}</span>
+                      <span style={{ fontSize: '11px', color: 'var(--muted-foreground)' }}>${m.strikePrice.toLocaleString()}</span>
+                      <span className="badge" style={{ background: '#27272a', color: '#d4d4d8', padding: '1px 5px', fontSize: '10px' }}>
+                        {m.windowDuration}
                       </span>
                     </div>
 
-                    <button
-                      type="button"
-                      className="btn-action"
-                      style={{ fontSize: '10.5px', padding: '4px 10px', height: 'auto' }}
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        onSelectMarket(m.id);
-                        onNavigateToTab('Markets & Depth');
-                      }}
-                    >
-                      <span>Trade</span>
-                      <ArrowRight size={10} />
-                    </button>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '14px' }}>
+                      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', fontSize: '11px' }}>
+                        <span style={{ fontFamily: 'var(--font-mono)', fontWeight: 600 }}>
+                          YES: {(implied * 100).toFixed(0)}%
+                        </span>
+                        <span style={{ color: 'var(--muted-foreground)', fontSize: '10px' }}>
+                          NO: {((1 - implied) * 100).toFixed(0)}%
+                        </span>
+                      </div>
+
+                      <button
+                        type="button"
+                        className="btn-action"
+                        style={{ fontSize: '10.5px', padding: '4px 10px', height: 'auto' }}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          onSelectMarket(m.id);
+                          onNavigateToTab('Markets & Depth');
+                        }}
+                      >
+                        <span>Trade</span>
+                        <ArrowRight size={10} />
+                      </button>
+                    </div>
                   </div>
-                </div>
-              );
-            })}
+                );
+              })
+            )}
           </div>
         </div>
 

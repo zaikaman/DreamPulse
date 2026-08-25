@@ -1072,6 +1072,30 @@ select.terminal-select option {
   border: 1px solid var(--border) !important;
 }
 
+/* Analytics Responsive Grids */
+.analytics-grid-2 {
+  display: grid;
+  grid-template-columns: 1.2fr 0.9fr;
+  gap: 16px;
+}
+.analytics-grid-3 {
+  display: grid;
+  grid-template-columns: 0.9fr 0.9fr 1.2fr;
+  gap: 16px;
+}
+.analytics-grid-ledger {
+  display: grid;
+  grid-template-columns: 1.6fr 0.9fr;
+  gap: 16px;
+}
+@media (max-width: 1100px) {
+  .analytics-grid-2,
+  .analytics-grid-3,
+  .analytics-grid-ledger {
+    grid-template-columns: 1fr;
+  }
+}
+
 /* Responsive Breakpoints */
 @media (max-width: 1280px) {
   .metrics-stat-grid {
@@ -2044,4 +2068,86 @@ select.terminal-select option {
   border: 1px solid rgba(0, 255, 204, 0.3);
 }
 
+/* ==============================================================================
+   Loading States: Shimmer Skeletons & Glow Spinners
+   ============================================================================== */
 
+@keyframes dreampulse-spin {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@keyframes skeleton-shimmer {
+  0% {
+    background-position: -200% 0;
+  }
+  100% {
+    background-position: 200% 0;
+  }
+}
+
+@keyframes skeleton-pulse {
+  0%, 100% {
+    opacity: 0.45;
+  }
+  50% {
+    opacity: 0.85;
+  }
+}
+
+.dreampulse-skeleton {
+  position: relative;
+  overflow: hidden;
+  will-change: background-position;
+}
+
+.dreampulse-skeleton.skeleton-shimmer {
+  background: linear-gradient(
+    90deg,
+    rgba(255, 255, 255, 0.02) 0%,
+    rgba(255, 255, 255, 0.07) 35%,
+    rgba(0, 255, 204, 0.05) 50%,
+    rgba(255, 255, 255, 0.07) 65%,
+    rgba(255, 255, 255, 0.02) 100%
+  );
+  background-size: 250% 100%;
+  animation: skeleton-shimmer 2s cubic-bezier(0.4, 0, 0.2, 1) infinite;
+}
+
+.dreampulse-spinner-wrapper {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  transition: transform 0.2s ease;
+}
+
+.dreampulse-spinner-wrapper .animate-spin,
+.spin {
+  animation: dreampulse-spin 0.85s linear infinite !important;
+}
+
+.btn-glow:disabled,
+.btn-action:disabled,
+.filter-btn:disabled {
+  opacity: 0.65;
+  cursor: not-allowed;
+}
+
+.fade-in {
+  animation: fadeIn 0.25s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(2px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}

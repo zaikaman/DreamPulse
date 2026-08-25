@@ -10,6 +10,7 @@ import { backtestService } from '../services/backtest-service.js';
 import { operatorAccount, SOMNIA_ADDRESSES, publicClient, somniaExchange } from '../config/somnia.js';
 import type { MarketStatus, AgentType, OrderStatus } from '../types/index.js';
 import { type Address, isAddress, getAddress, parseAbi } from 'viem';
+import { analyticsService, type AnalyticsRange } from '../services/analytics-service.js';
 
 export const apiRouter = Router();
 
@@ -112,22 +113,31 @@ apiRouter.get('/markets/:id/depth', (req: Request, res: Response) => {
   });
 });
 
-apiRouter.get('/markets/pools/future', async (_req: Request, res: Response) => {
+apiRouter.get('/markets/pools/future', async (req: Request, res: Response) => {
   try {
-    const nowSec = Math.floor(Date.now() / 1000);
-    const horizonSec = nowSec + 24 * 3600;
+    const horizonHours = req.query.horizonHours ? parseInt(req.query.horizonHours as string, 10) : 24;
+    const windowFilter = typeof req.query.window === 'string' ? (req.query.window as string).toLowerCase() : undefined;
+    const horizonSec = Math.floor(Date.now() / 1000) + Math.max(1, Math.min(168, horizonHours)) * 3600;
     const poolSet = new Set<string>();
 
     // 1) Current Open + Listed via indexer (covers deployed pools for next windows)
     try {
-      const all = await somniaExchange.client.listBinaryMarkets({ limit: 100 } as any).catch(() => [] as any[]);
+      const all = await somniaExchange.client.listBinaryMarkets({ limit: 200 } as any).catch(() => [] as any[]);
       for (const m of all as any[]) {
         const expiry = Number(m.expiry || 0);
         const pool = m.poolAddress as string | undefined;
         if (!pool || pool === SOMNIA_ADDRESSES.binaryModule) continue;
-        // Include if expiry within 24h horizon or status is Trading/Listed and not voided
+        const intervalSec = Number((m as any).intervalSec || 0);
+        let win: string = '5m';
+        if (intervalSec >= 604800) win = '7d';
+        else if (intervalSec >= 86400) win = '24h';
+        else if (intervalSec >= 14400) win = '4h';
+        else if (intervalSec >= 3600) win = '1h';
+        else if (intervalSec >= 900) win = '15m';
+        else win = '5m';
+        if (windowFilter && win !== windowFilter && windowFilter !== 'all') continue;
         const status = String(m.status || '');
-        const isRelevant = (expiry > 0 && expiry >= nowSec - 3600 && expiry <= horizonSec + 3600) || status === 'Trading' || status === 'Listed' || status === '1' || status === '0';
+        const isRelevant = (expiry > 0 && expiry >= Math.floor(Date.now()/1000) - 3600 && expiry <= horizonSec + 3600) || status === 'Trading' || status === 'Listed' || status === '1' || status === '0';
         if (isRelevant) poolSet.add(pool.toLowerCase());
       }
     } catch {}
@@ -156,9 +166,34 @@ apiRouter.get('/markets/pools/future', async (_req: Request, res: Response) => {
       }
     } catch {}
 
-    // 4) Fallback: if still empty, use known venue pools from recent markets
-    const pools = [...poolSet].slice(0, 80) as Address[];
-    res.json({ success: true, count: pools.length, pools, horizonHours: 24 });
+    // 4) Ensure 7d pools are included even when horizon is large — group by window+symbol and take next pool per group
+    // This prevents 5m pools (many) from crowding out 7d pools (few but far expiry) when slicing to maxPools
+    if (windowFilter === '7d' || horizonHours >= 24) {
+      // Rebuild to ensure per-window coverage for 7d
+      const byWindow = new Map<string, string>();
+      try {
+        const all = await somniaExchange.client.listBinaryMarkets({ limit: 200 } as any).catch(() => [] as any[]);
+        for (const m of all as any[]) {
+          const pool = m.poolAddress as string | undefined;
+          if (!pool) continue;
+          const intervalSec = Number((m as any).intervalSec || 0);
+          let win: string = '5m';
+          if (intervalSec >= 604800) win = '7d';
+          else if (intervalSec >= 86400) win = '24h';
+          else if (intervalSec >= 14400) win = '4h';
+          else if (intervalSec >= 3600) win = '1h';
+          else if (intervalSec >= 900) win = '15m';
+          else win = '5m';
+          if (windowFilter && windowFilter !== 'all' && win !== windowFilter) continue;
+          const key = `${win}-${(m as any).asset || 'BTC'}`;
+          if (!byWindow.has(key)) byWindow.set(key, pool.toLowerCase());
+        }
+      } catch {}
+      for (const [, pool] of byWindow) poolSet.add(pool);
+    }
+    const maxPools = windowFilter === '7d' ? 20 : horizonHours >= 168 ? 120 : 80;
+    const pools = [...poolSet].slice(0, maxPools) as Address[];
+    res.json({ success: true, count: pools.length, pools, horizonHours: Math.max(1, Math.min(168, horizonHours)), window: windowFilter || 'all' });
   } catch (err: any) {
     res.status(500).json({ success: false, error: err.message || 'Failed to fetch future pools' });
   }
@@ -300,15 +335,15 @@ apiRouter.get('/sessions/:userAddress/allowance-status', async (req: Request, re
     }
     const normalized = getAddress(userAddress) as Address;
     const session = await sessionService.getUserActiveSession(normalized).catch(() => null);
-    // Build pool set covering current Open + Listed + FreePools for 24h horizon (same as /pools/future)
+    // Build pool set covering current Open + Listed + FreePools for 7D horizon (168h) — covers 5m…7d
     const poolSet = new Set<string>();
     for (const m of marketService.getActiveMarkets({ status: 'Open' }).slice(0, 20)) {
       if (m.poolAddress) poolSet.add(m.poolAddress.toLowerCase());
     }
     try {
-      const all = await somniaExchange.client.listBinaryMarkets({ limit: 100 } as any).catch(() => [] as any[]);
+      const all = await somniaExchange.client.listBinaryMarkets({ limit: 200 } as any).catch(() => [] as any[]);
       const nowSec = Math.floor(Date.now() / 1000);
-      const horizonSec = nowSec + 24 * 3600;
+      const horizonSec = nowSec + 7 * 24 * 3600;
       for (const m of all as any[]) {
         const expiry = Number(m.expiry || 0);
         const pool = m.poolAddress as string | undefined;
@@ -332,51 +367,39 @@ apiRouter.get('/sessions/:userAddress/allowance-status', async (req: Request, re
         } catch {}
       }
     } catch {}
-    const pools = [...poolSet].slice(0, 40) as Address[];
+    const pools = [...poolSet].slice(0, 60) as Address[];
 
     const erc20Abi = parseAbi(['function allowance(address owner, address spender) view returns (uint256)', 'function balanceOf(address account) view returns (uint256)']);
-    const checks = await Promise.all(
-      pools.map(async (pool) => {
-        try {
-          const [allowance, balance, vault] = await Promise.all([
-            publicClient.readContract({ address: SOMNIA_ADDRESSES.testUsdc, abi: erc20Abi, functionName: 'allowance', args: [normalized, pool] }).catch(() => 0n),
-            publicClient.readContract({ address: SOMNIA_ADDRESSES.testUsdc, abi: erc20Abi, functionName: 'balanceOf', args: [normalized] }).catch(() => 0n),
-            // Vault balance via SDK (per-pool vault)
-            (async () => {
-              try {
-                const { somniaExchange } = await import('../config/somnia.js');
-                return await somniaExchange.client.getVaultBalance({ vault: pool, owner: normalized, token: SOMNIA_ADDRESSES.testUsdc }).catch(() => 0n);
-              } catch {
-                return 0n;
-              }
-            })(),
-          ]);
-          const allowanceHuman = Number(allowance) / 1_000_000;
-          const balanceHuman = Number(balance) / 1_000_000;
-          const vaultHuman = Number(vault) / 1_000_000;
-          const ready = allowanceHuman >= 1000 || vaultHuman >= 10;
-          return { pool, allowance: allowance.toString(), allowanceHuman, balanceHuman, vaultHuman, ready };
-        } catch (e: any) {
-          return { pool, error: e.message, ready: false };
-        }
-      }),
-    );
+    const registryAbi = parseAbi(['function isApprovedForPool(address pool, address owner, address operator, bytes4 selector) view returns (bool)', 'function isGloballyApproved(address owner, address operator, bytes4 selector) view returns (bool)']);
+    const operatorAddr = (SOMNIA_ADDRESSES.operatorAccount || '0x93e300607c363E7D7a47e50f5c9fDf1723e859Cf') as Address;
+    const selector = '0x80054449' as `0x${string}`;
 
-    const hasDelegated = !!session?.onChainAuthorized;
-    const allReady = checks.length === 0 ? true : checks.every((c: any) => c.ready);
+    const [allowanceOperator, balance, isGlobal] = await Promise.all([
+      publicClient.readContract({ address: SOMNIA_ADDRESSES.testUsdc, abi: erc20Abi, functionName: 'allowance', args: [normalized, operatorAddr] }).catch(() => 0n),
+      publicClient.readContract({ address: SOMNIA_ADDRESSES.testUsdc, abi: erc20Abi, functionName: 'balanceOf', args: [normalized] }).catch(() => 0n),
+      publicClient.readContract({ address: SOMNIA_ADDRESSES.operatorPermissionsRegistry, abi: registryAbi, functionName: 'isGloballyApproved', args: [normalized, operatorAddr, selector] }).catch(() => false),
+    ]);
+
+    const allowanceOperatorHuman = Number(allowanceOperator) / 1_000_000;
+    const balanceHuman = Number(balance) / 1_000_000;
+    const hasOperatorAllowance = allowanceOperatorHuman >= 100;
+    const allReady = hasOperatorAllowance && balanceHuman > 0;
+
     return res.json({
       success: true,
       userAddress: normalized,
       hasActiveSession: !!session?.isActive,
-      hasDelegated,
-      poolsChecked: checks.length,
+      hasDelegated: !!session?.onChainAuthorized || Boolean(isGlobal),
+      isGloballyApproved: Boolean(isGlobal),
+      hasOperatorAllowance,
+      allowanceOperatorHuman,
+      balanceHuman,
       allReady,
-      checks,
-      guidance: !hasDelegated
-        ? 'No on-chain operator delegation found — approve OperatorPermissionsRegistry first.'
-        : !allReady
-          ? 'One or more pools have insufficient TestUSDC allowance (<1000) and vault (<10). Call wallet approve for those pools via frontend.'
-          : 'All checked pools have sufficient allowance/vault for copy-trades.',
+      guidance: !hasOperatorAllowance
+        ? 'TestUSDC allowance to operator required. Click Approve to grant 1-time session trading allowance.'
+        : balanceHuman <= 0
+          ? 'Wallet TestUSDC balance is 0. Claim TestUSDC from the faucet to begin copy-trading.'
+          : 'Ready — Operator authorization and TestUSDC allowance active across all binary prediction markets.',
     });
   } catch (err: any) {
     return res.status(500).json({ success: false, error: err.message || 'Failed to check allowance status' });
@@ -384,11 +407,11 @@ apiRouter.get('/sessions/:userAddress/allowance-status', async (req: Request, re
 });
 
 // ------------------------------------------------------------------------------
-// 3. Swarm Agents Status & Telemetry Endpoints (cached 2s to prevent ERR_INSUFFICIENT_RESOURCES storm)
+// 3. Swarm Agents Status & Telemetry Endpoints (cached 800ms to prevent ERR_INSUFFICIENT_RESOURCES storm — was 2000ms, PnL now 2.5x faster)
 // ------------------------------------------------------------------------------
 let cachedSwarmStatus: { at: number; data: any } | null = null;
 let cachedSwarmDetailed: { at: number; data: any } | null = null;
-const SWARM_CACHE_MS = 2000;
+const SWARM_CACHE_MS = 800;
 
 export function invalidateSwarmCache(): void {
   cachedSwarmStatus = null;
@@ -532,9 +555,6 @@ apiRouter.get('/agents/logs', (req: Request, res: Response) => {
 // 4. Order Execution & History Endpoints
 // ------------------------------------------------------------------------------
 apiRouter.get('/orders', (req: Request, res: Response) => {
-  // Fire-and-forget PnL settlement — do not block paginated reads. Previous `await` caused
-  // `priceFeedService.getHistoricalPriceAt` network stalls to hang the entire table on Loading forever.
-  orderService.syncResolvedOrdersPnL();
   const { userAddress, agentType, status, outcome, marketId, limit, page, pageSize, search } = req.query;
 
   const result = orderService.queryOrdersPaginated({
@@ -715,7 +735,38 @@ apiRouter.get('/sweeper/history', (req: Request, res: Response) => {
 });
 
 // ------------------------------------------------------------------------------
-// 6. Strategy Studio & Historical Backtesting Simulator
+// 6. Analytics & Balance History (Transparent Swarm vs User Equity)
+// ------------------------------------------------------------------------------
+apiRouter.get('/analytics/equity', async (req: Request, res: Response) => {
+  try {
+    const { userAddress, range } = req.query;
+    const parsedRange = (typeof range === 'string' ? range : '30d') as AnalyticsRange;
+    const allowed: AnalyticsRange[] = ['24h', '7d', '30d', '90d', 'ALL'];
+    const finalRange = allowed.includes(parsedRange) ? parsedRange : '30d';
+    const targetAddress = typeof userAddress === 'string' && userAddress.trim().length > 0 ? userAddress.trim() : undefined;
+    const data = await analyticsService.getAnalytics(targetAddress, finalRange);
+    return res.json({ success: true, data });
+  } catch (err: any) {
+    return res.status(500).json({ success: false, error: err.message || 'Failed to fetch analytics' });
+  }
+});
+
+apiRouter.get('/analytics/balance-history', async (req: Request, res: Response) => {
+  try {
+    const { userAddress, range } = req.query;
+    const parsedRange = (typeof range === 'string' ? range : '30d') as AnalyticsRange;
+    const allowed: AnalyticsRange[] = ['24h', '7d', '30d', '90d', 'ALL'];
+    const finalRange = allowed.includes(parsedRange) ? parsedRange : '30d';
+    const targetAddress = typeof userAddress === 'string' && userAddress.trim().length > 0 ? userAddress.trim() : undefined;
+    const data = await analyticsService.getBalanceHistory(targetAddress, finalRange);
+    return res.json({ success: true, data });
+  } catch (err: any) {
+    return res.status(500).json({ success: false, error: err.message || 'Failed to fetch balance history' });
+  }
+});
+
+// ------------------------------------------------------------------------------
+// 7. Strategy Studio & Historical Backtesting Simulator
 // ------------------------------------------------------------------------------
 apiRouter.post('/backtest/run', async (req: Request, res: Response) => {
   try {
@@ -765,7 +816,7 @@ apiRouter.get('/backtest/history', (req: Request, res: Response) => {
 });
 
 // ------------------------------------------------------------------------------
-// 7. Health Check Endpoint
+// 8. Health Check Endpoint
 // ------------------------------------------------------------------------------
 apiRouter.get('/health', (_req: Request, res: Response) => {
   res.json({

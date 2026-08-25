@@ -18,6 +18,7 @@ import {
   Flame,
 } from 'lucide-react';
 import type { AgentThoughtLog } from '../types/index.js';
+import { AgentThoughtFeedSkeleton } from './ui/Skeleton.js';
 
 interface AgentThoughtFeedProps {
   thoughts: AgentThoughtLog[];
@@ -25,6 +26,7 @@ interface AgentThoughtFeedProps {
   isDebugEnabled?: boolean;
   onToggleDebug?: (enable?: boolean) => void;
   isConnected: boolean;
+  isLoading?: boolean;
 }
 
 export const AgentThoughtFeed: React.FC<AgentThoughtFeedProps> = ({
@@ -33,6 +35,7 @@ export const AgentThoughtFeed: React.FC<AgentThoughtFeedProps> = ({
   isDebugEnabled = false,
   onToggleDebug,
   isConnected,
+  isLoading = false,
 }) => {
   const [selectedFilter, setSelectedFilter] = useState<string>('ALL');
   const [searchQuery, setSearchQuery] = useState<string>('');
@@ -425,7 +428,9 @@ export const AgentThoughtFeed: React.FC<AgentThoughtFeedProps> = ({
           gap: '10px',
         }}
       >
-        {filteredThoughts.length === 0 ? (
+        {(isLoading || (!isConnected && thoughts.length === 0)) && filteredThoughts.length === 0 ? (
+          <AgentThoughtFeedSkeleton />
+        ) : filteredThoughts.length === 0 ? (
           <div
             style={{
               padding: '48px 24px',

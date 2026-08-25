@@ -27,6 +27,8 @@ import type { AgentType, SessionGrant } from '../types/index.js';
 import type { WalletState } from '../hooks/useSessionKey.js';
 import { useBacktest } from '../hooks/useBacktest.js';
 import { useUserRole } from '../hooks/useUserRole.js';
+import { StrategyStudioSkeleton } from './ui/Skeleton.js';
+import { Spinner } from './ui/Spinner.js';
 
 const MARKET_OPTIONS = [
   { symbol: 'BTC/USD', name: 'BTC/USD', label: '5m Binary Contracts', badge: 'BTC · 5m', color: '#f59e0b' },
@@ -403,8 +405,8 @@ export const StrategyStudio: React.FC<StrategyStudioProps> = ({
                 fontSize: '13px',
               }}
             >
-              <Play size={14} fill="currentColor" />
-              <span>{isLoading ? 'Running Simulation...' : 'Run Backtest Replay'}</span>
+              {isLoading ? <Spinner size="xs" variant="cyan" /> : <Play size={14} fill="currentColor" />}
+              <span>{isLoading ? 'Simulating Replay...' : 'Run Backtest Replay'}</span>
             </button>
           </div>
         </div>
@@ -958,7 +960,9 @@ export const StrategyStudio: React.FC<StrategyStudioProps> = ({
       </div>
 
       {/* 3. Simulation Results & Institutional Quantitative Scorecards */}
-      {currentResult && (
+      {isLoading && !currentResult ? (
+        <StrategyStudioSkeleton />
+      ) : currentResult ? (
         <>
           <div
             style={{
@@ -1104,12 +1108,12 @@ export const StrategyStudio: React.FC<StrategyStudioProps> = ({
                   </>
                 ) : isTrader ? (
                   <>
-                    <Zap size={12} />
+                    {isDeploying ? <Spinner size="xs" variant="cyan" /> : <Zap size={12} />}
                     <span>{isDeploying ? 'Deploying...' : 'Deploy to Session Bot'}</span>
                   </>
                 ) : (
                   <>
-                    <Cpu size={12} />
+                    {isDeploying ? <Spinner size="xs" variant="amber" /> : <Cpu size={12} />}
                     <span>{isDeploying ? 'Updating...' : 'Deploy to Swarm'}</span>
                   </>
                 )}
@@ -1504,7 +1508,7 @@ export const StrategyStudio: React.FC<StrategyStudioProps> = ({
             </div>
           </div>
         </>
-      )}
+      ) : null}
     </div>
   );
 };

@@ -419,32 +419,30 @@ export class SessionService {
         );
       });
 
-      for (const session of candidates) {
-        const probed = await probeOnChainOperatorAuthorization(
-          session.userAddress,
-          operator,
-          session.targetPoolAddress,
-          OPERATOR_SELECTORS.placeOrderFor,
-        );
-        if (probed === null) {
-          continue;
-        }
-        if (session.onChainAuthorized === probed) {
-          continue;
-        }
-        session.onChainAuthorized = probed;
-        session.updatedAt = new Date().toISOString();
-        if (isSessionPersistenceEnabled()) {
+      await Promise.all(
+        candidates.map(async (session) => {
           try {
-            await supabase
-              .from('sessions')
-              .update({ on_chain_authorized: probed, updated_at: session.updatedAt })
-              .eq('id', session.id);
-          } catch {
-            // column may not exist until migration 003 is applied
-          }
-        }
-      }
+            const probed = await probeOnChainOperatorAuthorization(
+              session.userAddress,
+              operator,
+              session.targetPoolAddress,
+              OPERATOR_SELECTORS.placeOrderFor,
+            );
+            if (probed === null) return;
+            if (session.onChainAuthorized === probed) return;
+            session.onChainAuthorized = probed;
+            session.updatedAt = new Date().toISOString();
+            if (isSessionPersistenceEnabled()) {
+              try {
+                await supabase
+                  .from('sessions')
+                  .update({ on_chain_authorized: probed, updated_at: session.updatedAt })
+                  .eq('id', session.id);
+              } catch {}
+            }
+          } catch {}
+        })
+      );
 
       this.lastAuthRefreshAt = Date.now();
     })();

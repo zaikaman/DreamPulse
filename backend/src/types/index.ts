@@ -86,6 +86,8 @@ export interface OrderExecution {
   status: OrderStatus;
   txHash?: `0x${string}`;
   pnl?: number;
+  isSettled?: boolean;
+  settledAt?: string;
   createdAt: string;
   filledAt?: string;
   // Snapshot of market at trade time for reliable post-expiry settlement even if market later evicted from memory

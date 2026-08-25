@@ -6,11 +6,11 @@ import {
   Clock,
   TrendingUp,
   TrendingDown,
-  Loader2,
   Radio,
 } from 'lucide-react';
 import type { Market } from '../types/index.js';
 import type { MarketTickData } from '../hooks/useTelemetry.js';
+import { MarketCardSkeleton } from './ui/Skeleton.js';
 
 interface MarketMatrixProps {
   markets: Market[];
@@ -18,6 +18,7 @@ interface MarketMatrixProps {
   onSelectMarket: (marketId: string) => void;
   liveTicks: Map<string, MarketTickData>;
   currentSpotPrices: Record<string, number>;
+  isLoading?: boolean;
 }
 
 export const MarketMatrix: React.FC<MarketMatrixProps> = ({
@@ -26,6 +27,7 @@ export const MarketMatrix: React.FC<MarketMatrixProps> = ({
   onSelectMarket,
   liveTicks,
   currentSpotPrices,
+  isLoading = false,
 }) => {
   const [selectedSymbol, setSelectedSymbol] = useState<string>('ALL');
   const [selectedWindow, setSelectedWindow] = useState<string>('ALL');
@@ -117,10 +119,27 @@ export const MarketMatrix: React.FC<MarketMatrixProps> = ({
 
       {/* Markets Grid */}
       <div className="matrix-grid">
-        {filteredMarkets.length === 0 ? (
-          <div className="matrix-empty-state">
-            <Loader2 size={24} className="animate-spin" />
-            <p>Scanning active prediction market rounds...</p>
+        {isLoading && markets.length === 0 ? (
+          [1, 2, 3, 4, 5, 6].map((i) => <MarketCardSkeleton key={`market-skel-${i}`} />)
+        ) : filteredMarkets.length === 0 ? (
+          <div className="matrix-empty-state" style={{ padding: '36px', textAlign: 'center', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '12px' }}>
+            <p style={{ color: 'var(--muted-foreground)', fontSize: '13px', margin: 0 }}>
+              No active prediction contracts matching selected filters.
+            </p>
+            {(selectedSymbol !== 'ALL' || selectedWindow !== 'ALL' || searchQuery) && (
+              <button
+                type="button"
+                className="btn-secondary"
+                style={{ fontSize: '11px', padding: '4px 12px' }}
+                onClick={() => {
+                  setSelectedSymbol('ALL');
+                  setSelectedWindow('ALL');
+                  setSearchQuery('');
+                }}
+              >
+                Reset Filters
+              </button>
+            )}
           </div>
         ) : (
           filteredMarkets.map((market) => {

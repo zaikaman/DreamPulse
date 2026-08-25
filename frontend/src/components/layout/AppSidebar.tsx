@@ -15,6 +15,7 @@ import {
   Wallet,
   ShieldCheck,
   LogOut,
+  BarChart3,
 } from 'lucide-react';
 import type { SessionGrant } from '../../types/index.js';
 import type { WalletState } from '../../hooks/useSessionKey.js';
@@ -82,10 +83,14 @@ export const AppSidebar: React.FC<AppSidebarProps> = ({
 
   const personalNavItems = [
     {
+      id: 'Analytics',
+      label: 'Analytics & Ledger',
+      Icon: BarChart3,
+    },
+    {
       id: 'Strategy Studio',
       label: 'Strategy & Bot Studio',
       Icon: LineChart,
-      badge: isGuest ? 'Demo' : undefined,
     },
     {
       id: 'Settlement',

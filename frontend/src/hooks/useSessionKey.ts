@@ -148,29 +148,16 @@ export function useSessionKey(): UseSessionKeyReturn {
     setIsFixingAllowance(true);
     setError(null);
     try {
-      // Prefer 24h future pool set (Listed + FreePools) so next windows are already approved
-      let pools: Address[] = [];
-      try {
-        const futureRes = await apiClient.getFuturePools();
-        if (futureRes?.pools?.length) pools = futureRes.pools.slice(0, 80) as Address[];
-      } catch {}
-      if (pools.length === 0) {
-        const marketsRes = await apiClient.getMarkets({ status: 'Open' });
-        pools = [...new Set((marketsRes.data || []).map((m: any) => m.poolAddress).filter(Boolean))] as Address[];
-        pools = pools.slice(0, 15) as Address[];
-      }
-      if (pools.length === 0) throw new Error('No pools discovered for 24h horizon');
-      // Batch via EIP-5792 (1 popup for N pools)
-      await web3Service.ensureAllowancesForPools({ userAddress: wallet.address, pools });
+      await web3Service.ensureAllowancesForPools({ userAddress: wallet.address });
       await refreshAllowanceStatus();
       await refreshBalances(wallet.address);
     } catch (err: any) {
-      setError(err.message || 'Failed to fix allowances');
+      setError(err.message || 'Failed to authorize operator');
       throw err;
     } finally {
       setIsFixingAllowance(false);
     }
-  }, [wallet.address, refreshAllowanceStatus]);
+  }, [wallet.address, refreshAllowanceStatus, refreshBalances]);
 
   /**
    * Fetches active session from backend API and Supabase.
@@ -341,85 +328,48 @@ export function useSessionKey(): UseSessionKeyReturn {
       let onChainTxHash: `0x${string}` | undefined;
 
       try {
-        // Step 1+2b (batched): On-chain operator approval + TestUSDC allowances to ALL future pools (24h horizon) in ONE wallet popup (EIP-5792)
-        // Covers Listed + FreePools so next 5m windows don't need another click
+        // 2-click forever: 1 batch for approve(operator,MAX)+global+per-pool(7d) via EIP-5792/7702 + 1 EIP-712
         setStepState('authorizing_onchain');
-        let poolsForBatch: Address[] = [];
-        if (!params.targetPool) {
+        let futurePools: Address[] = [];
+        try {
+          const futureRes = await apiClient.getFuturePools({ horizonHours: 168 }).catch(() => null);
+          if (futureRes?.pools?.length) futurePools = futureRes.pools.slice(0, 80) as Address[];
+        } catch {}
+        try {
+          const batchHash = await web3Service.batchSingleApproveAndGlobal({ userAddress: wallet.address, pools: futurePools });
+          if (batchHash) onChainTxHash = batchHash;
+        } catch (e: any) {
+          if (String(e?.message || '').includes('User rejected')) throw e;
+          console.warn('[useSessionKey] batchSingleApproveAndGlobal notice:', e.message);
           try {
-            const futureRes = await apiClient.getFuturePools().catch(() => null);
-            if (futureRes?.pools?.length) {
-              poolsForBatch = futureRes.pools.slice(0, 80) as Address[];
-            } else {
-              const marketsRes = await apiClient.getMarkets({ status: 'Open' });
-              poolsForBatch = [...new Set(
-                (marketsRes.data || [])
-                  .map((m: any) => m.poolAddress)
-                  .filter((p: string | undefined) => p && p.startsWith('0x') && p !== SOMNIA_ADDRESSES.binaryModule)
-              )] as Address[];
-              poolsForBatch = poolsForBatch.slice(0, 15);
-            }
-          } catch {}
-        } else {
-          poolsForBatch = [params.targetPool as Address];
-        }
-
-        // Try single batch for operator + all pool approvals (1 click)
-        if (poolsForBatch.length > 0 || !params.targetPool) {
-          try {
-            const batchRes = await web3Service.batchAuthorizeAndApprovePools({
-              userAddress: wallet.address,
-              pools: poolsForBatch,
-            });
-            onChainTxHash = batchRes.operatorHash || batchRes.allowanceHashes[0];
-            // If operator was already approved and no pool needed approval, batch returns empty — fallback to check
-            if (!onChainTxHash) {
-              // No on-chain write needed (already approved) — keep undefined, backend will verify via isGloballyApproved
-              onChainTxHash = undefined;
-            }
-          } catch (batchErr: any) {
-            // Batch already handles fallback; only rethrow user rejection
-            if (String(batchErr?.message || '').includes('User rejected') || String(batchErr?.message || '').includes('rejected')) throw batchErr;
-            console.warn('[useSessionKey] Batch authorize notice, trying fallback:', batchErr.message);
-            // Fallback: sequential (should already have been tried inside batch method, but ensure)
-            if (params.targetPool) {
-              const res = await web3Service.grantOperatorForPool({
-                userAddress: wallet.address,
-                pool: params.targetPool,
-                operator: SOMNIA_ADDRESSES.operatorAccount,
-                approved: true,
-              });
-              onChainTxHash = res.hash;
-              await web3Service.ensureAllowancesForPools({ userAddress: wallet.address, pools: poolsForBatch });
-            } else {
-              const res = await web3Service.grantOperatorGlobal({
-                userAddress: wallet.address,
-                operator: SOMNIA_ADDRESSES.operatorAccount,
-                approved: true,
-              });
-              onChainTxHash = res.hash;
-              if (poolsForBatch.length > 0) await web3Service.ensureAllowancesForPools({ userAddress: wallet.address, pools: poolsForBatch });
-            }
+            const opHash = await web3Service.approveOperatorForTestUsdc({ userAddress: wallet.address });
+            if (opHash) onChainTxHash = opHash;
+          } catch (ee: any) {
+            if (String(ee?.message || '').includes('User rejected')) throw ee;
           }
-        } else {
-          // No pools to approve — just operator
-          if (params.targetPool) {
-            const res = await web3Service.grantOperatorForPool({
-              userAddress: wallet.address,
-              pool: params.targetPool,
-              operator: SOMNIA_ADDRESSES.operatorAccount,
-              approved: true,
-            });
-            onChainTxHash = res.hash;
-          } else {
-            const res = await web3Service.grantOperatorGlobal({
-              userAddress: wallet.address,
-              operator: SOMNIA_ADDRESSES.operatorAccount,
-              approved: true,
-            });
-            onChainTxHash = res.hash;
+          try {
+            const isAuth = await web3Service.isOperatorAuthorized({ owner: wallet.address, operator: SOMNIA_ADDRESSES.operatorAccount });
+            if (!isAuth) {
+              const res = await web3Service.grantOperatorGlobal({ userAddress: wallet.address, operator: SOMNIA_ADDRESSES.operatorAccount, approved: true });
+              onChainTxHash = res.hash;
+            }
+          } catch (ee: any) {
+            if (String(ee?.message || '').includes('User rejected')) throw ee;
+          }
+          if (futurePools.length > 0) {
+            try {
+              await web3Service.batchAuthorizeAndApprovePools({ userAddress: wallet.address, pools: futurePools });
+            } catch {}
           }
         }
+        // Delegate EOA to Batch helper for future per-pool isApprovedForPool without further clicks (EIP-7702, executor:self)
+        // Backend will then call user's delegated EOA to setOperatorApprovalForPool for new pools as they appear — no user popup
+        try {
+          const code = await (web3Service as any).isDelegatedToBatch?.(wallet.address);
+          if (!code) {
+            await (web3Service as any).delegateToBatch?.(wallet.address).catch(() => {});
+          }
+        } catch {}
 
         // Step 2: (Optional) Collateral vault deposit — only for SpotPools, BinaryPools use allowance only
         if (params.depositAmount && params.depositAmount > 0 && params.targetPool) {

@@ -2,12 +2,14 @@ import React, { useState } from 'react';
 import { Crosshair, Zap, Coins } from 'lucide-react';
 import type { Market } from '../types/index.js';
 import type { MarketTickData } from '../hooks/useTelemetry.js';
+import { EdgeRadarHeatmapSkeleton } from './ui/Skeleton.js';
 
 interface EdgeRadarHeatmapProps {
   markets: Market[];
   selectedMarketId: string | null;
   onSelectMarket: (marketId: string) => void;
   liveTicks: Map<string, MarketTickData>;
+  isLoading?: boolean;
 }
 
 export const EdgeRadarHeatmap: React.FC<EdgeRadarHeatmapProps> = ({
@@ -15,8 +17,13 @@ export const EdgeRadarHeatmap: React.FC<EdgeRadarHeatmapProps> = ({
   selectedMarketId,
   onSelectMarket,
   liveTicks,
+  isLoading = false,
 }) => {
   const [hoveredMarketId, setHoveredMarketId] = useState<string | null>(null);
+
+  if (isLoading && markets.length === 0) {
+    return <EdgeRadarHeatmapSkeleton />;
+  }
 
   const symbols = ['BTC/USD', 'ETH/USD'];
   const windows: Array<'5m' | '15m' | '1h'> = ['5m', '15m', '1h'];

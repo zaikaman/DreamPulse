@@ -26,6 +26,7 @@
     "verify": "npm run typecheck && npm run test && npm run build"
   },
   "devDependencies": {
-    "concurrently": "^9.1.2"
+    "concurrently": "^9.1.2",
+    "solc": "^0.8.36"
   }
 }

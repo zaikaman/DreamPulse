@@ -12,6 +12,7 @@ interface MarketsDepthViewProps {
   liveTicks: Map<string, MarketTickData>;
   depthMap: Map<string, DepthUpdateData>;
   currentSpotPrices: Record<string, number>;
+  isLoading?: boolean;
 }
 
 export const MarketsDepthView: React.FC<MarketsDepthViewProps> = ({
@@ -22,6 +23,7 @@ export const MarketsDepthView: React.FC<MarketsDepthViewProps> = ({
   liveTicks,
   depthMap,
   currentSpotPrices,
+  isLoading = false,
 }) => {
   return (
     <div className="full-height-grid-view" style={{ gridTemplateColumns: '1.2fr 1fr' }}>
@@ -33,6 +35,7 @@ export const MarketsDepthView: React.FC<MarketsDepthViewProps> = ({
           onSelectMarket={onSelectMarket}
           liveTicks={liveTicks}
           currentSpotPrices={currentSpotPrices}
+          isLoading={isLoading}
         />
       </div>
 

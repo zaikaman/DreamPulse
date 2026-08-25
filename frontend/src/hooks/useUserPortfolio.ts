@@ -56,7 +56,7 @@ export function useUserPortfolio(wallet?: WalletState): UseUserPortfolioReturn {
 
     const now = Date.now();
     if (inFlightRef.current) return;
-    if (!force && now - lastFetchAtRef.current < 2000) return;
+    if (!force && now - lastFetchAtRef.current < 800) return;
 
     inFlightRef.current = true;
     lastFetchAtRef.current = now;
@@ -79,7 +79,7 @@ export function useUserPortfolio(wallet?: WalletState): UseUserPortfolioReturn {
     }
   }, []);
 
-  const debouncedFetch = useCallback((delay = 300) => {
+  const debouncedFetch = useCallback((delay = 100) => {
     if (debounceTimerRef.current) clearTimeout(debounceTimerRef.current);
     debounceTimerRef.current = window.setTimeout(() => {
       fetchPortfolio(true);
@@ -92,8 +92,8 @@ export function useUserPortfolio(wallet?: WalletState): UseUserPortfolioReturn {
     // Initial fetch on mount / address change
     fetchPortfolio(true);
 
-    // Periodic 10-second polling fallback
-    const interval = setInterval(() => fetchPortfolio(false), 10000);
+    // Periodic 5-second polling fallback (was 10s — 2x faster without storm)
+    const interval = setInterval(() => fetchPortfolio(false), 5000);
 
     // Realtime WebSocket subscriber for user trade & settlement events
     let ws: WebSocket | null = null;
@@ -136,7 +136,7 @@ export function useUserPortfolio(wallet?: WalletState): UseUserPortfolioReturn {
               payload.event === 'order_filled' ||
               payload.event === 'sweep_completed'
             ) {
-              debouncedFetch(300);
+              debouncedFetch(100);
             }
           } catch {}
         };

@@ -8,12 +8,12 @@ import {
   LogOut,
   Sliders,
   Coins,
-  Loader2,
   ChevronDown,
   Zap,
 } from 'lucide-react';
 import type { WalletState } from '../../hooks/useSessionKey.js';
 import type { SessionGrant } from '../../types/index.js';
+import { Spinner } from '../ui/Spinner.js';
 
 interface WalletAccountDropdownProps {
   wallet: WalletState;
@@ -297,7 +297,7 @@ export const WalletAccountDropdown: React.FC<WalletAccountDropdownProps> = ({
                   }}
                   title="Claim 1,000 TestUSDC for DreamDEX event trading"
                 >
-                  {isFauceting ? <Loader2 size={11} className="spin" /> : <Coins size={11} />}
+                  {isFauceting ? <Spinner size="xs" variant="cyan" /> : <Coins size={11} />}
                   <span>+1k Faucet</span>
                 </button>
               )}

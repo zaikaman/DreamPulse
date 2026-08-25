@@ -328,19 +328,12 @@ export class MultiAgentSwarmRunner {
               continue;
             }
 
-            const n = delegated.length;
-            const MAX_COPIES_PER_SIGNAL = 5;
-            let batch: SessionRecord[];
-            if (n <= MAX_COPIES_PER_SIGNAL) {
-              batch = delegated;
-            } else {
-              const startIdx = this.copyTradeCursor % n;
-              this.copyTradeCursor = (startIdx + MAX_COPIES_PER_SIGNAL) % n;
-              batch = [];
-              for (let i = 0; i < MAX_COPIES_PER_SIGNAL; i++) {
-                batch.push(delegated[(startIdx + i) % n]);
-              }
-            }
+            // Sort by most recently active first
+            const sortedDelegated = [...delegated].sort(
+              (a, b) => new Date(b.updatedAt || b.createdAt).getTime() - new Date(a.updatedAt || a.createdAt).getTime(),
+            );
+            const MAX_COPIES_PER_SIGNAL = 10;
+            const batch = sortedDelegated.slice(0, MAX_COPIES_PER_SIGNAL);
 
             let copiesDone = 0;
             for (const userSession of batch) {
@@ -403,43 +396,64 @@ export class MultiAgentSwarmRunner {
       const sweepInterval = sweeperAgent.sweeperConfig.sweepIntervalMs || 30000;
 
       if (now - lastSweepTime >= sweepInterval) {
+        this.lastTradeTimes.set('Sweeper', now);
         try {
           const startEvalTime = performance.now();
-          const targetAddress = operatorAccount.address;
-          const unclaimed = await settlementService.scanUnclaimedSettlements(targetAddress);
+          const candidateTargets = [
+            operatorAccount.address,
+            ...sessionService
+              .getDelegatedCopyTradeSessions(operatorAccount.address)
+              .filter((s) => s.isActive && s.onChainAuthorized)
+              .map((s) => s.userAddress),
+          ];
+          const uniqueTargets = Array.from(new Set(candidateTargets.map((a) => a.toLowerCase())));
+
+          let totalClaimedAcrossUsers = 0;
+          let totalMarketsClaimedAcrossUsers = 0;
+
+          for (const targetAddress of uniqueTargets) {
+            try {
+              const unclaimed = await settlementService.scanUnclaimedSettlements(targetAddress);
+              const totalUnclaimed = unclaimed.reduce((sum, u) => sum + (u.claimableAmount || 0), 0);
+
+              if (unclaimed.length > 0 && totalUnclaimed >= sweeperAgent.sweeperConfig.minClaimableAmount) {
+                const sweepResult = await settlementService.triggerBatchSweep(
+                  targetAddress,
+                  sweeperAgent.sweeperConfig.autoCompound,
+                );
+
+                if (sweepResult.claimedMarketsCount > 0) {
+                  const claimedNum = parseFloat(sweepResult.totalClaimedAmount.replace(/[^0-9.]/g, '')) || 0;
+                  totalClaimedAcrossUsers += claimedNum;
+                  totalMarketsClaimedAcrossUsers += sweepResult.claimedMarketsCount;
+
+                  telemetryWsGateway.broadcastAgentThought({
+                    id: `exec-sweep-${Date.now()}-${targetAddress.slice(0, 6)}`,
+                    agent: 'Sweeper',
+                    marketId: sweepResult.sweeps[0]?.marketId || 'BATCH_CLAIM',
+                    confidence: 0.99,
+                    action: 'BATCH_CLAIM_PAYOUTS',
+                    thought: `[AUTONOMOUS SWEEPER] Swept ${sweepResult.claimedMarketsCount} resolved market payout(s) (+${sweepResult.totalClaimedAmount}) for ${targetAddress.slice(0, 6)}...${targetAddress.slice(-4)} with 100% auto-compounding to trading capital.`,
+                    txHash: sweepResult.txHash,
+                    outcome: 'YES',
+                    isExecution: true,
+                    timestamp: Date.now(),
+                  });
+                }
+              }
+            } catch (userSweepErr: any) {
+              console.warn(`[SwarmRunner] User sweep error for ${targetAddress}:`, userSweepErr.message);
+            }
+          }
+
           sweeperState.evalLatencyMs = Math.max(1, Math.round(performance.now() - startEvalTime));
           sweeperState.consecutiveErrors = 0;
 
-          const totalUnclaimed = unclaimed.reduce((sum, u) => sum + (u.claimableAmount || 0), 0);
-
-          if (unclaimed.length > 0 && totalUnclaimed >= sweeperAgent.sweeperConfig.minClaimableAmount) {
-            this.lastTradeTimes.set('Sweeper', now);
+          if (totalMarketsClaimedAcrossUsers > 0) {
             sweeperState.lastAction = 'BATCH_SWEEP';
             sweeperState.lastActionTimestamp = now;
-
-            const sweepResult = await settlementService.triggerBatchSweep(
-              targetAddress,
-              sweeperAgent.sweeperConfig.autoCompound,
-            );
-
-            if (sweepResult.claimedMarketsCount > 0) {
-              const claimedNum = parseFloat(sweepResult.totalClaimedAmount.replace(/[^0-9.]/g, '')) || 0;
-              sweeperState.tradesToday += sweepResult.claimedMarketsCount;
-              sweeperState.pnlAmount = Number((sweeperState.pnlAmount + claimedNum).toFixed(2));
-
-              telemetryWsGateway.broadcastAgentThought({
-                id: `exec-sweep-${Date.now()}`,
-                agent: 'Sweeper',
-                marketId: sweepResult.sweeps[0]?.marketId || 'BATCH_CLAIM',
-                confidence: 0.99,
-                action: 'BATCH_CLAIM_PAYOUTS',
-                thought: `[AUTONOMOUS SWEEPER] Swept ${sweepResult.claimedMarketsCount} resolved market payout(s) (+${sweepResult.totalClaimedAmount}) with 100% auto-compounding to trading capital.`,
-                txHash: sweepResult.txHash,
-                outcome: 'YES',
-                isExecution: true,
-                timestamp: Date.now(),
-              });
-            }
+            sweeperState.tradesToday += totalMarketsClaimedAcrossUsers;
+            sweeperState.pnlAmount = Number((sweeperState.pnlAmount + totalClaimedAcrossUsers).toFixed(2));
           }
         } catch (sweeperErr: any) {
           sweeperState.consecutiveErrors++;
@@ -516,25 +530,23 @@ export class MultiAgentSwarmRunner {
    * `tradesToday` now represents **total all-time fills** (per product request: overview shows total, not daily).
    */
   public getSwarmStatus(): SwarmStatusSummary {
-    // Fast sync path for hot loop (uses current spot); for historically accurate use getSwarmStatusAsync()
-    orderService.syncResolvedOrdersPnL();
-
-    const voltPnl = orderService.getTotalRealizedPnl('Volt');
-    const oraclePnl = orderService.getTotalRealizedPnl('Oracle');
-    const titanPnl = orderService.getTotalRealizedPnl('Titan');
+    const operatorAddr = operatorAccount.address;
+    const voltPnl = orderService.getTotalRealizedPnl('Volt', operatorAddr);
+    const oraclePnl = orderService.getTotalRealizedPnl('Oracle', operatorAddr);
+    const titanPnl = orderService.getTotalRealizedPnl('Titan', operatorAddr);
 
     this.telemetry.Volt.pnlAmount = voltPnl;
     this.telemetry.Oracle.pnlAmount = oraclePnl;
     this.telemetry.Titan.pnlAmount = titanPnl;
 
-    // Total all-time fills per agent (FILLED + PENDING that have been persisted)
-    this.telemetry.Volt.tradesToday = orderService.getOrders({ agentType: 'Volt', status: 'FILLED' }).length + orderService.getOrders({ agentType: 'Volt', status: 'PENDING' }).length;
+    // Total all-time fills per agent — strictly operator wallet (canonical swarm). Copy-trade fills for delegated users are personal, not swarm.
+    this.telemetry.Volt.tradesToday = orderService.getOrders({ agentType: 'Volt', status: 'FILLED', userAddress: operatorAddr }).length + orderService.getOrders({ agentType: 'Volt', status: 'PENDING', userAddress: operatorAddr }).length;
     // Fallback to all statuses if filtering returns 0 due to no FILLED yet, count total all-time
-    if (this.telemetry.Volt.tradesToday === 0) this.telemetry.Volt.tradesToday = orderService.getOrders({ agentType: 'Volt' }).length;
-    this.telemetry.Oracle.tradesToday = orderService.getOrders({ agentType: 'Oracle', status: 'FILLED' }).length + orderService.getOrders({ agentType: 'Oracle', status: 'PENDING' }).length;
-    if (this.telemetry.Oracle.tradesToday === 0) this.telemetry.Oracle.tradesToday = orderService.getOrders({ agentType: 'Oracle' }).length;
-    this.telemetry.Titan.tradesToday = orderService.getOrders({ agentType: 'Titan', status: 'FILLED' }).length + orderService.getOrders({ agentType: 'Titan', status: 'PENDING' }).length;
-    if (this.telemetry.Titan.tradesToday === 0) this.telemetry.Titan.tradesToday = orderService.getOrders({ agentType: 'Titan' }).length;
+    if (this.telemetry.Volt.tradesToday === 0) this.telemetry.Volt.tradesToday = orderService.getOrders({ agentType: 'Volt', userAddress: operatorAddr }).length;
+    this.telemetry.Oracle.tradesToday = orderService.getOrders({ agentType: 'Oracle', status: 'FILLED', userAddress: operatorAddr }).length + orderService.getOrders({ agentType: 'Oracle', status: 'PENDING', userAddress: operatorAddr }).length;
+    if (this.telemetry.Oracle.tradesToday === 0) this.telemetry.Oracle.tradesToday = orderService.getOrders({ agentType: 'Oracle', userAddress: operatorAddr }).length;
+    this.telemetry.Titan.tradesToday = orderService.getOrders({ agentType: 'Titan', status: 'FILLED', userAddress: operatorAddr }).length + orderService.getOrders({ agentType: 'Titan', status: 'PENDING', userAddress: operatorAddr }).length;
+    if (this.telemetry.Titan.tradesToday === 0) this.telemetry.Titan.tradesToday = orderService.getOrders({ agentType: 'Titan', userAddress: operatorAddr }).length;
 
     const userSweeps = settlementService.getSweepHistory(operatorAccount.address);
     const confirmedSweeps = userSweeps.filter(
@@ -589,22 +601,21 @@ export class MultiAgentSwarmRunner {
   }
 
   public async getSwarmStatusAsync(): Promise<SwarmStatusSummary> {
-    // Single throttled sync, then parallel cached sums — was sequential + 3x blocking hist fetches (~6-9s)
-    await orderService.syncResolvedOrdersPnLAsync();
+    const operatorAddr = operatorAccount.address;
     const [voltPnl, oraclePnl, titanPnl] = await Promise.all([
-      orderService.getTotalRealizedPnlAsync('Volt'),
-      orderService.getTotalRealizedPnlAsync('Oracle'),
-      orderService.getTotalRealizedPnlAsync('Titan'),
+      orderService.getTotalRealizedPnlAsync('Volt', operatorAddr),
+      orderService.getTotalRealizedPnlAsync('Oracle', operatorAddr),
+      orderService.getTotalRealizedPnlAsync('Titan', operatorAddr),
     ]);
     this.telemetry.Volt.pnlAmount = voltPnl;
     this.telemetry.Oracle.pnlAmount = oraclePnl;
     this.telemetry.Titan.pnlAmount = titanPnl;
-    this.telemetry.Volt.tradesToday = orderService.getOrders({ agentType: 'Volt', status: 'FILLED' }).length + orderService.getOrders({ agentType: 'Volt', status: 'PENDING' }).length;
-    if (this.telemetry.Volt.tradesToday === 0) this.telemetry.Volt.tradesToday = orderService.getOrders({ agentType: 'Volt' }).length;
-    this.telemetry.Oracle.tradesToday = orderService.getOrders({ agentType: 'Oracle', status: 'FILLED' }).length + orderService.getOrders({ agentType: 'Oracle', status: 'PENDING' }).length;
-    if (this.telemetry.Oracle.tradesToday === 0) this.telemetry.Oracle.tradesToday = orderService.getOrders({ agentType: 'Oracle' }).length;
-    this.telemetry.Titan.tradesToday = orderService.getOrders({ agentType: 'Titan', status: 'FILLED' }).length + orderService.getOrders({ agentType: 'Titan', status: 'PENDING' }).length;
-    if (this.telemetry.Titan.tradesToday === 0) this.telemetry.Titan.tradesToday = orderService.getOrders({ agentType: 'Titan' }).length;
+    this.telemetry.Volt.tradesToday = orderService.getOrders({ agentType: 'Volt', status: 'FILLED', userAddress: operatorAddr }).length + orderService.getOrders({ agentType: 'Volt', status: 'PENDING', userAddress: operatorAddr }).length;
+    if (this.telemetry.Volt.tradesToday === 0) this.telemetry.Volt.tradesToday = orderService.getOrders({ agentType: 'Volt', userAddress: operatorAddr }).length;
+    this.telemetry.Oracle.tradesToday = orderService.getOrders({ agentType: 'Oracle', status: 'FILLED', userAddress: operatorAddr }).length + orderService.getOrders({ agentType: 'Oracle', status: 'PENDING', userAddress: operatorAddr }).length;
+    if (this.telemetry.Oracle.tradesToday === 0) this.telemetry.Oracle.tradesToday = orderService.getOrders({ agentType: 'Oracle', userAddress: operatorAddr }).length;
+    this.telemetry.Titan.tradesToday = orderService.getOrders({ agentType: 'Titan', status: 'FILLED', userAddress: operatorAddr }).length + orderService.getOrders({ agentType: 'Titan', status: 'PENDING', userAddress: operatorAddr }).length;
+    if (this.telemetry.Titan.tradesToday === 0) this.telemetry.Titan.tradesToday = orderService.getOrders({ agentType: 'Titan', userAddress: operatorAddr }).length;
     const userSweeps = settlementService.getSweepHistory(operatorAccount.address);
     const confirmedSweeps = userSweeps.filter((s) => s.status === 'CONFIRMED' && s.txHash && s.txHash !== '0x0000000000000000000000000000000000000000000000000000000000000000');
     const sweeperPnl = confirmedSweeps.reduce((acc, s) => acc + (s.claimableAmount || 0), 0);

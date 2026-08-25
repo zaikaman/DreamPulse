@@ -17,6 +17,7 @@ import { SwarmFeedView } from './components/dashboard/SwarmFeedView.js';
 import { SwarmCockpitView } from './components/dashboard/SwarmCockpitView.js';
 import { StrategyStudio } from './components/StrategyStudio.js';
 import { SweeperControls } from './components/SweeperControls.js';
+import { AnalyticsView } from './components/dashboard/AnalyticsView.js';
 import { SessionDelegationModal } from './components/SessionDelegationModal.js';
 import { useKeyboardShortcuts } from './hooks/useKeyboardShortcuts.js';
 import { soundEngine } from './services/audio.js';
@@ -99,7 +100,7 @@ export const App: React.FC = () => {
   const [globalSearch, setGlobalSearch] = useState<string>('');
 
   // Live data hooks
-  const { markets, selectedMarket, selectedMarketId, setSelectedMarketId } = useMarkets();
+  const { markets, selectedMarket, selectedMarketId, setSelectedMarketId, loading: isMarketsLoading } = useMarkets();
   const {
     isConnected,
     latencyMs,
@@ -156,6 +157,8 @@ export const App: React.FC = () => {
         setActiveNav('AI Swarm Feed');
       } else if (hash === 'cockpit' || hash === 'swarm-cockpit') {
         setActiveNav('Swarm Cockpit');
+      } else if (hash === 'analytics') {
+        setActiveNav('Analytics');
       } else if (hash === 'studio' || hash === 'backtest') {
         setActiveNav('Strategy Studio');
       } else if (hash === 'settlement' || hash === 'sweeper') {
@@ -178,6 +181,7 @@ export const App: React.FC = () => {
       else if (tab === 'Markets & Depth') window.location.hash = '#markets';
       else if (tab === 'AI Swarm Feed') window.location.hash = '#swarm';
       else if (tab === 'Swarm Cockpit') window.location.hash = '#cockpit';
+      else if (tab === 'Analytics') window.location.hash = '#analytics';
       else if (tab === 'Strategy Studio') window.location.hash = '#studio';
       else if (tab === 'Settlement') window.location.hash = '#settlement';
     },
@@ -452,6 +456,7 @@ export const App: React.FC = () => {
           else if (tab === 'Markets & Depth') window.location.hash = '#markets';
           else if (tab === 'AI Swarm Feed') window.location.hash = '#swarm';
           else if (tab === 'Swarm Cockpit') window.location.hash = '#cockpit';
+          else if (tab === 'Analytics') window.location.hash = '#analytics';
           else if (tab === 'Strategy Studio') window.location.hash = '#studio';
           else if (tab === 'Settlement') window.location.hash = '#settlement';
         }}
@@ -477,6 +482,7 @@ export const App: React.FC = () => {
             else if (tab === 'Markets & Depth') window.location.hash = '#markets';
             else if (tab === 'AI Swarm Feed') window.location.hash = '#swarm';
             else if (tab === 'Swarm Cockpit') window.location.hash = '#cockpit';
+            else if (tab === 'Analytics') window.location.hash = '#analytics';
             else if (tab === 'Strategy Studio') window.location.hash = '#studio';
             else if (tab === 'Settlement') window.location.hash = '#settlement';
           }}
@@ -502,7 +508,7 @@ export const App: React.FC = () => {
           className="dashboard-content-area"
           style={{
             height: 'calc(100vh - 56px)',
-            overflow: (activeNav === 'Overview' || activeNav === 'Swarm Cockpit' || activeNav === 'Strategy Studio' || activeNav === 'Settlement') ? 'auto' : 'hidden',
+            overflow: (activeNav === 'Overview' || activeNav === 'Swarm Cockpit' || activeNav === 'Analytics' || activeNav === 'Strategy Studio' || activeNav === 'Settlement') ? 'auto' : 'hidden',
           }}
         >
           {activeNav === 'Overview' ? (
@@ -519,6 +525,7 @@ export const App: React.FC = () => {
                 else if (tab === 'Markets & Depth') window.location.hash = '#markets';
                 else if (tab === 'AI Swarm Feed') window.location.hash = '#swarm';
                 else if (tab === 'Swarm Cockpit') window.location.hash = '#cockpit';
+                else if (tab === 'Analytics') window.location.hash = '#analytics';
                 else if (tab === 'Strategy Studio') window.location.hash = '#studio';
                 else if (tab === 'Settlement') window.location.hash = '#settlement';
               }}
@@ -530,6 +537,7 @@ export const App: React.FC = () => {
               onRevokeSession={revokeSession}
               onConnectWallet={connectWallet}
               onSwitchNetwork={switchNetwork}
+              isLoading={isMarketsLoading}
             />
           ) : activeNav === 'Edge Radar' ? (
             <EdgeRadarView
@@ -541,6 +549,7 @@ export const App: React.FC = () => {
                 setActiveNav('Markets & Depth');
                 window.location.hash = '#markets';
               }}
+              isLoading={isMarketsLoading}
             />
           ) : activeNav === 'Markets & Depth' ? (
             <MarketsDepthView
@@ -551,6 +560,7 @@ export const App: React.FC = () => {
               liveTicks={liveTicks}
               depthMap={depthMap}
               currentSpotPrices={currentSpotPrices}
+              isLoading={isMarketsLoading}
             />
           ) : activeNav === 'AI Swarm Feed' ? (
             <SwarmFeedView
@@ -574,6 +584,8 @@ export const App: React.FC = () => {
               onOpenSessionModal={() => setIsSessionModalOpen(true)}
               onConnectWallet={connectWallet}
             />
+          ) : activeNav === 'Analytics' ? (
+            <AnalyticsView wallet={wallet} onConnectWallet={connectWallet} />
           ) : activeNav === 'Settlement' ? (
             <SweeperControls
               userAddress={wallet.address || undefined}

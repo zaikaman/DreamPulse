@@ -337,7 +337,7 @@ export class PriceFeedService extends EventEmitter {
       const endMs = targetTimestampMs + 60000;
       const url = `https://api.binance.com/api/v3/klines?symbol=${binanceSymbol}&interval=1m&startTime=${startMs}&endTime=${endMs}&limit=5`;
       const controller = new AbortController();
-      const timeout = setTimeout(() => controller.abort(), 3500);
+      const timeout = setTimeout(() => controller.abort(), 2000);
       const res = await fetch(url, { signal: controller.signal });
       clearTimeout(timeout);
       if (!res.ok) return null;

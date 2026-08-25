@@ -3,19 +3,23 @@ import { ListOrdered } from 'lucide-react';
 import type { Market } from '../types/index.js';
 import type { DepthUpdateData, MarketTickData } from '../hooks/useTelemetry.js';
 import { apiClient } from '../services/api.js';
+import { OrderBookDepthSkeleton, Skeleton } from './ui/Skeleton.js';
 
 interface OrderBookDepthProps {
   selectedMarket: Market | null;
   liveDepth: DepthUpdateData | undefined;
   liveTick: MarketTickData | undefined;
+  isLoading?: boolean;
 }
 
 export const OrderBookDepth: React.FC<OrderBookDepthProps> = ({
   selectedMarket,
   liveDepth,
   liveTick,
+  isLoading = false,
 }) => {
   const [activeLeg, setActiveLeg] = useState<'YES' | 'NO'>('YES');
+  const [isFetchingDepth, setIsFetchingDepth] = useState<boolean>(true);
   const [depthData, setDepthData] = useState<{
     yesBids: Array<{ price: number; quantity: number; total: number }>;
     yesAsks: Array<{ price: number; quantity: number; total: number }>;
@@ -26,9 +30,13 @@ export const OrderBookDepth: React.FC<OrderBookDepthProps> = ({
 
   // Fetch initial depth via REST API when market selection changes
   useEffect(() => {
-    if (!selectedMarket) return;
+    if (!selectedMarket) {
+      setIsFetchingDepth(false);
+      return;
+    }
 
     let isMounted = true;
+    setIsFetchingDepth(true);
     apiClient
       .getMarketDepth(selectedMarket.id)
       .then((res) => {
@@ -39,25 +47,18 @@ export const OrderBookDepth: React.FC<OrderBookDepthProps> = ({
           });
         }
       })
-      .catch(() => {});
+      .catch(() => {})
+      .finally(() => {
+        if (isMounted) setIsFetchingDepth(false);
+      });
 
     return () => {
       isMounted = false;
     };
   }, [selectedMarket?.id]);
 
-  if (!selectedMarket) {
-    return (
-      <div className="terminal-panel orderbook-panel">
-        <div className="terminal-panel-header">
-          <div className="panel-title">
-            <ListOrdered size={16} />
-            <span>CLOB Order Book Depth</span>
-          </div>
-        </div>
-        <div className="orderbook-empty">Select a market to view live order book depth.</div>
-      </div>
-    );
+  if (!selectedMarket || isLoading) {
+    return <OrderBookDepthSkeleton />;
   }
 
   // Use live WebSocket depth if available, otherwise fall back to REST depth
@@ -125,31 +126,41 @@ export const OrderBookDepth: React.FC<OrderBookDepthProps> = ({
 
       {/* ASKS (Sells) - Rendered Top-to-Bottom */}
       <div className="book-ladder asks-ladder">
-        {asks
-          .slice(0, 5)
-          .reverse()
-          .map((ask, idx) => {
-            const displayPrice = activeLeg === 'YES' ? ask.price : Number((1.0 - ask.price).toFixed(2));
-            const barWidth = Math.min(100, Math.max(8, (ask.total / maxTotal) * 100));
+        {asks.length === 0 && isFetchingDepth ? (
+          [1, 2, 3, 4, 5].map((i) => (
+            <div key={`ask-row-skel-${i}`} className="book-row ask-row" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '0 8px' }}>
+              <Skeleton variant="text" width={45} height={12} />
+              <Skeleton variant="text" width={55} height={12} />
+              <Skeleton variant="text" width={45} height={12} />
+            </div>
+          ))
+        ) : (
+          asks
+            .slice(0, 5)
+            .reverse()
+            .map((ask, idx) => {
+              const displayPrice = activeLeg === 'YES' ? ask.price : Number((1.0 - ask.price).toFixed(2));
+              const barWidth = Math.min(100, Math.max(8, (ask.total / maxTotal) * 100));
 
-            return (
-              <div key={`ask-${idx}`} className="book-row ask-row">
-                <div
-                  className="depth-bar ask-depth-bar"
-                  style={{ width: `${barWidth}%` }}
-                ></div>
-                <span className="row-cell price-cell text-no tabular-num">
-                  {displayPrice.toFixed(2)}
-                </span>
-                <span className="row-cell size-cell tabular-num">
-                  {ask.quantity.toLocaleString()}
-                </span>
-                <span className="row-cell total-cell tabular-num text-muted">
-                  ${ask.total.toFixed(1)}
-                </span>
-              </div>
-            );
-          })}
+              return (
+                <div key={`ask-${idx}`} className="book-row ask-row">
+                  <div
+                    className="depth-bar ask-depth-bar"
+                    style={{ width: `${barWidth}%` }}
+                  ></div>
+                  <span className="row-cell price-cell text-no tabular-num">
+                    {displayPrice.toFixed(2)}
+                  </span>
+                  <span className="row-cell size-cell tabular-num">
+                    {ask.quantity.toLocaleString()}
+                  </span>
+                  <span className="row-cell total-cell tabular-num text-muted">
+                    ${ask.total.toFixed(1)}
+                  </span>
+                </div>
+              );
+            })
+        )}
       </div>
 
       {/* SPREAD & MIDPOINT / FAIR VALUE BANNER */}
@@ -172,28 +183,38 @@ export const OrderBookDepth: React.FC<OrderBookDepthProps> = ({
 
       {/* BIDS (Buys) - Rendered Top-to-Bottom */}
       <div className="book-ladder bids-ladder">
-        {bids.slice(0, 5).map((bid, idx) => {
-          const displayPrice = activeLeg === 'YES' ? bid.price : Number((1.0 - bid.price).toFixed(2));
-          const barWidth = Math.min(100, Math.max(8, (bid.total / maxTotal) * 100));
-
-          return (
-            <div key={`bid-${idx}`} className="book-row bid-row">
-              <div
-                className="depth-bar bid-depth-bar"
-                style={{ width: `${barWidth}%` }}
-              ></div>
-              <span className="row-cell price-cell text-yes tabular-num">
-                {displayPrice.toFixed(2)}
-              </span>
-              <span className="row-cell size-cell tabular-num">
-                {bid.quantity.toLocaleString()}
-              </span>
-              <span className="row-cell total-cell tabular-num text-muted">
-                ${bid.total.toFixed(1)}
-              </span>
+        {bids.length === 0 && isFetchingDepth ? (
+          [1, 2, 3, 4, 5].map((i) => (
+            <div key={`bid-row-skel-${i}`} className="book-row bid-row" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '0 8px' }}>
+              <Skeleton variant="text" width={45} height={12} />
+              <Skeleton variant="text" width={55} height={12} />
+              <Skeleton variant="text" width={45} height={12} />
             </div>
-          );
-        })}
+          ))
+        ) : (
+          bids.slice(0, 5).map((bid, idx) => {
+            const displayPrice = activeLeg === 'YES' ? bid.price : Number((1.0 - bid.price).toFixed(2));
+            const barWidth = Math.min(100, Math.max(8, (bid.total / maxTotal) * 100));
+
+            return (
+              <div key={`bid-${idx}`} className="book-row bid-row">
+                <div
+                  className="depth-bar bid-depth-bar"
+                  style={{ width: `${barWidth}%` }}
+                ></div>
+                <span className="row-cell price-cell text-yes tabular-num">
+                  {displayPrice.toFixed(2)}
+                </span>
+                <span className="row-cell size-cell tabular-num">
+                  {bid.quantity.toLocaleString()}
+                </span>
+                <span className="row-cell total-cell tabular-num text-muted">
+                  ${bid.total.toFixed(1)}
+                </span>
+              </div>
+            );
+          })
+        )}
       </div>
     </div>
   );

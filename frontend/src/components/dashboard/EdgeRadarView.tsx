@@ -3,6 +3,7 @@ import { ScanEye, ArrowRight, Zap } from 'lucide-react';
 import type { Market } from '../../types/index.js';
 import type { MarketTickData } from '../../hooks/useTelemetry.js';
 import { EdgeRadarHeatmap } from '../EdgeRadarHeatmap.js';
+import { Skeleton } from '../ui/Skeleton.js';
 
 interface EdgeRadarViewProps {
   markets: Market[];
@@ -10,6 +11,7 @@ interface EdgeRadarViewProps {
   onSelectMarket: (marketId: string) => void;
   liveTicks: Map<string, MarketTickData>;
   onNavigateToDepth: () => void;
+  isLoading?: boolean;
 }
 
 export const EdgeRadarView: React.FC<EdgeRadarViewProps> = ({
@@ -18,6 +20,7 @@ export const EdgeRadarView: React.FC<EdgeRadarViewProps> = ({
   onSelectMarket,
   liveTicks,
   onNavigateToDepth,
+  isLoading = false,
 }) => {
   const selectedMarket = markets.find((m) => m.id === selectedMarketId) || markets[0];
   const selectedTick = selectedMarket ? liveTicks.get(selectedMarket.id) : undefined;
@@ -34,10 +37,27 @@ export const EdgeRadarView: React.FC<EdgeRadarViewProps> = ({
         selectedMarketId={selectedMarketId}
         onSelectMarket={onSelectMarket}
         liveTicks={liveTicks}
+        isLoading={isLoading}
       />
 
       {/* 2. Focused Anomaly & Mathematical Inspector Card */}
-      {selectedMarket && (
+      {isLoading && !selectedMarket ? (
+        <div className="terminal-panel" style={{ padding: '20px' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '16px' }}>
+            <Skeleton variant="text" width={260} height={16} />
+            <Skeleton variant="rectangular" width={140} height={28} borderRadius={4} />
+          </div>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '16px' }}>
+            {[1, 2, 3, 4].map((i) => (
+              <div key={i} style={{ background: '#18181b', padding: '14px', borderRadius: '8px', border: '1px solid var(--border)', display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                <Skeleton variant="text" width={110} height={11} />
+                <Skeleton variant="text" width={75} height={22} />
+                <Skeleton variant="text" width={130} height={10} />
+              </div>
+            ))}
+          </div>
+        </div>
+      ) : selectedMarket ? (
         <div className="terminal-panel" style={{ padding: '20px' }}>
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '16px' }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
@@ -124,7 +144,7 @@ export const EdgeRadarView: React.FC<EdgeRadarViewProps> = ({
             </div>
           </div>
         </div>
-      )}
+      ) : null}
     </div>
   );
 };

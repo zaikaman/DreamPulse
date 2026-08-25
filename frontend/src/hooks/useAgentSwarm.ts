@@ -95,7 +95,7 @@ export const useAgentSwarm = (operatorAddress?: string): UseAgentSwarmReturn => 
   const fetchSwarmStatus = useCallback(async () => {
     const now = Date.now();
     if (inFlightRef.current) return;
-    if (now - lastFetchAtRef.current < 2500) return;
+    if (now - lastFetchAtRef.current < 1000) return;
     lastFetchAtRef.current = now;
     inFlightRef.current = true;
     try {
@@ -106,6 +106,39 @@ export const useAgentSwarm = (operatorAddress?: string): UseAgentSwarmReturn => 
 
       if (statusRes?.agents) {
         setSummary(statusRes.agents);
+        const parseVal = (str?: string) => {
+          if (!str) return 0;
+          const n = parseFloat(str.replace(/[^0-9.-]/g, ''));
+          return isNaN(n) ? 0 : n;
+        };
+        setDetailed((prev) => ({
+          ...prev,
+          volt: {
+            ...prev.volt,
+            tradesToday: statusRes.agents.volt?.tradesToday ?? prev.volt.tradesToday,
+            pnlAmount: parseVal(statusRes.agents.volt?.pnl) || prev.volt.pnlAmount,
+            evalLatencyMs: statusRes.agents.volt?.evalLatencyMs ?? prev.volt.evalLatencyMs,
+            status: (statusRes.agents.volt?.status || prev.volt.status) as AgentDetail['status'],
+          },
+          oracle: {
+            ...prev.oracle,
+            tradesToday: statusRes.agents.oracle?.tradesToday ?? prev.oracle.tradesToday,
+            pnlAmount: parseVal(statusRes.agents.oracle?.pnl) || prev.oracle.pnlAmount,
+            evalLatencyMs: statusRes.agents.oracle?.evalLatencyMs ?? prev.oracle.evalLatencyMs,
+            status: (statusRes.agents.oracle?.status || prev.oracle.status) as AgentDetail['status'],
+          },
+          titan: {
+            ...prev.titan,
+            tradesToday: statusRes.agents.titan?.activeQuotes ?? prev.titan.tradesToday,
+            pnlAmount: parseVal(statusRes.agents.titan?.spreadCaptured) || prev.titan.pnlAmount,
+            status: (statusRes.agents.titan?.status || prev.titan.status) as AgentDetail['status'],
+          },
+          sweeper: {
+            ...prev.sweeper,
+            pnlAmount: parseVal(statusRes.agents.sweeper?.totalClaimed) || prev.sweeper.pnlAmount,
+            status: (statusRes.agents.sweeper?.status || prev.sweeper.status) as AgentDetail['status'],
+          },
+        }));
       }
       if (detailedRes?.agents) {
         setDetailed(detailedRes.agents);
@@ -127,7 +160,7 @@ export const useAgentSwarm = (operatorAddress?: string): UseAgentSwarmReturn => 
 
     const interval = setInterval(() => {
       fetchSwarmStatus();
-    }, 8000);
+    }, 4000);
 
     // Realtime status refresh with instant WebSocket state updates
     let ws: WebSocket | null = null;
@@ -233,13 +266,13 @@ export const useAgentSwarm = (operatorAddress?: string): UseAgentSwarmReturn => 
               }));
             }
 
-            // 4. Background reconciliation on PnL resolution or fills
+            // 4. Background reconciliation on PnL resolution or fills — 200ms vs 500ms
             if (payload.event === 'pnl_update' || payload.event === 'sweep_completed') {
               if (wsDebounceRef.current) window.clearTimeout(wsDebounceRef.current);
               wsDebounceRef.current = window.setTimeout(() => {
                 wsDebounceRef.current = null;
                 fetchSwarmStatus();
-              }, 500);
+              }, 200);
             }
           } catch {}
         };

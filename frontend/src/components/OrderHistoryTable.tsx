@@ -19,10 +19,11 @@ import {
   ChevronsRight,
   RotateCcw,
   Receipt,
-  Loader2,
 } from 'lucide-react';
 import type { OrderExecution, AgentType, OutcomeType } from '../types/index.js';
 import { apiClient } from '../services/api.js';
+import { OrderHistoryTableSkeleton } from './ui/Skeleton.js';
+import { Spinner } from './ui/Spinner.js';
 
 interface OrderHistoryTableProps {
   orders?: OrderExecution[];
@@ -164,7 +165,7 @@ export const OrderHistoryTable: React.FC<OrderHistoryTableProps> = ({
     return () => { cancelled = true; };
   }, [isFiltered, scope, userAddress]);
 
-  // Throttled realtime refresh — at most once per 3s, never flashes
+  // Throttled realtime refresh — at most once per 900ms, never flashes (900ms vs 3000ms: ~3x faster PnL visible)
   const latestParamsRef = useRef({ scope, userAddress, selectedAgent, selectedOutcome, debouncedSearch, pageSize, currentPage });
   useEffect(() => {
     latestParamsRef.current = { scope, userAddress, selectedAgent, selectedOutcome, debouncedSearch, pageSize, currentPage };
@@ -179,7 +180,7 @@ export const OrderHistoryTable: React.FC<OrderHistoryTableProps> = ({
     const scheduleFetch = () => {
       const now = Date.now();
       const elapsed = now - lastFetchAt;
-      if (elapsed > 3000) {
+      if (elapsed > 900) {
         lastFetchAt = now;
         const { scope: s, userAddress: ua, selectedAgent: ag, selectedOutcome: oc, debouncedSearch: ds, pageSize: ps, currentPage: cp } = latestParamsRef.current;
         if (s === 'MY_ORDERS' && !ua) return;
@@ -205,7 +206,7 @@ export const OrderHistoryTable: React.FC<OrderHistoryTableProps> = ({
         pendingFetchTimer = window.setTimeout(() => {
           pendingFetchTimer = null;
           scheduleFetch();
-        }, 3100 - elapsed);
+        }, 950 - elapsed);
       }
     };
 
@@ -364,7 +365,7 @@ export const OrderHistoryTable: React.FC<OrderHistoryTableProps> = ({
         <div style={{ display: 'flex', alignItems: 'center', gap: '12px', flexWrap: 'wrap' }}>
           <div style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', padding: '4px 10px', borderRadius: '6px', background: 'rgba(0, 240, 255, 0.06)', border: '1px solid rgba(0, 240, 255, 0.2)', fontSize: '11px', color: 'var(--muted-foreground)', fontFamily: 'var(--font-mono)' }}>
             <Receipt size={12} style={{ color: 'var(--brand-cyan)' }} />
-            {isFetching && !isInitialLoading && <Loader2 size={11} style={{ color: 'var(--brand-cyan)', animation: 'spin 0.9s linear infinite' } as any} />}
+            {isFetching && !isInitialLoading && <Spinner size="xs" variant="cyan" />}
             {isFiltered ? (
               <span>
                 Filtered: <strong style={{ color: 'var(--brand-cyan)' }}>{totalVolume.toFixed(2)} tUSDC</strong> ({totalFills} fills)
@@ -425,7 +426,7 @@ export const OrderHistoryTable: React.FC<OrderHistoryTableProps> = ({
           {isFetching && orders.length > 0 && (
             <div style={{ position: 'absolute', inset: 0, background: 'rgba(9, 9, 11, 0.35)', backdropFilter: 'blur(0.5px)', display: 'flex', alignItems: 'flex-start', justifyContent: 'center', paddingTop: '28px', zIndex: 1, pointerEvents: 'none' }}>
               <span style={{ display: 'inline-flex', alignItems: 'center', gap: '8px', padding: '6px 12px', borderRadius: '999px', background: 'rgba(0,0,0,0.7)', border: '1px solid var(--border)', fontSize: '11px', color: 'var(--muted-foreground)', fontFamily: 'var(--font-mono)' }}>
-                <Loader2 size={12} style={{ animation: 'spin 0.9s linear infinite' } as any} />
+                <Spinner size="xs" variant="cyan" />
                 Updating page…
               </span>
             </div>
@@ -445,29 +446,26 @@ export const OrderHistoryTable: React.FC<OrderHistoryTableProps> = ({
                 <th style={{ padding: '10px 16px', textAlign: 'right', fontSize: '10px', color: 'var(--muted-foreground)', textTransform: 'uppercase' }}>On-Chain Tx</th>
               </tr>
             </thead>
-            <tbody>
-              {isInitialLoading ? (
-                <tr>
-                  <td colSpan={10} style={{ textAlign: 'center', padding: '36px', color: 'var(--muted-foreground)', fontSize: '12px' }}>
-                    <span style={{ display: 'inline-flex', alignItems: 'center', gap: '8px' }}><Loader2 size={14} style={{ animation: 'spin 0.9s linear infinite' } as any} /> Loading executed swarm trades...</span>
-                  </td>
-                </tr>
-              ) : fetchError ? (
-                <tr>
-                  <td colSpan={10} style={{ textAlign: 'center', padding: '36px' }}>
-                    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '10px' }}>
-                      <span style={{ color: 'var(--trade-sell)', fontSize: '12px' }}>{fetchError}</span>
-                      <button type="button" onClick={() => { setFetchError(null); setIsInitialLoading(orders.length === 0); setIsFetching(false); fetchIdRef.current++; setCurrentPage((p) => p); }} className="btn-secondary" style={{ fontSize: '11px', padding: '4px 10px' }}>Retry</button>
-                    </div>
-                  </td>
-                </tr>
-              ) : total === 0 || orders.length === 0 ? (
-                <tr>
-                  <td colSpan={10} style={{ textAlign: 'center', padding: '36px', color: 'var(--muted-foreground)', fontSize: '12px' }}>
-                    {scope === 'MY_ORDERS' ? 'No personal orders or bot executions found for this wallet.' : 'No orders match the selected filters.'}
-                  </td>
-                </tr>
-              ) : (
+            {isInitialLoading ? (
+              <OrderHistoryTableSkeleton rows={pageSize <= 10 ? pageSize : 10} />
+            ) : (
+              <tbody>
+                {fetchError ? (
+                  <tr>
+                    <td colSpan={10} style={{ textAlign: 'center', padding: '36px' }}>
+                      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '10px' }}>
+                        <span style={{ color: 'var(--trade-sell)', fontSize: '12px' }}>{fetchError}</span>
+                        <button type="button" onClick={() => { setFetchError(null); setIsInitialLoading(orders.length === 0); setIsFetching(false); fetchIdRef.current++; setCurrentPage((p) => p); }} className="btn-secondary" style={{ fontSize: '11px', padding: '4px 10px' }}>Retry</button>
+                      </div>
+                    </td>
+                  </tr>
+                ) : total === 0 || orders.length === 0 ? (
+                  <tr>
+                    <td colSpan={10} style={{ textAlign: 'center', padding: '36px', color: 'var(--muted-foreground)', fontSize: '12px' }}>
+                      {scope === 'MY_ORDERS' ? 'No personal orders or bot executions found for this wallet.' : 'No orders match the selected filters.'}
+                    </td>
+                  </tr>
+                ) : (
                 orders.map((order) => {
                   const timeStr = new Date(order.createdAt).toLocaleTimeString();
                   const shortTx = order.txHash ? `${order.txHash.slice(0, 6)}...${order.txHash.slice(-4)}` : 'N/A';
@@ -520,6 +518,7 @@ export const OrderHistoryTable: React.FC<OrderHistoryTableProps> = ({
                 })
               )}
             </tbody>
+          )}
           </table>
         </div>
       )}

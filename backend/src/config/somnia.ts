@@ -1,5 +1,15 @@
-import { createPublicClient, createWalletClient, http, defineChain, type Address, type PublicClient, type WalletClient } from 'viem';
-import { privateKeyToAccount } from 'viem/accounts';
+import {
+  createPublicClient,
+  createWalletClient,
+  http,
+  defineChain,
+  type Address,
+  type Hex,
+  type Abi,
+  type PublicClient,
+  type WalletClient,
+} from 'viem';
+import { privateKeyToAccount, nonceManager } from 'viem/accounts';
 import { SomniaMarkets } from '@somnia-chain/markets-sdk';
 import { env } from './env.js';
 
@@ -66,6 +76,7 @@ export const SOMNIA_ADDRESSES = {
   collateral: '0x70a86D8842FB63C4Ad2b7cdddF530eBf1BB25d8E' as Address,
   testUsdc: '0x70a86D8842FB63C4Ad2b7cdddF530eBf1BB25d8E' as Address,
   marketCreator: '0x5Ce69567dB39C8fBAd7e048bEfdbcCdfE67B44e6' as Address,
+  batchHelper: '0x12c9c45fa740ce7469dacff368b08ca7edcaac26' as Address,
 };
 
 /**
@@ -77,7 +88,7 @@ export const publicClient: PublicClient = createPublicClient({
 });
 
 /**
- * Viem Wallet Client initialized with Operator Private Key for autonomous swarm executions.
+ * Viem Wallet Client initialized with Operator Private Key and NonceManager for autonomous swarm executions.
  */
 const operatorPrivateKey = (
   env.OPERATOR_PRIVATE_KEY.startsWith('0x')
@@ -85,13 +96,80 @@ const operatorPrivateKey = (
     : `0x${env.OPERATOR_PRIVATE_KEY}`
 ) as `0x${string}`;
 
-export const operatorAccount = privateKeyToAccount(operatorPrivateKey);
+export const operatorAccount = privateKeyToAccount(operatorPrivateKey, { nonceManager });
 
 export const walletClient: WalletClient = createWalletClient({
   account: operatorAccount,
   chain: somniaShannonTestnet,
   transport: http(env.SOMNIA_RPC_URL),
 });
+
+let txQueue = Promise.resolve();
+
+/**
+ * Serializes on-chain write operations and handles nonce desynchronization with automatic retry.
+ */
+export async function executeOperatorTx<T>(operation: () => Promise<T>, maxRetries = 3): Promise<T> {
+  const execute = async () => {
+    let attempts = 0;
+    while (attempts < maxRetries) {
+      attempts++;
+      try {
+        return await operation();
+      } catch (err: any) {
+        const msg: string = err?.message || String(err);
+        const isNonceError =
+          msg.includes('nonce too low') ||
+          msg.includes('Nonce provided') ||
+          msg.includes('nonce lower than') ||
+          msg.includes('NONCE_EXPIRED') ||
+          msg.includes('replacement transaction underpriced') ||
+          msg.includes('already known');
+
+        if (isNonceError && attempts < maxRetries) {
+          console.warn(
+            `[SomniaConfig] Nonce desync detected on attempt ${attempts}/${maxRetries}. Resetting nonce manager and retrying... (${msg.slice(0, 100)})`,
+          );
+          nonceManager.reset({
+            address: operatorAccount.address,
+            chainId: somniaShannonTestnet.id,
+          });
+          await new Promise((r) => setTimeout(r, 400 * attempts));
+          continue;
+        }
+        throw err;
+      }
+    }
+    throw new Error('Transaction execution failed after retries');
+  };
+
+  const resultPromise = txQueue.then(execute, execute);
+  txQueue = resultPromise.then(() => {}, () => {});
+  return resultPromise;
+}
+
+/**
+ * Safely executes an on-chain contract write for the operator wallet with serialized nonce management.
+ */
+export async function executeOperatorWriteContract<
+  const TAbi extends Abi | readonly unknown[],
+  TFunctionName extends string,
+>(params: {
+  address: Address;
+  abi: TAbi;
+  functionName: TFunctionName;
+  args?: readonly unknown[];
+  value?: bigint;
+}): Promise<Hex> {
+  return executeOperatorTx(async () => {
+    const hash = await walletClient.writeContract({
+      chain: somniaShannonTestnet,
+      account: operatorAccount,
+      ...params,
+    } as any);
+    return hash;
+  });
+}
 
 /**
  * SomniaMarkets Exchange Client for interacting with DreamDEX Event Contracts CLOB and indexer.

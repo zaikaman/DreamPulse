@@ -21,6 +21,7 @@ import {
 import type { SessionGrant } from '../types/index.js';
 import type { WalletState } from '../hooks/useSessionKey.js';
 import { SOMNIA_ADDRESSES } from '../services/web3.js';
+import { Spinner } from './ui/Spinner.js';
 
 interface SessionDelegationModalProps {
   isOpen: boolean;
@@ -374,7 +375,7 @@ export const SessionDelegationModal: React.FC<SessionDelegationModalProps> = ({
             </div>
           )}
 
-          {/* Allowance Diagnostic Banner — surfaces 0x3fb0ba2e root cause */}
+          {/* Allowance Diagnostic Banner */}
           {activeSession?.isActive && allowanceStatus && !allowanceStatus.allReady && (
             <div
               className="collateral-clarity-banner"
@@ -390,35 +391,10 @@ export const SessionDelegationModal: React.FC<SessionDelegationModalProps> = ({
                 <AlertTriangle size={16} style={{ color: '#ef4444', flexShrink: 0, marginTop: '2px' }} />
                 <div style={{ flex: 1 }}>
                   <div style={{ fontWeight: 700, fontSize: '12px', color: '#ef4444', marginBottom: '4px' }}>
-                    Copy-Trading Paused: Insufficient Pool Allowance
+                    Action Required: Operator TestUSDC Authorization
                   </div>
                   <div style={{ fontSize: '11px', color: 'var(--muted-foreground)', lineHeight: 1.4, marginBottom: '8px' }}>
-                    Your wallet approved the operator globally, but {allowanceStatus.checks.filter((c) => !c.ready).length} active pool(s) have
-                    TestUSDC allowance &lt; 1000 USDC (vault &lt; 10). On-chain <code>placeBinaryOrderFor</code> reverts with <code>0x3fb0ba2e</code>.
-                    Approve MAX for those pools to resume copy-trades. No withdrawal permission is granted.
-                  </div>
-                  <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', marginBottom: '8px' }}>
-                    {allowanceStatus.checks.slice(0, 4).map((c) => (
-                      <code
-                        key={c.pool}
-                        title={`${c.pool} — allowance ${c.allowanceHuman.toFixed(2)} / vault ${c.vaultHuman.toFixed(2)}`}
-                        style={{
-                          fontSize: '10px',
-                          padding: '3px 6px',
-                          background: c.ready ? 'rgba(16,185,129,0.12)' : 'rgba(239,68,68,0.12)',
-                          border: `1px solid ${c.ready ? 'rgba(16,185,129,0.3)' : 'rgba(239,68,68,0.3)'}`,
-                          borderRadius: '4px',
-                          color: c.ready ? 'var(--color-yes)' : '#ef4444',
-                        }}
-                      >
-                        {c.pool.slice(0, 6)}…{c.pool.slice(-4)} {c.ready ? '✓' : `${c.allowanceHuman.toFixed(0)} USDC`}
-                      </code>
-                    ))}
-                    {allowanceStatus.checks.length > 4 && (
-                      <span style={{ fontSize: '10px', color: 'var(--muted-foreground)', alignSelf: 'center' }}>
-                        +{allowanceStatus.checks.length - 4} more pools
-                      </span>
-                    )}
+                    {allowanceStatus.guidance || 'Your wallet needs to grant TestUSDC allowance to the operator for seamless copy-trading. Click Authorize Operator below to complete 1-time setup.'}
                   </div>
                   <div style={{ display: 'flex', gap: '8px' }}>
                     <button
@@ -444,8 +420,8 @@ export const SessionDelegationModal: React.FC<SessionDelegationModalProps> = ({
                         gap: '6px',
                       }}
                     >
-                      {isFixingAllowance ? <Loader2 size={12} className="spin" /> : <ShieldCheck size={12} />}
-                      <span>Approve All Active Pools (MAX)</span>
+                      {isFixingAllowance ? <Spinner size="xs" variant="white" /> : <CheckCircle2 size={12} />}
+                      Authorize Operator
                     </button>
                     <button
                       type="button"
@@ -717,7 +693,7 @@ export const SessionDelegationModal: React.FC<SessionDelegationModalProps> = ({
             >
               {isLoading ? (
                 <>
-                  <Loader2 size={15} className="spin" />
+                  <Spinner size="sm" variant="white" />
                   <span>Connecting Wallet...</span>
                 </>
               ) : (
@@ -736,7 +712,7 @@ export const SessionDelegationModal: React.FC<SessionDelegationModalProps> = ({
             >
               {isLoading ? (
                 <>
-                  <Loader2 size={15} className="spin" />
+                  <Spinner size="sm" variant="amber" />
                   <span>Switching Network...</span>
                 </>
               ) : (
@@ -755,7 +731,7 @@ export const SessionDelegationModal: React.FC<SessionDelegationModalProps> = ({
             >
               {isSigning ? (
                 <>
-                  <Loader2 size={15} className="spin" />
+                  <Spinner size="sm" variant="white" />
                   <span>{getStepStatusText()}</span>
                 </>
               ) : (

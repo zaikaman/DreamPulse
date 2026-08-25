@@ -32,6 +32,8 @@ export function parseWindowToSeconds(window: string): number {
     case '24h':
     case '1d':
       return 86400;
+    case '7d':
+      return 604800;
     default:
       return 300;
   }

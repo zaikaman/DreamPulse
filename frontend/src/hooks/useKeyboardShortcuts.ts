@@ -41,9 +41,15 @@ export const useKeyboardShortcuts = ({
       } else if (e.key === '5') {
         e.preventDefault();
         onNavigateTab('Swarm Cockpit');
-      } else if (e.key === '6' || e.key.toLowerCase() === 'b') {
+      } else if (e.key === '6') {
+        e.preventDefault();
+        onNavigateTab('Analytics');
+      } else if (e.key === '7' || e.key.toLowerCase() === 'b') {
         e.preventDefault();
         onNavigateTab('Strategy Studio');
+      } else if (e.key === '8') {
+        e.preventDefault();
+        onNavigateTab('Settlement');
       } else if (e.key.toLowerCase() === 's') {
         e.preventDefault();
         if (onTriggerSweep) {

@@ -86,6 +86,8 @@ export interface OrderExecution {
   status: OrderStatus;
   txHash?: `0x${string}`;
   pnl?: number;
+  isSettled?: boolean;
+  settledAt?: string;
   createdAt: string;
   filledAt?: string;
   marketSnapshot?: {

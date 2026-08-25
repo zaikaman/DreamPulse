@@ -14,6 +14,7 @@ import {
 } from 'lucide-react';
 import type { AgentType } from '../types/index.js';
 import type { AgentDetail } from '../hooks/useAgentSwarm.js';
+import { Spinner } from './ui/Spinner.js';
 
 interface AgentSwarmCockpitProps {
   detailedAgents: Record<string, AgentDetail>;
@@ -510,8 +511,8 @@ export const AgentSwarmCockpit: React.FC<AgentSwarmCockpitProps> = ({
                     </>
                   ) : (
                     <>
-                      <Sliders size={12} />
-                      <span>{isSaving.Volt ? 'Saving...' : 'Apply Strategy Parameters'}</span>
+                      {isSaving.Volt ? <Spinner size="xs" variant="amber" /> : <Sliders size={12} />}
+                      <span>{isSaving.Volt ? 'Saving Parameters...' : 'Apply Strategy Parameters'}</span>
                     </>
                   )}
                 </button>
@@ -711,8 +712,8 @@ export const AgentSwarmCockpit: React.FC<AgentSwarmCockpitProps> = ({
                     </>
                   ) : (
                     <>
-                      <Sliders size={12} />
-                      <span>{isSaving.Oracle ? 'Saving...' : 'Apply Strategy Parameters'}</span>
+                      {isSaving.Oracle ? <Spinner size="xs" variant="amber" /> : <Sliders size={12} />}
+                      <span>{isSaving.Oracle ? 'Saving Parameters...' : 'Apply Strategy Parameters'}</span>
                     </>
                   )}
                 </button>
@@ -909,8 +910,8 @@ export const AgentSwarmCockpit: React.FC<AgentSwarmCockpitProps> = ({
                     </>
                   ) : (
                     <>
-                      <Sliders size={12} />
-                      <span>{isSaving.Titan ? 'Saving...' : 'Apply Strategy Parameters'}</span>
+                      {isSaving.Titan ? <Spinner size="xs" variant="amber" /> : <Sliders size={12} />}
+                      <span>{isSaving.Titan ? 'Saving Parameters...' : 'Apply Strategy Parameters'}</span>
                     </>
                   )}
                 </button>

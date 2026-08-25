@@ -19,6 +19,7 @@ import type { WalletState } from '../../hooks/useSessionKey.js';
 import { useUserRole } from '../../hooks/useUserRole.js';
 import { soundEngine } from '../../services/audio.js';
 import { WalletAccountDropdown } from './WalletAccountDropdown.js';
+import { Spinner } from '../ui/Spinner.js';
 
 interface DashboardHeaderProps {
   activeTab: string;
@@ -104,21 +105,39 @@ export const DashboardHeader: React.FC<DashboardHeaderProps> = ({
           <div className="header-spot-item">
             <span className="spot-sym">BTC</span>
             <span className="spot-val tabular-num">
-              {spotPrices['BTC/USD'] ? `$${spotPrices['BTC/USD'].toLocaleString(undefined, { minimumFractionDigits: 1, maximumFractionDigits: 1 })}` : 'Syncing...'}
+              {spotPrices['BTC/USD'] ? (
+                `$${spotPrices['BTC/USD'].toLocaleString(undefined, { minimumFractionDigits: 1, maximumFractionDigits: 1 })}`
+              ) : (
+                <span style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', color: 'var(--muted-foreground)' }}>
+                  <Spinner size="xs" variant="muted" /> Syncing
+                </span>
+              )}
             </span>
           </div>
 
           <div className="header-spot-item">
             <span className="spot-sym">ETH</span>
             <span className="spot-val tabular-num">
-              {spotPrices['ETH/USD'] ? `$${spotPrices['ETH/USD'].toLocaleString(undefined, { minimumFractionDigits: 1, maximumFractionDigits: 1 })}` : 'Syncing...'}
+              {spotPrices['ETH/USD'] ? (
+                `$${spotPrices['ETH/USD'].toLocaleString(undefined, { minimumFractionDigits: 1, maximumFractionDigits: 1 })}`
+              ) : (
+                <span style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', color: 'var(--muted-foreground)' }}>
+                  <Spinner size="xs" variant="muted" /> Syncing
+                </span>
+              )}
             </span>
           </div>
 
           <div className="header-spot-item">
             <span className="spot-sym">SOL</span>
             <span className="spot-val tabular-num">
-              {spotPrices['SOL/USD'] ? `$${spotPrices['SOL/USD'].toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : 'Syncing...'}
+              {spotPrices['SOL/USD'] ? (
+                `$${spotPrices['SOL/USD'].toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+              ) : (
+                <span style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', color: 'var(--muted-foreground)' }}>
+                  <Spinner size="xs" variant="muted" /> Syncing
+                </span>
+              )}
             </span>
           </div>
         </div>

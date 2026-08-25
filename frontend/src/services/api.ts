@@ -55,8 +55,12 @@ export const apiClient = {
     return fetchJson<{ success: boolean; data: Record<string, { symbol: string; price: number; change1m: number; change5m: number; high24h: number; low24h: number; volume24h: number; timestamp: number }> }>('/markets/spot');
   },
 
-  async getFuturePools(): Promise<{ success: boolean; count: number; pools: string[]; horizonHours: number }> {
-    return fetchJson<{ success: boolean; count: number; pools: string[]; horizonHours: number }>('/markets/pools/future');
+  async getFuturePools(params?: { horizonHours?: number; window?: string }): Promise<{ success: boolean; count: number; pools: string[]; horizonHours: number }> {
+    const qp = new URLSearchParams();
+    if (params?.horizonHours) qp.append('horizonHours', params.horizonHours.toString());
+    if (params?.window) qp.append('window', params.window);
+    const q = qp.toString();
+    return fetchJson<{ success: boolean; count: number; pools: string[]; horizonHours: number }>(`/markets/pools/future${q ? `?${q}` : ''}`);
   },
 
   // Sessions
@@ -208,6 +212,22 @@ export const apiClient = {
       method: 'POST',
       body: JSON.stringify(config),
     });
+  },
+
+  async getAnalytics(userAddress?: string, range: string = '30d'): Promise<{ success: boolean; data: any }> {
+    const params = new URLSearchParams();
+    if (userAddress) params.append('userAddress', userAddress);
+    if (range) params.append('range', range);
+    const q = params.toString();
+    return fetchJson(`/analytics/equity${q ? `?${q}` : ''}`);
+  },
+
+  async getBalanceHistory(userAddress?: string, range: string = '30d'): Promise<{ success: boolean; data: any }> {
+    const params = new URLSearchParams();
+    if (userAddress) params.append('userAddress', userAddress);
+    if (range) params.append('range', range);
+    const q = params.toString();
+    return fetchJson(`/analytics/balance-history${q ? `?${q}` : ''}`);
   },
 };
 
