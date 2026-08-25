@@ -9,7 +9,7 @@ import { generateAgentThought } from '../src/llm/reasoning-service.js';
 
 describe('Groq Multi-Key Round-Robin & Fallback System', () => {
   it('rotates through Groq API keys in sequential round-robin order', () => {
-    const initialIndex = getCurrentGroqKeyIndex();
+    setGroqKeyIndex(0);
     const key1 = getNextGroqKey();
     const key2 = getNextGroqKey();
     const key3 = getNextGroqKey();
@@ -17,7 +17,7 @@ describe('Groq Multi-Key Round-Robin & Fallback System', () => {
     expect(key1).toBeDefined();
     expect(key2).toBeDefined();
     expect(key3).toBeDefined();
-    expect(getCurrentGroqKeyIndex()).toBe((initialIndex + 3) % 20);
+    expect(getCurrentGroqKeyIndex()).toBe(3);
   });
 
   it('can set and restore key index gracefully', async () => {

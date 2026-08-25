@@ -42,6 +42,14 @@ if (process.env.NODE_ENV !== 'test') {
     // Restore persistent Groq key index from database
     const { initPersistentKeyIndex } = await import('./llm/client.js');
     await initPersistentKeyIndex();
+
+    // Start Real-Time Market Telemetry & Anomaly Broadcaster
+    const { startMarketEmitter } = await import('./websocket/market-emitter.js');
+    startMarketEmitter(100);
+
+    // Start Autonomous Multi-Agent Swarm Runner Loop (100ms evaluation tick)
+    const { swarmRunner } = await import('./agents/swarm-runner.js');
+    swarmRunner.start(100);
   });
 }
 

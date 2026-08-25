@@ -116,3 +116,11 @@ export interface BacktestResult {
   sharpeRatio: number;
   createdAt: string;
 }
+
+export interface SwarmStatusSummary {
+  volt: { status: string; evalLatencyMs: number; tradesToday: number; pnl: string };
+  oracle: { status: string; evalLatencyMs: number; tradesToday: number; pnl: string };
+  titan: { status: string; activeQuotes: number; spreadCaptured: string };
+  sweeper: { status: string; lastSweep: string; totalClaimed: string };
+}
+

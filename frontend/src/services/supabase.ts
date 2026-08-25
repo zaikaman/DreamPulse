@@ -15,6 +15,8 @@ export const supabaseBrowser: SupabaseClient = createClient(supabaseUrl, supabas
   },
 });
 
+export const supabase = supabaseBrowser;
+
 /**
  * Subscribes to real-time table inserts/updates in Supabase.
  */

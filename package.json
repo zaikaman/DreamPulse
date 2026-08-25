@@ -11,12 +11,21 @@
     "node": ">=20.0.0"
   },
   "scripts": {
+    "start": "concurrently -n \"BACKEND,FRONTEND\" -c \"cyan.bold,green.bold\" \"npm run dev --workspace=dreampulse-backend\" \"npm run dev --workspace=dreampulse-frontend\"",
+    "dev": "concurrently -n \"BACKEND,FRONTEND\" -c \"cyan.bold,green.bold\" \"npm run dev --workspace=dreampulse-backend\" \"npm run dev --workspace=dreampulse-frontend\"",
     "dev:backend": "npm run dev --workspace=dreampulse-backend",
     "dev:frontend": "npm run dev --workspace=dreampulse-frontend",
+    "typecheck:backend": "tsc -p backend/tsconfig.json --noEmit",
+    "typecheck:frontend": "tsc -p frontend/tsconfig.json --noEmit",
+    "typecheck": "npm run typecheck:backend && npm run typecheck:frontend",
     "build:backend": "npm run build --workspace=dreampulse-backend",
     "build:frontend": "npm run build --workspace=dreampulse-frontend",
     "build": "npm run build:backend && npm run build:frontend",
     "test:backend": "npm run test --workspace=dreampulse-backend",
-    "test": "npm run test:backend"
+    "test": "npm run test:backend",
+    "verify": "npm run typecheck && npm run test && npm run build"
+  },
+  "devDependencies": {
+    "concurrently": "^9.1.2"
   }
 }

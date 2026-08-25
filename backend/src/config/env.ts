@@ -13,6 +13,9 @@ for (let i = 2; i <= 50; i++) {
   }
 }
 
+const defaultGroqKeys = ['gsk_mock_key_1', 'gsk_mock_key_2', 'gsk_mock_key_3', 'gsk_mock_key_4'];
+const finalGroqKeys = rawGroqKeys.length > 0 ? rawGroqKeys : defaultGroqKeys;
+
 const envSchema = z.object({
   PORT: z.string().default('5000').transform((val) => parseInt(val, 10)),
   NODE_ENV: z.enum(['development', 'production', 'test']).default('development'),
@@ -25,7 +28,7 @@ const envSchema = z.object({
   // Groq LLM (Primary Pool with Round-Robin Rotation)
   GROQ_BASE_URL: z.string().default('https://api.groq.com/openai/v1'),
   GROQ_MODEL: z.string().default('qwen/qwen3.6-27b'),
-  GROQ_KEYS: z.array(z.string()).default(rawGroqKeys),
+  GROQ_KEYS: z.array(z.string()).default(finalGroqKeys),
 
   // Gemini LLM (Secondary Fallback)
   GEMINI_BASE_URL: z.string().default('https://generativelanguage.googleapis.com/v1beta/openai/'),
@@ -45,5 +48,6 @@ const envSchema = z.object({
 
 export const env = envSchema.parse({
   ...process.env,
-  GROQ_KEYS: rawGroqKeys.length > 0 ? rawGroqKeys : undefined,
+  GROQ_KEYS: finalGroqKeys,
 });
+

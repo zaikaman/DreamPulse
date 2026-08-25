@@ -30,7 +30,11 @@ async function fetchJson<T>(endpoint: string, options?: RequestInit): Promise<T>
 export const apiClient = {
   // Markets & Depth
   async getMarkets(params?: { status?: string; symbol?: string; window?: string }): Promise<{ success: boolean; count: number; data: Market[] }> {
-    const query = new URLSearchParams(params as Record<string, string>).toString();
+    const searchParams = new URLSearchParams();
+    if (params?.status) searchParams.append('status', params.status);
+    if (params?.symbol && params.symbol !== 'ALL') searchParams.append('symbol', params.symbol);
+    if (params?.window && params.window !== 'ALL') searchParams.append('window', params.window);
+    const query = searchParams.toString();
     const endpoint = query ? `/markets?${query}` : '/markets';
     return fetchJson<{ success: boolean; count: number; data: Market[] }>(endpoint);
   },
@@ -65,10 +69,45 @@ export const apiClient = {
     return fetchJson<{ success: boolean; agents: SwarmStatusSummary }>('/agents/status');
   },
 
+  async getDetailedAgents(): Promise<{ success: boolean; agents: Record<string, any>; isRunning: boolean; intervalMs: number }> {
+    return fetchJson<{ success: boolean; agents: Record<string, any>; isRunning: boolean; intervalMs: number }>('/agents/detailed');
+  },
+
+  async toggleAgent(agentType: string, enabled: boolean): Promise<{ success: boolean; agentType: string; enabled: boolean; message: string }> {
+    return fetchJson('/agents/toggle', {
+      method: 'POST',
+      body: JSON.stringify({ agentType, enabled }),
+    });
+  },
+
+  async updateAgentConfig(agentType: string, config: Record<string, unknown>): Promise<{ success: boolean; agentType: string; message: string }> {
+    return fetchJson('/agents/config', {
+      method: 'POST',
+      body: JSON.stringify({ agentType, config }),
+    });
+  },
+
   async getAgentLogs(agentType?: string, limit: number = 50): Promise<{ success: boolean; logs: AgentThoughtLog[] }> {
     const params = new URLSearchParams({ limit: limit.toString() });
     if (agentType) params.append('agentType', agentType);
     return fetchJson<{ success: boolean; logs: AgentThoughtLog[] }>(`/agents/logs?${params.toString()}`);
+  },
+
+  // Orders
+  async getOrders(params?: {
+    userAddress?: string;
+    agentType?: string;
+    status?: string;
+    limit?: number;
+  }): Promise<{ success: boolean; count: number; data: any[] }> {
+    const searchParams = new URLSearchParams();
+    if (params?.userAddress) searchParams.append('userAddress', params.userAddress);
+    if (params?.agentType && params.agentType !== 'ALL') searchParams.append('agentType', params.agentType);
+    if (params?.status && params.status !== 'ALL') searchParams.append('status', params.status);
+    if (params?.limit) searchParams.append('limit', params.limit.toString());
+    const query = searchParams.toString();
+    const endpoint = query ? `/orders?${query}` : '/orders';
+    return fetchJson(endpoint);
   },
 
   // Sweeper & Backtest
@@ -98,3 +137,4 @@ export const apiClient = {
     });
   },
 };
+

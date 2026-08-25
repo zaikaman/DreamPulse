@@ -96,3 +96,8 @@ export function fromContractUnits(
   const factor = 10 ** decimals;
   return Number(amount) / factor;
 }
+
+// Aliases for convenience
+export const snapTickPrice = quantizePrice;
+export const snapLotQuantity = quantizeLotSize;
+
