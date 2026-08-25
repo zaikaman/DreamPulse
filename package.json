@@ -1,0 +1,22 @@
+{
+  "name": "dreampulse-ai-workspace",
+  "version": "1.0.0",
+  "private": true,
+  "description": "DreamPulse AI - Autonomous Multi-Agent Trading Swarm on Somnia DreamDEX",
+  "workspaces": [
+    "backend",
+    "frontend"
+  ],
+  "engines": {
+    "node": ">=20.0.0"
+  },
+  "scripts": {
+    "dev:backend": "npm run dev --workspace=dreampulse-backend",
+    "dev:frontend": "npm run dev --workspace=dreampulse-frontend",
+    "build:backend": "npm run build --workspace=dreampulse-backend",
+    "build:frontend": "npm run build --workspace=dreampulse-frontend",
+    "build": "npm run build:backend && npm run build:frontend",
+    "test:backend": "npm run test --workspace=dreampulse-backend",
+    "test": "npm run test:backend"
+  }
+}

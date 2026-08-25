@@ -9,14 +9,14 @@
 
 **Purpose**: Project initialization, directory structure, dependencies, and build harnesses for frontend and backend.
 
-- [ ] T001 Initialize root workspace configuration and `.gitignore` covering `node_modules`, `.env`, and build artifacts in `.gitignore`
-- [ ] T002 [P] Initialize `backend/` directory with `package.json`, Node 20+ engine configuration, and dependencies (`express`, `ws`, `@supabase/supabase-js`, `viem`, `openai`, `dotenv`, `cors`, `zod`, `tsx`, `vitest`) in `backend/package.json`
-- [ ] T003 [P] Configure TypeScript compilation settings for backend in `backend/tsconfig.json`
-- [ ] T004 [P] Initialize `frontend/` directory with Vite + React 18+ + TypeScript template in `frontend/package.json`
-- [ ] T005 [P] Configure Vite build, proxy, and alias options in `frontend/vite.config.ts` and `frontend/tsconfig.json`
-- [ ] T006 [P] Create environment variable template for backend in `backend/.env.example`
-- [ ] T007 [P] Create environment variable template for frontend in `frontend/.env.example`
-- [ ] T008 [P] Setup Vitest test runner configuration for backend quantitative and unit tests in `backend/vitest.config.ts`
+- [X] T001 Initialize root workspace configuration and `.gitignore` covering `node_modules`, `.env`, and build artifacts in `.gitignore`
+- [X] T002 [P] Initialize `backend/` directory with `package.json`, Node 20+ engine configuration, and dependencies (`express`, `ws`, `@supabase/supabase-js`, `viem`, `openai`, `dotenv`, `cors`, `zod`, `tsx`, `vitest`) in `backend/package.json`
+- [X] T003 [P] Configure TypeScript compilation settings for backend in `backend/tsconfig.json`
+- [X] T004 [P] Initialize `frontend/` directory with Vite + React 18+ + TypeScript template in `frontend/package.json`
+- [X] T005 [P] Configure Vite build, proxy, and alias options in `frontend/vite.config.ts` and `frontend/tsconfig.json`
+- [X] T006 [P] Create environment variable template for backend in `backend/.env.example`
+- [X] T007 [P] Create environment variable template for frontend in `frontend/.env.example`
+- [X] T008 [P] Setup Vitest test runner configuration for backend quantitative and unit tests in `backend/vitest.config.ts`
 
 ---
 

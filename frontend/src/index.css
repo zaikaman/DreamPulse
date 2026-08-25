@@ -1,0 +1,22 @@
+:root {
+  --bg-primary: #0a0b0e;
+  --bg-secondary: #12141a;
+  --text-primary: #f0f2f5;
+  --accent-cyan: #00ffcc;
+  --font-mono: 'JetBrains Mono', monospace;
+  --font-display: 'Outfit', sans-serif;
+}
+
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+body {
+  background-color: var(--bg-primary);
+  color: var(--text-primary);
+  font-family: var(--font-mono);
+  min-height: 100vh;
+  overflow-x: hidden;
+}
