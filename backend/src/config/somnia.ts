@@ -1,6 +1,19 @@
 import { createPublicClient, createWalletClient, http, defineChain, type Address, type PublicClient, type WalletClient } from 'viem';
 import { privateKeyToAccount } from 'viem/accounts';
+import { SomniaMarkets } from '@somnia-chain/markets-sdk';
 import { env } from './env.js';
+
+/**
+ * On-chain MarketStatus enum: 0 Listed · 1 Trading · 2 Locked · 3 Settling · 4 Resolved · 5 Voided.
+ */
+export const MARKET_STATUS = {
+  Listed: 0,
+  Trading: 1,
+  Locked: 2,
+  Settling: 3,
+  Resolved: 4,
+  Voided: 5,
+} as const;
 
 /**
  * Somnia Shannon Testnet chain definition (Chain ID 50312).
@@ -15,10 +28,12 @@ export const somniaShannonTestnet = defineChain({
   },
   rpcUrls: {
     default: {
-      http: [env.SOMNIA_RPC_URL],
+      http: [env.SOMNIA_RPC_URL || 'https://api.infra.testnet.somnia.network'],
+      webSocket: ['wss://api.infra.testnet.somnia.network/ws'],
     },
     public: {
-      http: [env.SOMNIA_RPC_URL],
+      http: [env.SOMNIA_RPC_URL || 'https://api.infra.testnet.somnia.network'],
+      webSocket: ['wss://api.infra.testnet.somnia.network/ws'],
     },
   },
   blockExplorers: {
@@ -76,3 +91,21 @@ export const walletClient: WalletClient = createWalletClient({
   chain: somniaShannonTestnet,
   transport: http(env.SOMNIA_RPC_URL),
 });
+
+/**
+ * SomniaMarkets Exchange Client for interacting with DreamDEX Event Contracts CLOB and indexer.
+ */
+export const somniaExchange = new SomniaMarkets({
+  indexerUrl: env.INDEXER_URL,
+  chain: somniaShannonTestnet,
+  wsRpcUrl: env.SOMNIA_WS_URL,
+  addresses: SOMNIA_ADDRESSES,
+  privateKey: operatorPrivateKey,
+  fees: {
+    maxFeePerGas: 8_000_000_000n,
+    maxPriorityFeePerGas: 1_000_000_000n,
+  },
+});
+
+
+

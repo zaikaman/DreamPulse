@@ -13,6 +13,9 @@ import {
   Loader2,
   Copy,
   Check,
+  Coins,
+  Layers,
+  FileCheck2,
 } from 'lucide-react';
 import type { SessionGrant } from '../types/index.js';
 import type { WalletState } from '../hooks/useSessionKey.js';
@@ -25,6 +28,7 @@ interface SessionDelegationModalProps {
   activeSession: SessionGrant | null;
   isSigning: boolean;
   isLoading: boolean;
+  stepState?: 'idle' | 'authorizing_onchain' | 'depositing_vault' | 'signing_eip712' | 'registering_backend';
   error: string | null;
   onConnectWallet: () => Promise<void>;
   onSwitchNetwork: () => Promise<void>;
@@ -32,8 +36,10 @@ interface SessionDelegationModalProps {
     maxTradeSize: number;
     dailyVolumeCap: number;
     durationHours: number;
+    depositAmount?: number;
+    targetPool?: `0x${string}`;
   }) => Promise<SessionGrant>;
-  onRevokeSession: () => Promise<void>;
+  onRevokeSession: (options?: { onChain?: boolean }) => Promise<void>;
   onClearError: () => void;
 }
 
@@ -44,6 +50,7 @@ export const SessionDelegationModal: React.FC<SessionDelegationModalProps> = ({
   activeSession,
   isSigning,
   isLoading,
+  stepState = 'idle',
   error,
   onConnectWallet,
   onSwitchNetwork,
@@ -54,8 +61,10 @@ export const SessionDelegationModal: React.FC<SessionDelegationModalProps> = ({
   const [maxTradeSize, setMaxTradeSize] = useState<number>(10);
   const [dailyVolumeCap, setDailyVolumeCap] = useState<number>(100);
   const [durationHours, setDurationHours] = useState<number>(24);
+  const [depositAmount, setDepositAmount] = useState<number>(10);
   const [copiedOperator, setCopiedOperator] = useState<boolean>(false);
   const [confirmRevoke, setConfirmRevoke] = useState<boolean>(false);
+  const [revokeOnChainOption, setRevokeOnChainOption] = useState<boolean>(true);
 
   if (!isOpen) return null;
 
@@ -72,6 +81,8 @@ export const SessionDelegationModal: React.FC<SessionDelegationModalProps> = ({
         maxTradeSize,
         dailyVolumeCap,
         durationHours,
+        depositAmount: depositAmount > 0 ? depositAmount : undefined,
+        targetPool: SOMNIA_ADDRESSES.binaryModule,
       });
       onClose();
     } catch {
@@ -82,7 +93,7 @@ export const SessionDelegationModal: React.FC<SessionDelegationModalProps> = ({
   const handleRevoke = async () => {
     onClearError();
     try {
-      await onRevokeSession();
+      await onRevokeSession({ onChain: revokeOnChainOption });
       setConfirmRevoke(false);
       onClose();
     } catch {
@@ -96,6 +107,21 @@ export const SessionDelegationModal: React.FC<SessionDelegationModalProps> = ({
     { label: '24 Hours', hours: 24 },
     { label: '7 Days', hours: 168 },
   ];
+
+  const getStepStatusText = () => {
+    switch (stepState) {
+      case 'authorizing_onchain':
+        return 'Step 1/3: Confirming On-Chain Operator Approval on Somnia...';
+      case 'depositing_vault':
+        return 'Step 2/3: Depositing Working Capital to Pool Vault...';
+      case 'signing_eip712':
+        return 'Step 3/3: Signing EIP-712 Risk Ceilings in Wallet...';
+      case 'registering_backend':
+        return 'Registering Session with DreamPulse Swarm...';
+      default:
+        return 'Sign EIP-712 & Submit On-Chain Delegation...';
+    }
+  };
 
   return (
     <div className="modal-backdrop" onClick={onClose}>
@@ -117,7 +143,7 @@ export const SessionDelegationModal: React.FC<SessionDelegationModalProps> = ({
                 Non-Custodial Session Delegation
               </h2>
               <p className="modal-subtitle">
-                Somnia OperatorPermissionsRegistry • EIP-712 Scoped Authorization
+                Somnia OperatorPermissionsRegistry • On-Chain Approval & EIP-712 Guardrails
               </p>
             </div>
           </div>
@@ -139,14 +165,34 @@ export const SessionDelegationModal: React.FC<SessionDelegationModalProps> = ({
               <div className="active-session-header">
                 <div className="status-indicator-live">
                   <span className="live-dot-green"></span>
-                  <span className="active-session-text">Session Active & Authorized</span>
+                  <span className="active-session-text">Session Active & On-Chain Authorized</span>
                 </div>
                 <span className="active-session-expiry">
                   Expires: {new Date(activeSession.expiresAt).toLocaleTimeString()} (
                   {new Date(activeSession.expiresAt).toLocaleDateString()})
                 </span>
               </div>
-              <div className="active-session-stats-row">
+
+              {/* On-Chain Permissions Badge */}
+              <div className="onchain-status-row" style={{ marginTop: '8px', fontSize: '11px', display: 'flex', gap: '8px', alignItems: 'center' }}>
+                <span style={{ color: 'var(--brand-cyan)', display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
+                  <ShieldCheck size={13} />
+                  <span>On-Chain Permitted: <code>0x80054449</code> (placeOrderFor) + <code>0xe37b444b</code> (cancelOrderFor)</span>
+                </span>
+                {activeSession.onChainTxHash && (
+                  <a
+                    href={`https://shannon-explorer.somnia.network/tx/${activeSession.onChainTxHash}`}
+                    target="_blank"
+                    rel="noreferrer"
+                    style={{ color: 'var(--brand-cyan)', textDecoration: 'underline', display: 'inline-flex', alignItems: 'center', gap: '2px', marginLeft: 'auto' }}
+                  >
+                    <span>Tx Hash</span>
+                    <ExternalLink size={10} />
+                  </a>
+                )}
+              </div>
+
+              <div className="active-session-stats-row" style={{ marginTop: '10px' }}>
                 <div className="stat-pill">
                   <span className="stat-pill-label">Max / Trade:</span>
                   <span className="stat-pill-value">{activeSession.maxTradeSize} STT</span>
@@ -159,13 +205,30 @@ export const SessionDelegationModal: React.FC<SessionDelegationModalProps> = ({
                   <span className="stat-pill-label">Spent Today:</span>
                   <span className="stat-pill-value">{activeSession.spentToday.toFixed(2)} STT</span>
                 </div>
+                {activeSession.vaultDepositAmount !== undefined && activeSession.vaultDepositAmount > 0 && (
+                  <div className="stat-pill">
+                    <span className="stat-pill-label">Vault Capital:</span>
+                    <span className="stat-pill-value">{activeSession.vaultDepositAmount} STT</span>
+                  </div>
+                )}
               </div>
 
               {confirmRevoke ? (
-                <div className="revoke-confirm-box">
+                <div className="revoke-confirm-box" style={{ marginTop: '12px' }}>
                   <span className="revoke-confirm-text">
-                    Are you sure? This immediately halts all autonomous trading for your wallet.
+                    Are you sure? This immediately halts autonomous trading and revokes permissions.
                   </span>
+                  <div style={{ margin: '8px 0', fontSize: '11px', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                    <input
+                      type="checkbox"
+                      id="revoke-onchain-checkbox"
+                      checked={revokeOnChainOption}
+                      onChange={(e) => setRevokeOnChainOption(e.target.checked)}
+                    />
+                    <label htmlFor="revoke-onchain-checkbox" style={{ color: 'var(--foreground)', cursor: 'pointer' }}>
+                      Submit On-Chain Revocation to OperatorPermissionsRegistry
+                    </label>
+                  </div>
                   <div className="revoke-btn-group">
                     <button
                       type="button"
@@ -198,40 +261,39 @@ export const SessionDelegationModal: React.FC<SessionDelegationModalProps> = ({
             </div>
           )}
 
-          {/* Zero-Custody Safety Guarantees */}
-          <div className="safety-guarantees-card">
-            <div className="safety-card-title">
-              <ShieldCheck size={16} className="safety-icon-cyan" />
-              <span>Mathematical Zero-Withdrawal Invariant</span>
+          {/* 3-Step Onboarding Architecture Banner */}
+          <div className="safety-guarantees-card" style={{ padding: '12px 14px', marginBottom: '14px' }}>
+            <div className="safety-card-title" style={{ marginBottom: '10px' }}>
+              <Layers size={15} className="safety-icon-cyan" />
+              <span>3-Step On-Chain Split-Key Architecture</span>
             </div>
-            <div className="safety-grid">
-              <div className="safety-item">
-                <Lock size={14} className="safety-mini-icon" />
-                <div>
-                  <strong>Zero Fund Access</strong>
-                  <p>The operator key cannot transfer, withdraw, or approve ERC20 balances.</p>
-                </div>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '8px', fontSize: '11px' }}>
+              <div style={{ background: 'rgba(255, 255, 255, 0.03)', padding: '8px', borderRadius: '6px', border: '1px solid rgba(255, 255, 255, 0.06)' }}>
+                <strong style={{ display: 'flex', alignItems: 'center', gap: '4px', color: 'var(--brand-cyan)' }}>
+                  <ShieldCheck size={12} />
+                  <span>1. On-Chain Registry</span>
+                </strong>
+                <p style={{ margin: '4px 0 0 0', color: 'var(--muted-foreground)', lineHeight: 1.3 }}>
+                  Authorizes bot key on <code>OperatorPermissionsRegistry</code> for place & cancel orders.
+                </p>
               </div>
-              <div className="safety-item">
-                <Zap size={14} className="safety-mini-icon" />
-                <div>
-                  <strong>Direct Settlement</strong>
-                  <p>All position payouts settle directly to your connected wallet.</p>
-                </div>
+              <div style={{ background: 'rgba(255, 255, 255, 0.03)', padding: '8px', borderRadius: '6px', border: '1px solid rgba(255, 255, 255, 0.06)' }}>
+                <strong style={{ display: 'flex', alignItems: 'center', gap: '4px', color: 'var(--brand-cyan)' }}>
+                  <Coins size={12} />
+                  <span>2. Pool Vault Mode</span>
+                </strong>
+                <p style={{ margin: '4px 0 0 0', color: 'var(--muted-foreground)', lineHeight: 1.3 }}>
+                  Enables <code>setManualVaultMode</code> & deposits collateral so bot trades without wallet access.
+                </p>
               </div>
-              <div className="safety-item">
-                <Clock size={14} className="safety-mini-icon" />
-                <div>
-                  <strong>Hard Time Expiry</strong>
-                  <p>Session automatically dissolves when duration expires.</p>
-                </div>
-              </div>
-              <div className="safety-item">
-                <Sliders size={14} className="safety-mini-icon" />
-                <div>
-                  <strong>Enforced Caps</strong>
-                  <p>Trades exceeding your single or daily limits are rejected on-chain.</p>
-                </div>
+              <div style={{ background: 'rgba(255, 255, 255, 0.03)', padding: '8px', borderRadius: '6px', border: '1px solid rgba(255, 255, 255, 0.06)' }}>
+                <strong style={{ display: 'flex', alignItems: 'center', gap: '4px', color: 'var(--brand-cyan)' }}>
+                  <FileCheck2 size={12} />
+                  <span>3. EIP-712 Caps</span>
+                </strong>
+                <p style={{ margin: '4px 0 0 0', color: 'var(--muted-foreground)', lineHeight: 1.3 }}>
+                  Cryptographically binds trade size, 24h daily spend ceilings, and hard deadlines.
+                </p>
               </div>
             </div>
           </div>
@@ -260,7 +322,40 @@ export const SessionDelegationModal: React.FC<SessionDelegationModalProps> = ({
 
           {/* Risk Limits Configuration Form */}
           <div className="risk-config-section">
-            <h3 className="section-title">Configure Risk Ceilings</h3>
+            <h3 className="section-title">Configure Risk Ceilings & Working Capital</h3>
+
+            {/* Working Capital Vault Deposit */}
+            <div className="config-group">
+              <div className="config-header-row">
+                <label htmlFor="deposit-amount-slider" className="config-label" style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
+                  <Coins size={13} style={{ color: 'var(--brand-cyan)' }} />
+                  <span>Working Capital Vault Deposit</span>
+                </label>
+                <span className="config-value-badge">{depositAmount} STT</span>
+              </div>
+              <input
+                id="deposit-amount-slider"
+                type="range"
+                min={0}
+                max={100}
+                step={5}
+                value={depositAmount}
+                onChange={(e) => setDepositAmount(Number(e.target.value))}
+                className="custom-range-slider"
+              />
+              <div className="preset-pill-row">
+                {[0, 10, 25, 50, 100].map((val) => (
+                  <button
+                    key={val}
+                    type="button"
+                    className={`preset-pill ${depositAmount === val ? 'active' : ''}`}
+                    onClick={() => setDepositAmount(val)}
+                  >
+                    {val === 0 ? '0 (Skip)' : `${val} STT`}
+                  </button>
+                ))}
+              </div>
+            </div>
 
             {/* Max Trade Size Slider */}
             <div className="config-group">
@@ -355,6 +450,44 @@ export const SessionDelegationModal: React.FC<SessionDelegationModalProps> = ({
             </div>
           </div>
 
+          {/* Zero-Custody Safety Guarantees */}
+          <div className="safety-guarantees-card">
+            <div className="safety-card-title">
+              <ShieldCheck size={16} className="safety-icon-cyan" />
+              <span>Mathematical Zero-Withdrawal Invariant</span>
+            </div>
+            <div className="safety-grid">
+              <div className="safety-item">
+                <Lock size={14} className="safety-mini-icon" />
+                <div>
+                  <strong>Zero Fund Access</strong>
+                  <p>The operator key cannot transfer, withdraw, or approve ERC20 balances.</p>
+                </div>
+              </div>
+              <div className="safety-item">
+                <Zap size={14} className="safety-mini-icon" />
+                <div>
+                  <strong>Direct Settlement</strong>
+                  <p>All position payouts settle directly to your connected wallet.</p>
+                </div>
+              </div>
+              <div className="safety-item">
+                <Clock size={14} className="safety-mini-icon" />
+                <div>
+                  <strong>Hard Time Expiry</strong>
+                  <p>Session automatically dissolves when duration expires.</p>
+                </div>
+              </div>
+              <div className="safety-item">
+                <Sliders size={14} className="safety-mini-icon" />
+                <div>
+                  <strong>Enforced Caps</strong>
+                  <p>Trades exceeding your single or daily limits are rejected on-chain.</p>
+                </div>
+              </div>
+            </div>
+          </div>
+
           {/* Error Alert */}
           {error && (
             <div className="error-alert-box">
@@ -414,15 +547,15 @@ export const SessionDelegationModal: React.FC<SessionDelegationModalProps> = ({
               {isSigning ? (
                 <>
                   <Loader2 size={15} className="spin" />
-                  <span>Sign EIP-712 Grant in Wallet...</span>
+                  <span>{getStepStatusText()}</span>
                 </>
               ) : (
                 <>
                   <CheckCircle2 size={15} />
                   <span>
                     {activeSession?.isActive
-                      ? 'Update Session Guardrails'
-                      : 'Sign & Authorize Non-Custodial Session'}
+                      ? 'Update Session & On-Chain Permissions'
+                      : 'Authorize On-Chain Session & Deposit'}
                   </span>
                 </>
               )}
@@ -433,3 +566,4 @@ export const SessionDelegationModal: React.FC<SessionDelegationModalProps> = ({
     </div>
   );
 };
+

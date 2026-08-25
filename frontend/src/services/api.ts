@@ -5,6 +5,8 @@ import type {
   SwarmStatusSummary,
   AgentThoughtLog,
   BacktestResult,
+  SettlementSweep,
+  SweeperSummary,
 } from '../types/index.js';
 
 const API_BASE_URL = import.meta.env.VITE_BACKEND_HTTP_URL || '/api/v1';
@@ -43,6 +45,10 @@ export const apiClient = {
     return fetchJson<{ success: boolean; marketId: string; depth: OrderBookDepth }>(`/markets/${encodeURIComponent(marketId)}/depth`);
   },
 
+  async getSpotPrices(): Promise<{ success: boolean; data: Record<string, { symbol: string; price: number; change1m: number; change5m: number; high24h: number; low24h: number; volume24h: number; timestamp: number }> }> {
+    return fetchJson<{ success: boolean; data: Record<string, { symbol: string; price: number; change1m: number; change5m: number; high24h: number; low24h: number; volume24h: number; timestamp: number }> }>('/markets/spot');
+  },
+
   // Sessions
   async registerSession(payload: {
     userAddress: string;
@@ -51,6 +57,10 @@ export const apiClient = {
     dailyVolumeCap: number;
     expiresAt?: string;
     signature?: string;
+    onChainTxHash?: string;
+    vaultDepositAmount?: number;
+    targetPoolAddress?: string;
+    onChainAuthorized?: boolean;
   }): Promise<{ success: boolean; session: SessionGrant }> {
     return fetchJson<{ success: boolean; session: SessionGrant }>('/sessions/register', {
       method: 'POST',
@@ -111,15 +121,26 @@ export const apiClient = {
   },
 
   // Sweeper & Backtest
-  async triggerSweep(userAddress: string): Promise<{
+  async getSweepHistory(userAddress?: string): Promise<{ success: boolean; count: number; data: SettlementSweep[] }> {
+    const endpoint = userAddress ? `/sweeper/history?userAddress=${encodeURIComponent(userAddress)}` : '/sweeper/history';
+    return fetchJson(endpoint);
+  },
+
+  async getSweeperSummary(userAddress?: string): Promise<{ success: boolean; data: SweeperSummary }> {
+    const endpoint = userAddress ? `/sweeper/summary?userAddress=${encodeURIComponent(userAddress)}` : '/sweeper/summary';
+    return fetchJson(endpoint);
+  },
+
+  async triggerSweep(userAddress: string, autoCompound: boolean = true): Promise<{
     success: boolean;
     claimedMarketsCount: number;
     totalClaimedAmount: string;
     txHash: string;
+    sweeps?: SettlementSweep[];
   }> {
     return fetchJson('/sweeper/trigger', {
       method: 'POST',
-      body: JSON.stringify({ userAddress }),
+      body: JSON.stringify({ userAddress, autoCompound }),
     });
   },
 

@@ -320,6 +320,42 @@ apiRouter.get('/orders/:id', (req: Request, res: Response) => {
 // ------------------------------------------------------------------------------
 // 5. Sweeper Settlement & Payout Redemptions
 // ------------------------------------------------------------------------------
+apiRouter.get('/sweeper/summary', async (req: Request, res: Response) => {
+  try {
+    const { userAddress } = req.query;
+    const summary = await settlementService.getSweeperSummary(
+      typeof userAddress === 'string' ? userAddress : undefined,
+    );
+    return res.json({
+      success: true,
+      data: summary,
+    });
+  } catch (err: any) {
+    return res.status(500).json({ success: false, error: err.message || 'Failed to fetch sweeper summary' });
+  }
+});
+
+apiRouter.get('/sweeper/unclaimed', async (req: Request, res: Response) => {
+  try {
+    const { userAddress } = req.query;
+    const unclaimed = await settlementService.scanUnclaimedSettlements(
+      typeof userAddress === 'string' ? userAddress : undefined,
+    );
+    const totalUnclaimed = Number(
+      unclaimed.reduce((acc, p) => acc + p.claimableAmount, 0).toFixed(4),
+    );
+    return res.json({
+      success: true,
+      count: unclaimed.length,
+      totalUnclaimedAmount: `${totalUnclaimed.toFixed(2)} STT`,
+      unclaimedAmountNum: totalUnclaimed,
+      positions: unclaimed,
+    });
+  } catch (err: any) {
+    return res.status(500).json({ success: false, error: err.message || 'Failed to scan unclaimed settlements' });
+  }
+});
+
 apiRouter.post('/sweeper/trigger', async (req: Request, res: Response) => {
   try {
     const { userAddress, autoCompound } = req.body;
@@ -353,11 +389,11 @@ apiRouter.get('/sweeper/history', (req: Request, res: Response) => {
 // ------------------------------------------------------------------------------
 // 6. Strategy Studio & Historical Backtesting Simulator
 // ------------------------------------------------------------------------------
-apiRouter.post('/backtest/run', (req: Request, res: Response) => {
+apiRouter.post('/backtest/run', async (req: Request, res: Response) => {
   try {
     const { userAddress, agentType, symbol, startDate, endDate, initialCapital, strategyConfig } = req.body;
 
-    const result = backtestService.runSimulation({
+    const result = await backtestService.runSimulation({
       userAddress,
       agentType: agentType || 'Volt',
       symbol: symbol || 'BTC/USD',

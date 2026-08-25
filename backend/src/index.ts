@@ -47,9 +47,9 @@ if (process.env.NODE_ENV !== 'test') {
     const { startMarketEmitter } = await import('./websocket/market-emitter.js');
     startMarketEmitter(100);
 
-    // Start Autonomous Multi-Agent Swarm Runner Loop (100ms evaluation tick)
+    // Start Autonomous Multi-Agent Swarm Runner Loop (1000ms evaluation tick)
     const { swarmRunner } = await import('./agents/swarm-runner.js');
-    swarmRunner.start(100);
+    swarmRunner.start(1000);
   });
 }
 

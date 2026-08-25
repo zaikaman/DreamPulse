@@ -91,7 +91,7 @@ export const MarketMatrix: React.FC<MarketMatrixProps> = ({
           </div>
 
           <div className="filter-pill-group">
-            {['ALL', '5m', '15m', '1h'].map((win) => (
+            {['ALL', '5m', '15m', '1h', '4h', '24h'].map((win) => (
               <button
                 key={win}
                 type="button"

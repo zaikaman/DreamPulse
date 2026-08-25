@@ -97,25 +97,22 @@ export const DashboardHeader: React.FC<DashboardHeaderProps> = ({
           <div className="header-spot-item">
             <span className="spot-sym">BTC</span>
             <span className="spot-val tabular-num">
-              ${(spotPrices['BTC/USD'] || 96450).toLocaleString(undefined, { minimumFractionDigits: 1, maximumFractionDigits: 1 })}
+              {spotPrices['BTC/USD'] ? `$${spotPrices['BTC/USD'].toLocaleString(undefined, { minimumFractionDigits: 1, maximumFractionDigits: 1 })}` : 'Syncing...'}
             </span>
-            <span className="spot-tag-pos">+0.42%</span>
           </div>
 
           <div className="header-spot-item">
             <span className="spot-sym">ETH</span>
             <span className="spot-val tabular-num">
-              ${(spotPrices['ETH/USD'] || 2745.5).toLocaleString(undefined, { minimumFractionDigits: 1, maximumFractionDigits: 1 })}
+              {spotPrices['ETH/USD'] ? `$${spotPrices['ETH/USD'].toLocaleString(undefined, { minimumFractionDigits: 1, maximumFractionDigits: 1 })}` : 'Syncing...'}
             </span>
-            <span className="spot-tag-neg">-0.18%</span>
           </div>
 
           <div className="header-spot-item">
             <span className="spot-sym">SOL</span>
             <span className="spot-val tabular-num">
-              ${(spotPrices['SOL/USD'] || 188.25).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+              {spotPrices['SOL/USD'] ? `$${spotPrices['SOL/USD'].toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : 'Syncing...'}
             </span>
-            <span className="spot-tag-pos">+1.15%</span>
           </div>
         </div>
       </div>

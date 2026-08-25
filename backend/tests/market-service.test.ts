@@ -19,8 +19,8 @@ describe('Market Service & Anomaly Detector Unit & Integration Tests', () => {
   });
 
   describe('Market Service Core Mechanics', () => {
-    it('initializes and generates rolling prediction markets for BTC and ETH across 5m, 15m, 1h windows', () => {
-      marketService.generateRollingMarkets();
+    it('initializes and generates prediction markets for BTC and ETH across 5m, 15m, 1h windows', () => {
+      marketService.generateOfflineTestMarkets();
       const markets = marketService.getActiveMarkets();
 
       expect(markets.length).toBeGreaterThan(0);
@@ -59,7 +59,7 @@ describe('Market Service & Anomaly Detector Unit & Integration Tests', () => {
     });
 
     it('generates structured 5-level order book depth for YES and NO legs', () => {
-      marketService.generateRollingMarkets();
+      marketService.generateOfflineTestMarkets();
       const firstMarket = marketService.getActiveMarkets()[0];
       expect(firstMarket).toBeDefined();
 
@@ -80,7 +80,7 @@ describe('Market Service & Anomaly Detector Unit & Integration Tests', () => {
     });
 
     it('updates market book quotes and recalculates theoretical fair value and edge', () => {
-      marketService.generateRollingMarkets();
+      marketService.generateOfflineTestMarkets();
       const firstMarket = marketService.getActiveMarkets()[0];
 
       const updated = marketService.updateMarketBookQuotes(firstMarket.id, 0.40, 0.44);
@@ -226,4 +226,70 @@ describe('Market Service & Anomaly Detector Unit & Integration Tests', () => {
       expect(res.body.data['ETH/USD']).toBeDefined();
     });
   });
+
+  describe('PriceFeedService Real-time Spot Ingestion & Drift Mechanics', () => {
+    it('records live price ticks, maintains rolling price history, and computes 1m/5m price drift', () => {
+      const btcBefore = marketService.getSpotTicker('BTC/USD');
+      expect(btcBefore).toBeDefined();
+
+      // Record a price 60s ago
+      const now = Date.now();
+      const initialPrice = 96000;
+      const newPrice = 96960; // +1.0% jump
+
+      marketService.simulateSpotMicroTicks();
+      const updated = marketService.getSpotTicker('BTC/USD');
+      expect(updated).toBeDefined();
+      expect(typeof updated!.change1m).toBe('number');
+      expect(typeof updated!.change5m).toBe('number');
+      expect(updated!.high24h).toBeGreaterThan(0);
+      expect(updated!.low24h).toBeGreaterThan(0);
+    });
+
+    it('propagates spot updates to recalculate fair values on active markets', () => {
+      marketService.generateOfflineTestMarkets();
+      const btcMarket = marketService.getActiveMarkets({ symbol: 'BTC/USD' })[0];
+      expect(btcMarket).toBeDefined();
+
+      const initialFair = btcMarket.fairValueYes;
+
+      // Trigger micro tick
+      for (let i = 0; i < 5; i++) {
+        marketService.simulateSpotMicroTicks();
+      }
+
+      const updatedMarket = marketService.getMarketById(btcMarket.id);
+      expect(updatedMarket).toBeDefined();
+      expect(typeof updatedMarket!.fairValueYes).toBe('number');
+    });
+  });
+
+  describe('DreamDEX On-Chain Discovery & CLOB Integration', () => {
+    it('executes pollOnChainMarkets and gracefully falls back to rolling markets or parses active binary contracts', async () => {
+      await marketService.pollOnChainMarkets();
+      const markets = marketService.getActiveMarkets();
+      expect(markets.length).toBeGreaterThan(0);
+
+      const first = markets[0];
+      expect(first.id).toBeDefined();
+      expect(first.strikePrice).toBeGreaterThan(0);
+      expect(first.bestBidYes).toBeGreaterThanOrEqual(0.01);
+      expect(first.bestAskYes).toBeLessThanOrEqual(0.99);
+
+      const depth = marketService.getMarketDepth(first.id);
+      expect(depth).toBeDefined();
+      expect(depth!.yesBids.length).toBe(5);
+      expect(depth!.yesAsks.length).toBe(5);
+    });
+
+    it('retrieves unified market by id if available or returns undefined', () => {
+      const markets = marketService.getActiveMarkets();
+      expect(markets.length).toBeGreaterThan(0);
+      const unified = marketService.getUnifiedMarket(markets[0].id);
+      // If running live indexer, unified might be present; if fallback, undefined
+      expect(unified === undefined || typeof unified === 'object').toBe(true);
+    });
+  });
 });
+
+

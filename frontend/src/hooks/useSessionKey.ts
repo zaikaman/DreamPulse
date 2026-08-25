@@ -19,6 +19,7 @@ export interface UseSessionKeyReturn {
   activeSession: SessionGrant | null;
   isLoading: boolean;
   isSigning: boolean;
+  stepState: 'idle' | 'authorizing_onchain' | 'depositing_vault' | 'signing_eip712' | 'registering_backend';
   error: string | null;
   connectWallet: () => Promise<void>;
   disconnectWallet: () => void;
@@ -27,8 +28,10 @@ export interface UseSessionKeyReturn {
     maxTradeSize: number;
     dailyVolumeCap: number;
     durationHours: number;
+    depositAmount?: number;
+    targetPool?: Address;
   }) => Promise<SessionGrant>;
-  revokeSession: () => Promise<void>;
+  revokeSession: (options?: { onChain?: boolean }) => Promise<void>;
   refreshSession: () => Promise<void>;
   clearError: () => void;
 }
@@ -62,6 +65,9 @@ export function useSessionKey(): UseSessionKeyReturn {
 
   const [isLoading, setIsLoading] = useState<boolean>(false);
   const [isSigning, setIsSigning] = useState<boolean>(false);
+  const [stepState, setStepState] = useState<
+    'idle' | 'authorizing_onchain' | 'depositing_vault' | 'signing_eip712' | 'registering_backend'
+  >('idle');
   const [error, setError] = useState<string | null>(null);
 
   const clearError = useCallback(() => setError(null), []);
@@ -106,6 +112,10 @@ export function useSessionKey(): UseSessionKeyReturn {
             spentToday: Number(s.spentToday || 0),
             expiresAt: s.expiresAt,
             isActive: Boolean(s.isActive),
+            onChainTxHash: s.onChainTxHash,
+            vaultDepositAmount: s.vaultDepositAmount,
+            targetPoolAddress: s.targetPoolAddress,
+            onChainAuthorized: s.onChainAuthorized ?? true,
           };
 
           if (new Date(sessionGrant.expiresAt).getTime() > Date.now() && sessionGrant.isActive) {
@@ -142,6 +152,10 @@ export function useSessionKey(): UseSessionKeyReturn {
             spentToday: Number(row.spent_today || 0),
             expiresAt: row.expires_at,
             isActive: row.is_active,
+            onChainTxHash: row.on_chain_tx_hash,
+            vaultDepositAmount: row.vault_deposit_amount,
+            targetPoolAddress: row.target_pool_address,
+            onChainAuthorized: row.on_chain_authorized ?? true,
           };
           setActiveSession(sessionGrant);
           localStorage.setItem(LOCAL_SESSION_KEY, JSON.stringify(sessionGrant));
@@ -221,13 +235,15 @@ export function useSessionKey(): UseSessionKeyReturn {
   }, []);
 
   /**
-   * Signs and registers a non-custodial session grant.
+   * Full non-custodial session onboarding with on-chain operator permissions & vault setup.
    */
   const createSession = useCallback(
     async (params: {
       maxTradeSize: number;
       dailyVolumeCap: number;
       durationHours: number;
+      depositAmount?: number;
+      targetPool?: Address;
     }): Promise<SessionGrant> => {
       if (!wallet.isConnected || !wallet.address) {
         throw new Error('Please connect your Web3 wallet first.');
@@ -236,13 +252,46 @@ export function useSessionKey(): UseSessionKeyReturn {
       setIsSigning(true);
       setError(null);
 
+      let onChainTxHash: `0x${string}` | undefined;
+
       try {
+        // Step 1: On-Chain Operator Authorization
+        setStepState('authorizing_onchain');
+        if (params.targetPool) {
+          const res = await web3Service.grantOperatorForPool({
+            userAddress: wallet.address,
+            pool: params.targetPool,
+            operator: SOMNIA_ADDRESSES.operatorPermissionsRegistry,
+            approved: true,
+          });
+          onChainTxHash = res.hash;
+        } else {
+          const res = await web3Service.grantOperatorGlobal({
+            userAddress: wallet.address,
+            operator: SOMNIA_ADDRESSES.operatorPermissionsRegistry,
+            approved: true,
+          });
+          onChainTxHash = res.hash;
+        }
+
+        // Step 2: (Optional) Collateral Deposit & Vault Mode Setup
+        if (params.depositAmount && params.depositAmount > 0 && params.targetPool) {
+          setStepState('depositing_vault');
+          await web3Service.setupPoolVault({
+            userAddress: wallet.address,
+            pool: params.targetPool,
+            token: SOMNIA_ADDRESSES.testUsdc,
+            amount: params.depositAmount,
+          });
+        }
+
+        // Step 3: Sign EIP-712 structured data in user's wallet for risk ceilings
+        setStepState('signing_eip712');
         const now = Date.now();
         const expiresAt = new Date(now + params.durationHours * 3600 * 1000).toISOString();
         const deadline = Math.floor(new Date(expiresAt).getTime() / 1000);
         const nonce = 0;
 
-        // Sign EIP-712 structured data in user's wallet
         const signature = await web3Service.signSessionDelegation({
           delegator: wallet.address,
           operator: SOMNIA_ADDRESSES.operatorPermissionsRegistry,
@@ -252,7 +301,8 @@ export function useSessionKey(): UseSessionKeyReturn {
           deadline,
         });
 
-        // Register session on backend
+        // Step 4: Register session on backend
+        setStepState('registering_backend');
         const res = await apiClient.registerSession({
           userAddress: wallet.address,
           operatorAddress: SOMNIA_ADDRESSES.operatorPermissionsRegistry,
@@ -260,6 +310,10 @@ export function useSessionKey(): UseSessionKeyReturn {
           dailyVolumeCap: params.dailyVolumeCap,
           expiresAt,
           signature,
+          onChainTxHash,
+          vaultDepositAmount: params.depositAmount,
+          targetPoolAddress: params.targetPool,
+          onChainAuthorized: true,
         });
 
         const createdSession: SessionGrant = {
@@ -272,10 +326,15 @@ export function useSessionKey(): UseSessionKeyReturn {
           spentToday: 0,
           expiresAt,
           isActive: true,
+          onChainTxHash,
+          vaultDepositAmount: params.depositAmount,
+          targetPoolAddress: params.targetPool,
+          onChainAuthorized: true,
         };
 
         setActiveSession(createdSession);
         localStorage.setItem(LOCAL_SESSION_KEY, JSON.stringify(createdSession));
+        await refreshBalances(wallet.address);
 
         return createdSession;
       } catch (err: any) {
@@ -284,29 +343,40 @@ export function useSessionKey(): UseSessionKeyReturn {
         throw err;
       } finally {
         setIsSigning(false);
+        setStepState('idle');
       }
     },
-    [wallet.isConnected, wallet.address]
+    [wallet.isConnected, wallet.address, refreshBalances]
   );
 
   /**
-   * Revokes the active session grant.
+   * Revokes the active session grant both on-chain and in backend.
    */
-  const revokeSession = useCallback(async () => {
-    if (!activeSession) return;
-    setIsLoading(true);
-    setError(null);
+  const revokeSession = useCallback(
+    async (options?: { onChain?: boolean }) => {
+      if (!activeSession) return;
+      setIsLoading(true);
+      setError(null);
 
-    try {
-      await apiClient.revokeSession(activeSession.id);
-      setActiveSession(null);
-      localStorage.removeItem(LOCAL_SESSION_KEY);
-    } catch (err: any) {
-      setError(err.message || 'Failed to revoke session');
-    } finally {
-      setIsLoading(false);
-    }
-  }, [activeSession]);
+      try {
+        if (options?.onChain && wallet.address) {
+          await web3Service.revokeOperatorOnChain({
+            userAddress: wallet.address,
+            operator: SOMNIA_ADDRESSES.operatorPermissionsRegistry,
+            pool: activeSession.targetPoolAddress,
+          });
+        }
+        await apiClient.revokeSession(activeSession.id);
+        setActiveSession(null);
+        localStorage.removeItem(LOCAL_SESSION_KEY);
+      } catch (err: any) {
+        setError(err.message || 'Failed to revoke session');
+      } finally {
+        setIsLoading(false);
+      }
+    },
+    [activeSession, wallet.address]
+  );
 
   const refreshSession = useCallback(async () => {
     if (wallet.address) {
@@ -398,6 +468,7 @@ export function useSessionKey(): UseSessionKeyReturn {
     activeSession,
     isLoading,
     isSigning,
+    stepState,
     error,
     connectWallet,
     disconnectWallet,

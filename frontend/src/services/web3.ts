@@ -1,5 +1,7 @@
 import {
   createPublicClient,
+  createWalletClient,
+  custom,
   http,
   defineChain,
   parseUnits,
@@ -45,6 +47,12 @@ export const SOMNIA_ADDRESSES = {
   marketsCore: '0x2802504314685D89bF6C992CA5a8e7cC78bc0294' as Address,
 };
 
+export const OPERATOR_SELECTORS = {
+  placeOrderFor: '0x80054449' as Hex,
+  cancelOrderFor: '0xe37b444b' as Hex,
+  reduceOrderFor: '0x364c2587' as Hex,
+} as const;
+
 export const SESSION_EIP712_DOMAIN = {
   name: 'DreamPulse Operator Registry',
   version: '1',
@@ -63,7 +71,134 @@ export const SESSION_EIP712_TYPES = {
   ],
 } as const;
 
-export const ERC20_BALANCE_ABI = [
+export const OPERATOR_REGISTRY_ABI = [
+  {
+    type: 'function',
+    name: 'setOperatorApprovalForPool',
+    stateMutability: 'nonpayable',
+    inputs: [
+      { name: 'pool', type: 'address' },
+      { name: 'operator', type: 'address' },
+      { name: 'selectors', type: 'bytes4[]' },
+      { name: 'approved', type: 'bool' },
+    ],
+    outputs: [],
+  },
+  {
+    type: 'function',
+    name: 'setOperatorApprovalGlobal',
+    stateMutability: 'nonpayable',
+    inputs: [
+      { name: 'operator', type: 'address' },
+      { name: 'selectors', type: 'bytes4[]' },
+      { name: 'approved', type: 'bool' },
+    ],
+    outputs: [],
+  },
+  {
+    type: 'function',
+    name: 'setOperatorDenialForPool',
+    stateMutability: 'nonpayable',
+    inputs: [
+      { name: 'pool', type: 'address' },
+      { name: 'operator', type: 'address' },
+      { name: 'selectors', type: 'bytes4[]' },
+      { name: 'denied', type: 'bool' },
+    ],
+    outputs: [],
+  },
+  {
+    type: 'function',
+    name: 'isOperatorAuthorized',
+    stateMutability: 'view',
+    inputs: [
+      { name: 'owner', type: 'address' },
+      { name: 'operator', type: 'address' },
+      { name: 'selector', type: 'bytes4' },
+    ],
+    outputs: [{ name: '', type: 'bool' }],
+  },
+] as const;
+
+export const SPOT_POOL_ABI = [
+  {
+    type: 'function',
+    name: 'setManualVaultMode',
+    stateMutability: 'nonpayable',
+    inputs: [{ name: 'enabled', type: 'bool' }],
+    outputs: [],
+  },
+  {
+    type: 'function',
+    name: 'getManualVaultMode',
+    stateMutability: 'view',
+    inputs: [{ name: 'user', type: 'address' }],
+    outputs: [{ name: '', type: 'bool' }],
+  },
+  {
+    type: 'function',
+    name: 'deposit',
+    stateMutability: 'nonpayable',
+    inputs: [
+      { name: 'token', type: 'address' },
+      { name: 'amount', type: 'uint256' },
+    ],
+    outputs: [],
+  },
+  {
+    type: 'function',
+    name: 'withdraw',
+    stateMutability: 'nonpayable',
+    inputs: [
+      { name: 'token', type: 'address' },
+      { name: 'amount', type: 'uint256' },
+    ],
+    outputs: [],
+  },
+  {
+    type: 'function',
+    name: 'getWithdrawableBalance',
+    stateMutability: 'view',
+    inputs: [
+      { name: 'owner', type: 'address' },
+      { name: 'token', type: 'address' },
+    ],
+    outputs: [{ name: '', type: 'uint256' }],
+  },
+  {
+    type: 'function',
+    name: 'isOperatorAuthorized',
+    stateMutability: 'view',
+    inputs: [
+      { name: 'owner', type: 'address' },
+      { name: 'operator', type: 'address' },
+      { name: 'selector', type: 'bytes4' },
+    ],
+    outputs: [{ name: '', type: 'bool' }],
+  },
+] as const;
+
+export const ERC20_ABI = [
+  {
+    type: 'function',
+    name: 'approve',
+    stateMutability: 'nonpayable',
+    inputs: [
+      { name: 'spender', type: 'address' },
+      { name: 'amount', type: 'uint256' },
+    ],
+    outputs: [{ name: '', type: 'bool' }],
+  },
+  {
+    type: 'function',
+    name: 'allowance',
+    stateMutability: 'view',
+    inputs: [
+      { name: 'owner', type: 'address' },
+      { name: 'spender', type: 'address' },
+    ],
+    outputs: [{ name: '', type: 'uint256' }],
+  },
   {
     type: 'function',
     name: 'balanceOf',
@@ -79,6 +214,8 @@ export const ERC20_BALANCE_ABI = [
     outputs: [{ name: '', type: 'uint8' }],
   },
 ] as const;
+
+export const ERC20_BALANCE_ABI = ERC20_ABI;
 
 /**
  * Public Viem client for querying Somnia testnet state.
@@ -100,6 +237,20 @@ export class Web3Service {
    */
   public isWalletAvailable(): boolean {
     return typeof window !== 'undefined' && Boolean(window.ethereum);
+  }
+
+  /**
+   * Gets a viem WalletClient wrapping window.ethereum for contract transactions.
+   */
+  public getWalletClient(userAddress: Address) {
+    if (!this.isWalletAvailable()) {
+      throw new Error('No Ethereum wallet detected.');
+    }
+    return createWalletClient({
+      account: userAddress,
+      chain: somniaShannonTestnet,
+      transport: custom(window.ethereum),
+    });
   }
 
   /**
@@ -199,6 +350,240 @@ export class Web3Service {
       console.warn('[Web3Service] Error fetching collateral balance:', err);
       return '0.00';
     }
+  }
+
+  /**
+   * Grants operator permissions globally on OperatorPermissionsRegistry.
+   */
+  public async grantOperatorGlobal(params: {
+    userAddress: Address;
+    operator?: Address;
+    selectors?: Hex[];
+    approved?: boolean;
+  }): Promise<{ hash: Hex }> {
+    const operator = params.operator || SOMNIA_ADDRESSES.operatorPermissionsRegistry;
+    const selectors = params.selectors || [
+      OPERATOR_SELECTORS.placeOrderFor,
+      OPERATOR_SELECTORS.cancelOrderFor,
+    ];
+    const approved = params.approved ?? true;
+
+    const wallet = this.getWalletClient(params.userAddress);
+    const hash = await wallet.writeContract({
+      address: SOMNIA_ADDRESSES.operatorPermissionsRegistry,
+      abi: OPERATOR_REGISTRY_ABI,
+      functionName: 'setOperatorApprovalGlobal',
+      args: [operator, selectors, approved],
+    });
+
+    await publicClient.waitForTransactionReceipt({ hash });
+    return { hash };
+  }
+
+  /**
+   * Grants operator permissions for a specific pool on OperatorPermissionsRegistry.
+   */
+  public async grantOperatorForPool(params: {
+    userAddress: Address;
+    pool: Address;
+    operator?: Address;
+    selectors?: Hex[];
+    approved?: boolean;
+  }): Promise<{ hash: Hex }> {
+    const operator = params.operator || SOMNIA_ADDRESSES.operatorPermissionsRegistry;
+    const selectors = params.selectors || [
+      OPERATOR_SELECTORS.placeOrderFor,
+      OPERATOR_SELECTORS.cancelOrderFor,
+    ];
+    const approved = params.approved ?? true;
+
+    const wallet = this.getWalletClient(params.userAddress);
+    const hash = await wallet.writeContract({
+      address: SOMNIA_ADDRESSES.operatorPermissionsRegistry,
+      abi: OPERATOR_REGISTRY_ABI,
+      functionName: 'setOperatorApprovalForPool',
+      args: [params.pool, operator, selectors, approved],
+    });
+
+    await publicClient.waitForTransactionReceipt({ hash });
+    return { hash };
+  }
+
+  /**
+   * Configures manual vault mode, approves collateral, and deposits working capital into a pool's vault.
+   */
+  public async setupPoolVault(params: {
+    userAddress: Address;
+    pool: Address;
+    token?: Address;
+    amount: number;
+  }): Promise<{
+    approvalHash?: Hex;
+    vaultModeHash?: Hex;
+    depositHash?: Hex;
+  }> {
+    const token = params.token || SOMNIA_ADDRESSES.testUsdc;
+    const amountRaw = parseUnits(params.amount.toString(), 6);
+    const wallet = this.getWalletClient(params.userAddress);
+    const result: { approvalHash?: Hex; vaultModeHash?: Hex; depositHash?: Hex } = {};
+
+    // 1. Check and set manual vault mode if needed
+    try {
+      const isManualMode = await publicClient.readContract({
+        address: params.pool,
+        abi: SPOT_POOL_ABI,
+        functionName: 'getManualVaultMode',
+        args: [params.userAddress],
+      });
+
+      if (!isManualMode) {
+        const modeHash = await wallet.writeContract({
+          address: params.pool,
+          abi: SPOT_POOL_ABI,
+          functionName: 'setManualVaultMode',
+          args: [true],
+        });
+        await publicClient.waitForTransactionReceipt({ hash: modeHash });
+        result.vaultModeHash = modeHash;
+      }
+    } catch (err: any) {
+      console.warn('[Web3Service] Vault mode notice:', err.message);
+    }
+
+    if (amountRaw > 0n) {
+      // 2. Check and approve token allowance
+      try {
+        const allowance = await publicClient.readContract({
+          address: token,
+          abi: ERC20_ABI,
+          functionName: 'allowance',
+          args: [params.userAddress, params.pool],
+        });
+
+        if (allowance < amountRaw) {
+          const appHash = await wallet.writeContract({
+            address: token,
+            abi: ERC20_ABI,
+            functionName: 'approve',
+            args: [params.pool, amountRaw * 10n], // Approve with headroom
+          });
+          await publicClient.waitForTransactionReceipt({ hash: appHash });
+          result.approvalHash = appHash;
+        }
+      } catch (err: any) {
+        console.warn('[Web3Service] Token approval notice:', err.message);
+      }
+
+      // 3. Deposit collateral into pool vault
+      try {
+        const depHash = await wallet.writeContract({
+          address: params.pool,
+          abi: SPOT_POOL_ABI,
+          functionName: 'deposit',
+          args: [token, amountRaw],
+        });
+        await publicClient.waitForTransactionReceipt({ hash: depHash });
+        result.depositHash = depHash;
+      } catch (err: any) {
+        console.warn('[Web3Service] Pool vault deposit notice:', err.message);
+      }
+    }
+
+    return result;
+  }
+
+  /**
+   * Queries whether an operator is authorized for an owner on-chain.
+   */
+  public async isOperatorAuthorized(params: {
+    owner: Address;
+    operator?: Address;
+    pool?: Address;
+    selector?: Hex;
+  }): Promise<boolean> {
+    const operator = params.operator || SOMNIA_ADDRESSES.operatorPermissionsRegistry;
+    const selector = params.selector || OPERATOR_SELECTORS.placeOrderFor;
+
+    try {
+      if (params.pool) {
+        const poolAuthed = await publicClient.readContract({
+          address: params.pool,
+          abi: SPOT_POOL_ABI,
+          functionName: 'isOperatorAuthorized',
+          args: [params.owner, operator, selector as `0x${string}`],
+        });
+        if (poolAuthed) return true;
+      }
+
+      const regAuthed = await publicClient.readContract({
+        address: SOMNIA_ADDRESSES.operatorPermissionsRegistry,
+        abi: OPERATOR_REGISTRY_ABI,
+        functionName: 'isOperatorAuthorized',
+        args: [params.owner, operator, selector as `0x${string}`],
+      });
+
+      return Boolean(regAuthed);
+    } catch {
+      return false;
+    }
+  }
+
+  /**
+   * Queries pool vault withdrawable balance for an owner.
+   */
+  public async getVaultWithdrawableBalance(params: {
+    pool: Address;
+    owner: Address;
+    token?: Address;
+  }): Promise<string> {
+    const token = params.token || SOMNIA_ADDRESSES.testUsdc;
+    try {
+      const balance = await publicClient.readContract({
+        address: params.pool,
+        abi: SPOT_POOL_ABI,
+        functionName: 'getWithdrawableBalance',
+        args: [params.owner, token],
+      });
+      return formatUnits(balance, 6);
+    } catch {
+      return '0.00';
+    }
+  }
+
+  /**
+   * Revokes operator permissions on-chain.
+   */
+  public async revokeOperatorOnChain(params: {
+    userAddress: Address;
+    operator?: Address;
+    pool?: Address;
+  }): Promise<{ hash: Hex }> {
+    const operator = params.operator || SOMNIA_ADDRESSES.operatorPermissionsRegistry;
+    const selectors = [
+      OPERATOR_SELECTORS.placeOrderFor,
+      OPERATOR_SELECTORS.cancelOrderFor,
+    ];
+    const wallet = this.getWalletClient(params.userAddress);
+
+    let hash: Hex;
+    if (params.pool) {
+      hash = await wallet.writeContract({
+        address: SOMNIA_ADDRESSES.operatorPermissionsRegistry,
+        abi: OPERATOR_REGISTRY_ABI,
+        functionName: 'setOperatorApprovalForPool',
+        args: [params.pool, operator, selectors, false],
+      });
+    } else {
+      hash = await wallet.writeContract({
+        address: SOMNIA_ADDRESSES.operatorPermissionsRegistry,
+        abi: OPERATOR_REGISTRY_ABI,
+        functionName: 'setOperatorApprovalGlobal',
+        args: [operator, selectors, false],
+      });
+    }
+
+    await publicClient.waitForTransactionReceipt({ hash });
+    return { hash };
   }
 
   /**
@@ -303,3 +688,4 @@ export class Web3Service {
 }
 
 export const web3Service = new Web3Service();
+

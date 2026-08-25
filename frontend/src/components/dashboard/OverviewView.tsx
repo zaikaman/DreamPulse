@@ -9,6 +9,7 @@ import {
 import type { Market, AgentThoughtLog, SessionGrant } from '../../types/index.js';
 import type { MarketTickData } from '../../hooks/useTelemetry.js';
 import type { WalletState } from '../../hooks/useSessionKey.js';
+import { useAgentSwarm } from '../../hooks/useAgentSwarm.js';
 import { StatCardsGrid } from './StatCardsGrid.js';
 import { SessionStatusBar } from '../SessionStatusBar.js';
 
@@ -64,6 +65,8 @@ export const OverviewView: React.FC<OverviewViewProps> = ({
 
   const recentThoughts = agentThoughts.slice(0, 4);
 
+  const { detailed: swarmDetailed, orders } = useAgentSwarm();
+
   return (
     <div className="overview-container" style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
       {/* Non-Custodial Session Delegation Status Banner */}
@@ -83,6 +86,8 @@ export const OverviewView: React.FC<OverviewViewProps> = ({
         markets={markets}
         liveTicks={liveTicks}
         latencyMs={latencyMs}
+        swarmDetailed={swarmDetailed}
+        ordersCount={orders.length}
       />
 
       {/* 2. Primary Focal Point: Top Arbitrage Opportunities */}

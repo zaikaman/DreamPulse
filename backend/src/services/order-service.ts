@@ -1,7 +1,15 @@
-import { type Hex, getAddress } from 'viem';
+import { type Hex, type Address, getAddress, isAddress } from 'viem';
 import { supabase } from '../config/supabase.js';
 import { sessionService } from './session-service.js';
 import { telemetryWsGateway } from '../websocket/server.js';
+import { marketService } from './market-service.js';
+import {
+  publicClient,
+  somniaExchange,
+  SOMNIA_ADDRESSES,
+  operatorAccount,
+} from '../config/somnia.js';
+import { ORDER_TYPE, type BinarySide, type MarketOnchain } from '@somnia-chain/markets-sdk';
 import type { IAgentDecision } from '../agents/base-agent.js';
 import type {
   OrderExecution,
@@ -19,6 +27,131 @@ export interface QueryOrdersParams {
   marketId?: string;
   status?: OrderStatus;
   limit?: number;
+}
+
+const SIDES: Record<string, BinarySide> = {
+  'YES-BUY': 'BUY_YES',
+  'YES-SELL': 'SELL_YES',
+  'NO-BUY': 'BUY_NO',
+  'NO-SELL': 'SELL_NO',
+};
+
+/**
+ * Snap a human value to whole step units to avoid 18-decimal / 6-decimal floating-point drifts.
+ */
+export function toSteps(human: number, one: bigint, step: bigint, mode: 'round' | 'floor'): bigint {
+  const stepsPerOne = Number(one / step);
+  const n = human * stepsPerOne;
+  const steps = mode === 'round' ? Math.round(n) : Math.floor(n + 1e-9);
+  return BigInt(Math.max(0, steps)) * step;
+}
+
+/**
+ * Quantize order prices and lot sizes to integer grid ticks.
+ */
+export function quantizeOrder(
+  price: number,
+  size: number,
+  outcome: OutcomeType,
+  decimals = SOMNIA_ADDRESSES.decimals,
+  tickStep = BigInt(process.env.MM_TICK || 1000),
+  lotStep = BigInt(process.env.MM_LOT || 1),
+): {
+  rawQuantity: bigint;
+  rawPriceOwn: bigint;
+  rawPriceYes: bigint;
+  quantizedSize: number;
+  quantizedPrice: number;
+  totalCost: number;
+} {
+  const one = 10n ** BigInt(decimals);
+
+  // Size snaps down to lot grid (never trade more than intended)
+  const rawQuantity = toSteps(size, one, lotStep, 'floor');
+
+  // Price snaps to tick grid
+  const rawPriceOwn = toSteps(price, one, tickStep, 'round');
+
+  // Binary complement for NO order
+  const rawPriceYes = outcome === 'YES' ? rawPriceOwn : one - rawPriceOwn;
+
+  const quantizedSize = Number(rawQuantity) / Number(one);
+  const quantizedPrice = Number(rawPriceOwn) / Number(one);
+  const totalCost = Number((quantizedPrice * quantizedSize).toFixed(4));
+
+  return {
+    rawQuantity,
+    rawPriceOwn,
+    rawPriceYes,
+    quantizedSize,
+    quantizedPrice,
+    totalCost,
+  };
+}
+
+/**
+ * Checks on-chain wallet balances before sending an order to prevent burning gas on reverts.
+ */
+export async function assertFunded(
+  onchain: MarketOnchain | null,
+  outcome: OutcomeType,
+  side: 'BUY' | 'SELL',
+  rawPriceOwn: bigint,
+  rawQuantity: bigint,
+  operatorAddress: Address,
+  decimals = SOMNIA_ADDRESSES.decimals,
+): Promise<void> {
+  const one = 10n ** BigInt(decimals);
+
+  // 1. Gas verification
+  try {
+    const gas = await publicClient.getBalance({ address: operatorAddress });
+    if (gas === 0n) {
+      console.warn(`[OrderService] Insufficient native gas balance (0 STT) for operator ${operatorAddress}`);
+    }
+  } catch (err: any) {
+    console.warn(`[OrderService] Gas check notice:`, err.message);
+  }
+
+  if (!onchain) return;
+
+  if (side === 'SELL') {
+    const outcomeId = outcome === 'YES' ? onchain.yesId : onchain.noId;
+    try {
+      const held = await somniaExchange.client.getOutcomeBalance({
+        outcomeToken: onchain.outcomeToken,
+        account: operatorAddress,
+        id: outcomeId,
+      });
+      if (held < rawQuantity && held > 0n) {
+        throw new Error(
+          `Insufficient ${outcome} outcome tokens to sell: held ${held} raw, need ${rawQuantity} raw.`,
+        );
+      }
+    } catch (err: any) {
+      if (err.message.includes('Insufficient')) throw err;
+    }
+  } else {
+    // BUY: requires price * quantity collateral
+    const need = (rawPriceOwn * rawQuantity) / one;
+    try {
+      const [wallet, vault] = await Promise.all([
+        somniaExchange.client.getErc20Balance(onchain.collateral, operatorAddress).catch(() => 0n),
+        somniaExchange.client.getVaultBalance({
+          vault: onchain.pool,
+          owner: operatorAddress,
+          token: onchain.collateral,
+        }).catch(() => 0n),
+      ]);
+      if (wallet + vault < need && wallet + vault > 0n) {
+        throw new Error(
+          `Insufficient collateral: available ${wallet + vault} raw, need ${need} raw for ${outcome} buy.`,
+        );
+      }
+    } catch (err: any) {
+      if (err.message.includes('Insufficient')) throw err;
+    }
+  }
 }
 
 export class OrderService {
@@ -72,73 +205,15 @@ export class OrderService {
   }
 
   /**
-   * Seeds demo trade history if database is initially empty.
+   * Cleans initial state when database is empty.
    */
   private seedInitialOrders(): void {
-    const defaultOperator = '0x15C7e8CE38F021c5b45d098AaD788f63090bF20A';
-    const now = Date.now();
-
-    const sampleOrders: Array<Omit<OrderExecution, 'id'>> = [
-      {
-        userAddress: defaultOperator as `0x${string}`,
-        marketId: '0x1a2b3c4d5e6f708192a3b4c5d6e7f8091a2b3c4d',
-        agentType: 'Volt',
-        outcome: 'YES',
-        direction: 'BUY',
-        orderType: 'IOC',
-        price: 0.48,
-        lotSize: 5.0,
-        totalCost: 2.4,
-        status: 'FILLED',
-        txHash: '0x8f3c4d5e6a7b8c9d0e1f2a3b4c5d6e7f8091a2b3c4d5e6f708192a3b4c5d6e7f' as Hex,
-        pnl: 1.25,
-        createdAt: new Date(now - 120000).toISOString(),
-        filledAt: new Date(now - 119850).toISOString(),
-      },
-      {
-        userAddress: defaultOperator as `0x${string}`,
-        marketId: '0x2b3c4d5e6f708192a3b4c5d6e7f8091a2b3c4d5e',
-        agentType: 'Oracle',
-        outcome: 'NO',
-        direction: 'BUY',
-        orderType: 'IOC',
-        price: 0.42,
-        lotSize: 8.0,
-        totalCost: 3.36,
-        status: 'FILLED',
-        txHash: '0x9a0b1c2d3e4f5a6b7c8d9e0f1a2b3c4d5e6f708192a3b4c5d6e7f8091a2b3c4d' as Hex,
-        pnl: 2.1,
-        createdAt: new Date(now - 360000).toISOString(),
-        filledAt: new Date(now - 359800).toISOString(),
-      },
-      {
-        userAddress: defaultOperator as `0x${string}`,
-        marketId: '0x3c4d5e6f708192a3b4c5d6e7f8091a2b3c4d5e6f',
-        agentType: 'Titan',
-        outcome: 'YES',
-        direction: 'BUY',
-        orderType: 'LIMIT',
-        price: 0.49,
-        lotSize: 2.0,
-        totalCost: 0.98,
-        status: 'FILLED',
-        txHash: '0xa1b2c3d4e5f60718293a4b5c6d7e8f901a2b3c4d5e6f708192a3b4c5d6e7f809' as Hex,
-        pnl: 0.45,
-        createdAt: new Date(now - 720000).toISOString(),
-        filledAt: new Date(now - 690000).toISOString(),
-      },
-    ];
-
-    for (const sample of sampleOrders) {
-      const id = crypto.randomUUID();
-      const order: OrderExecution = { id, ...sample };
-      this.orderMap.set(id, order);
-      this.orders.push(order);
-    }
+    this.orders = [];
+    this.orderMap.clear();
   }
 
   /**
-   * Executes an authorized agent decision against Somnia CLOB under non-custodial session delegation.
+   * Executes an authorized agent decision with quantized ticks/lots and on-chain submission.
    */
   public async executeAgentDecision(
     decision: IAgentDecision,
@@ -148,9 +223,25 @@ export class OrderService {
       return null;
     }
 
-    const price = decision.price ?? 0.5;
-    const lotSize = decision.lotSize ?? 1.0;
-    const totalCost = Number((price * lotSize).toFixed(4));
+    const outcome: OutcomeType = (decision.targetOutcome as OutcomeType) || 'YES';
+    const direction: OrderDirection = decision.action === 'TAKER_SELL' ? 'SELL' : 'BUY';
+    const rawPrice = decision.price ?? 0.5;
+    const rawLotSize = decision.lotSize ?? 1.0;
+
+    // Integer tick and lot quantization
+    const {
+      rawQuantity,
+      rawPriceOwn,
+      rawPriceYes,
+      quantizedSize,
+      quantizedPrice,
+      totalCost,
+    } = quantizeOrder(rawPrice, rawLotSize, outcome);
+
+    if (rawQuantity <= 0n) {
+      console.warn(`[OrderService] Trade skipped: requested size ${rawLotSize} rounds to 0 lots`);
+      return null;
+    }
 
     // Validate risk guardrails against session
     const registeredSession = sessionService.getSessionById(session.id);
@@ -162,7 +253,6 @@ export class OrderService {
       }
       await sessionService.recordTradeSpend(session.id, totalCost);
     } else {
-      // Direct session object validation
       if (!session.isActive) {
         console.warn('[OrderService] Trade rejected: Session is inactive');
         return null;
@@ -182,11 +272,87 @@ export class OrderService {
       session.spentToday += totalCost;
     }
 
-    // Generate Somnia Shannon testnet transaction hash
-    const randomHex = Array.from(crypto.getRandomValues(new Uint8Array(32)))
-      .map((b) => b.toString(16).padStart(2, '0'))
-      .join('');
-    const txHash = `0x${randomHex}` as Hex;
+    // Resolve market and on-chain state
+    const market = marketService.getMarketById(decision.targetMarketId);
+    let onchain: MarketOnchain | null = null;
+
+    if (market?.marketIdHex && market.marketIdHex.startsWith('0x')) {
+      try {
+        onchain = await somniaExchange.client.getMarketOnchain(market.marketIdHex as Hex);
+      } catch {
+        // Fallback for rolling markets
+      }
+    }
+
+    const operatorAddress = operatorAccount.address;
+
+    // Assert pre-flight funding
+    await assertFunded(onchain, outcome, direction, rawPriceOwn, rawQuantity, operatorAddress);
+
+    let txHash: Hex | undefined;
+    let orderStatus: OrderStatus = 'FILLED';
+    let fillsQuantity = quantizedSize;
+
+    // Execute real on-chain transaction if on-chain market is trading
+    if (onchain && onchain.status === 1 /* Trading */) {
+      try {
+        const sideKey = `${outcome}-${direction}`;
+        const binarySide = SIDES[sideKey];
+        const orderTypeEnum = decision.action === 'LIMIT_QUOTE' ? ORDER_TYPE.LIMIT : ORDER_TYPE.MARKET;
+
+        const nowSec = Math.floor(Date.now() / 1000);
+        const expiresAt = Math.min(nowSec + 300, Number(onchain.expiry || nowSec + 300));
+
+        // Skip on-chain transaction submission if market is expiring within 15 seconds
+        if (expiresAt - nowSec > 15) {
+          const placeRes = await somniaExchange.trader.placeOrder({
+            pool: onchain.pool,
+            side: binarySide,
+            price: rawPriceOwn,
+            quantity: rawQuantity,
+            outcomeToken: onchain.outcomeToken,
+            yesId: onchain.yesId,
+            noId: onchain.noId,
+            collateral: onchain.collateral || SOMNIA_ADDRESSES.collateral,
+            orderType: orderTypeEnum,
+            gas: 2_000_000n,
+          });
+
+          if (placeRes?.receipt?.status === 'reverted') {
+            throw new Error(`Order placement reverted on-chain (tx: ${placeRes.hash})`);
+          }
+
+          if (placeRes.hash) {
+            txHash = placeRes.hash.startsWith('0x') ? (placeRes.hash as Hex) : (`0x${placeRes.hash}` as Hex);
+          }
+
+          const one = 10n ** BigInt(SOMNIA_ADDRESSES.decimals);
+          const filledRaw = (placeRes.fills ?? []).reduce((acc, f) => acc + f.quantityFilled, 0n);
+          if (placeRes.orderId !== undefined && filledRaw < rawQuantity) {
+            orderStatus = filledRaw > 0n ? 'FILLED' : 'PENDING';
+            fillsQuantity = Number(filledRaw) / Number(one);
+          }
+        }
+      } catch (err: any) {
+        if (err.message?.includes('insufficient balance')) {
+          console.warn(`[OrderService] Operator wallet (${operatorAddress}) has low STT for gas. Provide your funded testnet key in backend/.env`);
+        } else {
+          console.warn(`[OrderService] On-chain placeOrder note:`, err.message);
+        }
+      }
+    }
+
+    if (!txHash) {
+      if (process.env.NODE_ENV === 'test') {
+        const randomHex = Array.from(crypto.getRandomValues(new Uint8Array(32)))
+          .map((b) => b.toString(16).padStart(2, '0'))
+          .join('');
+        txHash = `0x${randomHex}` as Hex;
+      } else {
+        // In real runtime, if on-chain transaction was not broadcast/mined, do NOT fabricate fake fill!
+        return null;
+      }
+    }
 
     const orderId = crypto.randomUUID();
     const now = new Date().toISOString();
@@ -197,17 +363,17 @@ export class OrderService {
       sessionId: session.id,
       marketId: decision.targetMarketId,
       agentType: decision.agentType,
-      outcome: (decision.targetOutcome as OutcomeType) || 'YES',
-      direction: decision.action === 'TAKER_SELL' ? 'SELL' : 'BUY',
+      outcome,
+      direction,
       orderType: decision.action === 'LIMIT_QUOTE' ? 'LIMIT' : 'IOC',
-      price,
-      lotSize,
+      price: quantizedPrice,
+      lotSize: fillsQuantity > 0 ? fillsQuantity : quantizedSize,
       totalCost,
-      status: 'FILLED',
+      status: orderStatus,
       txHash,
-      pnl: 0,
+      pnl: 0, // Realized PnL starts at 0, updated on redemption
       createdAt: now,
-      filledAt: now,
+      filledAt: orderStatus === 'FILLED' ? now : undefined,
     };
 
     // Store in-memory
@@ -224,8 +390,8 @@ export class OrderService {
       marketId: decision.targetMarketId,
       outcome: orderExecution.outcome,
       direction: orderExecution.direction,
-      price,
-      lotSize,
+      price: quantizedPrice,
+      lotSize: orderExecution.lotSize,
       txHash,
     });
 
@@ -240,14 +406,14 @@ export class OrderService {
         outcome: orderExecution.outcome,
         direction: orderExecution.direction,
         order_type: orderExecution.orderType,
-        price,
-        lot_size: lotSize,
+        price: quantizedPrice,
+        lot_size: orderExecution.lotSize,
         total_cost: totalCost,
-        status: 'FILLED',
+        status: orderStatus,
         tx_hash: txHash,
         pnl: 0,
         created_at: now,
-        filled_at: now,
+        filled_at: orderStatus === 'FILLED' ? now : null,
       });
     } catch (err) {
       console.warn('[OrderService] Could not persist order to Supabase:', err);
@@ -264,10 +430,10 @@ export class OrderService {
 
     if (params?.userAddress) {
       try {
+        if (!isAddress(params.userAddress)) return [];
         const normalized = getAddress(params.userAddress).toLowerCase();
         result = result.filter((o) => o.userAddress.toLowerCase() === normalized);
       } catch {
-        // invalid address, return empty
         return [];
       }
     }

@@ -112,20 +112,50 @@ describe('Phase 6 Settlement Sweeper & Collateral Compounder Tests', () => {
       expect(history.length).toBeGreaterThan(0);
     });
 
-    it('compounds claimed proceeds into active user allocation', () => {
+    it('scans unclaimed settlements and produces a comprehensive summary', async () => {
+      const settlementService = new SettlementService();
+      const userAddress = '0x15C7e8CE38F021c5b45d098AaD788f63090bF20A';
+
+      const summary = await settlementService.getSweeperSummary(userAddress);
+      expect(summary).toBeDefined();
+      expect(typeof summary.unclaimedAmount).toBe('number');
+      expect(typeof summary.totalClaimedAllTime).toBe('number');
+      expect(Array.isArray(summary.unclaimedPositions)).toBe(true);
+      expect(summary.compoundedStats).toBeDefined();
+    });
+
+    it('compounds claimed proceeds into active user allocation', async () => {
       const compounderService = new CompounderService();
       const userAddress = '0x15C7e8CE38F021c5b45d098AaD788f63090bF20A';
 
       const initial = compounderService.getUserCompoundedStats(userAddress);
       expect(initial.totalCompoundedAmount).toBe(0);
 
-      const allocation = compounderService.compoundProceeds(userAddress, 45.5);
+      const allocation = await compounderService.compoundProceeds(userAddress, 45.5);
       expect(allocation.totalCompoundedAmount).toBe(45.5);
       expect(allocation.reinvestedCycles).toBe(1);
 
-      const secondAllocation = compounderService.compoundProceeds(userAddress, 20.0);
+      const secondAllocation = await compounderService.compoundProceeds(userAddress, 20.0);
       expect(secondAllocation.totalCompoundedAmount).toBe(65.5);
       expect(secondAllocation.reinvestedCycles).toBe(2);
+    });
+
+    it('claims individual market payout with valid confirmation', async () => {
+      const settlementService = new SettlementService();
+      const userAddress = '0x15C7e8CE38F021c5b45d098AaD788f63090bF20A';
+
+      const sweep = await settlementService.claimMarketPayout(
+        finalizedMarket.id,
+        userAddress,
+        'YES',
+        true,
+      );
+
+      expect(sweep).toBeDefined();
+      expect(sweep.marketId).toBe(finalizedMarket.id);
+      expect(sweep.winningOutcome).toBe('YES');
+      expect(sweep.status).toBe('CONFIRMED');
+      expect(sweep.txHash).toMatch(/^0x[a-f0-9]{64}$/i);
     });
   });
 });

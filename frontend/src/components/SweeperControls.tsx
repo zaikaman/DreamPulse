@@ -26,8 +26,9 @@ export const SweeperControls: React.FC<SweeperControlsProps> = ({
   const [autoSweepEnabled, setAutoSweepEnabled] = useState<boolean>(true);
   const [isSweeping, setIsSweeping] = useState<boolean>(false);
   const [history, setHistory] = useState<SettlementSweep[]>([]);
-  const [unclaimedAmount, setUnclaimedAmount] = useState<number>(43.5);
-  const [totalClaimedAllTime, setTotalClaimedAllTime] = useState<number>(145.0);
+  const [unclaimedAmount, setUnclaimedAmount] = useState<number>(0);
+  const [totalClaimedAllTime, setTotalClaimedAllTime] = useState<number>(0);
+  const [claimableMarketsCount, setClaimableMarketsCount] = useState<number>(0);
 
   // Celebration modal state
   const [celebrationState, setCelebrationState] = useState<{
@@ -39,31 +40,39 @@ export const SweeperControls: React.FC<SweeperControlsProps> = ({
     amount: '',
   });
 
-  const fetchHistory = async () => {
+  const fetchSweeperData = async () => {
     try {
-      const res = await (apiClient as any).getSweepHistory?.(userAddress) || { data: [] };
-      if (res?.data && res.data.length > 0) {
-        setHistory(res.data);
-      } else {
-        // Fetch via fetch directly
-        const raw = await fetch('/api/v1/sweeper/history').then((r) => r.json());
-        if (raw?.data) {
-          setHistory(raw.data);
-        }
+      const [summaryRes, historyRes] = await Promise.all([
+        apiClient.getSweeperSummary(userAddress).catch(() => null),
+        apiClient.getSweepHistory(userAddress).catch(() => null),
+      ]);
+
+      if (summaryRes?.success && summaryRes.data) {
+        setUnclaimedAmount(summaryRes.data.unclaimedAmount || 0);
+        setTotalClaimedAllTime(summaryRes.data.totalClaimedAllTime || 0);
+        setClaimableMarketsCount(summaryRes.data.claimableMarketsCount || 0);
       }
-    } catch {
-      // ignore fallback
+
+      if (historyRes?.success && Array.isArray(historyRes.data)) {
+        setHistory(historyRes.data);
+      }
+    } catch (err: any) {
+      console.warn('[SweeperControls] Fetch data error:', err);
     }
   };
 
   useEffect(() => {
-    fetchHistory();
+    fetchSweeperData();
+    const interval = setInterval(() => {
+      fetchSweeperData();
+    }, 15000);
+    return () => clearInterval(interval);
   }, [userAddress]);
 
   const handleManualSweep = async () => {
     setIsSweeping(true);
     try {
-      const res = await apiClient.triggerSweep(userAddress);
+      const res = await apiClient.triggerSweep(userAddress, autoCompound);
       if (res.success) {
         setCelebrationState({
           isOpen: true,
@@ -71,11 +80,11 @@ export const SweeperControls: React.FC<SweeperControlsProps> = ({
           txHash: res.txHash,
         });
 
-        const claimedNum = parseFloat(res.totalClaimedAmount.replace(/[^0-9.]/g, '')) || 40.0;
+        const claimedNum = parseFloat(res.totalClaimedAmount.replace(/[^0-9.]/g, '')) || 0;
         setTotalClaimedAllTime((prev) => Number((prev + claimedNum).toFixed(2)));
         setUnclaimedAmount(0);
 
-        await fetchHistory();
+        await fetchSweeperData();
         if (onRefreshPortfolio) onRefreshPortfolio();
       }
     } catch (err: any) {
@@ -178,8 +187,13 @@ export const SweeperControls: React.FC<SweeperControlsProps> = ({
           }}
         >
           <div style={{ background: 'rgba(255, 255, 255, 0.02)', padding: '12px 16px', borderRadius: '8px', border: '1px solid var(--border)' }}>
-            <div style={{ fontSize: '11px', color: 'var(--muted-foreground)', marginBottom: '4px' }}>
-              Pending Unclaimed Payouts
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '4px' }}>
+              <span style={{ fontSize: '11px', color: 'var(--muted-foreground)' }}>Pending Unclaimed Payouts</span>
+              {claimableMarketsCount > 0 && (
+                <span style={{ fontSize: '10px', color: 'var(--trade-anomaly)', fontWeight: 600 }}>
+                  {claimableMarketsCount} ready
+                </span>
+              )}
             </div>
             <div style={{ fontSize: '20px', fontWeight: 700, color: unclaimedAmount > 0 ? 'var(--trade-anomaly)' : 'var(--foreground)', fontFamily: 'var(--font-mono)' }}>
               {unclaimedAmount.toFixed(2)} STT

@@ -1,21 +1,14 @@
 import { EventEmitter } from 'events';
-import type { Market, MarketStatus } from '../types/index.js';
+import type { Market, MarketStatus, OutcomeType } from '../types/index.js';
 import { calculateFairValue, calculateEdge, parseWindowToSeconds } from '../quantitative/pricing.js';
-import { snapTickPrice, snapLotQuantity } from '../quantitative/quantizer.js';
-import { SOMNIA_ADDRESSES } from '../config/somnia.js';
+import { SOMNIA_ADDRESSES, somniaExchange, MARKET_STATUS } from '../config/somnia.js';
+import { env } from '../config/env.js';
 import { getServiceSupabase } from '../config/supabase.js';
+import { priceFeedService, type SpotTicker } from './price-feed-service.js';
+import type { UnifiedMarket, UnifiedOrderBook } from '@somnia-chain/markets-sdk';
+import type { Hex } from 'viem';
 
-export interface SpotTicker {
-  symbol: string;
-  price: number;
-  change1m: number;
-  change5m: number;
-  high24h: number;
-  low24h: number;
-  volume24h: number;
-  timestamp: number;
-  priceHistory: Array<{ timestamp: number; price: number }>;
-}
+export type { SpotTicker } from './price-feed-service.js';
 
 export interface OrderBookLevel {
   price: number;
@@ -41,58 +34,81 @@ export class MarketService extends EventEmitter {
   private markets: Map<string, Market> = new Map();
   private depthBooks: Map<string, OrderBookDepth> = new Map();
   private spotPrices: Map<string, SpotTicker> = new Map();
+  private unifiedMarketsMap: Map<string, UnifiedMarket> = new Map();
   private updateInterval: NodeJS.Timeout | null = null;
+  private onchainPollInterval: NodeJS.Timeout | null = null;
   private dbSyncInterval: NodeJS.Timeout | null = null;
   private isInitialized = false;
+  private isPolling = false;
+  private priceUpdateHandler: (ticker: SpotTicker) => void;
 
   constructor() {
     super();
-    this.initializeSpotTickers();
-    this.generateRollingMarkets();
-    this.updateAllFairValuesAndDepths();
+    this.syncInitialSpotTickers();
+    this.generateOfflineTestMarkets();
+
+    // Hook live price feed updates to dynamic fair value repricing
+    this.priceUpdateHandler = (ticker: SpotTicker) => {
+      this.handleLiveSpotUpdate(ticker);
+    };
+    priceFeedService.on('spotUpdate', this.priceUpdateHandler);
   }
 
-  private initializeSpotTickers(): void {
-    const now = Date.now();
-    const defaultTickers: Record<string, { price: number; high: number; low: number; vol: number }> = {
-      'BTC/USD': { price: 96450.0, high: 97800.0, low: 95200.0, vol: 18450.2 },
-      'ETH/USD': { price: 2745.5, high: 2820.0, low: 2690.0, vol: 84200.5 },
-      'SOL/USD': { price: 188.25, high: 196.0, low: 181.5, vol: 320100.0 },
-    };
-
-    for (const [symbol, data] of Object.entries(defaultTickers)) {
-      this.spotPrices.set(symbol, {
-        symbol,
-        price: data.price,
-        change1m: 0.0,
-        change5m: 0.0,
-        high24h: data.high,
-        low24h: data.low,
-        volume24h: data.vol,
-        timestamp: now,
-        priceHistory: [{ timestamp: now, price: data.price }],
-      });
+  private syncInitialSpotTickers(): void {
+    const all = priceFeedService.getAllSpotTickers();
+    for (const [symbol, ticker] of Object.entries(all)) {
+      this.spotPrices.set(symbol, ticker);
     }
   }
 
+  private handleLiveSpotUpdate(ticker: SpotTicker): void {
+    this.spotPrices.set(ticker.symbol, ticker);
+
+    const now = Date.now();
+    for (const [, market] of this.markets.entries()) {
+      if (market.symbol === ticker.symbol && market.status === 'Open') {
+        const closeTime = new Date(market.closeTimestamp).getTime();
+        const timeLeftSeconds = Math.max(1, Math.floor((closeTime - now) / 1000));
+        const fair = calculateFairValue(ticker.price, market.strikePrice, timeLeftSeconds, market.symbol);
+        const edge = calculateEdge(fair.fairValueYes, market.bestBidYes, market.bestAskYes);
+
+        market.fairValueYes = fair.fairValueYes;
+        market.impliedProbYes = edge.impliedProbYes;
+        market.edgePercentage = edge.edgePercentage;
+      }
+    }
+    this.emit('spot_updated', ticker);
+  }
+
   /**
-   * Initializes market catalog, generates initial rolling event contracts, and starts polling loops.
+   * Initializes market catalog, price feed ingestion, on-chain discovery, and starts polling loops.
    */
   public async initialize(): Promise<void> {
     if (this.isInitialized) return;
 
-    this.generateRollingMarkets();
-    this.updateAllFairValuesAndDepths();
+    await priceFeedService.initialize().catch((err) => {
+      console.warn('[MarketService] Price feed initialization notice:', err.message);
+    });
+    this.syncInitialSpotTickers();
 
-    // High frequency price & contract tick loop (100ms)
+    // Perform immediate on-chain discovery from DreamDEX indexer & CLOB
+    await this.pollOnChainMarkets().catch((err) => {
+      console.warn('[MarketService] Initial on-chain discovery fallback:', err.message);
+    });
+
+    // High frequency contract expiration & fair value refresh loop (250ms)
     this.updateInterval = setInterval(() => {
-      this.simulateSpotMicroTicks();
       this.refreshMarketTimersAndFairValues();
-    }, 100);
+    }, 250);
+
+    // Periodic on-chain indexer & CLOB polling loop (every 3 seconds)
+    this.onchainPollInterval = setInterval(async () => {
+      await this.pollOnChainMarkets().catch(() => {});
+    }, 3000);
 
     // Periodic Supabase DB sync (every 5 seconds)
     this.dbSyncInterval = setInterval(async () => {
-      await this.syncActiveMarketsToDatabase().catch((_err) => {});
+      await this.syncActiveMarketsToDatabase().catch(() => {});
     }, 5000);
 
     this.isInitialized = true;
@@ -100,80 +116,186 @@ export class MarketService extends EventEmitter {
   }
 
   /**
-   * Generates continuous active rolling binary prediction markets (5m, 15m, 1h)
-   * anchored around current spot prices and block time boundaries.
+   * Discovers real-time binary prediction markets directly from the DreamDEX indexer
+   * and fetches live CLOB order book depth levels.
    */
-  public generateRollingMarkets(): void {
-    const now = Date.now();
-    const symbols = ['BTC/USD', 'ETH/USD'];
-    const windows: Array<'5m' | '15m' | '1h'> = ['5m', '15m', '1h'];
+  public async pollOnChainMarkets(timeoutMs = 4000): Promise<void> {
+    if (this.isPolling) return;
+    this.isPolling = true;
 
-    for (const symbol of symbols) {
-      const spot = this.spotPrices.get(symbol)?.price || (symbol === 'BTC/USD' ? 96500 : 2750);
+    try {
+      const loadPromise = somniaExchange.loadMarkets(true);
+      const timeoutPromise = new Promise<Record<string, UnifiedMarket>>((_, reject) =>
+        setTimeout(() => reject(new Error('SomniaMarkets indexer timeout')), timeoutMs),
+      );
+      const loaded = (await Promise.race([loadPromise, timeoutPromise])) as Record<string, UnifiedMarket>;
+      const allMarkets = Object.values(loaded) as UnifiedMarket[];
+      const binaryMarkets = allMarkets.filter((m) => m.type === 'binary');
 
-      for (const windowDur of windows) {
-        const windowSec = parseWindowToSeconds(windowDur);
-        const windowMs = windowSec * 1000;
+      // Filter active markets from the Somnia DreamDEX venues
+      const targetVenueId = env.DREAMDEX_VENUE_ID.toLowerCase();
+      const liveBinaryMarkets = binaryMarkets.filter((m) => {
+        if (!m.active) return false;
+        const info = m.info as any;
+        if (!info) return true;
+        if (info.venueId && info.venueId.toLowerCase() === targetVenueId) return true;
+        if (info.operatorId === 2 || info.operatorId === 4) return true;
+        return true;
+      });
 
-        // Align window close to next round boundary
-        const currentWindowIndex = Math.floor(now / windowMs);
-        const closeTimeMs = (currentWindowIndex + 1) * windowMs;
-        const openTimeMs = currentWindowIndex * windowMs;
+      const now = Date.now();
+      const discoveredIds = new Set<string>();
 
-        // Strike offset variations (At-The-Money strike near current round price)
-        const roundBase = symbol === 'BTC/USD' ? 50 : 5;
-        const atmStrike = Math.round(spot / roundBase) * roundBase;
+      // Fetch CLOB orderbooks in parallel with a timeout per market
+      const obPromises = liveBinaryMarkets.map(async (m) => {
+        if (m.outcomes && m.outcomes[0] && m.outcomes[0].symbol) {
+          try {
+            const fetchPromise = somniaExchange.fetchOrderBook(m.outcomes[0].symbol, 5);
+            const obTimeout = new Promise<null>((resolve) => setTimeout(() => resolve(null), 1500));
+            return await Promise.race([fetchPromise, obTimeout]);
+          } catch {
+            return null;
+          }
+        }
+        return null;
+      });
 
-        const strikes = [
-          atmStrike,
-          symbol === 'BTC/USD' ? atmStrike + 100 : atmStrike + 15,
-          symbol === 'BTC/USD' ? atmStrike - 100 : atmStrike - 15,
-        ];
+      const orderBooks = await Promise.allSettled(obPromises);
 
-        for (const strike of strikes) {
-          const marketId = `${SOMNIA_ADDRESSES.binaryModule}-${symbol.replace('/', '')}-${windowDur}-${strike}-${closeTimeMs}`;
+      if (liveBinaryMarkets.length > 0) {
+        this.markets.clear();
+        this.depthBooks.clear();
+        this.unifiedMarketsMap.clear();
+      }
 
-          if (!this.markets.has(marketId)) {
-            const timeLeft = Math.max(1, Math.floor((closeTimeMs - now) / 1000));
-            const fair = calculateFairValue(spot, strike, timeLeft, symbol);
+      for (let i = 0; i < liveBinaryMarkets.length; i++) {
+        const m = liveBinaryMarkets[i];
+        const info = m.info as any;
+        if (!info) continue;
 
-            // Seed realistic initial resting order book prices around fair value
-            const spread = 0.02;
-            const seedBid = Math.max(0.01, Math.min(0.98, fair.fairValueYes - spread / 2));
-            const seedAsk = Math.max(0.02, Math.min(0.99, fair.fairValueYes + spread / 2));
+        const rawAsset = String(info.asset || 'BTC').toUpperCase();
+        const symbol = rawAsset.includes('/') ? rawAsset : `${rawAsset}/USD`;
+        const spot = this.spotPrices.get(symbol)?.price || (symbol === 'BTC/USD' ? 77000 : 2400);
 
-            const edge = calculateEdge(fair.fairValueYes, seedBid, seedAsk);
+        // Parse strike price accurately from question or strike field
+        let strike = 0;
+        const questionText = String(info.question || '');
+        const match = questionText.match(/at or above ([0-9.]+)/i);
+        if (match && match[1]) {
+          strike = parseFloat(match[1]);
+        } else if (info.strike && Number(info.strike) > 0) {
+          const rawStrike = Number(info.strike);
+          if (rawStrike > 1000000) {
+            strike = rawStrike / 100;
+          } else {
+            strike = rawStrike;
+          }
+        } else {
+          // ATM market ("closes at or above opening price")
+          strike = Math.round(spot);
+        }
 
-            const newMarket: Market = {
-              id: marketId,
-              symbol,
-              strikePrice: strike,
-              windowDuration: windowDur,
-              openTimestamp: new Date(openTimeMs).toISOString(),
-              closeTimestamp: new Date(closeTimeMs).toISOString(),
-              resolutionTimestamp: new Date(closeTimeMs + 60000).toISOString(),
-              status: 'Open',
-              bestBidYes: Number(seedBid.toFixed(2)),
-              bestAskYes: Number(seedAsk.toFixed(2)),
-              bestBidNo: Number((1.0 - seedAsk).toFixed(2)),
-              bestAskNo: Number((1.0 - seedBid).toFixed(2)),
-              impliedProbYes: edge.impliedProbYes,
-              fairValueYes: fair.fairValueYes,
-              edgePercentage: edge.edgePercentage,
-            };
+        const intervalSec = Number(info.intervalSec || 300);
+        let windowDuration: '5m' | '15m' | '1h' | '4h' | '24h' | string = '5m';
+        if (intervalSec >= 86400) windowDuration = '24h';
+        else if (intervalSec >= 14400) windowDuration = '4h';
+        else if (intervalSec >= 3600) windowDuration = '1h';
+        else if (intervalSec >= 900) windowDuration = '15m';
+        else windowDuration = '5m';
 
-            this.markets.set(marketId, newMarket);
-            this.generateDepthBook(newMarket);
+        const expirySec = Number(info.expiry || 0);
+        const closeTimeMs = expirySec > 0 ? expirySec * 1000 : now + intervalSec * 1000;
+        const tradingStartSec = Number(info.tradingStart || 0);
+        const openTimeMs = tradingStartSec > 0 ? tradingStartSec * 1000 : closeTimeMs - intervalSec * 1000;
+        const timeLeftSeconds = Math.max(0, Math.floor((closeTimeMs - now) / 1000));
+
+        let status: MarketStatus = 'Open';
+        if (info.finalized || info.status === 'Finalized' || timeLeftSeconds === 0) {
+          status = 'Finalized';
+        } else if (info.status === 'Locked' || info.status === 'Settling') {
+          status = 'Resolving';
+        }
+
+        const marketId = String(info.marketId || m.id || `${SOMNIA_ADDRESSES.binaryModule}-${m.symbol}`);
+        discoveredIds.add(marketId);
+        this.unifiedMarketsMap.set(marketId, m);
+
+        // Extract fetched CLOB Order Book Depth
+        let bestBidYes = 0.49;
+        let bestAskYes = 0.51;
+        const obResult = orderBooks[i];
+        const depthLevels = obResult && obResult.status === 'fulfilled' ? obResult.value : null;
+
+        if (depthLevels && depthLevels.bids.length > 0 && depthLevels.bids[0]?.[0] !== undefined) {
+          bestBidYes = Number(depthLevels.bids[0][0].toFixed(3));
+        }
+        if (depthLevels && depthLevels.asks.length > 0 && depthLevels.asks[0]?.[0] !== undefined) {
+          bestAskYes = Number(depthLevels.asks[0][0].toFixed(3));
+        }
+
+        // Calculate quantitative fair value and edge
+        const fair = calculateFairValue(spot, strike, Math.max(1, timeLeftSeconds), symbol);
+        const edge = calculateEdge(fair.fairValueYes, bestBidYes, bestAskYes);
+
+        const marketObj: Market = {
+          id: marketId,
+          symbol,
+          strikePrice: strike,
+          windowDuration,
+          openTimestamp: new Date(openTimeMs).toISOString(),
+          closeTimestamp: new Date(closeTimeMs).toISOString(),
+          resolutionTimestamp: new Date(closeTimeMs + 60000).toISOString(),
+          status,
+          settlementPrice: status === 'Finalized' ? spot : undefined,
+          winningOutcome: status === 'Finalized' ? (spot >= strike ? 'YES' : 'NO') : undefined,
+          bestBidYes: Number(bestBidYes.toFixed(2)),
+          bestAskYes: Number(bestAskYes.toFixed(2)),
+          bestBidNo: Number((1.0 - bestAskYes).toFixed(2)),
+          bestAskNo: Number((1.0 - bestBidYes).toFixed(2)),
+          impliedProbYes: edge.impliedProbYes,
+          fairValueYes: fair.fairValueYes,
+          edgePercentage: edge.edgePercentage,
+          poolAddress: info.poolAddress,
+          marketIdHex: info.marketId as Hex,
+          venueId: info.venueId,
+          operatorId: info.operatorId,
+          yesTokenId: info.yesTokenId,
+          noTokenId: info.noTokenId,
+          intervalSec,
+          onchainStatus: info.status === 'Trading' ? MARKET_STATUS.Trading : undefined,
+        };
+
+        this.markets.set(marketId, marketObj);
+        this.buildDepthBookFromClob(marketObj, depthLevels);
+      }
+
+      // Remove any stale markets that are no longer in the active on-chain set
+      if (discoveredIds.size > 0) {
+        for (const [id] of this.markets.entries()) {
+          if (!discoveredIds.has(id)) {
+            this.markets.delete(id);
+            this.depthBooks.delete(id);
+            this.unifiedMarketsMap.delete(id);
           }
         }
       }
+
+      this.emit('markets_synced', { count: this.markets.size });
+    } catch (err: any) {
+      console.warn('[MarketService] pollOnChainMarkets error (retaining current onchain state):', err.message);
+      // If no markets exist yet (e.g. offline testing), seed minimal test fallback
+      if (this.markets.size === 0) {
+        this.generateOfflineTestMarkets();
+      }
+    } finally {
+      this.isPolling = false;
     }
   }
 
   /**
-   * Generates structured order book depth ladders (5 levels) for YES and NO legs.
+   * Constructs structured 5-level order book depth ladders from live CLOB snapshot.
    */
-  private generateDepthBook(market: Market): OrderBookDepth {
+  private buildDepthBookFromClob(market: Market, clob?: UnifiedOrderBook | null): OrderBookDepth {
     const yesBids: OrderBookLevel[] = [];
     const yesAsks: OrderBookLevel[] = [];
     const noBids: OrderBookLevel[] = [];
@@ -182,33 +304,42 @@ export class MarketService extends EventEmitter {
     const bestBid = market.bestBidYes;
     const bestAsk = market.bestAskYes;
 
-    // Build 5 levels for YES Bids (descending from bestBid)
-    let cumulativeBidTotal = 0;
-    for (let i = 0; i < 5; i++) {
-      const price = Number(Math.max(0.01, bestBid - i * 0.01).toFixed(2));
-      const qty = Math.round((100 + i * 85 + (market.strikePrice % 17) * 12) / 5) * 5;
-      cumulativeBidTotal += price * qty;
-      yesBids.push({
-        price,
-        quantity: qty,
-        total: Number(cumulativeBidTotal.toFixed(2)),
-      });
+    if (clob && clob.bids.length > 0) {
+      let cumBid = 0;
+      for (const [p, q] of clob.bids.slice(0, 5)) {
+        cumBid += p * q;
+        yesBids.push({ price: Number(p.toFixed(3)), quantity: q, total: Number(cumBid.toFixed(2)) });
+      }
     }
 
-    // Build 5 levels for YES Asks (ascending from bestAsk)
-    let cumulativeAskTotal = 0;
-    for (let i = 0; i < 5; i++) {
-      const price = Number(Math.min(0.99, bestAsk + i * 0.01).toFixed(2));
-      const qty = Math.round((120 + i * 95 + (market.strikePrice % 13) * 15) / 5) * 5;
-      cumulativeAskTotal += price * qty;
-      yesAsks.push({
-        price,
-        quantity: qty,
-        total: Number(cumulativeAskTotal.toFixed(2)),
-      });
+    if (clob && clob.asks.length > 0) {
+      let cumAsk = 0;
+      for (const [p, q] of clob.asks.slice(0, 5)) {
+        cumAsk += p * q;
+        yesAsks.push({ price: Number(p.toFixed(3)), quantity: q, total: Number(cumAsk.toFixed(2)) });
+      }
     }
 
-    // Derive NO levels (P_NO = 1 - P_YES)
+    // Fill remaining levels up to 5 if CLOB is shallow on testnet
+    let cumBidTotal = yesBids.length > 0 ? yesBids[yesBids.length - 1].total : 0;
+    const startBidIndex = yesBids.length;
+    for (let i = startBidIndex; i < 5; i++) {
+      const price = Number(Math.max(0.01, bestBid - (i - startBidIndex + 1) * 0.01).toFixed(2));
+      const qty = Math.round((100 + i * 75 + (Math.round(market.strikePrice) % 17) * 10) / 5) * 5;
+      cumBidTotal += price * qty;
+      yesBids.push({ price, quantity: qty, total: Number(cumBidTotal.toFixed(2)) });
+    }
+
+    let cumAskTotal = yesAsks.length > 0 ? yesAsks[yesAsks.length - 1].total : 0;
+    const startAskIndex = yesAsks.length;
+    for (let i = startAskIndex; i < 5; i++) {
+      const price = Number(Math.min(0.99, bestAsk + (i - startAskIndex + 1) * 0.01).toFixed(2));
+      const qty = Math.round((120 + i * 85 + (Math.round(market.strikePrice) % 13) * 12) / 5) * 5;
+      cumAskTotal += price * qty;
+      yesAsks.push({ price, quantity: qty, total: Number(cumAskTotal.toFixed(2)) });
+    }
+
+    // Derive complementary NO levels (P_NO = 1 - P_YES)
     const bestNoBid = market.bestBidNo;
     const bestNoAsk = market.bestAskNo;
 
@@ -247,59 +378,83 @@ export class MarketService extends EventEmitter {
   }
 
   /**
-   * Simulates high-frequency micro-ticks and spot price drift.
+   * Offline test fallback only used when indexer is completely offline during unit tests.
    */
-  public simulateSpotMicroTicks(): void {
+  public generateOfflineTestMarkets(): void {
     const now = Date.now();
+    const symbols = ['BTC/USD', 'ETH/USD'];
+    const windows: Array<'5m' | '15m' | '1h'> = ['5m', '15m', '1h'];
 
-    for (const [symbol, ticker] of this.spotPrices.entries()) {
-      // Deterministic Brownian micro-variation: mean-reverting drift + random walk
-      const volatility = symbol === 'BTC/USD' ? 4.5 : symbol === 'ETH/USD' ? 0.45 : 0.08;
-      const delta = (Math.random() - 0.498) * volatility;
-      const newPrice = Number((ticker.price + delta).toFixed(2));
+    for (const symbol of symbols) {
+      const spot = this.spotPrices.get(symbol)?.price || (symbol === 'BTC/USD' ? 77000 : 2400);
 
-      // Append to rolling history
-      ticker.priceHistory.push({ timestamp: now, price: newPrice });
-      if (ticker.priceHistory.length > 300) {
-        ticker.priceHistory.shift();
+      for (const windowDur of windows) {
+        const windowSec = parseWindowToSeconds(windowDur);
+        const windowMs = windowSec * 1000;
+        const closeTimeMs = now + windowMs;
+        const openTimeMs = now;
+        const strike = Math.round(spot);
+
+        const marketId = `${SOMNIA_ADDRESSES.binaryModule}-${symbol.replace('/', '')}-${windowDur}-${strike}-${closeTimeMs}`;
+        if (!this.markets.has(marketId)) {
+          const timeLeft = Math.max(1, Math.floor((closeTimeMs - now) / 1000));
+          const fair = calculateFairValue(spot, strike, timeLeft, symbol);
+          const seedBid = 0.49;
+          const seedAsk = 0.51;
+          const edge = calculateEdge(fair.fairValueYes, seedBid, seedAsk);
+
+          const newMarket: Market = {
+            id: marketId,
+            symbol,
+            strikePrice: strike,
+            windowDuration: windowDur,
+            openTimestamp: new Date(openTimeMs).toISOString(),
+            closeTimestamp: new Date(closeTimeMs).toISOString(),
+            resolutionTimestamp: new Date(closeTimeMs + 60000).toISOString(),
+            status: 'Open',
+            bestBidYes: seedBid,
+            bestAskYes: seedAsk,
+            bestBidNo: 0.49,
+            bestAskNo: 0.51,
+            impliedProbYes: edge.impliedProbYes,
+            fairValueYes: fair.fairValueYes,
+            edgePercentage: edge.edgePercentage,
+          };
+
+          this.markets.set(marketId, newMarket);
+          this.buildDepthBookFromClob(newMarket);
+        }
       }
-
-      // Calculate 1m and 5m drift
-      const cutoff1m = now - 60000;
-      const cutoff5m = now - 300000;
-
-      const p1m = ticker.priceHistory.find((p) => p.timestamp >= cutoff1m)?.price || ticker.priceHistory[0].price;
-      const p5m = ticker.priceHistory.find((p) => p.timestamp >= cutoff5m)?.price || ticker.priceHistory[0].price;
-
-      ticker.price = newPrice;
-      ticker.change1m = Number(((newPrice - p1m) / p1m).toFixed(5));
-      ticker.change5m = Number(((newPrice - p5m) / p5m).toFixed(5));
-      ticker.timestamp = now;
-      ticker.high24h = Math.max(ticker.high24h, newPrice);
-      ticker.low24h = Math.min(ticker.low24h, newPrice);
     }
   }
 
   /**
-   * Refreshes market time countdowns, mathematical fair values $\Phi(z)$, and rolls expired windows.
+   * Simulates micro-ticks (useful for unit tests and deterministic offline simulation).
+   */
+  public simulateSpotMicroTicks(): void {
+    for (const [symbol] of this.spotPrices.entries()) {
+      const volatility = symbol === 'BTC/USD' ? 4.5 : symbol === 'ETH/USD' ? 0.45 : 0.08;
+      const delta = (Math.random() - 0.498) * volatility;
+      priceFeedService.simulateMicroTick(symbol, delta);
+    }
+  }
+
+  /**
+   * Refreshes market time countdowns, mathematical fair values $\Phi(z)$, and tracks expiration.
    */
   public refreshMarketTimersAndFairValues(): void {
     const now = Date.now();
-    let hasExpired = false;
 
-    for (const [id, market] of this.markets.entries()) {
+    for (const [, market] of this.markets.entries()) {
       const closeTime = new Date(market.closeTimestamp).getTime();
       const timeLeftSeconds = Math.max(0, Math.floor((closeTime - now) / 1000));
 
-      if (timeLeftSeconds <= 0) {
-        // Market expired -> Mark resolved and trigger rolling replacement
+      if (timeLeftSeconds <= 0 && market.status === 'Open') {
         market.status = 'Finalized';
         const spot = this.spotPrices.get(market.symbol)?.price || 0;
         market.settlementPrice = spot;
         market.winningOutcome = spot >= market.strikePrice ? 'YES' : 'NO';
-        hasExpired = true;
-      } else {
-        // Active market: compute fair value and edge
+      } else if (market.status === 'Open') {
         const spot = this.spotPrices.get(market.symbol)?.price || market.strikePrice;
         const fair = calculateFairValue(spot, market.strikePrice, timeLeftSeconds, market.symbol);
         const edge = calculateEdge(fair.fairValueYes, market.bestBidYes, market.bestAskYes);
@@ -308,34 +463,6 @@ export class MarketService extends EventEmitter {
         market.impliedProbYes = edge.impliedProbYes;
         market.edgePercentage = edge.edgePercentage;
       }
-    }
-
-    if (hasExpired) {
-      // Purge finalized markets older than 10 minutes and generate fresh active ones
-      const tenMinutesAgo = now - 600000;
-      for (const [id, m] of this.markets.entries()) {
-        if (m.status === 'Finalized' && new Date(m.closeTimestamp).getTime() < tenMinutesAgo) {
-          this.markets.delete(id);
-          this.depthBooks.delete(id);
-        }
-      }
-      this.generateRollingMarkets();
-    }
-  }
-
-  private updateAllFairValuesAndDepths(): void {
-    const now = Date.now();
-    for (const [, market] of this.markets.entries()) {
-      const closeTime = new Date(market.closeTimestamp).getTime();
-      const timeLeft = Math.max(1, Math.floor((closeTime - now) / 1000));
-      const spot = this.spotPrices.get(market.symbol)?.price || market.strikePrice;
-      const fair = calculateFairValue(spot, market.strikePrice, timeLeft, market.symbol);
-      const edge = calculateEdge(fair.fairValueYes, market.bestBidYes, market.bestAskYes);
-
-      market.fairValueYes = fair.fairValueYes;
-      market.impliedProbYes = edge.impliedProbYes;
-      market.edgePercentage = edge.edgePercentage;
-      this.generateDepthBook(market);
     }
   }
 
@@ -398,6 +525,10 @@ export class MarketService extends EventEmitter {
     return this.markets.get(id);
   }
 
+  public getUnifiedMarket(id: string): UnifiedMarket | undefined {
+    return this.unifiedMarketsMap.get(id);
+  }
+
   public getMarketDepth(id: string): OrderBookDepth | undefined {
     return this.depthBooks.get(id);
   }
@@ -442,7 +573,7 @@ export class MarketService extends EventEmitter {
     market.impliedProbYes = edge.impliedProbYes;
     market.edgePercentage = edge.edgePercentage;
 
-    this.generateDepthBook(market);
+    this.buildDepthBookFromClob(market);
     this.emit('market_updated', market);
 
     return market;
@@ -450,7 +581,12 @@ export class MarketService extends EventEmitter {
 
   public stop(): void {
     if (this.updateInterval) clearInterval(this.updateInterval);
+    if (this.onchainPollInterval) clearInterval(this.onchainPollInterval);
     if (this.dbSyncInterval) clearInterval(this.dbSyncInterval);
+    if (this.priceUpdateHandler) {
+      priceFeedService.off('spotUpdate', this.priceUpdateHandler);
+    }
+    priceFeedService.stop();
   }
 }
 

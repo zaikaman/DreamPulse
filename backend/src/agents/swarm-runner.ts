@@ -1,9 +1,11 @@
 import { voltSniperAgent, VoltSniperAgent } from './volt-sniper.js';
 import { oracleArbAgent, OracleArbAgent } from './oracle-arb.js';
 import { titanMMAgent, TitanMMAgent } from './titan-mm.js';
+import { sweeperAgent, SweeperAgent } from './sweeper.js';
 import { marketService } from '../services/market-service.js';
 import { sessionService } from '../services/session-service.js';
 import { orderService } from '../services/order-service.js';
+import { operatorAccount } from '../config/somnia.js';
 import { telemetryWsGateway } from '../websocket/server.js';
 import type { IAgentContext, IAgentDecision } from './base-agent.js';
 import type { AgentType, SessionGrant, SwarmStatusSummary } from '../types/index.js';
@@ -31,51 +33,51 @@ export class MultiAgentSwarmRunner {
       agentType: 'Volt',
       isEnabled: true,
       status: 'ACTIVE',
-      evalLatencyMs: 38,
-      tradesToday: 18,
-      pnlAmount: 24.5,
-      lastAction: 'TAKER_SNIPE_YES',
-      lastActionTimestamp: Date.now() - 15000,
+      evalLatencyMs: 0,
+      tradesToday: 0,
+      pnlAmount: 0.0,
+      lastAction: 'IDLE',
+      lastActionTimestamp: Date.now(),
       consecutiveErrors: 0,
     },
     Oracle: {
       agentType: 'Oracle',
       isEnabled: true,
       status: 'ACTIVE',
-      evalLatencyMs: 64,
-      tradesToday: 12,
-      pnlAmount: 19.8,
-      lastAction: 'TAKER_BUY_NO',
-      lastActionTimestamp: Date.now() - 32000,
+      evalLatencyMs: 0,
+      tradesToday: 0,
+      pnlAmount: 0.0,
+      lastAction: 'IDLE',
+      lastActionTimestamp: Date.now(),
       consecutiveErrors: 0,
     },
     Titan: {
       agentType: 'Titan',
       isEnabled: true,
       status: 'ACTIVE',
-      evalLatencyMs: 42,
-      tradesToday: 34,
-      pnlAmount: 8.2,
-      lastAction: 'LIMIT_QUOTE_YES',
-      lastActionTimestamp: Date.now() - 5000,
+      evalLatencyMs: 0,
+      tradesToday: 0,
+      pnlAmount: 0.0,
+      lastAction: 'IDLE',
+      lastActionTimestamp: Date.now(),
       consecutiveErrors: 0,
     },
     Sweeper: {
       agentType: 'Sweeper',
       isEnabled: true,
       status: 'ACTIVE',
-      evalLatencyMs: 15,
-      tradesToday: 6,
-      pnlAmount: 145.0,
-      lastAction: 'BATCH_CLAIM_PAYOUTS',
-      lastActionTimestamp: Date.now() - 120000,
+      evalLatencyMs: 0,
+      tradesToday: 0,
+      pnlAmount: 0.0,
+      lastAction: 'IDLE',
+      lastActionTimestamp: Date.now(),
       consecutiveErrors: 0,
     },
   };
 
   constructor() {
     // Hook thought events from agents to broadcast via WebSocket
-    [voltSniperAgent, oracleArbAgent, titanMMAgent].forEach((agent) => {
+    [voltSniperAgent, oracleArbAgent, titanMMAgent, sweeperAgent].forEach((agent) => {
       agent.on('thought', (thought) => {
         telemetryWsGateway.broadcastAgentThought({
           agent: thought.agentType,
@@ -129,6 +131,7 @@ export class MultiAgentSwarmRunner {
       { agent: voltSniperAgent, type: 'Volt' as AgentType },
       { agent: oracleArbAgent, type: 'Oracle' as AgentType },
       { agent: titanMMAgent, type: 'Titan' as AgentType },
+      { agent: sweeperAgent, type: 'Sweeper' as AgentType },
     ];
 
     for (const { agent, type } of agents) {
@@ -181,24 +184,24 @@ export class MultiAgentSwarmRunner {
           continue;
         }
 
-        // Check if decision is actionable (not HOLD)
-        if (decision && decision.action !== 'HOLD' && decision.action !== 'CANCEL_QUOTE') {
+        // Check if decision is actionable (not HOLD) and meets confidence threshold
+        if (decision && decision.action !== 'HOLD' && decision.action !== 'CANCEL_QUOTE' && decision.confidence >= 0.75) {
           state.lastAction = `${decision.action}_${decision.targetOutcome || 'YES'}`;
           state.lastActionTimestamp = Date.now();
 
-          // Rate limit: Max 1 execution per 2000ms per agent
+          // Rate limit: Max 1 execution per 15,000ms (15 seconds) per agent
           const lastTradeTime = this.lastTradeTimes.get(type) || 0;
           const now = Date.now();
-          if (now - lastTradeTime < 2000) {
+          if (now - lastTradeTime < 15000) {
             continue;
           }
 
-          // Execute under system operator or active user session
-          const systemOperatorAddress = '0x15C7e8CE38F021c5b45d098AaD788f63090bF20A';
+          // Execute under configured system operator address
+          const systemOperatorAddress = operatorAccount.address;
           const defaultSession: SessionGrant = {
             id: `session-${type.toLowerCase()}`,
-            userAddress: systemOperatorAddress as `0x${string}`,
-            operatorAddress: systemOperatorAddress as `0x${string}`,
+            userAddress: systemOperatorAddress,
+            operatorAddress: systemOperatorAddress,
             permissions: ['placeOrderFor', 'cancelOrderFor'],
             maxTradeSize: 50.0,
             dailyVolumeCap: 500.0,
@@ -207,12 +210,21 @@ export class MultiAgentSwarmRunner {
             isActive: true,
           };
 
-          const order = await orderService.executeAgentDecision(decision, defaultSession);
-          if (order) {
-            this.lastTradeTimes.set(type, now);
-            state.tradesToday++;
-            const profit = Number((order.lotSize * 0.15).toFixed(2));
-            state.pnlAmount = Number((state.pnlAmount + profit).toFixed(2));
+          if (decision.action === 'BATCH_SWEEP') {
+            const sweep = await sweeperAgent.execute(decision, defaultSession);
+            if (sweep && 'claimableAmount' in sweep && (sweep.claimableAmount ?? 0) > 0) {
+              this.lastTradeTimes.set(type, now);
+              state.tradesToday++;
+              state.pnlAmount = Number((state.pnlAmount + (sweep.claimableAmount || 0)).toFixed(2));
+            }
+          } else {
+            const order = await orderService.executeAgentDecision(decision, defaultSession);
+            if (order && (order.status === 'FILLED' || order.status === 'PENDING') && order.txHash && order.txHash !== '0x0000000000000000000000000000000000000000000000000000000000000000') {
+              this.lastTradeTimes.set(type, now);
+              state.tradesToday++;
+              // Real PnL accumulation based on actual order executions & settlement outcomes
+              state.pnlAmount = Number((state.pnlAmount + (order.pnl || 0)).toFixed(2));
+            }
           }
         }
       }
@@ -238,6 +250,9 @@ export class MultiAgentSwarmRunner {
         break;
       case 'Titan':
         titanMMAgent.isEnabled = enabled;
+        break;
+      case 'Sweeper':
+        sweeperAgent.isEnabled = enabled;
         break;
       default:
         break;
@@ -267,6 +282,11 @@ export class MultiAgentSwarmRunner {
         if (config.inventoryAversion !== undefined) titanMMAgent.titanConfig.inventoryAversion = Number(config.inventoryAversion);
         if (config.lotSize !== undefined) titanMMAgent.titanConfig.lotSize = Number(config.lotSize);
         break;
+      case 'Sweeper':
+        if (config.autoCompound !== undefined) sweeperAgent.sweeperConfig.autoCompound = Boolean(config.autoCompound);
+        if (config.minClaimableAmount !== undefined) sweeperAgent.sweeperConfig.minClaimableAmount = Number(config.minClaimableAmount);
+        if (config.sweepIntervalMs !== undefined) sweeperAgent.sweeperConfig.sweepIntervalMs = Number(config.sweepIntervalMs);
+        break;
       default:
         return false;
     }
@@ -277,23 +297,27 @@ export class MultiAgentSwarmRunner {
    * Returns current swarm telemetry status summary.
    */
   public getSwarmStatus(): SwarmStatusSummary {
+    const voltPrefix = this.telemetry.Volt.pnlAmount >= 0 ? '+' : '';
+    const oraclePrefix = this.telemetry.Oracle.pnlAmount >= 0 ? '+' : '';
+    const titanPrefix = this.telemetry.Titan.pnlAmount >= 0 ? '+' : '';
+
     return {
       volt: {
         status: this.telemetry.Volt.status,
         evalLatencyMs: this.telemetry.Volt.evalLatencyMs,
         tradesToday: this.telemetry.Volt.tradesToday,
-        pnl: `+${this.telemetry.Volt.pnlAmount.toFixed(2)} STT`,
+        pnl: `${voltPrefix}${this.telemetry.Volt.pnlAmount.toFixed(2)} STT`,
       },
       oracle: {
         status: this.telemetry.Oracle.status,
         evalLatencyMs: this.telemetry.Oracle.evalLatencyMs,
         tradesToday: this.telemetry.Oracle.tradesToday,
-        pnl: `+${this.telemetry.Oracle.pnlAmount.toFixed(2)} STT`,
+        pnl: `${oraclePrefix}${this.telemetry.Oracle.pnlAmount.toFixed(2)} STT`,
       },
       titan: {
         status: this.telemetry.Titan.status,
         activeQuotes: 6,
-        spreadCaptured: `+${this.telemetry.Titan.pnlAmount.toFixed(2)} STT`,
+        spreadCaptured: `${titanPrefix}${this.telemetry.Titan.pnlAmount.toFixed(2)} STT`,
       },
       sweeper: {
         status: this.telemetry.Sweeper.status,

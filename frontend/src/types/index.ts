@@ -50,6 +50,10 @@ export interface SessionGrant {
   spentToday: number;
   expiresAt: string;
   isActive: boolean;
+  onChainTxHash?: `0x${string}`;
+  vaultDepositAmount?: number;
+  targetPoolAddress?: `0x${string}`;
+  onChainAuthorized?: boolean;
 }
 
 export interface AgentStrategy {
@@ -97,6 +101,27 @@ export interface SettlementSweep {
   txHash?: `0x${string}`;
   status: 'PENDING' | 'CONFIRMED' | 'FAILED';
   claimedAt: string;
+}
+
+export interface SweeperSummary {
+  unclaimedAmount: number;
+  totalClaimedAllTime: number;
+  claimableMarketsCount: number;
+  confirmedSweepsCount: number;
+  unclaimedPositions: Array<{
+    marketId: string;
+    symbol: string;
+    winningOutcome: OutcomeType;
+    claimableAmount: number;
+    isVoided: boolean;
+    status: string;
+  }>;
+  autoCompound: boolean;
+  compoundedStats: {
+    totalCompoundedAmount: number;
+    reinvestedCycles: number;
+    lastCompoundedAt: string;
+  };
 }
 
 export interface AgentThoughtLog {

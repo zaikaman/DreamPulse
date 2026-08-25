@@ -5,7 +5,7 @@ import {
   parseUnits,
   formatUnits,
 } from 'viem';
-import { SOMNIA_ADDRESSES } from './somnia.js';
+import { SOMNIA_ADDRESSES, publicClient } from './somnia.js';
 
 /**
  * Somnia OperatorPermissionsRegistry ABI bindings.
@@ -57,6 +57,138 @@ export const OPERATOR_PERMISSIONS_REGISTRY_ABI = [
       { name: 'selector', type: 'bytes4' },
     ],
     outputs: [{ name: '', type: 'bool' }],
+  },
+] as const;
+
+/**
+ * DreamDEX SpotPool ABI surface for orders, manual vault mode, and deposits.
+ */
+export const SPOT_POOL_ABI = [
+  {
+    type: 'function',
+    name: 'setManualVaultMode',
+    stateMutability: 'nonpayable',
+    inputs: [{ name: 'enabled', type: 'bool' }],
+    outputs: [],
+  },
+  {
+    type: 'function',
+    name: 'getManualVaultMode',
+    stateMutability: 'view',
+    inputs: [{ name: 'user', type: 'address' }],
+    outputs: [{ name: '', type: 'bool' }],
+  },
+  {
+    type: 'function',
+    name: 'deposit',
+    stateMutability: 'nonpayable',
+    inputs: [
+      { name: 'token', type: 'address' },
+      { name: 'amount', type: 'uint256' },
+    ],
+    outputs: [],
+  },
+  {
+    type: 'function',
+    name: 'depositNative',
+    stateMutability: 'payable',
+    inputs: [],
+    outputs: [],
+  },
+  {
+    type: 'function',
+    name: 'withdraw',
+    stateMutability: 'nonpayable',
+    inputs: [
+      { name: 'token', type: 'address' },
+      { name: 'amount', type: 'uint256' },
+    ],
+    outputs: [],
+  },
+  {
+    type: 'function',
+    name: 'getWithdrawableBalance',
+    stateMutability: 'view',
+    inputs: [
+      { name: 'owner', type: 'address' },
+      { name: 'token', type: 'address' },
+    ],
+    outputs: [{ name: '', type: 'uint256' }],
+  },
+  {
+    type: 'function',
+    name: 'isOperatorAuthorized',
+    stateMutability: 'view',
+    inputs: [
+      { name: 'owner', type: 'address' },
+      { name: 'operator', type: 'address' },
+      { name: 'selector', type: 'bytes4' },
+    ],
+    outputs: [{ name: '', type: 'bool' }],
+  },
+  {
+    type: 'function',
+    name: 'placeOrderFor',
+    stateMutability: 'payable',
+    inputs: [
+      { name: 'owner', type: 'address' },
+      { name: 'isBid', type: 'bool' },
+      { name: 'userData', type: 'uint64' },
+      { name: 'price', type: 'uint256' },
+      { name: 'quantity', type: 'uint256' },
+      { name: 'expireTimestampNs', type: 'uint64' },
+      { name: 'orderType', type: 'uint8' },
+      { name: 'selfMatchingOption', type: 'uint8' },
+      { name: 'builder', type: 'address' },
+      { name: 'builderFeeBpsTimes1k', type: 'uint96' },
+    ],
+    outputs: [
+      { name: 'success', type: 'bool' },
+      { name: 'orderId', type: 'uint128' },
+    ],
+  },
+  {
+    type: 'function',
+    name: 'cancelOrderFor',
+    stateMutability: 'nonpayable',
+    inputs: [
+      { name: 'owner', type: 'address' },
+      { name: 'orderId', type: 'uint128' },
+    ],
+    outputs: [],
+  },
+] as const;
+
+/**
+ * Standard ERC20 ABI for allowance and approvals.
+ */
+export const ERC20_ABI = [
+  {
+    type: 'function',
+    name: 'approve',
+    stateMutability: 'nonpayable',
+    inputs: [
+      { name: 'spender', type: 'address' },
+      { name: 'amount', type: 'uint256' },
+    ],
+    outputs: [{ name: '', type: 'bool' }],
+  },
+  {
+    type: 'function',
+    name: 'allowance',
+    stateMutability: 'view',
+    inputs: [
+      { name: 'owner', type: 'address' },
+      { name: 'spender', type: 'address' },
+    ],
+    outputs: [{ name: '', type: 'uint256' }],
+  },
+  {
+    type: 'function',
+    name: 'balanceOf',
+    stateMutability: 'view',
+    inputs: [{ name: 'account', type: 'address' }],
+    outputs: [{ name: '', type: 'uint256' }],
   },
 ] as const;
 
@@ -188,3 +320,60 @@ export function validateZeroCustodyInvariants(requestedActions: string[]): {
     rejectedActions,
   };
 }
+
+/**
+ * Query on-chain OperatorPermissionsRegistry or SpotPool to verify if operator is authorized for owner.
+ */
+export async function checkOnChainOperatorAuthorization(
+  owner: Address,
+  operator: Address,
+  pool?: Address,
+  selector: Hex = OPERATOR_SELECTORS.placeOrderFor,
+): Promise<boolean> {
+  try {
+    if (pool && pool.startsWith('0x')) {
+      const authorizedOnPool = await publicClient.readContract({
+        address: pool,
+        abi: SPOT_POOL_ABI,
+        functionName: 'isOperatorAuthorized',
+        args: [owner, operator, selector as `0x${string}`],
+      });
+      if (authorizedOnPool) return true;
+    }
+
+    const authorizedOnRegistry = await publicClient.readContract({
+      address: SOMNIA_ADDRESSES.operatorPermissionsRegistry,
+      abi: OPERATOR_PERMISSIONS_REGISTRY_ABI,
+      functionName: 'isOperatorAuthorized',
+      args: [owner, operator, selector as `0x${string}`],
+    });
+
+    return Boolean(authorizedOnRegistry);
+  } catch (err: any) {
+    console.warn(`[checkOnChainOperatorAuthorization] Check notice:`, err.message);
+    return false;
+  }
+}
+
+/**
+ * Query on-chain SpotPool withdrawable vault balance for an owner.
+ */
+export async function checkVaultWithdrawableBalance(
+  owner: Address,
+  pool: Address,
+  token: Address = SOMNIA_ADDRESSES.testUsdc,
+): Promise<bigint> {
+  try {
+    const balance = await publicClient.readContract({
+      address: pool,
+      abi: SPOT_POOL_ABI,
+      functionName: 'getWithdrawableBalance',
+      args: [owner, token],
+    });
+    return balance;
+  } catch (err: any) {
+    console.warn(`[checkVaultWithdrawableBalance] Check notice:`, err.message);
+    return 0n;
+  }
+}
+

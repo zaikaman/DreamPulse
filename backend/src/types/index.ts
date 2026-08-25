@@ -1,3 +1,5 @@
+import type { Hex } from 'viem';
+
 /**
  * Shared TypeScript Domain Models for DreamPulse Backend Engine.
  */
@@ -13,7 +15,7 @@ export interface Market {
   id: string; // Contract Address or Market Key
   symbol: string; // "BTC/USD" | "ETH/USD"
   strikePrice: number;
-  windowDuration: '5m' | '15m' | '1h';
+  windowDuration: '5m' | '15m' | '1h' | '4h' | string;
   openTimestamp: string;
   closeTimestamp: string;
   resolutionTimestamp: string;
@@ -27,6 +29,15 @@ export interface Market {
   impliedProbYes: number;
   fairValueYes: number;
   edgePercentage: number;
+  // On-chain protocol fields
+  poolAddress?: string;
+  marketIdHex?: Hex;
+  venueId?: string;
+  operatorId?: number;
+  yesTokenId?: string;
+  noTokenId?: string;
+  intervalSec?: number;
+  onchainStatus?: number;
 }
 
 export interface SessionGrant {
@@ -39,6 +50,10 @@ export interface SessionGrant {
   spentToday: number;
   expiresAt: string;
   isActive: boolean;
+  onChainTxHash?: `0x${string}`;
+  vaultDepositAmount?: number;
+  targetPoolAddress?: `0x${string}`;
+  onChainAuthorized?: boolean;
 }
 
 export interface AgentStrategy {

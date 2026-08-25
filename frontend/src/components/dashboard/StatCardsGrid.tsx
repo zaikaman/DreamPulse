@@ -10,17 +10,22 @@ import {
 } from 'lucide-react';
 import type { Market } from '../../types/index.js';
 import type { MarketTickData } from '../../hooks/useTelemetry.js';
+import type { AgentDetail } from '../../hooks/useAgentSwarm.js';
 
 interface StatCardsGridProps {
   markets: Market[];
   liveTicks: Map<string, MarketTickData>;
   latencyMs: number;
+  swarmDetailed?: Record<string, AgentDetail>;
+  ordersCount?: number;
 }
 
 export const StatCardsGrid: React.FC<StatCardsGridProps> = ({
   markets,
   liveTicks,
   latencyMs,
+  swarmDetailed,
+  ordersCount,
 }) => {
   // Find highest anomaly edge
   let maxEdge = 0;
@@ -38,6 +43,21 @@ export const StatCardsGrid: React.FC<StatCardsGridProps> = ({
   }
 
   const activeCount = markets.filter((m) => m.status === 'Open').length || markets.length;
+
+  // Calculate dynamic swarm PnL and trade fills
+  const voltPnl = swarmDetailed?.volt?.pnlAmount ?? 0;
+  const oraclePnl = swarmDetailed?.oracle?.pnlAmount ?? 0;
+  const titanPnl = swarmDetailed?.titan?.pnlAmount ?? 0;
+  const sweeperPnl = swarmDetailed?.sweeper?.pnlAmount ?? 0;
+  const totalPnl = voltPnl + oraclePnl + titanPnl + sweeperPnl;
+
+  const agentFills =
+    (swarmDetailed?.volt?.tradesToday ?? 0) +
+    (swarmDetailed?.oracle?.tradesToday ?? 0) +
+    (swarmDetailed?.titan?.tradesToday ?? 0) +
+    (swarmDetailed?.sweeper?.tradesToday ?? 0);
+  const totalFills = ordersCount !== undefined ? Math.max(ordersCount, agentFills) : agentFills;
+  const isProfitable = totalPnl >= 0;
 
   return (
     <div className="metrics-stat-grid">
@@ -79,13 +99,15 @@ export const StatCardsGrid: React.FC<StatCardsGridProps> = ({
       <div className="stat-card">
         <div className="stat-card-header">
           <span className="stat-card-title">SWARM REAL-TIME PnL</span>
-          <TrendingUp size={16} className="stat-card-icon" style={{ color: 'var(--trade-yes)' }} />
+          <TrendingUp size={16} className="stat-card-icon" style={{ color: isProfitable ? 'var(--trade-yes)' : 'var(--trade-no)' }} />
         </div>
-        <div className="stat-card-value text-yes">+48.50 STT</div>
+        <div className={`stat-card-value ${isProfitable ? 'text-yes' : 'text-no'}`}>
+          {isProfitable ? `+${totalPnl.toFixed(2)}` : totalPnl.toFixed(2)} STT
+        </div>
         <div className="stat-card-footer">
-          <span className="stat-pill-tag tag-green">
+          <span className={`stat-pill-tag ${totalFills > 0 ? 'tag-green' : 'tag-cyan'}`}>
             <TrendingUp size={11} />
-            <span>38 FILLS TODAY</span>
+            <span>{totalFills > 0 ? `${totalFills} FILLS TODAY` : 'READY TO TRADE'}</span>
           </span>
           <span>Volt, Oracle & Titan trading</span>
         </div>

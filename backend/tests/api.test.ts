@@ -51,4 +51,31 @@ describe('Express REST API Endpoints', () => {
     expect(res.body.agents).toHaveProperty('titan');
     expect(res.body.agents).toHaveProperty('sweeper');
   });
+
+  it('GET /api/v1/sweeper/summary returns live unclaimed and compounding metrics', async () => {
+    const res = await request(app).get('/api/v1/sweeper/summary?userAddress=0x15C7e8CE38F021c5b45d098AaD788f63090bF20A');
+    expect(res.status).toBe(200);
+    expect(res.body.success).toBe(true);
+    expect(res.body.data).toHaveProperty('unclaimedAmount');
+    expect(res.body.data).toHaveProperty('totalClaimedAllTime');
+    expect(res.body.data).toHaveProperty('compoundedStats');
+  });
+
+  it('GET /api/v1/sweeper/unclaimed scans positions across finalized markets', async () => {
+    const res = await request(app).get('/api/v1/sweeper/unclaimed?userAddress=0x15C7e8CE38F021c5b45d098AaD788f63090bF20A');
+    expect(res.status).toBe(200);
+    expect(res.body.success).toBe(true);
+    expect(res.body).toHaveProperty('totalUnclaimedAmount');
+    expect(Array.isArray(res.body.positions)).toBe(true);
+  });
+
+  it('POST /api/v1/sweeper/trigger executes batch sweep and returns claim confirmation', async () => {
+    const res = await request(app)
+      .post('/api/v1/sweeper/trigger')
+      .send({ userAddress: '0x15C7e8CE38F021c5b45d098AaD788f63090bF20A', autoCompound: true });
+    expect(res.status).toBe(200);
+    expect(res.body.success).toBe(true);
+    expect(res.body.txHash).toMatch(/^0x[a-f0-9]{64}$/i);
+    expect(res.body.claimedMarketsCount).toBeGreaterThanOrEqual(1);
+  });
 });

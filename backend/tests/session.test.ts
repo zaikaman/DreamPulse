@@ -274,4 +274,33 @@ describe('Task T038 & T040: Session Management Service & Risk Guardrails', () =>
     // User 2's session remains unaffected
     expect(sessionService.validateTradeAllowance(sessionUser2.id, 50).allowed).toBe(true);
   });
+
+  it('records on-chain transaction hash and vault deposit parameters', async () => {
+    const user = privateKeyToAccount(generatePrivateKey());
+    const mockTxHash = '0x1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef';
+    const mockPool = SOMNIA_ADDRESSES.binaryModule;
+
+    const session = await sessionService.registerSession({
+      userAddress: user.address,
+      operatorAddress: operator,
+      maxTradeSize: 15,
+      dailyVolumeCap: 150,
+      onChainTxHash: mockTxHash,
+      vaultDepositAmount: 25,
+      targetPoolAddress: mockPool,
+      onChainAuthorized: true,
+    });
+
+    expect(session).toBeDefined();
+    expect(session.onChainTxHash).toBe(mockTxHash);
+    expect(session.vaultDepositAmount).toBe(25);
+    expect(session.targetPoolAddress?.toLowerCase()).toBe(mockPool.toLowerCase());
+    expect(session.onChainAuthorized).toBe(true);
+
+    const activeSession = await sessionService.getUserActiveSession(user.address);
+    expect(activeSession?.onChainTxHash).toBe(mockTxHash);
+    expect(activeSession?.vaultDepositAmount).toBe(25);
+    expect(activeSession?.targetPoolAddress?.toLowerCase()).toBe(mockPool.toLowerCase());
+  });
 });
+

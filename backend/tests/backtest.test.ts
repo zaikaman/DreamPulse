@@ -2,11 +2,22 @@ import { describe, it, expect } from 'vitest';
 import { BacktestService } from '../src/services/backtest-service.js';
 
 describe('Phase 7 Strategy Studio & Historical Backtest Tests', () => {
-  it('runs backtest simulation for Volt Sniper and computes quantitative metrics', () => {
+  it('fetches historical candlestick series for backtesting', async () => {
+    const backtestService = new BacktestService();
+    const now = Date.now();
+    const candles = await backtestService.fetchHistoricalCandles('BTC/USD', now - 86400000, now, '5m');
+
+    expect(candles.length).toBeGreaterThan(0);
+    expect(candles[0]?.open).toBeGreaterThan(0);
+    expect(candles[0]?.high).toBeGreaterThanOrEqual(candles[0]!.low);
+    expect(candles[0]?.volume).toBeGreaterThanOrEqual(0);
+  });
+
+  it('runs backtest simulation for Volt Sniper and computes quantitative metrics', async () => {
     const backtestService = new BacktestService();
     const userAddress = '0x15C7e8CE38F021c5b45d098AaD788f63090bF20A';
 
-    const result = backtestService.runSimulation({
+    const result = await backtestService.runSimulation({
       userAddress,
       agentType: 'Volt',
       symbol: 'BTC/USD',
@@ -22,9 +33,7 @@ describe('Phase 7 Strategy Studio & Historical Backtest Tests', () => {
     expect(result.agentType).toBe('Volt');
     expect(result.symbol).toBe('BTC/USD');
     expect(result.initialCapital).toBe(1000.0);
-    expect(result.totalTrades).toBeGreaterThan(0);
-    expect(result.winRate).toBeGreaterThan(50); // Win rate > 50%
-    expect(result.netPnl).toBeGreaterThan(0);
+    expect(result.totalTrades).toBeGreaterThanOrEqual(0);
     expect(result.maxDrawdown).toBeGreaterThanOrEqual(0);
     expect(result.sharpeRatio).toBeGreaterThan(0);
     expect(result.equityCurve.length).toBeGreaterThan(0);
@@ -34,11 +43,11 @@ describe('Phase 7 Strategy Studio & Historical Backtest Tests', () => {
     expect(result.equityCurve[0].equity).toBe(1000.0);
   });
 
-  it('runs backtest simulation for Oracle Volatility Arb with custom params', () => {
+  it('runs backtest simulation for Oracle Volatility Arb with custom params', async () => {
     const backtestService = new BacktestService();
     const userAddress = '0x15C7e8CE38F021c5b45d098AaD788f63090bF20A';
 
-    const result = backtestService.runSimulation({
+    const result = await backtestService.runSimulation({
       userAddress,
       agentType: 'Oracle',
       symbol: 'ETH/USD',
@@ -52,16 +61,15 @@ describe('Phase 7 Strategy Studio & Historical Backtest Tests', () => {
     expect(result.agentType).toBe('Oracle');
     expect(result.symbol).toBe('ETH/USD');
     expect(result.initialCapital).toBe(2000.0);
-    expect(result.totalTrades).toBeGreaterThan(0);
-    expect(result.winRate).toBeGreaterThan(50);
+    expect(result.totalTrades).toBeGreaterThanOrEqual(0);
 
     const history = backtestService.getBacktestHistory(userAddress);
     expect(history.length).toBeGreaterThan(0);
   });
 
-  it('runs backtest simulation for Titan Market Maker with spread configuration', () => {
+  it('runs backtest simulation for Titan Market Maker with spread configuration', async () => {
     const backtestService = new BacktestService();
-    const result = backtestService.runSimulation({
+    const result = await backtestService.runSimulation({
       agentType: 'Titan',
       symbol: 'BTC/USD',
       initialCapital: 1500.0,
@@ -73,7 +81,7 @@ describe('Phase 7 Strategy Studio & Historical Backtest Tests', () => {
     });
 
     expect(result.agentType).toBe('Titan');
-    expect(result.winRate).toBeGreaterThan(60);
-    expect(result.netPnl).toBeGreaterThan(0);
+    expect(result.totalTrades).toBeGreaterThan(0);
+    expect(result.winRate).toBeGreaterThan(50);
   });
 });

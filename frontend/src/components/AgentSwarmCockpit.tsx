@@ -92,47 +92,48 @@ export const AgentSwarmCockpit: React.FC<AgentSwarmCockpitProps> = ({
     agentType: 'Volt',
     isEnabled: true,
     status: 'ACTIVE',
-    evalLatencyMs: 38,
-    tradesToday: 18,
-    pnlAmount: 24.5,
-    lastAction: 'TAKER_SNIPE_YES',
-    lastActionTimestamp: Date.now() - 15000,
+    evalLatencyMs: 0,
+    tradesToday: 0,
+    pnlAmount: 0.0,
+    lastAction: 'INITIALIZING',
+    lastActionTimestamp: Date.now(),
   };
 
   const oracleData = detailedAgents.oracle || {
     agentType: 'Oracle',
     isEnabled: true,
     status: 'ACTIVE',
-    evalLatencyMs: 64,
-    tradesToday: 12,
-    pnlAmount: 19.8,
-    lastAction: 'TAKER_BUY_NO',
-    lastActionTimestamp: Date.now() - 32000,
+    evalLatencyMs: 0,
+    tradesToday: 0,
+    pnlAmount: 0.0,
+    lastAction: 'INITIALIZING',
+    lastActionTimestamp: Date.now(),
   };
 
   const titanData = detailedAgents.titan || {
     agentType: 'Titan',
     isEnabled: true,
     status: 'ACTIVE',
-    evalLatencyMs: 42,
-    tradesToday: 34,
-    pnlAmount: 8.2,
-    lastAction: 'LIMIT_QUOTE_YES',
-    lastActionTimestamp: Date.now() - 5000,
+    evalLatencyMs: 0,
+    tradesToday: 0,
+    pnlAmount: 0.0,
+    lastAction: 'INITIALIZING',
+    lastActionTimestamp: Date.now(),
   };
 
   const sweeperData = detailedAgents.sweeper || {
     agentType: 'Sweeper',
     isEnabled: true,
     status: 'ACTIVE',
-    evalLatencyMs: 15,
-    tradesToday: 6,
-    pnlAmount: 145.0,
-    lastAction: 'BATCH_CLAIM_PAYOUTS',
-    lastActionTimestamp: Date.now() - 120000,
+    evalLatencyMs: 0,
+    tradesToday: 0,
+    pnlAmount: 0.0,
+    lastAction: 'INITIALIZING',
+    lastActionTimestamp: Date.now(),
   };
 
-  const totalPnl = (voltData.pnlAmount + oracleData.pnlAmount + titanData.pnlAmount + sweeperData.pnlAmount).toFixed(2);
+  const numericTotalPnl = (voltData.pnlAmount || 0) + (oracleData.pnlAmount || 0) + (titanData.pnlAmount || 0) + (sweeperData.pnlAmount || 0);
+  const totalPnl = numericTotalPnl.toFixed(2);
   const activeCount = [voltData, oracleData, titanData, sweeperData].filter((a) => a.isEnabled).length;
 
   return (
@@ -193,18 +194,18 @@ export const AgentSwarmCockpit: React.FC<AgentSwarmCockpitProps> = ({
 
             <div
               style={{
-                background: 'rgba(0, 255, 102, 0.06)',
-                border: '1px solid rgba(0, 255, 102, 0.25)',
+                background: numericTotalPnl >= 0 ? 'rgba(0, 255, 102, 0.06)' : 'rgba(255, 51, 102, 0.06)',
+                border: `1px solid ${numericTotalPnl >= 0 ? 'rgba(0, 255, 102, 0.25)' : 'rgba(255, 51, 102, 0.25)'}`,
                 borderRadius: '8px',
                 padding: '8px 14px',
                 textAlign: 'right',
               }}
             >
-              <div style={{ fontSize: '10px', color: 'var(--trade-buy)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+              <div style={{ fontSize: '10px', color: numericTotalPnl >= 0 ? 'var(--trade-buy)' : 'var(--trade-sell)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
                 Cumulative Swarm PnL
               </div>
-              <div style={{ fontSize: '16px', fontWeight: 700, color: 'var(--trade-buy)', fontFamily: 'var(--font-mono)' }}>
-                +{totalPnl} STT
+              <div style={{ fontSize: '16px', fontWeight: 700, color: numericTotalPnl >= 0 ? 'var(--trade-buy)' : 'var(--trade-sell)', fontFamily: 'var(--font-mono)' }}>
+                {numericTotalPnl >= 0 ? `+${totalPnl}` : totalPnl} STT
               </div>
             </div>
           </div>
@@ -319,8 +320,8 @@ export const AgentSwarmCockpit: React.FC<AgentSwarmCockpitProps> = ({
               </div>
               <div style={{ background: 'rgba(255, 255, 255, 0.02)', padding: '8px', borderRadius: '6px', border: '1px solid var(--border)' }}>
                 <div style={{ fontSize: '10px', color: 'var(--muted-foreground)' }}>Captured PnL</div>
-                <div style={{ fontSize: '13px', fontWeight: 700, color: 'var(--trade-buy)', fontFamily: 'var(--font-mono)' }}>
-                  +{voltData.pnlAmount.toFixed(2)} STT
+                <div style={{ fontSize: '13px', fontWeight: 700, color: voltData.pnlAmount >= 0 ? 'var(--trade-buy)' : 'var(--trade-sell)', fontFamily: 'var(--font-mono)' }}>
+                  {voltData.pnlAmount >= 0 ? `+${voltData.pnlAmount.toFixed(2)}` : voltData.pnlAmount.toFixed(2)} STT
                 </div>
               </div>
             </div>
@@ -503,8 +504,8 @@ export const AgentSwarmCockpit: React.FC<AgentSwarmCockpitProps> = ({
               </div>
               <div style={{ background: 'rgba(255, 255, 255, 0.02)', padding: '8px', borderRadius: '6px', border: '1px solid var(--border)' }}>
                 <div style={{ fontSize: '10px', color: 'var(--muted-foreground)' }}>Captured PnL</div>
-                <div style={{ fontSize: '13px', fontWeight: 700, color: 'var(--trade-buy)', fontFamily: 'var(--font-mono)' }}>
-                  +{oracleData.pnlAmount.toFixed(2)} STT
+                <div style={{ fontSize: '13px', fontWeight: 700, color: oracleData.pnlAmount >= 0 ? 'var(--trade-buy)' : 'var(--trade-sell)', fontFamily: 'var(--font-mono)' }}>
+                  {oracleData.pnlAmount >= 0 ? `+${oracleData.pnlAmount.toFixed(2)}` : oracleData.pnlAmount.toFixed(2)} STT
                 </div>
               </div>
             </div>
@@ -669,8 +670,8 @@ export const AgentSwarmCockpit: React.FC<AgentSwarmCockpitProps> = ({
               </div>
               <div style={{ background: 'rgba(255, 255, 255, 0.02)', padding: '8px', borderRadius: '6px', border: '1px solid var(--border)' }}>
                 <div style={{ fontSize: '10px', color: 'var(--muted-foreground)' }}>Spread PnL</div>
-                <div style={{ fontSize: '13px', fontWeight: 700, color: 'var(--trade-buy)', fontFamily: 'var(--font-mono)' }}>
-                  +{titanData.pnlAmount.toFixed(2)} STT
+                <div style={{ fontSize: '13px', fontWeight: 700, color: titanData.pnlAmount >= 0 ? 'var(--trade-buy)' : 'var(--trade-sell)', fontFamily: 'var(--font-mono)' }}>
+                  {titanData.pnlAmount >= 0 ? `+${titanData.pnlAmount.toFixed(2)}` : titanData.pnlAmount.toFixed(2)} STT
                 </div>
               </div>
             </div>
@@ -797,8 +798,8 @@ export const AgentSwarmCockpit: React.FC<AgentSwarmCockpitProps> = ({
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '8px' }}>
               <div style={{ background: 'rgba(255, 255, 255, 0.02)', padding: '8px', borderRadius: '6px', border: '1px solid var(--border)' }}>
                 <div style={{ fontSize: '10px', color: 'var(--muted-foreground)' }}>Total Claimed</div>
-                <div style={{ fontSize: '13px', fontWeight: 700, color: 'var(--trade-buy)', fontFamily: 'var(--font-mono)' }}>
-                  +{sweeperData.pnlAmount.toFixed(2)} STT
+                <div style={{ fontSize: '13px', fontWeight: 700, color: sweeperData.pnlAmount >= 0 ? 'var(--trade-buy)' : 'var(--trade-sell)', fontFamily: 'var(--font-mono)' }}>
+                  {sweeperData.pnlAmount >= 0 ? `+${sweeperData.pnlAmount.toFixed(2)}` : sweeperData.pnlAmount.toFixed(2)} STT
                 </div>
               </div>
               <div style={{ background: 'rgba(255, 255, 255, 0.02)', padding: '8px', borderRadius: '6px', border: '1px solid var(--border)' }}>

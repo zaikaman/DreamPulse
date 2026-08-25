@@ -4,6 +4,8 @@ import { SOMNIA_ADDRESSES } from '../config/somnia.js';
 import {
   verifySessionDelegationSignature,
   validateZeroCustodyInvariants,
+  checkOnChainOperatorAuthorization,
+  OPERATOR_SELECTORS,
 } from '../config/permissions-abi.js';
 
 export interface SessionRecord {
@@ -19,6 +21,10 @@ export interface SessionRecord {
   isActive: boolean;
   signature?: Hex;
   nonce: number;
+  onChainTxHash?: Hex;
+  vaultDepositAmount?: number;
+  targetPoolAddress?: Address;
+  onChainAuthorized?: boolean;
   createdAt: string;
   updatedAt: string;
 }
@@ -32,6 +38,10 @@ export interface RegisterSessionParams {
   signature?: string;
   nonce?: number;
   permissions?: string[];
+  onChainTxHash?: string;
+  vaultDepositAmount?: number;
+  targetPoolAddress?: string;
+  onChainAuthorized?: boolean;
 }
 
 export class SessionService {
@@ -78,6 +88,10 @@ export class SessionService {
         expiresAt: row.expires_at,
         isActive,
         nonce: 0,
+        onChainTxHash: (row.on_chain_tx_hash as Hex) || undefined,
+        vaultDepositAmount: row.vault_deposit_amount ? Number(row.vault_deposit_amount) : undefined,
+        targetPoolAddress: row.target_pool_address ? (getAddress(row.target_pool_address) as Address) : undefined,
+        onChainAuthorized: row.on_chain_authorized ?? true,
         createdAt: row.created_at,
         updatedAt: row.updated_at,
       };
@@ -144,6 +158,32 @@ export class SessionService {
       }
     }
 
+    // Verify on-chain operator authorization on Somnia Shannon Testnet if on-chain check available
+    let onChainAuthorized = params.onChainAuthorized ?? false;
+    let targetPoolAddress: Address | undefined;
+    if (params.targetPoolAddress && isAddress(params.targetPoolAddress)) {
+      targetPoolAddress = getAddress(params.targetPoolAddress) as Address;
+    }
+
+    try {
+      const isAuthed = await checkOnChainOperatorAuthorization(
+        normalizedUser,
+        normalizedOperator,
+        targetPoolAddress,
+        OPERATOR_SELECTORS.placeOrderFor,
+      );
+      if (isAuthed) {
+        onChainAuthorized = true;
+      } else if (params.onChainTxHash) {
+        // Optimistically set to true if an on-chain transaction hash was provided
+        onChainAuthorized = true;
+      }
+    } catch {
+      if (params.onChainTxHash) {
+        onChainAuthorized = true;
+      }
+    }
+
     // Deactivate previous active sessions for this user
     const userKey = normalizedUser.toLowerCase();
     const existingActiveId = this.userToActiveSessionId.get(userKey);
@@ -168,6 +208,10 @@ export class SessionService {
     const isExpired = now >= expiresTimestamp;
     const isActive = !isExpired;
 
+    const onChainTxHash = params.onChainTxHash?.startsWith('0x')
+      ? (params.onChainTxHash as Hex)
+      : undefined;
+
     const sessionId = crypto.randomUUID();
     const sessionRecord: SessionRecord = {
       id: sessionId,
@@ -182,6 +226,10 @@ export class SessionService {
       isActive,
       signature: params.signature as Hex | undefined,
       nonce,
+      onChainTxHash,
+      vaultDepositAmount: params.vaultDepositAmount,
+      targetPoolAddress,
+      onChainAuthorized,
       createdAt: new Date(now).toISOString(),
       updatedAt: new Date(now).toISOString(),
     };

@@ -35,8 +35,11 @@ const envSchema = z.object({
   GEMINI_API_KEY: z.string().default('mock-gemini-key'),
   GEMINI_MODEL: z.string().default('gemini-2.5-flash'),
 
-  // Somnia Blockchain
-  SOMNIA_RPC_URL: z.string().default('https://dream-rpc.somnia.network'),
+  // Somnia Blockchain & Network
+  NETWORK: z.enum(['testnet', 'mainnet']).default('testnet'),
+  SOMNIA_RPC_URL: z.string().default('https://api.infra.testnet.somnia.network'),
+  SOMNIA_WS_URL: z.string().default('wss://api.infra.testnet.somnia.network/ws'),
+  INDEXER_URL: z.string().default('https://dev.smk.somnia.host/v1/graphql'),
   SOMNIA_CHAIN_ID: z.string().default('50312').transform((val) => parseInt(val, 10)),
   OPERATOR_PRIVATE_KEY: z.string().default('0x0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef'),
 
@@ -48,6 +51,10 @@ const envSchema = z.object({
 
 export const env = envSchema.parse({
   ...process.env,
+  SOMNIA_RPC_URL: process.env.SOMNIA_RPC_URL || process.env.RPC_URL || 'https://api.infra.testnet.somnia.network',
+  SOMNIA_WS_URL: process.env.SOMNIA_WS_URL || process.env.WS_RPC_URL || 'wss://api.infra.testnet.somnia.network/ws',
+  INDEXER_URL: process.env.INDEXER_URL || 'https://dev.smk.somnia.host/v1/graphql',
+  OPERATOR_PRIVATE_KEY: process.env.OPERATOR_PRIVATE_KEY || process.env.PRIVATE_KEY || '0x0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef',
   GROQ_KEYS: finalGroqKeys,
 });
 

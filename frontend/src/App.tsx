@@ -19,6 +19,7 @@ import { SweeperControls } from './components/SweeperControls.js';
 import { SessionDelegationModal } from './components/SessionDelegationModal.js';
 import { useKeyboardShortcuts } from './hooks/useKeyboardShortcuts.js';
 import { soundEngine } from './services/audio.js';
+import { apiClient } from './services/api.js';
 
 interface StatItemProps {
   glyph: string;
@@ -106,6 +107,7 @@ export const App: React.FC = () => {
     activeSession,
     isLoading: isSessionLoading,
     isSigning: isSessionSigning,
+    stepState: sessionStepState,
     error: sessionError,
     connectWallet,
     switchNetwork,
@@ -160,12 +162,28 @@ export const App: React.FC = () => {
     },
   });
 
-  // Compute live spot prices from recent ticks
-  const currentSpotPrices: Record<string, number> = {
-    'BTC/USD': 96450.0,
-    'ETH/USD': 2745.5,
-    'SOL/USD': 188.25,
-  };
+  const [initialSpotPrices, setInitialSpotPrices] = useState<Record<string, number>>({});
+
+  // Initial load of live spot prices from REST API
+  useEffect(() => {
+    apiClient
+      .getSpotPrices()
+      .then((res) => {
+        if (res.success && res.data) {
+          const prices: Record<string, number> = {};
+          for (const [sym, ticker] of Object.entries(res.data)) {
+            prices[sym] = ticker.price;
+          }
+          setInitialSpotPrices(prices);
+        }
+      })
+      .catch((_err) => {
+        // Fallback silently
+      });
+  }, []);
+
+  // Compute live spot prices dynamically from initial snapshot + live WebSocket telemetry ticks
+  const currentSpotPrices: Record<string, number> = { ...initialSpotPrices };
 
   for (const [, tick] of liveTicks.entries()) {
     if (tick.symbol && tick.spotPrice) {
@@ -544,6 +562,7 @@ export const App: React.FC = () => {
         activeSession={activeSession}
         isSigning={isSessionSigning}
         isLoading={isSessionLoading}
+        stepState={sessionStepState}
         error={sessionError}
         onConnectWallet={connectWallet}
         onSwitchNetwork={switchNetwork}
