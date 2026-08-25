@@ -1,5 +1,6 @@
 -- ==============================================================================
--- DreamPulse - Supabase PostgreSQL Schema & Realtime Configuration
+-- Migration: 001_initial_schema.sql
+-- Description: Initial schema for DreamPulse (Markets, Sessions, Strategies, Orders, Sweeps, Logs, Backtests)
 -- ==============================================================================
 
 -- Enable UUID extension
@@ -138,7 +139,7 @@ CREATE TABLE IF NOT EXISTS public.backtests (
 );
 
 -- ------------------------------------------------------------------------------
--- Indices for High-Frequency Quantitative Queries
+-- Indices for High-Frequency Queries
 -- ------------------------------------------------------------------------------
 CREATE INDEX IF NOT EXISTS idx_markets_status ON public.markets(status);
 CREATE INDEX IF NOT EXISTS idx_markets_symbol_window ON public.markets(symbol, window_duration);
@@ -161,11 +162,9 @@ ALTER TABLE public.sweeps ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.agent_logs ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.backtests ENABLE ROW LEVEL SECURITY;
 
--- Markets & Agent Logs are public read
 CREATE POLICY "Public Read Markets" ON public.markets FOR SELECT USING (true);
 CREATE POLICY "Public Read Agent Logs" ON public.agent_logs FOR SELECT USING (true);
 
--- User-scoped read/write for Sessions, Orders, Sweeps, Strategies, Backtests
 CREATE POLICY "User Read Own Sessions" ON public.sessions FOR SELECT USING (true);
 CREATE POLICY "User Modify Own Sessions" ON public.sessions FOR ALL USING (true);
 
@@ -178,22 +177,3 @@ CREATE POLICY "User Insert Own Orders" ON public.orders FOR INSERT WITH CHECK (t
 CREATE POLICY "User Read Own Sweeps" ON public.sweeps FOR SELECT USING (true);
 CREATE POLICY "User Read Own Backtests" ON public.backtests FOR SELECT USING (true);
 CREATE POLICY "User Insert Own Backtests" ON public.backtests FOR INSERT WITH CHECK (true);
-
--- ------------------------------------------------------------------------------
--- 8. Persistent System State & Key Rotation Index
--- ------------------------------------------------------------------------------
-CREATE TABLE IF NOT EXISTS public.system_state (
-    key VARCHAR(100) PRIMARY KEY,
-    value JSONB NOT NULL,
-    description TEXT,
-    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
-);
-
-ALTER TABLE public.system_state ENABLE ROW LEVEL SECURITY;
-CREATE POLICY "Public Read System State" ON public.system_state FOR SELECT USING (true);
-CREATE POLICY "Service Role Modify System State" ON public.system_state FOR ALL USING (true);
-
-INSERT INTO public.system_state (key, value, description)
-VALUES ('groq_key_rotation', '{"current_index": 0, "total_keys": 20}'::jsonb, 'Tracks round-robin Groq key index across server restarts')
-ON CONFLICT (key) DO NOTHING;
-

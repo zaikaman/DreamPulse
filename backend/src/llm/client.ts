@@ -1,15 +1,6 @@
 import OpenAI from 'openai';
 import { env } from '../config/env.js';
-
-/**
- * OpenAI-compatible Google Gemini LLM Client.
- */
-export const llmClient = new OpenAI({
-  baseURL: env.GEMINI_BASE_URL,
-  apiKey: env.GEMINI_API_KEY || 'dummy-key',
-});
-
-export const GEMINI_MODEL = env.GEMINI_MODEL || 'gemini-2.5-flash';
+import { supabase } from '../config/supabase.js';
 
 export interface StructuredReasoningRequest {
   systemPrompt: string;
@@ -27,38 +18,197 @@ export interface StructuredAgentThought {
   metadata?: Record<string, unknown>;
 }
 
+// ------------------------------------------------------------------------------
+// Groq Multi-Key Client Pool & Persistent Round-Robin Index
+// ------------------------------------------------------------------------------
+const groqClients: Map<string, OpenAI> = new Map();
+let currentGroqKeyIndex = 0;
+let isInitialized = false;
+
+function getGroqClient(apiKey: string): OpenAI {
+  let client = groqClients.get(apiKey);
+  if (!client) {
+    client = new OpenAI({
+      baseURL: env.GROQ_BASE_URL,
+      apiKey: apiKey,
+    });
+    groqClients.set(apiKey, client);
+  }
+  return client;
+}
+
 /**
- * Generates structured JSON reasoning from Gemini using OpenAI compatible completions.
+ * Initializes the round-robin key index from Supabase system_state table across server restarts.
+ */
+export async function initPersistentKeyIndex(): Promise<number> {
+  if (isInitialized) return currentGroqKeyIndex;
+  try {
+    const { data, error } = await supabase
+      .from('system_state')
+      .select('value')
+      .eq('key', 'groq_key_rotation')
+      .single();
+
+    if (!error && data?.value && typeof data.value.current_index === 'number') {
+      const totalKeys = env.GROQ_KEYS?.length || 1;
+      currentGroqKeyIndex = data.value.current_index % totalKeys;
+      console.log(`[LLM Key Rotator] Restored Groq key index from database: ${currentGroqKeyIndex}`);
+    }
+  } catch (_err) {
+    // If Supabase is offline/fresh, fallback gracefully to in-memory start
+  }
+  isInitialized = true;
+  return currentGroqKeyIndex;
+}
+
+/**
+ * Persists updated key rotation state to Supabase asynchronously (non-blocking).
+ */
+let persistTimeout: NodeJS.Timeout | null = null;
+export function schedulePersistKeyIndex(index: number): void {
+  if (persistTimeout) clearTimeout(persistTimeout);
+  persistTimeout = setTimeout(async () => {
+    try {
+      await supabase
+        .from('system_state')
+        .upsert({
+          key: 'groq_key_rotation',
+          value: {
+            current_index: index,
+            total_keys: env.GROQ_KEYS?.length || 0,
+            last_rotated_at: new Date().toISOString(),
+          },
+          updated_at: new Date().toISOString(),
+        });
+    } catch (_err) {
+      // Non-fatal background sync
+    }
+  }, 1000);
+}
+
+// ------------------------------------------------------------------------------
+// Gemini Fallback Client Singleton
+// ------------------------------------------------------------------------------
+let geminiFallbackClient: OpenAI | null = null;
+
+function getGeminiClient(): OpenAI {
+  if (!geminiFallbackClient) {
+    geminiFallbackClient = new OpenAI({
+      baseURL: env.GEMINI_BASE_URL,
+      apiKey: env.GEMINI_API_KEY || 'dummy-key',
+    });
+  }
+  return geminiFallbackClient;
+}
+
+/**
+ * Extracts valid JSON block from raw model output (handles reasoning models with <think> blocks).
+ */
+export function extractJsonFromText(text: string): string | null {
+  if (!text) return null;
+  const cleaned = text.replace(/```json/gi, '').replace(/```/g, '').trim();
+  const match = cleaned.match(/\{[\s\S]*\}/);
+  if (match) {
+    try {
+      JSON.parse(match[0]);
+      return match[0];
+    } catch (_err) {
+      return null;
+    }
+  }
+  return null;
+}
+
+/**
+ * Returns the next available Groq key using atomic round-robin rotation and saves to DB.
+ */
+export function getNextGroqKey(): string | null {
+  const keys = env.GROQ_KEYS;
+  if (!keys || keys.length === 0) return null;
+  const key = keys[currentGroqKeyIndex % keys.length];
+  currentGroqKeyIndex = (currentGroqKeyIndex + 1) % keys.length;
+  schedulePersistKeyIndex(currentGroqKeyIndex);
+  return key;
+}
+
+export function getCurrentGroqKeyIndex(): number {
+  return currentGroqKeyIndex;
+}
+
+export function setGroqKeyIndex(index: number): void {
+  currentGroqKeyIndex = index;
+  schedulePersistKeyIndex(index);
+}
+
+/**
+ * Generates structured JSON reasoning with priority hierarchy:
+ * 1. Groq multi-key pool with round-robin rotation & auto-retry on 429/errors.
+ * 2. Gemini fallback endpoint if all Groq keys fail.
+ * 3. Local deterministic quantitative generator if all LLMs are unreachable.
  */
 export async function generateStructuredReasoning(
   request: StructuredReasoningRequest,
 ): Promise<string> {
-  // If in test or mock environment without a real API key, return deterministic structured text
-  if (!env.GEMINI_API_KEY || env.GEMINI_API_KEY.includes('mock') || env.GEMINI_API_KEY === 'dummy-key') {
-    return JSON.stringify({
-      confidence: 0.92,
-      thought: 'Evaluated quantitative edge on Somnia Shannon CLOB. Executing deterministic rule strategy.',
-    });
+  const groqKeys = env.GROQ_KEYS || [];
+  const maxGroqAttempts = Math.min(3, groqKeys.length);
+
+  // 1. Try Groq Pool in Round-Robin order
+  for (let attempt = 0; attempt < maxGroqAttempts; attempt++) {
+    const apiKey = getNextGroqKey();
+    if (!apiKey) break;
+
+    try {
+      const groq = getGroqClient(apiKey);
+      const response = await groq.chat.completions.create({
+        model: env.GROQ_MODEL,
+        messages: [
+          { role: 'system', content: request.systemPrompt },
+          { role: 'user', content: request.userPrompt },
+        ],
+        temperature: request.temperature ?? 0.2,
+        max_tokens: request.maxTokens ?? 1000,
+      });
+
+      const rawContent = response.choices[0]?.message?.content || '';
+      const extractedJson = extractJsonFromText(rawContent);
+      if (extractedJson) {
+        return extractedJson;
+      }
+    } catch (groqErr) {
+      const errMsg = groqErr instanceof Error ? groqErr.message : String(groqErr);
+      console.warn(`[LLM Groq Rotation] Key failed (attempt ${attempt + 1}/${maxGroqAttempts}): ${errMsg}`);
+    }
   }
 
-  try {
-    const response = await llmClient.chat.completions.create({
-      model: GEMINI_MODEL,
-      messages: [
-        { role: 'system', content: request.systemPrompt },
-        { role: 'user', content: request.userPrompt },
-      ],
-      temperature: request.temperature ?? 0.2,
-      max_tokens: request.maxTokens ?? 300,
-      response_format: { type: 'json_object' },
-    });
+  // 2. Secondary Fallback: Gemini Client
+  if (env.GEMINI_API_KEY && !env.GEMINI_API_KEY.includes('mock') && env.GEMINI_API_KEY !== 'dummy-key') {
+    try {
+      console.log('[LLM Fallback] Groq pool exhausted or errored. Failing over to Gemini...');
+      const gemini = getGeminiClient();
+      const response = await gemini.chat.completions.create({
+        model: env.GEMINI_MODEL,
+        messages: [
+          { role: 'system', content: request.systemPrompt },
+          { role: 'user', content: request.userPrompt },
+        ],
+        temperature: request.temperature ?? 0.2,
+        max_tokens: request.maxTokens ?? 300,
+      });
 
-    return response.choices[0]?.message?.content || '{}';
-  } catch (error) {
-    console.warn('[Gemini Client] LLM request fallback to deterministic mode:', error instanceof Error ? error.message : error);
-    return JSON.stringify({
-      confidence: 0.88,
-      thought: 'Autonomous quantitative signal calculated from Black-Scholes probability Φ(z).',
-    });
+      const rawContent = response.choices[0]?.message?.content || '';
+      const extractedJson = extractJsonFromText(rawContent);
+      if (extractedJson) {
+        return extractedJson;
+      }
+    } catch (geminiErr) {
+      const errMsg = geminiErr instanceof Error ? geminiErr.message : String(geminiErr);
+      console.warn(`[LLM Gemini Fallback] Gemini endpoint failed: ${errMsg}`);
+    }
   }
+
+  // 3. Tertiary Fallback: Local Deterministic Reasoning
+  return JSON.stringify({
+    confidence: 0.92,
+    thought: 'Evaluated quantitative edge on Somnia Shannon CLOB. Executing deterministic rule strategy.',
+  });
 }

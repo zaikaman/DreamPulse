@@ -3,6 +3,16 @@ import { z } from 'zod';
 
 dotenv.config();
 
+// Extract all GROQ_API_KEY* variables from environment
+const rawGroqKeys: string[] = [];
+if (process.env.GROQ_API_KEY) rawGroqKeys.push(process.env.GROQ_API_KEY.trim());
+for (let i = 2; i <= 50; i++) {
+  const key = process.env[`GROQ_API_KEY_${i}`];
+  if (key && key.trim()) {
+    rawGroqKeys.push(key.trim());
+  }
+}
+
 const envSchema = z.object({
   PORT: z.string().default('5000').transform((val) => parseInt(val, 10)),
   NODE_ENV: z.enum(['development', 'production', 'test']).default('development'),
@@ -12,7 +22,12 @@ const envSchema = z.object({
   SUPABASE_SERVICE_ROLE_KEY: z.string().default('mock-service-role-key'),
   SUPABASE_ANON_KEY: z.string().default('mock-anon-key'),
 
-  // Gemini LLM (OpenAI compatible)
+  // Groq LLM (Primary Pool with Round-Robin Rotation)
+  GROQ_BASE_URL: z.string().default('https://api.groq.com/openai/v1'),
+  GROQ_MODEL: z.string().default('qwen/qwen3.6-27b'),
+  GROQ_KEYS: z.array(z.string()).default(rawGroqKeys),
+
+  // Gemini LLM (Secondary Fallback)
   GEMINI_BASE_URL: z.string().default('https://generativelanguage.googleapis.com/v1beta/openai/'),
   GEMINI_API_KEY: z.string().default('mock-gemini-key'),
   GEMINI_MODEL: z.string().default('gemini-2.5-flash'),
@@ -28,4 +43,7 @@ const envSchema = z.object({
   DREAMDEX_VENUE_ID: z.string().default('0x679795a0195a1b76cdebb7c51d74e058aee92919b8c3389af86ef24535e8a28c'),
 });
 
-export const env = envSchema.parse(process.env);
+export const env = envSchema.parse({
+  ...process.env,
+  GROQ_KEYS: rawGroqKeys.length > 0 ? rawGroqKeys : undefined,
+});

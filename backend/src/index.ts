@@ -34,10 +34,14 @@ app.use(errorHandler);
 telemetryWsGateway.initialize(server);
 
 if (process.env.NODE_ENV !== 'test') {
-  server.listen(env.PORT, () => {
+  server.listen(env.PORT, async () => {
     console.log(`[DreamPulse Engine] HTTP & WebSocket Server listening on port ${env.PORT}`);
     console.log(`[DreamPulse Engine] REST API: http://localhost:${env.PORT}/api/v1`);
     console.log(`[DreamPulse Engine] WebSocket Stream: ws://localhost:${env.PORT}/ws/telemetry`);
+
+    // Restore persistent Groq key index from database
+    const { initPersistentKeyIndex } = await import('./llm/client.js');
+    await initPersistentKeyIndex();
   });
 }
 

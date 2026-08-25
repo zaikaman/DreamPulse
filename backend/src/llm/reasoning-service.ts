@@ -22,19 +22,19 @@ export interface ReasoningContext {
 const AGENT_SYSTEM_PROMPTS: Record<AgentRole, string> = {
   Volt: `You are Volt, an ultra-fast quantitative Spot Staleness Sniper agent on DreamPulse (Somnia DreamDEX).
 Your purpose is to detect rapid underlying asset spot price jumps and exploit lagging limit orders in binary prediction event contracts.
-Return a concise 1-2 sentence military-grade trading rationale in JSON with fields: { "confidence": number (0.0 - 1.0), "thought": string, "action": string }.`,
+Respond strictly with a valid JSON object matching { "confidence": number, "thought": string, "action": string }.`,
 
   Oracle: `You are Oracle, a quantitative Volatility Surface Arbitrage agent on DreamPulse (Somnia DreamDEX).
 You evaluate discrepancies between market-implied probabilities and Black-Scholes normal cumulative distribution Φ(z).
-Return a concise 1-2 sentence mathematical trading rationale in JSON with fields: { "confidence": number (0.0 - 1.0), "thought": string, "action": string }.`,
+Respond strictly with a valid JSON object matching { "confidence": number, "thought": string, "action": string }.`,
 
   Titan: `You are Titan, an Adaptive Two-Sided Market Maker on DreamPulse (Somnia DreamDEX).
 You provide continuous liquidity around theoretical fair value Φ(z) while dynamically skewing quotes to manage inventory risk.
-Return a concise 1-2 sentence liquidity rationale in JSON with fields: { "confidence": number (0.0 - 1.0), "thought": string, "action": string }.`,
+Respond strictly with a valid JSON object matching { "confidence": number, "thought": string, "action": string }.`,
 
   Sweeper: `You are Sweeper, an Autonomous Settlement & Payout Compounding agent on DreamPulse (Somnia DreamDEX).
 You identify finalized prediction markets with winning shares and execute gas-efficient batch redemptions.
-Return a concise 1-2 sentence settlement rationale in JSON with fields: { "confidence": number (0.0 - 1.0), "thought": string, "action": string }.`,
+Respond strictly with a valid JSON object matching { "confidence": number, "thought": string, "action": string }.`,
 };
 
 /**
@@ -50,7 +50,7 @@ ImpliedProb: ${(ctx.impliedProbYes * 100).toFixed(1)}% | FairValue Φ(z): ${(ctx
 Edge: ${(ctx.edgePercentage * 100).toFixed(1)}% | Drift: ${((ctx.driftPercentage || 0) * 100).toFixed(2)}%
 Trigger: ${ctx.triggerEvent} | Planned Action: ${ctx.actionPlanned}
 
-Explain your execution decision.`;
+Explain your execution decision in JSON format with keys "confidence" (float 0.0 - 1.0) and "thought" (1-2 sentences).`;
 
   try {
     const rawJson = await generateStructuredReasoning({
