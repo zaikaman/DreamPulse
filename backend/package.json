@@ -2,7 +2,7 @@
   "name": "dreampulse-backend",
   "version": "1.0.0",
   "private": true,
-  "description": "DreamPulse AI Backend Daemon & Multi-Agent Quantitative Swarm Engine",
+  "description": "DreamPulse Backend Daemon & Multi-Agent Quantitative Swarm Engine",
   "type": "module",
   "main": "dist/index.js",
   "engines": {

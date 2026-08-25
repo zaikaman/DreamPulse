@@ -1,4 +1,4 @@
-# Technical Research & Architectural Decisions: DreamPulse AI
+# Technical Research & Architectural Decisions: DreamPulse
 
 **Feature Directory**: `specs/001-dreampulse-ai`  
 **Date**: 2026-08-25  

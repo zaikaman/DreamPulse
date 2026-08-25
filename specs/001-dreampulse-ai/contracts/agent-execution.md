@@ -1,4 +1,4 @@
-# Multi-Agent Swarm Strategy Execution Contract: DreamPulse AI
+# Multi-Agent Swarm Strategy Execution Contract: DreamPulse
 
 **Agents**: `Volt` (Sniper), `Oracle` (Volatility Arb), `Titan` (Market Maker), `Sweeper` (Auto-Claimer)  
 

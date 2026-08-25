@@ -1,4 +1,4 @@
-# Specification Quality Checklist: DreamPulse AI
+# Specification Quality Checklist: DreamPulse
 
 **Purpose**: Validate specification completeness and quality before proceeding to planning  
 **Created**: 2026-08-25  

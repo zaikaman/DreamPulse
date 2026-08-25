@@ -1,4 +1,4 @@
-# Quickstart & Deployment Guide: DreamPulse AI
+# Quickstart & Deployment Guide: DreamPulse
 
 **Feature Directory**: `specs/001-dreampulse-ai`  
 **Date**: 2026-08-25  
@@ -80,7 +80,7 @@ cd ../frontend
 npm install
 npm run dev
 ```
-Open `http://localhost:5173` to access the DreamPulse AI Cyber-Terminal.
+Open `http://localhost:5173` to access the DreamPulse Cyber-Terminal.
 
 ---
 

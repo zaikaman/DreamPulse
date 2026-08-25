@@ -1,4 +1,4 @@
-# REST API Contract Specification: DreamPulse AI
+# REST API Contract Specification: DreamPulse
 
 **Base URL**: `/api/v1`  
 **Protocol**: HTTP/1.1 JSON  

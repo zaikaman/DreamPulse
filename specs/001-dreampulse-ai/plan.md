@@ -1,4 +1,4 @@
-# Implementation Plan: DreamPulse AI
+# Implementation Plan: DreamPulse
 
 **Branch**: `main` | **Date**: 2026-08-25 | **Spec**: [specs/001-dreampulse-ai/spec.md](file:///d:/DreamPulse/specs/001-dreampulse-ai/spec.md)  
 **Input**: Feature specification from `/specs/001-dreampulse-ai/spec.md` and architecture directives from `IDEA.md`
@@ -7,7 +7,7 @@
 
 ## Summary
 
-DreamPulse AI is an autonomous, quantitative multi-agent trading ecosystem, real-time edge radar terminal, and non-custodial copy-vault built for DreamDEX Event Contracts on Somnia Layer 1. The application consists of a high-performance React + Vite cyber-terminal deployed on Vercel, a Node.js + Express multi-agent daemon backend deployed on Heroku, Supabase PostgreSQL with real-time subscriptions for state persistence, and Google Gemini via OpenAI-compatible endpoints for high-speed agent reasoning.
+DreamPulse is an autonomous, quantitative multi-agent trading ecosystem, real-time edge radar terminal, and non-custodial copy-vault built for DreamDEX Event Contracts on Somnia Layer 1. The application consists of a high-performance React + Vite cyber-terminal deployed on Vercel, a Node.js + Express multi-agent daemon backend deployed on Heroku, Supabase PostgreSQL with real-time subscriptions for state persistence, and Google Gemini via OpenAI-compatible endpoints for high-speed agent reasoning.
 
 ---
 

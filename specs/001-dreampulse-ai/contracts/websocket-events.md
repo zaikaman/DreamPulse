@@ -1,4 +1,4 @@
-# WebSocket Real-Time Event Contracts: DreamPulse AI
+# WebSocket Real-Time Event Contracts: DreamPulse
 
 **Endpoint**: `ws://<backend-host>/ws/telemetry` or Socket.io connection  
 **Payload Format**: JSON  

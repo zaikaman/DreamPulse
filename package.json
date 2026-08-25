@@ -1,8 +1,8 @@
 {
-  "name": "dreampulse-ai-workspace",
+  "name": "dreampulse-workspace",
   "version": "1.0.0",
   "private": true,
-  "description": "DreamPulse AI - Autonomous Multi-Agent Trading Swarm on Somnia DreamDEX",
+  "description": "DreamPulse - Autonomous Multi-Agent Trading Swarm on Somnia DreamDEX",
   "workspaces": [
     "backend",
     "frontend"

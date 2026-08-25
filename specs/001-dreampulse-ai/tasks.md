@@ -1,4 +1,4 @@
-# Tasks: DreamPulse AI
+# Tasks: DreamPulse
 
 **Input**: Design documents from `/specs/001-dreampulse-ai/`  
 **Prerequisites**: [plan.md](file:///d:/DreamPulse/specs/001-dreampulse-ai/plan.md), [spec.md](file:///d:/DreamPulse/specs/001-dreampulse-ai/spec.md), [data-model.md](file:///d:/DreamPulse/specs/001-dreampulse-ai/data-model.md), [research.md](file:///d:/DreamPulse/specs/001-dreampulse-ai/research.md), [contracts/](file:///d:/DreamPulse/specs/001-dreampulse-ai/contracts/)  

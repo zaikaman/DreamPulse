@@ -1,4 +1,4 @@
-# Session Key & Operator Permissions Contract: DreamPulse AI
+# Session Key & Operator Permissions Contract: DreamPulse
 
 **Protocol**: Somnia `OperatorPermissionsRegistry`  
 **Network**: Somnia Shannon Testnet (`Chain ID: 50312`)  
@@ -7,7 +7,7 @@
 
 ## 1. Permission Delegation Specification
 
-To ensure non-custodial safety, DreamPulse AI interacts exclusively through Somnia's `OperatorPermissionsRegistry`.
+To ensure non-custodial safety, DreamPulse interacts exclusively through Somnia's `OperatorPermissionsRegistry`.
 
 ### 1.1 Permitted Operations
 - `placeLimitOrderFor(address delegator, bytes32 marketId, uint8 outcome, uint256 price, uint256 amount)`

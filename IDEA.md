@@ -1,15 +1,15 @@
-# ⚡ DreamPulse AI
+# ⚡ DreamPulse
 ### *Autonomous Multi-Agent Swarm, Real-Time Edge Radar & Non-Custodial Copy-Vault for DreamDEX Event Contracts on Somnia*
 
 ---
 
 ## 🌟 1. Executive Summary
 
-**DreamPulse AI** is the first autonomous, quantitative multi-agent trading ecosystem and high-frequency edge terminal purpose-built for **DreamDEX Event Contracts** on **Somnia Layer 1**. 
+**DreamPulse** is the first autonomous, quantitative multi-agent trading ecosystem and high-frequency edge terminal purpose-built for **DreamDEX Event Contracts** on **Somnia Layer 1**. 
 
 In high-speed binary prediction markets (5-minute, 15-minute, and 1-hour BTC/ETH windows), manual human trading cannot compete: mathematical probability pricing $\Phi(z)$, volatility tracking, order book staleness, and claim cycles move too fast. 
 
-**DreamPulse AI** bridges this gap by combining:
+**DreamPulse** bridges this gap by combining:
 1. **An Autonomous AI Agent Swarm:** Specialized quantitative agents running automated strategies (Staleness Arbitrage, Volatility Surface Arbitrage, Adaptive Market Making, and Auto-Settlement).
 2. **Zero-Custody Session Key Delegation:** Enabling any user to 1-click delegate execution to an AI agent swarm via Somnia's `OperatorPermissionsRegistry`—with strict zero-withdrawal guarantees.
 3. **High-Frequency Visual Edge Radar:** A terminal visualising live order books, implied probability versus fair mathematical value discrepancies, and on-chain agent reasoning in real time.
@@ -19,7 +19,7 @@ In high-speed binary prediction markets (5-minute, 15-minute, and 1-hour BTC/ETH
 
 ## 🎯 2. The Problem & Market Opportunity
 
-| The Challenge | Why It Hurts DreamDEX / Users | How DreamPulse AI Solves It |
+| The Challenge | Why It Hurts DreamDEX / Users | How DreamPulse Solves It |
 | :--- | :--- | :--- |
 | **Rapid 5m/15m Expiries** | Retail traders cannot manually monitor and compute probabilities for short-window contracts continuously. | **Autonomous Swarm:** 24/7 automated agents evaluate price feeds, calculate drift, and execute in milliseconds. |
 | **Pricing Inefficiency & Staleness** | When underlying spot (BTC/ETH) jumps, resting CLOB quotes lag, creating temporary mispricings. | **`Volt` Sniper Agent:** Detects spot drift and fires instant IOC orders to capture risk-free mathematical edge. |
@@ -101,7 +101,7 @@ In high-speed binary prediction markets (5-minute, 15-minute, and 1-hour BTC/ETH
 
 ## 🏆 4. Hackathon Judging Matrix Alignment
 
-| Criteria | Weight | How DreamPulse AI Wins |
+| Criteria | Weight | How DreamPulse Wins |
 | :--- | :---: | :--- |
 | **Innovation & Originality** | **20%** | Novel synthesis of autonomous AI agents, quantitative event pricing $\Phi(z)$, staleness arbitrage, and session-key non-custodial delegation. |
 | **Technical Implementation** | **25%** | Deep integration with `@dreamdex-bot-kit/ec-core`, `@somnia-chain/markets-sdk`, Somnia testnet contracts, WebSocket feeds, and quantized lot/tick execution. |

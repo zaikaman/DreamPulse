@@ -1,4 +1,4 @@
-# Feature Specification: DreamPulse AI
+# Feature Specification: DreamPulse
 
 **Feature Directory**: `specs/001-dreampulse-ai`  
 **Created**: 2026-08-25  

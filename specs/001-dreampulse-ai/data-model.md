@@ -1,4 +1,4 @@
-# Data Model & Schema Specification: DreamPulse AI
+# Data Model & Schema Specification: DreamPulse
 
 **Feature Directory**: `specs/001-dreampulse-ai`  
 **Date**: 2026-08-25  
