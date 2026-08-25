@@ -141,6 +141,8 @@ export const apiClient = {
     status?: string;
     outcome?: string;
     marketId?: string;
+    scope?: 'ALL_SWARM' | 'MY_ORDERS' | 'ALL';
+    swarmOnly?: boolean;
     limit?: number;
     page?: number;
     pageSize?: number;
@@ -158,6 +160,7 @@ export const apiClient = {
   }> {
     const searchParams = new URLSearchParams();
     if (params?.userAddress) searchParams.append('userAddress', params.userAddress);
+    if (params?.swarmOnly || params?.scope === 'ALL_SWARM') searchParams.append('swarmOnly', 'true');
     if (params?.agentType && params.agentType !== 'ALL') searchParams.append('agentType', params.agentType);
     if (params?.status && params.status !== 'ALL') searchParams.append('status', params.status);
     if (params?.outcome && params.outcome !== 'ALL') searchParams.append('outcome', params.outcome);

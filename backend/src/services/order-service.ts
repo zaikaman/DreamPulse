@@ -36,6 +36,8 @@ export interface QueryOrdersParams {
   status?: OrderStatus;
   outcome?: OutcomeType;
   searchQuery?: string;
+  scope?: 'SWARM' | 'MY_ORDERS' | 'ALL';
+  swarmOnly?: boolean;
   limit?: number;
   offset?: number;
 }
@@ -61,6 +63,7 @@ const CIRCUIT_BREAKER_THRESHOLD = 5;
 const CIRCUIT_BREAKER_COOLDOWN_MS = 120_000;
 const poolFailureUntil = new Map<string, number>();
 const POOL_FAILURE_COOLDOWN_MS = 10 * 60 * 1000; // per-pool 10m cooldown after revert to avoid gas drain on bad pools
+const orderOnchainMarketCache = new Map<string, { data: MarketOnchain; expiresAt: number }>();
 
 /**
  * Ensures the operator wallet has sufficient TestUSDC collateral for swarm order execution.
@@ -346,8 +349,10 @@ export class OrderService {
     }
   }
 
+  public readonly initPromise: Promise<void>;
+
   constructor() {
-    this.initializeFromDb().catch((err) => {
+    this.initPromise = this.initializeFromDb().catch((err) => {
       console.warn('[OrderService] DB load warning (using in-memory store):', err.message);
     });
     ensureOperatorCollateral().catch((err: any) => {
@@ -414,7 +419,10 @@ export class OrderService {
     // Hydrate missing market snapshots from DB so old orders (without snapshot) can still settle to accurate PnL even if market evicted from memory
     await this.hydrateMarketSnapshotsFromDb().catch(() => {});
 
-    // Reconcile only truly unsettled orders whose market expired while server was stopped
+    // Authoritative on-chain healing: verify all on-chain hex orders against actual smart contract settlements
+    await this.reconcileSettledOrdersWithOnChain().catch(() => {});
+
+    // Reconcile remaining unsettled orders whose market expired
     await this.syncResolvedOrdersPnLAsync({ force: true }).catch(() => {});
   }
 
@@ -530,10 +538,20 @@ export class OrderService {
     let onchain: MarketOnchain | null = null;
 
     if (market?.marketIdHex && market.marketIdHex.startsWith('0x')) {
-      try {
-        onchain = await somniaExchange.client.getMarketOnchain(market.marketIdHex as Hex);
-      } catch {
-        // Fallback for rolling markets
+      const cacheKey = market.marketIdHex.toLowerCase();
+      const now = Date.now();
+      const cached = orderOnchainMarketCache.get(cacheKey);
+      if (cached && now < cached.expiresAt) {
+        onchain = cached.data;
+      } else {
+        try {
+          onchain = await somniaExchange.client.getMarketOnchain(market.marketIdHex as Hex);
+          if (onchain) {
+            orderOnchainMarketCache.set(cacheKey, { data: onchain, expiresAt: now + 2000 });
+          }
+        } catch {
+          // Fallback for rolling markets
+        }
       }
     }
 
@@ -631,7 +649,26 @@ export class OrderService {
           } else {
             // Copy-trade execution:
             // Collateral is pulled from user via transferFrom(targetTrader, operatorAddress, need)
-            const tradeCost = (priceYes * rawQuantity) / one;
+            const tradeCost = (rawPriceOwn * rawQuantity) / one;
+            let collateralPulled = false;
+
+            const refundCollateralIfPulled = async () => {
+              if (collateralPulled && tradeCost > 0n && process.env.NODE_ENV !== 'test') {
+                try {
+                  const refHash = await executeOperatorWriteContract({
+                    address: SOMNIA_ADDRESSES.testUsdc,
+                    abi: ERC20_ABI,
+                    functionName: 'transfer',
+                    args: [targetTrader, tradeCost],
+                  });
+                  await publicClient.waitForTransactionReceipt({ hash: refHash, timeout: 60_000 });
+                  console.info(`[OrderService] Collateral of ${tradeCost} tUSDC auto-refunded to ${targetTrader} (tx: ${refHash})`);
+                } catch (refErr: any) {
+                  console.error(`[OrderService] CRITICAL: Collateral auto-refund to ${targetTrader} failed:`, refErr.message);
+                }
+              }
+            };
+
             if (direction === 'BUY') {
               try {
                 const tfHash = await executeOperatorWriteContract({
@@ -644,6 +681,7 @@ export class OrderService {
                 if (tfReceipt.status === 'reverted') {
                   throw new Error(`transferFrom collateral pull reverted for ${targetTrader} (tx: ${tfHash})`);
                 }
+                collateralPulled = true;
               } catch (tfErr: any) {
                 console.warn(`[OrderService] transferFrom failed for copy-trader ${targetTrader}:`, tfErr.message);
                 return null;
@@ -651,28 +689,36 @@ export class OrderService {
             }
 
             // Execute order placement via SDK
-            const placeRes = await executeOperatorTx(() =>
-              somniaExchange.trader.placeOrder({
-                pool: onchain.pool,
-                side: binarySide,
-                price: priceYes,
-                quantity: rawQuantity,
-                outcomeToken: onchain.outcomeToken,
-                yesId: onchain.yesId,
-                noId: onchain.noId,
-                collateral: onchain.collateral || SOMNIA_ADDRESSES.collateral,
-                orderType: orderTypeEnum,
-                expireTimestampNs,
-                gas: 10_000_000n,
-              }),
-            );
+            let placeRes: any = null;
+            try {
+              placeRes = await executeOperatorTx(() =>
+                somniaExchange.trader.placeOrder({
+                  pool: onchain.pool,
+                  side: binarySide,
+                  price: priceYes,
+                  quantity: rawQuantity,
+                  outcomeToken: onchain.outcomeToken,
+                  yesId: onchain.yesId,
+                  noId: onchain.noId,
+                  collateral: onchain.collateral || SOMNIA_ADDRESSES.collateral,
+                  orderType: orderTypeEnum,
+                  expireTimestampNs,
+                  gas: 10_000_000n,
+                }),
+              );
 
-            if (placeRes?.receipt?.status === 'reverted') {
-              throw new Error(`Copy-trade placement reverted on-chain (tx: ${placeRes.hash})`);
-            }
-            if (placeRes && (placeRes as any).success === false) {
-              console.info(`[OrderService] Copy-trade order silently rejected (success=false) for ${onchain.pool} — no on-chain log, skipping`);
-              return null;
+              if (placeRes?.receipt?.status === 'reverted') {
+                await refundCollateralIfPulled();
+                throw new Error(`Copy-trade placement reverted on-chain (tx: ${placeRes.hash})`);
+              }
+              if (placeRes && (placeRes as any).success === false) {
+                console.info(`[OrderService] Copy-trade order silently rejected (success=false) for ${onchain.pool} — refunding collateral`);
+                await refundCollateralIfPulled();
+                return null;
+              }
+            } catch (pErr: any) {
+              await refundCollateralIfPulled();
+              throw pErr;
             }
 
             if (placeRes?.hash) {
@@ -680,7 +726,10 @@ export class OrderService {
               recordOnChainSuccess();
             }
 
-            const filledRaw = (placeRes?.fills ?? []).reduce((acc, f) => acc + f.quantityFilled, 0n);
+            const filledRaw = ((placeRes?.fills ?? []) as Array<{ quantityFilled: bigint }>).reduce(
+              (acc: bigint, f: { quantityFilled: bigint }) => acc + f.quantityFilled,
+              0n,
+            );
             if (placeRes?.orderId !== undefined && filledRaw < rawQuantity) {
               orderStatus = filledRaw > 0n ? 'FILLED' : 'PENDING';
               fillsQuantity = Number(filledRaw) / Number(one);
@@ -688,7 +737,7 @@ export class OrderService {
 
             // For SELL copy-trades, return proceeds to user
             if (direction === 'SELL' && filledRaw > 0n) {
-              const proceeds = (priceYes * filledRaw) / one;
+              const proceeds = (rawPriceOwn * filledRaw) / one;
               if (proceeds > 0n) {
                 try {
                   await executeOperatorWriteContract({
@@ -863,7 +912,10 @@ export class OrderService {
   public getOrders(params?: QueryOrdersParams): OrderExecution[] {
     let result = [...this.orders];
 
-    if (params?.userAddress) {
+    if (params?.swarmOnly || params?.scope === 'SWARM') {
+      const opAddr = (operatorAccount?.address || SOMNIA_ADDRESSES.operatorAccount).toLowerCase();
+      result = result.filter((o) => o.userAddress && o.userAddress.toLowerCase() === opAddr);
+    } else if (params?.userAddress) {
       try {
         if (!isAddress(params.userAddress)) return [];
         const normalized = getAddress(params.userAddress).toLowerCase();
@@ -940,6 +992,8 @@ export class OrderService {
     outcome?: OutcomeType;
     marketId?: string;
     searchQuery?: string;
+    scope?: 'SWARM' | 'MY_ORDERS' | 'ALL';
+    swarmOnly?: boolean;
     limit?: number;
     page?: number;
     pageSize?: number;
@@ -959,6 +1013,8 @@ export class OrderService {
       outcome: params?.outcome,
       marketId: params?.marketId,
       searchQuery: params?.searchQuery,
+      scope: params?.scope,
+      swarmOnly: params?.swarmOnly,
       limit: undefined,
       offset: undefined,
     });
@@ -998,10 +1054,10 @@ export class OrderService {
    * Checks if an agent has an active in-flight trade on a specific market (or any market)
    * that has not yet reached resolution / finalization.
    */
-  public hasActivePosition(agentType: AgentType, marketId?: string): boolean {
+  public hasActivePosition(agentType?: AgentType, marketId?: string): boolean {
     const now = Date.now();
     return this.orders.some((o) => {
-      if (o.agentType !== agentType) return false;
+      if (agentType && o.agentType !== agentType) return false;
       if (o.status !== 'FILLED' && o.status !== 'PENDING') return false;
       if (marketId && o.marketId.toLowerCase() !== marketId.toLowerCase()) return false;
 
@@ -1037,7 +1093,7 @@ export class OrderService {
 
   /**
    * Authoritative, event-driven market settlement.
-   * Settles all orders for the given market exactly ONCE and persists their PnL to Supabase.
+   * Settles all orders for the given market and persists their verified PnL to Supabase.
    */
   public async settleOrdersForMarket(
     marketId: string,
@@ -1045,20 +1101,21 @@ export class OrderService {
     settlementPrice?: number,
     isVoided = false,
   ): Promise<number> {
-    const unsettled = this.orders.filter(
-      (o) => o.marketId === marketId && !o.isSettled && (o.status === 'FILLED' || o.status === 'PENDING'),
+    const isVoid = isVoided || winningOutcome === 'VOID';
+    const targetOrders = this.orders.filter(
+      (o) => o.marketId.toLowerCase() === marketId.toLowerCase() && (o.status === 'FILLED' || o.status === 'PENDING' || !o.isSettled),
     );
-    if (unsettled.length === 0) return 0;
+    if (targetOrders.length === 0) return 0;
 
     const updatedEvents: Array<{ orderId: string; marketId: string; pnl: number; outcome: string; winningOutcome: string }> = [];
     const dbUpdates: Array<Promise<any>> = [];
     const nowIso = new Date().toISOString();
 
-    for (const order of unsettled) {
+    for (const order of targetOrders) {
       const isBuy = order.direction === 'BUY';
       const entryCost = Number((order.price * order.lotSize).toFixed(4));
       let newPnl: number;
-      if (isVoided || winningOutcome === 'VOID') {
+      if (isVoid) {
         const payoutVoid = 0.5 * order.lotSize;
         newPnl = isBuy ? Number((payoutVoid - entryCost).toFixed(2)) : Number((entryCost - payoutVoid).toFixed(2));
       } else {
@@ -1066,9 +1123,16 @@ export class OrderService {
         newPnl = isBuy ? Number((payout - entryCost).toFixed(2)) : Number((entryCost - payout).toFixed(2));
       }
 
+      const pnlChanged = Math.abs((order.pnl || 0) - newPnl) > 0.001;
+      const statusChanged = !order.isSettled || order.status === 'PENDING';
+
+      if (!pnlChanged && !statusChanged) {
+        continue;
+      }
+
       order.pnl = newPnl;
       order.isSettled = true;
-      order.settledAt = nowIso;
+      order.settledAt = order.settledAt || nowIso;
       if (order.status === 'PENDING') order.status = 'FILLED';
 
       updatedEvents.push({
@@ -1076,7 +1140,7 @@ export class OrderService {
         marketId: order.marketId,
         pnl: order.pnl,
         outcome: order.outcome,
-        winningOutcome: isVoided ? 'VOID' : winningOutcome,
+        winningOutcome: isVoid ? 'VOID' : winningOutcome,
       });
 
       dbUpdates.push(
@@ -1088,7 +1152,7 @@ export class OrderService {
                 pnl: order.pnl,
                 status: order.status,
                 is_settled: true,
-                settled_at: nowIso,
+                settled_at: order.settledAt,
               })
               .eq('id', order.id);
             if (res.error && res.error.message.includes('is_settled')) {
@@ -1124,8 +1188,100 @@ export class OrderService {
   }
 
   /**
+   * Scans all stored orders against on-chain Somnia prediction markets to heal any mis-settled historical orders.
+   */
+  public async reconcileSettledOrdersWithOnChain(): Promise<number> {
+    if (process.env.NODE_ENV === 'test') return 0;
+    const hexOrders = this.orders.filter(
+      (o) => o.marketId.startsWith('0x') && o.marketId.length === 66,
+    );
+    if (hexOrders.length === 0) return 0;
+
+    const uniqueMarketIds = [...new Set(hexOrders.map((o) => o.marketId as Hex))];
+    const onchainCache = new Map<string, any>();
+
+    const CONCURRENCY = 8;
+    for (let i = 0; i < uniqueMarketIds.length; i += CONCURRENCY) {
+      const batch = uniqueMarketIds.slice(i, i + CONCURRENCY);
+      await Promise.allSettled(
+        batch.map(async (mktId) => {
+          try {
+            const onchain = await Promise.race([
+              somniaExchange.client.getMarketOnchain(mktId).catch(() => null),
+              new Promise<null>((resolve) => setTimeout(() => resolve(null), 2500)),
+            ]);
+            if (onchain && (onchain.isResolved || onchain.finalized)) {
+              onchainCache.set(mktId.toLowerCase(), onchain);
+            }
+          } catch {}
+        }),
+      );
+    }
+
+    let correctedCount = 0;
+    const dbUpdates: Array<Promise<any>> = [];
+    const nowIso = new Date().toISOString();
+
+    for (const order of hexOrders) {
+      const onchain = onchainCache.get(order.marketId.toLowerCase());
+      if (!onchain) continue;
+
+      const isVoid = onchain.isVoided;
+      const onchainWinner = isVoid ? 'VOID' : (onchain.winningOutcome === 0 ? 'YES' : 'NO');
+      const isBuy = order.direction === 'BUY';
+      const entryCost = Number((order.price * order.lotSize).toFixed(4));
+      let truePnl: number;
+
+      if (isVoid) {
+        const payoutVoid = 0.5 * order.lotSize;
+        truePnl = isBuy ? Number((payoutVoid - entryCost).toFixed(2)) : Number((entryCost - payoutVoid).toFixed(2));
+      } else {
+        const payout = order.outcome === onchainWinner ? order.lotSize * 1.0 : 0;
+        truePnl = isBuy ? Number((payout - entryCost).toFixed(2)) : Number((entryCost - payout).toFixed(2));
+      }
+
+      const needsCorrection = Math.abs((order.pnl || 0) - truePnl) > 0.001 || !order.isSettled;
+      if (needsCorrection) {
+        correctedCount++;
+        order.pnl = truePnl;
+        order.isSettled = true;
+        order.settledAt = order.settledAt || nowIso;
+        if (order.status === 'PENDING') order.status = 'FILLED';
+
+        dbUpdates.push(
+          (async () => {
+            try {
+              const res = await supabase
+                .from('orders')
+                .update({
+                  pnl: truePnl,
+                  status: order.status,
+                  is_settled: true,
+                  settled_at: order.settledAt,
+                })
+                .eq('id', order.id);
+              if (res.error && res.error.message.includes('is_settled')) {
+                await supabase.from('orders').update({ pnl: truePnl, status: order.status }).eq('id', order.id);
+              }
+            } catch {}
+          })(),
+        );
+      }
+    }
+
+    if (correctedCount > 0) {
+      await Promise.allSettled(dbUpdates);
+      this.cachedPnlByKey.clear();
+      this.notifyStateChange();
+      console.log(`[OrderService] Reconciled and corrected ${correctedCount} orders with on-chain truth.`);
+    }
+
+    return correctedCount;
+  }
+
+  /**
    * Computes accurate realized PnL per-trade for unsettled orders whose market has expired.
-   * Settled orders (isSettled: true) are NEVER re-evaluated or overwritten.
+   * On-chain markets (0x...) are strictly evaluated against verified contract state.
    */
   public syncResolvedOrdersPnL(options?: { force?: boolean }): void {
     void this.syncResolvedOrdersPnLAsync(options);
@@ -1144,7 +1300,7 @@ export class OrderService {
     if (!force && now - this.lastPnlSyncAt < 700) return;
     const doSync = async () => {
       const updatedOrderPnlEvents: Array<{ orderId: string; marketId: string; pnl: number; outcome: string; winningOutcome: string }> = [];
-      // Only unsettled candidates — settled orders are completely immutable
+      // Only unsettled candidates
       const candidates = this.orders.filter(
         (o) => !o.isSettled && (o.status === 'FILLED' || o.status === 'PENDING'),
       );
@@ -1152,10 +1308,13 @@ export class OrderService {
         this.lastPnlSyncAt = Date.now();
         return;
       }
-      // Collect unique historical price keys first so we can fetch in parallel
+      // Collect unique historical price keys first so we can fetch in parallel for synthetic/test markets
       const histKeys = new Set<string>();
       const candidateMeta = new Map<string, { closeMs: number; symbol: string; key: string }>();
       for (const order of candidates) {
+        const isHexMarket = order.marketId.startsWith('0x') && order.marketId.length === 66;
+        if (isHexMarket) continue; // On-chain markets are resolved strictly on-chain
+
         const market = marketService.getMarketById(order.marketId);
         if (market && market.settlementPrice == null) {
           const closeMs = market.closeTimestamp ? new Date(market.closeTimestamp).getTime() : NaN;
@@ -1224,14 +1383,15 @@ export class OrderService {
         let winningOutcome: OutcomeType | undefined;
         let settlementPrice: number | undefined;
         let isVoided = false;
+        const isOnChainHexMarket = order.marketId.startsWith('0x') && order.marketId.length === 66;
 
-        if (order.marketId.startsWith('0x') && order.marketId.length === 66 && process.env.NODE_ENV !== 'test') {
+        if (isOnChainHexMarket && process.env.NODE_ENV !== 'test') {
           try {
             let onchain = onchainMarketCache.get(order.marketId);
             if (onchain === undefined) {
               onchain = await Promise.race([
                 somniaExchange.client.getMarketOnchain(order.marketId as Hex).catch(() => null),
-                new Promise<null>((resolve) => setTimeout(() => resolve(null), 800)),
+                new Promise<null>((resolve) => setTimeout(() => resolve(null), 2500)),
               ]);
               onchainMarketCache.set(order.marketId, onchain);
             }
@@ -1245,9 +1405,14 @@ export class OrderService {
               }
             }
           } catch {}
+
+          // STRICT INVARIANT: If not yet resolved on-chain, skip and leave order pending!
+          if (!shouldResolve) {
+            continue;
+          }
         }
 
-        if (!shouldResolve && market) {
+        if (!shouldResolve && market && !isOnChainHexMarket) {
           const isFinalized = market.status === 'Finalized';
           const closeMs = market.closeTimestamp ? new Date(market.closeTimestamp).getTime() : Number.MAX_SAFE_INTEGER;
           const resolveMs = market.resolutionTimestamp ? new Date(market.resolutionTimestamp).getTime() : closeMs;
@@ -1260,7 +1425,7 @@ export class OrderService {
             if (market.winningOutcome === 'VOID') { winningOutcome = 'VOID'; isVoided = true; }
             else winningOutcome = market.winningOutcome || (settlementPrice >= market.strikePrice ? 'YES' : 'NO');
           }
-        } else if (!shouldResolve && order.marketId.includes('-')) {
+        } else if (!shouldResolve && order.marketId.includes('-') && !isOnChainHexMarket) {
           const parts = order.marketId.split('-');
           if (parts.length >= 5) {
             const rawSymbol = parts[1];
@@ -1276,7 +1441,7 @@ export class OrderService {
               winningOutcome = spot >= strikePrice ? 'YES' : 'NO';
             }
           }
-        } else if (order.marketSnapshot) {
+        } else if (!shouldResolve && order.marketSnapshot && !isOnChainHexMarket) {
           const snap = order.marketSnapshot;
           const closeMs = snap.closeTimestamp ? new Date(snap.closeTimestamp).getTime() : NaN;
           if (!isNaN(closeMs) && now >= closeMs) {
@@ -1343,6 +1508,9 @@ export class OrderService {
             totalSwarm: Number((voltPnl + oraclePnl + titanPnl).toFixed(2)),
             timestamp: Date.now(),
           });
+
+          void import('./settlement-service.js').then((m) => m.settlementService.invalidateCache()).catch(() => {});
+          void import('./analytics-service.js').then((m) => m.analyticsService.invalidateCache()).catch(() => {});
         } catch {}
       }
       this.lastPnlSyncAt = Date.now();

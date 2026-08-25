@@ -30,5 +30,14 @@ export default defineConfig({
     outDir: 'dist',
     sourcemap: true,
     target: 'esnext',
+    rollupOptions: {
+      output: {
+        manualChunks: {
+          'vendor-react': ['react', 'react-dom'],
+          'vendor-web3': ['viem'],
+          'vendor-icons': ['lucide-react'],
+        },
+      },
+    },
   },
 });

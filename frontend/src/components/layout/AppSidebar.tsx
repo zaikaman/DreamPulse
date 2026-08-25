@@ -34,7 +34,7 @@ interface AppSidebarProps {
   onOpenSessionModal?: () => void;
 }
 
-export const AppSidebar: React.FC<AppSidebarProps> = ({
+const AppSidebarComponent: React.FC<AppSidebarProps> = ({
   activeTab,
   onSelectTab,
   collapsed,
@@ -351,3 +351,5 @@ export const AppSidebar: React.FC<AppSidebarProps> = ({
     </aside>
   );
 };
+
+export const AppSidebar = React.memo(AppSidebarComponent);

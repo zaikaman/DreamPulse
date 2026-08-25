@@ -38,7 +38,7 @@ interface OverviewViewProps {
   onSwitchNetwork?: () => Promise<void>;
 }
 
-export const OverviewView: React.FC<OverviewViewProps> = ({
+const OverviewViewComponent: React.FC<OverviewViewProps> = ({
   markets,
   liveTicks,
   latencyMs,
@@ -528,3 +528,5 @@ export const OverviewView: React.FC<OverviewViewProps> = ({
     </div>
   );
 };
+
+export const OverviewView = React.memo(OverviewViewComponent);

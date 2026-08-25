@@ -4,6 +4,7 @@ import type { SessionGrant } from '../types/index.js';
 import { apiClient } from '../services/api.js';
 import { supabase } from '../services/supabase.js';
 import { web3Service, SOMNIA_ADDRESSES, somniaShannonTestnet } from '../services/web3.js';
+import { telemetryClient, type OrderFillData, type SweepCompleteData } from '../services/telemetry-client.js';
 
 export interface WalletState {
   isConnected: boolean;
@@ -598,6 +599,50 @@ export function useSessionKey(): UseSessionKeyReturn {
       supabase.removeChannel(channel);
     };
   }, [wallet.address]);
+
+  // Real-time balance updates via telemetry WebSocket events + heartbeat
+  useEffect(() => {
+    if (!wallet.isConnected || !wallet.address) return;
+    const targetAddr = wallet.address;
+
+    let debounceTimer: number | null = null;
+    const scheduleRefresh = (delay = 400) => {
+      if (debounceTimer) window.clearTimeout(debounceTimer);
+      debounceTimer = window.setTimeout(() => {
+        refreshBalances(targetAddr).catch(() => {});
+      }, delay);
+    };
+
+    // 1. WebSocket event triggers for instant balance updates
+    const unsubOrder = telemetryClient.on('order_filled', (order: OrderFillData) => {
+      if (!order.userAddress || order.userAddress.toLowerCase() === targetAddr.toLowerCase()) {
+        scheduleRefresh(300);
+      }
+    });
+
+    const unsubSweep = telemetryClient.on('sweep_completed', (sweep: SweepCompleteData) => {
+      if (!sweep.userAddress || sweep.userAddress.toLowerCase() === targetAddr.toLowerCase()) {
+        scheduleRefresh(300);
+      }
+    });
+
+    const unsubPnl = telemetryClient.on('pnl_update', () => {
+      scheduleRefresh(500);
+    });
+
+    // 2. Periodic 15-second background sync
+    const interval = setInterval(() => {
+      refreshBalances(targetAddr).catch(() => {});
+    }, 15000);
+
+    return () => {
+      if (debounceTimer) window.clearTimeout(debounceTimer);
+      clearInterval(interval);
+      unsubOrder();
+      unsubSweep();
+      unsubPnl();
+    };
+  }, [wallet.isConnected, wallet.address, refreshBalances]);
 
   // Keep allowance status fresh while wallet is connected
   useEffect(() => {

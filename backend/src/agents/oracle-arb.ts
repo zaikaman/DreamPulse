@@ -76,13 +76,25 @@ export class OracleArbAgent extends BaseAgent {
 
       if (askPrice < fair.fairValueYes) {
         const snappedPrice = quantizePrice(askPrice);
-        const maxLots = this.oracleConfig.maxTradeSize > 0
-          ? Math.floor(this.oracleConfig.maxTradeSize / snappedPrice)
-          : this.oracleConfig.lotSize;
-        const lotSize = quantizeLotSize(Math.min(this.oracleConfig.lotSize, Math.max(1, maxLots)));
+
+        // Safe probability envelope: avoid extreme tail buying (<0.15 or >0.85) to eliminate negative skew steamroller risk
+        if (snappedPrice < 0.15 || snappedPrice > 0.85) {
+          return {
+            agentType: 'Oracle',
+            action: 'HOLD',
+            targetMarketId: market.id,
+            confidence: 0.5,
+            rationale: `YES ask price (${snappedPrice.toFixed(2)}) is outside the optimal risk/reward boundary [0.15, 0.85]. Holding.`,
+          };
+        }
+
+        // Dynamic risk-adjusted position sizing: caps maximum capital at risk to ~$2.50 per trade
+        const targetRiskUsd = Math.min(2.5, this.oracleConfig.maxTradeSize > 0 ? this.oracleConfig.maxTradeSize : 2.5);
+        const dynamicLots = Math.max(1, Math.min(this.oracleConfig.lotSize, Math.floor(targetRiskUsd / snappedPrice)));
+        const lotSize = quantizeLotSize(dynamicLots);
         const confidence = Math.min(0.99, Number((0.72 + absEdge * 2.5).toFixed(2)));
 
-        const rationale = `[VOL ARB] Mathematical mispricing detected: Theoretical Φ(z) = ${(fair.fairValueYes * 100).toFixed(1)}% exceeds market price ${(askPrice * 100).toFixed(1)}% by +${(edge * 100).toFixed(1)}% EV edge. Buying YES.`;
+        const rationale = `[VOL ARB] Mathematical mispricing detected: Theoretical Φ(z) = ${(fair.fairValueYes * 100).toFixed(1)}% exceeds market price ${(askPrice * 100).toFixed(1)}% by +${(edge * 100).toFixed(1)}% EV edge. Buying YES (${lotSize} lots at ${snappedPrice.toFixed(2)}).`;
 
         const decision: IAgentDecision = {
           agentType: 'Oracle',
@@ -125,13 +137,25 @@ export class OracleArbAgent extends BaseAgent {
 
       if (askPriceNo < fair.fairValueNo) {
         const snappedPrice = quantizePrice(askPriceNo);
-        const maxLots = this.oracleConfig.maxTradeSize > 0
-          ? Math.floor(this.oracleConfig.maxTradeSize / snappedPrice)
-          : this.oracleConfig.lotSize;
-        const lotSize = quantizeLotSize(Math.min(this.oracleConfig.lotSize, Math.max(1, maxLots)));
+
+        // Safe probability envelope: avoid extreme tail buying (<0.15 or >0.85) to eliminate negative skew steamroller risk
+        if (snappedPrice < 0.15 || snappedPrice > 0.85) {
+          return {
+            agentType: 'Oracle',
+            action: 'HOLD',
+            targetMarketId: market.id,
+            confidence: 0.5,
+            rationale: `NO ask price (${snappedPrice.toFixed(2)}) is outside the optimal risk/reward boundary [0.15, 0.85]. Holding.`,
+          };
+        }
+
+        // Dynamic risk-adjusted position sizing: caps maximum capital at risk to ~$2.50 per trade
+        const targetRiskUsd = Math.min(2.5, this.oracleConfig.maxTradeSize > 0 ? this.oracleConfig.maxTradeSize : 2.5);
+        const dynamicLots = Math.max(1, Math.min(this.oracleConfig.lotSize, Math.floor(targetRiskUsd / snappedPrice)));
+        const lotSize = quantizeLotSize(dynamicLots);
         const confidence = Math.min(0.99, Number((0.72 + absEdge * 2.5).toFixed(2)));
 
-        const rationale = `[VOL ARB] Mathematical mispricing detected: Market YES is overpriced vs theoretical Φ(z) = ${(fair.fairValueYes * 100).toFixed(1)}% (NO EV Edge: +${(absEdge * 100).toFixed(1)}%). Buying NO.`;
+        const rationale = `[VOL ARB] Mathematical mispricing detected: Market YES is overpriced vs theoretical Φ(z) = ${(fair.fairValueYes * 100).toFixed(1)}% (NO EV Edge: +${(absEdge * 100).toFixed(1)}%). Buying NO (${lotSize} lots at ${snappedPrice.toFixed(2)}).`;
 
         const decision: IAgentDecision = {
           agentType: 'Oracle',

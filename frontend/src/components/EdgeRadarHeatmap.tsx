@@ -12,7 +12,7 @@ interface EdgeRadarHeatmapProps {
   isLoading?: boolean;
 }
 
-export const EdgeRadarHeatmap: React.FC<EdgeRadarHeatmapProps> = ({
+const EdgeRadarHeatmapComponent: React.FC<EdgeRadarHeatmapProps> = ({
   markets,
   selectedMarketId,
   onSelectMarket,
@@ -25,7 +25,8 @@ export const EdgeRadarHeatmap: React.FC<EdgeRadarHeatmapProps> = ({
     return <EdgeRadarHeatmapSkeleton />;
   }
 
-  const symbols = ['BTC/USD', 'ETH/USD'];
+  const discoveredSymbols = Array.from(new Set(markets.map((m) => m.symbol)));
+  const symbols = discoveredSymbols.length > 0 ? discoveredSymbols : ['BTC/USD', 'ETH/USD'];
   const windows: Array<'5m' | '15m' | '1h'> = ['5m', '15m', '1h'];
 
   const getHeatmapColor = (edgePct: number) => {
@@ -214,3 +215,5 @@ export const EdgeRadarHeatmap: React.FC<EdgeRadarHeatmapProps> = ({
     </div>
   );
 };
+
+export const EdgeRadarHeatmap = React.memo(EdgeRadarHeatmapComponent);

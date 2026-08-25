@@ -22,6 +22,7 @@ import {
 } from 'lucide-react';
 import type { OrderExecution, AgentType, OutcomeType } from '../types/index.js';
 import { apiClient } from '../services/api.js';
+import { telemetryClient } from '../services/telemetry-client.js';
 import { OrderHistoryTableSkeleton } from './ui/Skeleton.js';
 import { Spinner } from './ui/Spinner.js';
 
@@ -104,6 +105,7 @@ export const OrderHistoryTable: React.FC<OrderHistoryTableProps> = ({
       try {
         const res = await apiClient.getOrders({
           userAddress: scope === 'MY_ORDERS' ? userAddress : undefined,
+          swarmOnly: scope === 'ALL_SWARM',
           agentType: selectedAgent,
           outcome: selectedOutcome,
           search: debouncedSearch || undefined,
@@ -154,6 +156,7 @@ export const OrderHistoryTable: React.FC<OrderHistoryTableProps> = ({
       try {
         const res = await apiClient.getOrders({
           userAddress: scope === 'MY_ORDERS' ? userAddress : undefined,
+          swarmOnly: scope === 'ALL_SWARM',
           page: 1,
           pageSize: 1,
         });
@@ -172,8 +175,6 @@ export const OrderHistoryTable: React.FC<OrderHistoryTableProps> = ({
   }, [scope, userAddress, selectedAgent, selectedOutcome, debouncedSearch, pageSize, currentPage]);
 
   useEffect(() => {
-    let ws: WebSocket | null = null;
-    let reconnectTimer: number | null = null;
     let lastFetchAt = 0;
     let pendingFetchTimer: number | null = null;
 
@@ -187,6 +188,7 @@ export const OrderHistoryTable: React.FC<OrderHistoryTableProps> = ({
         // Silent background refresh — never shows "Updating page" overlay, never touches isFetching
         apiClient.getOrders({
           userAddress: s === 'MY_ORDERS' ? ua : undefined,
+          swarmOnly: s === 'ALL_SWARM',
           agentType: ag,
           outcome: oc,
           search: ds || undefined,
@@ -210,41 +212,17 @@ export const OrderHistoryTable: React.FC<OrderHistoryTableProps> = ({
       }
     };
 
-    const connect = () => {
-      try {
-        const wsUrl = (import.meta as any).env?.VITE_BACKEND_WS_URL
-          ? (import.meta as any).env.VITE_BACKEND_WS_URL
-          : (() => {
-              const loc = window.location;
-              const protocol = loc.protocol === 'https:' ? 'wss:' : 'ws:';
-              const host = loc.hostname;
-              const port = loc.port === '5173' ? '5000' : loc.port || '5000';
-              return `${protocol}//${host}:${port}/ws/telemetry`;
-            })();
-        ws = new WebSocket(wsUrl);
-        ws.onopen = () => {
-          try { ws?.send(JSON.stringify({ action: 'subscribe', channel: 'markets' })); } catch {}
-          try { ws?.send(JSON.stringify({ action: 'subscribe', channel: 'user_portfolio' })); } catch {}
-        };
-        ws.onmessage = (event) => {
-          try {
-            const payload = JSON.parse((event as MessageEvent).data);
-            if (payload.event === 'pnl_update' || payload.event === 'swarm_pnl_tick' || payload.event === 'order_filled' || payload.event === 'sweep_completed') {
-              scheduleFetch();
-            }
-          } catch {}
-        };
-        ws.onclose = () => { reconnectTimer = window.setTimeout(connect, 3000); };
-        ws.onerror = () => { try { ws?.close(); } catch {} };
-      } catch {
-        reconnectTimer = window.setTimeout(connect, 3000);
-      }
-    };
-    connect();
+    const unsubPnl = telemetryClient.on('pnl_update', scheduleFetch);
+    const unsubSwarm = telemetryClient.on('swarm_pnl_tick', scheduleFetch);
+    const unsubOrder = telemetryClient.on('order_filled', scheduleFetch);
+    const unsubSweep = telemetryClient.on('sweep_completed', scheduleFetch);
+
     return () => {
-      if (reconnectTimer) clearTimeout(reconnectTimer);
       if (pendingFetchTimer) clearTimeout(pendingFetchTimer);
-      try { ws?.close(); } catch {}
+      unsubPnl();
+      unsubSwarm();
+      unsubOrder();
+      unsubSweep();
     };
   }, []);
 
@@ -352,11 +330,11 @@ export const OrderHistoryTable: React.FC<OrderHistoryTableProps> = ({
             <h3 style={{ fontSize: '14px', fontWeight: 700, margin: 0, color: 'var(--foreground)' }}>On-Chain Order Executions</h3>
           </div>
           <div style={{ display: 'flex', gap: '4px', background: 'rgba(0, 0, 0, 0.3)', padding: '2px', borderRadius: '6px', border: '1px solid var(--border)' }}>
-            <button id="btn-public-swarm-ledger" type="button" className={`shadcn-tab-btn ${scope === 'ALL_SWARM' ? 'active' : ''}`} onClick={() => handleScope('ALL_SWARM')} style={{ fontSize: '11px', padding: '3px 8px' }}>
+            <button id="btn-public-swarm-ledger" type="button" className={`shadcn-tab-btn ${scope === 'ALL_SWARM' ? 'active' : ''}`} onClick={() => handleScope('ALL_SWARM')} style={{ fontSize: '11px', padding: '3px 8px' }} title="Canonical autonomous swarm trades executed by Somnia Operator (0x93e3...59Cf)">
               <Bot size={12} />
               <span>Public Swarm Ledger</span>
             </button>
-            <button id="btn-my-orders-fills" type="button" className={`shadcn-tab-btn ${scope === 'MY_ORDERS' ? 'active' : ''}`} onClick={() => handleScope('MY_ORDERS')} style={{ fontSize: '11px', padding: '3px 8px' }}>
+            <button id="btn-my-orders-fills" type="button" className={`shadcn-tab-btn ${scope === 'MY_ORDERS' ? 'active' : ''}`} onClick={() => handleScope('MY_ORDERS')} style={{ fontSize: '11px', padding: '3px 8px' }} title="Personal autonomous copy-trade fills for your connected wallet">
               <User size={12} />
               <span>My Orders & Fills</span>
             </button>

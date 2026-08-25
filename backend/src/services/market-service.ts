@@ -289,8 +289,17 @@ export class MarketService extends EventEmitter {
           closeTimestamp: new Date(closeTimeMs).toISOString(),
           resolutionTimestamp: new Date(closeTimeMs + 60000).toISOString(),
           status,
-          settlementPrice: status === 'Finalized' ? spot : undefined,
-          winningOutcome: status === 'Finalized' ? (spot >= strike ? 'YES' : 'NO') : undefined,
+          settlementPrice: status === 'Finalized' && (m as any).settlementPrice ? Number((m as any).settlementPrice) : undefined,
+          winningOutcome:
+            status === 'Finalized'
+              ? (m as any).isVoided
+                ? 'VOID'
+                : (m as any).winningOutcome === 0
+                ? 'YES'
+                : (m as any).winningOutcome === 1
+                ? 'NO'
+                : undefined
+              : undefined,
           bestBidYes: Number(bestBidYes.toFixed(2)),
           bestAskYes: Number(bestAskYes.toFixed(2)),
           bestBidNo: Number((1.0 - bestAskYes).toFixed(2)),

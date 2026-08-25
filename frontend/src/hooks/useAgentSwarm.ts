@@ -1,6 +1,13 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { apiClient } from '../services/api.js';
 import type { AgentType, OrderExecution, SwarmStatusSummary } from '../types/index.js';
+import {
+  telemetryClient,
+  type SwarmPnlTickData,
+  type OrderFillData,
+  type SweepCompleteData,
+  type PnlUpdateData,
+} from '../services/telemetry-client.js';
 
 export interface AgentDetail {
   agentType: AgentType;
@@ -152,147 +159,116 @@ export const useAgentSwarm = (operatorAddress?: string): UseAgentSwarmReturn => 
   }, []);
 
   // Deprecated no-op: OrderHistoryTable now fetches its own paginated page on demand.
-  // Kept to preserve hook API for legacy callers.
   const fetchOrders = useCallback(async () => {}, []);
 
   useEffect(() => {
     fetchSwarmStatus();
 
+    // Relaxed polling interval (30s heartbeat fallback)
     const interval = setInterval(() => {
       fetchSwarmStatus();
-    }, 4000);
+    }, 30000);
 
-    // Realtime status refresh with instant WebSocket state updates
-    let ws: WebSocket | null = null;
-    let reconnectTimer: number | null = null;
-    const connectRealtime = () => {
-      try {
-        const wsUrl = (import.meta as any).env?.VITE_BACKEND_WS_URL
-          ? (import.meta as any).env.VITE_BACKEND_WS_URL
-          : (() => {
-              const loc = window.location;
-              const protocol = loc.protocol === 'https:' ? 'wss:' : 'ws:';
-              const host = loc.hostname;
-              const port = loc.port === '5173' ? '5000' : loc.port || '5000';
-              return `${protocol}//${host}:${port}/ws/telemetry`;
-            })();
-        ws = new WebSocket(wsUrl);
-        ws.onopen = () => {
-          try { ws?.send(JSON.stringify({ action: 'subscribe', channel: 'markets' })); } catch {}
-          try { ws?.send(JSON.stringify({ action: 'subscribe', channel: 'user_portfolio' })); } catch {}
-          try { ws?.send(JSON.stringify({ action: 'subscribe', channel: 'agent_thoughts' })); } catch {}
-        };
-        ws.onmessage = (event) => {
-          try {
-            const payload = JSON.parse((event as MessageEvent).data);
-            if (!payload || !payload.event) return;
+    // 1. Direct 0ms Real-Time PnL Stream Update via shared telemetry client
+    const unsubSwarmPnl = telemetryClient.on('swarm_pnl_tick', (payload: SwarmPnlTickData) => {
+      const voltPnl = typeof payload.volt === 'number' ? payload.volt : undefined;
+      const oraclePnl = typeof payload.oracle === 'number' ? payload.oracle : undefined;
+      const titanPnl = typeof payload.titan === 'number' ? payload.titan : undefined;
+      const sweeperPnl = typeof payload.sweeper === 'number' ? payload.sweeper : undefined;
 
-            // 1. Direct 0ms Real-Time PnL Stream Update
-            if (payload.event === 'swarm_pnl_tick') {
-              const voltPnl = typeof payload.volt === 'number' ? payload.volt : undefined;
-              const oraclePnl = typeof payload.oracle === 'number' ? payload.oracle : undefined;
-              const titanPnl = typeof payload.titan === 'number' ? payload.titan : undefined;
-              const sweeperPnl = typeof payload.sweeper === 'number' ? payload.sweeper : undefined;
+      setDetailed((prev) => ({
+        ...prev,
+        volt: { ...prev.volt, pnlAmount: voltPnl !== undefined ? voltPnl : prev.volt.pnlAmount },
+        oracle: { ...prev.oracle, pnlAmount: oraclePnl !== undefined ? oraclePnl : prev.oracle.pnlAmount },
+        titan: { ...prev.titan, pnlAmount: titanPnl !== undefined ? titanPnl : prev.titan.pnlAmount },
+        sweeper: { ...prev.sweeper, pnlAmount: sweeperPnl !== undefined ? sweeperPnl : prev.sweeper.pnlAmount },
+      }));
 
-              setDetailed((prev) => ({
-                ...prev,
-                volt: { ...prev.volt, pnlAmount: voltPnl !== undefined ? voltPnl : prev.volt.pnlAmount },
-                oracle: { ...prev.oracle, pnlAmount: oraclePnl !== undefined ? oraclePnl : prev.oracle.pnlAmount },
-                titan: { ...prev.titan, pnlAmount: titanPnl !== undefined ? titanPnl : prev.titan.pnlAmount },
-                sweeper: { ...prev.sweeper, pnlAmount: sweeperPnl !== undefined ? sweeperPnl : prev.sweeper.pnlAmount },
-              }));
+      setSummary((prev) => ({
+        ...prev,
+        volt: {
+          ...prev.volt,
+          pnl: voltPnl !== undefined ? `${voltPnl >= 0 ? '+' : ''}${voltPnl.toFixed(2)} tUSDC` : prev.volt.pnl,
+        },
+        oracle: {
+          ...prev.oracle,
+          pnl: oraclePnl !== undefined ? `${oraclePnl >= 0 ? '+' : ''}${oraclePnl.toFixed(2)} tUSDC` : prev.oracle.pnl,
+        },
+        titan: {
+          ...prev.titan,
+          spreadCaptured: titanPnl !== undefined ? `${titanPnl >= 0 ? '+' : ''}${titanPnl.toFixed(2)} tUSDC` : prev.titan.spreadCaptured,
+        },
+        sweeper: {
+          ...prev.sweeper,
+          totalClaimed: sweeperPnl !== undefined ? `+${sweeperPnl.toFixed(2)} tUSDC` : prev.sweeper.totalClaimed,
+        },
+      }));
+    });
 
-              setSummary((prev) => ({
-                ...prev,
-                volt: {
-                  ...prev.volt,
-                  pnl: voltPnl !== undefined ? `${voltPnl >= 0 ? '+' : ''}${voltPnl.toFixed(2)} tUSDC` : prev.volt.pnl,
-                },
-                oracle: {
-                  ...prev.oracle,
-                  pnl: oraclePnl !== undefined ? `${oraclePnl >= 0 ? '+' : ''}${oraclePnl.toFixed(2)} tUSDC` : prev.oracle.pnl,
-                },
-                titan: {
-                  ...prev.titan,
-                  spreadCaptured: titanPnl !== undefined ? `${titanPnl >= 0 ? '+' : ''}${titanPnl.toFixed(2)} tUSDC` : prev.titan.spreadCaptured,
-                },
-                sweeper: {
-                  ...prev.sweeper,
-                  totalClaimed: sweeperPnl !== undefined ? `+${sweeperPnl.toFixed(2)} tUSDC` : prev.sweeper.totalClaimed,
-                },
-              }));
-            }
-
-            // 2. Direct Trade Fill Increment
-            if (payload.event === 'order_filled') {
-              const rawAgent = payload.agentType || payload.agent || '';
-              const agentKey = rawAgent.toLowerCase();
-              if (agentKey && (agentKey === 'volt' || agentKey === 'oracle' || agentKey === 'titan')) {
-                setDetailed((prev) => ({
-                  ...prev,
-                  [agentKey]: {
-                    ...prev[agentKey],
-                    tradesToday: (prev[agentKey]?.tradesToday ?? 0) + 1,
-                    lastAction: `TAKER_BUY_${payload.outcome || 'YES'}`,
-                    lastActionTimestamp: Date.now(),
-                  },
-                }));
-                if (agentKey === 'volt') {
-                  setSummary((prev) => ({
-                    ...prev,
-                    volt: { ...prev.volt, tradesToday: prev.volt.tradesToday + 1 },
-                  }));
-                } else if (agentKey === 'oracle') {
-                  setSummary((prev) => ({
-                    ...prev,
-                    oracle: { ...prev.oracle, tradesToday: prev.oracle.tradesToday + 1 },
-                  }));
-                }
-              }
-            }
-
-            // 3. Direct Sweep Completion Update
-            if (payload.event === 'sweep_completed') {
-              const claimed = parseFloat(payload.claimedAmount || '0') || 0;
-              setDetailed((prev) => ({
-                ...prev,
-                sweeper: {
-                  ...prev.sweeper,
-                  tradesToday: (prev.sweeper?.tradesToday ?? 0) + 1,
-                  pnlAmount: (prev.sweeper?.pnlAmount ?? 0) + claimed,
-                  lastAction: 'BATCH_SWEEP_CLAIM',
-                  lastActionTimestamp: Date.now(),
-                },
-              }));
-            }
-
-            // 4. Background reconciliation on PnL resolution or fills — 200ms vs 500ms
-            if (payload.event === 'pnl_update' || payload.event === 'sweep_completed') {
-              if (wsDebounceRef.current) window.clearTimeout(wsDebounceRef.current);
-              wsDebounceRef.current = window.setTimeout(() => {
-                wsDebounceRef.current = null;
-                fetchSwarmStatus();
-              }, 200);
-            }
-          } catch {}
-        };
-        ws.onclose = () => {
-          reconnectTimer = window.setTimeout(connectRealtime, 3000);
-        };
-        ws.onerror = () => {
-          try { ws?.close(); } catch {}
-        };
-      } catch {
-        reconnectTimer = window.setTimeout(connectRealtime, 3000);
+    // 2. Direct Trade Fill Increment
+    const unsubOrder = telemetryClient.on('order_filled', (payload: OrderFillData) => {
+      const rawAgent = payload.agentType || '';
+      const agentKey = rawAgent.toLowerCase();
+      if (agentKey && (agentKey === 'volt' || agentKey === 'oracle' || agentKey === 'titan')) {
+        setDetailed((prev) => ({
+          ...prev,
+          [agentKey]: {
+            ...prev[agentKey],
+            tradesToday: (prev[agentKey]?.tradesToday ?? 0) + 1,
+            lastAction: `TAKER_BUY_${payload.outcome || 'YES'}`,
+            lastActionTimestamp: Date.now(),
+          },
+        }));
+        if (agentKey === 'volt') {
+          setSummary((prev) => ({
+            ...prev,
+            volt: { ...prev.volt, tradesToday: prev.volt.tradesToday + 1 },
+          }));
+        } else if (agentKey === 'oracle') {
+          setSummary((prev) => ({
+            ...prev,
+            oracle: { ...prev.oracle, tradesToday: prev.oracle.tradesToday + 1 },
+          }));
+        }
       }
-    };
-    connectRealtime();
+    });
+
+    // 3. Direct Sweep Completion Update
+    const unsubSweep = telemetryClient.on('sweep_completed', (payload: SweepCompleteData) => {
+      const claimed = parseFloat(payload.claimedAmount || '0') || 0;
+      setDetailed((prev) => ({
+        ...prev,
+        sweeper: {
+          ...prev.sweeper,
+          tradesToday: (prev.sweeper?.tradesToday ?? 0) + 1,
+          pnlAmount: (prev.sweeper?.pnlAmount ?? 0) + claimed,
+          lastAction: 'BATCH_SWEEP_CLAIM',
+          lastActionTimestamp: Date.now(),
+        },
+      }));
+      if (wsDebounceRef.current) window.clearTimeout(wsDebounceRef.current);
+      wsDebounceRef.current = window.setTimeout(() => {
+        wsDebounceRef.current = null;
+        fetchSwarmStatus();
+      }, 200);
+    });
+
+    // 4. Background reconciliation on PnL resolution
+    const unsubPnl = telemetryClient.on('pnl_update', (_payload: PnlUpdateData) => {
+      if (wsDebounceRef.current) window.clearTimeout(wsDebounceRef.current);
+      wsDebounceRef.current = window.setTimeout(() => {
+        wsDebounceRef.current = null;
+        fetchSwarmStatus();
+      }, 200);
+    });
 
     return () => {
       clearInterval(interval);
-      if (reconnectTimer) clearTimeout(reconnectTimer);
       if (wsDebounceRef.current) window.clearTimeout(wsDebounceRef.current);
-      try { ws?.close(); } catch {}
+      unsubSwarmPnl();
+      unsubOrder();
+      unsubSweep();
+      unsubPnl();
     };
   }, [fetchSwarmStatus]);
 
@@ -321,7 +297,7 @@ export const useAgentSwarm = (operatorAddress?: string): UseAgentSwarmReturn => 
         }
         return false;
       } catch (err: any) {
-        setError(err.message || `Failed to toggle agent ${agentType}`);
+        setError(err.message || 'Failed to toggle agent');
         return false;
       }
     },
@@ -331,28 +307,25 @@ export const useAgentSwarm = (operatorAddress?: string): UseAgentSwarmReturn => 
   const updateConfig = useCallback(
     async (agentType: AgentType, config: Record<string, any>): Promise<boolean> => {
       try {
-        const res = await apiClient.updateAgentConfig(agentType, config, operatorAddress);
+        const res = await apiClient.updateAgentConfig(agentType, config);
         if (res.success) {
           const key = agentType.toLowerCase();
           setDetailed((prev) => ({
             ...prev,
             [key]: {
               ...prev[key],
-              config: {
-                ...prev[key]?.config,
-                ...config,
-              },
+              config: { ...prev[key]?.config, ...config },
             },
           }));
           return true;
         }
         return false;
       } catch (err: any) {
-        setError(err.message || `Failed to update configuration for ${agentType}`);
+        setError(err.message || 'Failed to update agent config');
         return false;
       }
     },
-    [operatorAddress],
+    [],
   );
 
   return {

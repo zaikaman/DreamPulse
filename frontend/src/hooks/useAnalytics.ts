@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { apiClient } from '../services/api.js';
 import type { WalletState } from './useSessionKey.js';
+import { telemetryClient } from '../services/telemetry-client.js';
 
 export type AnalyticsRange = '24h' | '7d' | '30d' | '90d' | 'ALL';
 
@@ -99,14 +100,38 @@ export interface UseAnalyticsReturn {
   refresh: () => Promise<void>;
 }
 
+const LOCAL_ANALYTICS_PREFIX = 'dreampulse_analytics_';
+
 export function useAnalytics(wallet?: WalletState, initialRange: AnalyticsRange = '30d'): UseAnalyticsReturn {
   const address = wallet?.address || undefined;
   const [range, setRange] = useState<AnalyticsRange>(initialRange);
-  const [data, setData] = useState<AnalyticsData | null>(null);
-  const [isLoading, setIsLoading] = useState<boolean>(true);
+  const cacheKey = `${LOCAL_ANALYTICS_PREFIX}${address || 'swarm'}_${range}`;
+
+  const [data, setData] = useState<AnalyticsData | null>(() => {
+    try {
+      const cached = localStorage.getItem(cacheKey);
+      if (cached) return JSON.parse(cached);
+    } catch {}
+    return null;
+  });
+
+  const [isLoading, setIsLoading] = useState<boolean>(!data);
   const [error, setError] = useState<string | null>(null);
   const inFlightRef = useRef(false);
   const lastFetchAtRef = useRef(0);
+
+  // Sync cache if active wallet or range changes
+  useEffect(() => {
+    try {
+      const cached = localStorage.getItem(cacheKey);
+      if (cached) {
+        setData(JSON.parse(cached));
+        setIsLoading(false);
+      } else {
+        setIsLoading(true);
+      }
+    } catch {}
+  }, [cacheKey]);
 
   const fetchData = useCallback(async (force = false) => {
     const now = Date.now();
@@ -114,12 +139,14 @@ export function useAnalytics(wallet?: WalletState, initialRange: AnalyticsRange 
     if (!force && now - lastFetchAtRef.current < 900) return;
     inFlightRef.current = true;
     lastFetchAtRef.current = now;
-    setIsLoading(true);
     setError(null);
     try {
       const res = await apiClient.getAnalytics(address, range);
       if (res.success && res.data) {
         setData(res.data as AnalyticsData);
+        try {
+          localStorage.setItem(cacheKey, JSON.stringify(res.data));
+        } catch {}
       }
     } catch (err: any) {
       setError(err.message || 'Failed to load analytics');
@@ -127,16 +154,14 @@ export function useAnalytics(wallet?: WalletState, initialRange: AnalyticsRange 
       inFlightRef.current = false;
       setIsLoading(false);
     }
-  }, [address, range]);
+  }, [address, range, cacheKey]);
 
   useEffect(() => {
     fetchData(true);
   }, [fetchData]);
 
-  // Realtime refresh on pnl updates
+  // Realtime refresh on user trade & settlement events via multiplexed telemetry bus
   useEffect(() => {
-    let ws: WebSocket | null = null;
-    let reconnectTimer: number | null = null;
     let debounceTimer: number | null = null;
 
     const schedule = () => {
@@ -144,41 +169,15 @@ export function useAnalytics(wallet?: WalletState, initialRange: AnalyticsRange 
       debounceTimer = window.setTimeout(() => fetchData(true), 800);
     };
 
-    const connect = () => {
-      try {
-        const wsUrl = (import.meta as any).env?.VITE_BACKEND_WS_URL
-          ? (import.meta as any).env.VITE_BACKEND_WS_URL
-          : (() => {
-              const loc = window.location;
-              const protocol = loc.protocol === 'https:' ? 'wss:' : 'ws:';
-              const host = loc.hostname;
-              const port = loc.port === '5173' ? '5000' : loc.port || '5000';
-              return `${protocol}//${host}:${port}/ws/telemetry`;
-            })();
-        ws = new WebSocket(wsUrl);
-        ws.onopen = () => {
-          try { ws?.send(JSON.stringify({ action: 'subscribe', channel: 'user_portfolio' })); } catch {}
-          try { ws?.send(JSON.stringify({ action: 'subscribe', channel: 'markets' })); } catch {}
-        };
-        ws.onmessage = (event) => {
-          try {
-            const payload = JSON.parse((event as MessageEvent).data);
-            if (payload.event === 'pnl_update' || payload.event === 'order_filled' || payload.event === 'sweep_completed' || payload.event === 'swarm_pnl_tick') {
-              schedule();
-            }
-          } catch {}
-        };
-        ws.onclose = () => { reconnectTimer = window.setTimeout(connect, 3000); };
-        ws.onerror = () => { try { ws?.close(); } catch {} };
-      } catch {
-        reconnectTimer = window.setTimeout(connect, 3000);
-      }
-    };
-    connect();
+    const unsubPnl = telemetryClient.on('pnl_update', schedule);
+    const unsubOrder = telemetryClient.on('order_filled', schedule);
+    const unsubSweep = telemetryClient.on('sweep_completed', schedule);
+
     return () => {
-      if (reconnectTimer) clearTimeout(reconnectTimer);
       if (debounceTimer) clearTimeout(debounceTimer);
-      try { ws?.close(); } catch {}
+      unsubPnl();
+      unsubOrder();
+      unsubSweep();
     };
   }, [fetchData]);
 

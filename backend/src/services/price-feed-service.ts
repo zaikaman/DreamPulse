@@ -317,6 +317,15 @@ export class PriceFeedService extends EventEmitter {
     return this.spotPrices.get(symbol);
   }
 
+  /**
+   * Checks if the price ticker for a symbol is stale (older than maxAgeMs, default 6000ms).
+   */
+  public isPriceStale(symbol: string, maxAgeMs: number = 6000): boolean {
+    const ticker = this.spotPrices.get(symbol);
+    if (!ticker) return true;
+    return Date.now() - ticker.timestamp > maxAgeMs;
+  }
+
   public getAllSpotTickers(): Record<string, SpotTicker> {
     const result: Record<string, SpotTicker> = {};
     for (const [k, v] of this.spotPrices.entries()) {
@@ -325,11 +334,19 @@ export class PriceFeedService extends EventEmitter {
     return result;
   }
 
+  private historicalPriceCache = new Map<string, number>();
+
   /**
    * Fetches historical close price for a symbol at a specific timestamp (used for accurate post-expiry settlement).
+   * Caches results permanently in memory since historical candle prices for past timestamps are immutable.
    * Falls back to current spot if fetch fails.
    */
   public async getHistoricalPriceAt(symbol: string, targetTimestampMs: number): Promise<number | null> {
+    const cacheKey = `${symbol}:${targetTimestampMs}`;
+    if (this.historicalPriceCache.has(cacheKey)) {
+      return this.historicalPriceCache.get(cacheKey)!;
+    }
+
     try {
       const binanceSymbol = REVERSE_SYMBOL_MAPPINGS[symbol] || symbol.replace('/', '');
       // Binance klines are inclusive; fetch 1m candle containing target time
@@ -354,6 +371,9 @@ export class PriceFeedService extends EventEmitter {
           minDiff = diff;
           closest = closePrice;
         }
+      }
+      if (closest != null) {
+        this.historicalPriceCache.set(cacheKey, closest);
       }
       return closest;
     } catch {

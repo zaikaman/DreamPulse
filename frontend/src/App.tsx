@@ -14,14 +14,18 @@ import { OverviewView } from './components/dashboard/OverviewView.js';
 import { EdgeRadarView } from './components/dashboard/EdgeRadarView.js';
 import { MarketsDepthView } from './components/dashboard/MarketsDepthView.js';
 import { SwarmFeedView } from './components/dashboard/SwarmFeedView.js';
-import { SwarmCockpitView } from './components/dashboard/SwarmCockpitView.js';
-import { StrategyStudio } from './components/StrategyStudio.js';
-import { SweeperControls } from './components/SweeperControls.js';
-import { AnalyticsView } from './components/dashboard/AnalyticsView.js';
-import { SessionDelegationModal } from './components/SessionDelegationModal.js';
 import { useKeyboardShortcuts } from './hooks/useKeyboardShortcuts.js';
 import { soundEngine } from './services/audio.js';
 import { apiClient } from './services/api.js';
+import { telemetryClient, type OrderFillData, type SweepCompleteData } from './services/telemetry-client.js';
+import { Spinner } from './components/ui/Spinner.js';
+
+// Lazy load heavy modules to minimize initial bundle size and accelerate TTI
+const SwarmCockpitView = React.lazy(() => import('./components/dashboard/SwarmCockpitView.js').then((m) => ({ default: m.SwarmCockpitView })));
+const StrategyStudio = React.lazy(() => import('./components/StrategyStudio.js').then((m) => ({ default: m.StrategyStudio })));
+const SweeperControls = React.lazy(() => import('./components/SweeperControls.js').then((m) => ({ default: m.SweeperControls })));
+const AnalyticsView = React.lazy(() => import('./components/dashboard/AnalyticsView.js').then((m) => ({ default: m.AnalyticsView })));
+const SessionDelegationModal = React.lazy(() => import('./components/SessionDelegationModal.js').then((m) => ({ default: m.SessionDelegationModal })));
 
 interface StatItemProps {
   glyph: string;
@@ -209,6 +213,26 @@ export const App: React.FC = () => {
         // Fallback silently
       });
   }, []);
+
+  // Procedural audio feedback on real-time user events
+  useEffect(() => {
+    const unsubOrder = telemetryClient.on('order_filled', (order: OrderFillData) => {
+      if (wallet.address && order.userAddress && order.userAddress.toLowerCase() === wallet.address.toLowerCase()) {
+        soundEngine.playTradeFill();
+      }
+    });
+
+    const unsubSweep = telemetryClient.on('sweep_completed', (sweep: SweepCompleteData) => {
+      if (wallet.address && sweep.userAddress && sweep.userAddress.toLowerCase() === wallet.address.toLowerCase()) {
+        soundEngine.playWinChime();
+      }
+    });
+
+    return () => {
+      unsubOrder();
+      unsubSweep();
+    };
+  }, [wallet.address]);
 
   // Compute live spot prices dynamically from initial snapshot + live WebSocket telemetry ticks
   const currentSpotPrices: Record<string, number> = { ...initialSpotPrices };
@@ -571,26 +595,34 @@ export const App: React.FC = () => {
               isConnected={isConnected}
             />
           ) : activeNav === 'Swarm Cockpit' ? (
-            <SwarmCockpitView
-              wallet={wallet}
-              onForkToStudio={handleForkToStudio}
-              onConnectWallet={connectWallet}
-            />
+            <React.Suspense fallback={<div className="stat-card" style={{ minHeight: '340px', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: '12px' }}><Spinner size="lg" /><span style={{ fontSize: '13px', color: 'var(--muted-foreground)' }}>Loading Swarm Cockpit...</span></div>}>
+              <SwarmCockpitView
+                wallet={wallet}
+                onForkToStudio={handleForkToStudio}
+                onConnectWallet={connectWallet}
+              />
+            </React.Suspense>
           ) : activeNav === 'Strategy Studio' ? (
-            <StrategyStudio
-              initialConfig={forkedStrategyConfig}
-              wallet={wallet}
-              activeSession={activeSession}
-              onOpenSessionModal={() => setIsSessionModalOpen(true)}
-              onConnectWallet={connectWallet}
-            />
+            <React.Suspense fallback={<div className="stat-card" style={{ minHeight: '340px', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: '12px' }}><Spinner size="lg" /><span style={{ fontSize: '13px', color: 'var(--muted-foreground)' }}>Loading Strategy Studio...</span></div>}>
+              <StrategyStudio
+                initialConfig={forkedStrategyConfig}
+                wallet={wallet}
+                activeSession={activeSession}
+                onOpenSessionModal={() => setIsSessionModalOpen(true)}
+                onConnectWallet={connectWallet}
+              />
+            </React.Suspense>
           ) : activeNav === 'Analytics' ? (
-            <AnalyticsView wallet={wallet} onConnectWallet={connectWallet} />
+            <React.Suspense fallback={<div className="stat-card" style={{ minHeight: '340px', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: '12px' }}><Spinner size="lg" /><span style={{ fontSize: '13px', color: 'var(--muted-foreground)' }}>Loading Analytics...</span></div>}>
+              <AnalyticsView wallet={wallet} onConnectWallet={connectWallet} />
+            </React.Suspense>
           ) : activeNav === 'Settlement' ? (
-            <SweeperControls
-              userAddress={wallet.address || undefined}
-              onConnectWallet={connectWallet}
-            />
+            <React.Suspense fallback={<div className="stat-card" style={{ minHeight: '340px', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: '12px' }}><Spinner size="lg" /><span style={{ fontSize: '13px', color: 'var(--muted-foreground)' }}>Loading Settlement Sweeper...</span></div>}>
+              <SweeperControls
+                userAddress={wallet.address || undefined}
+                onConnectWallet={connectWallet}
+              />
+            </React.Suspense>
           ) : (
             /* Upcoming Protocol View Placeholder */
             <div className="stat-card" style={{ minHeight: '340px', alignItems: 'center', justifyContent: 'center', textAlign: 'center' }}>
@@ -617,28 +649,30 @@ export const App: React.FC = () => {
       </div>
 
       {/* Non-Custodial Session Key Delegation Modal */}
-      <SessionDelegationModal
-        isOpen={isSessionModalOpen}
-        onClose={() => setIsSessionModalOpen(false)}
-        wallet={wallet}
-        activeSession={activeSession}
-        isSigning={isSessionSigning}
-        isLoading={isSessionLoading}
-        isFauceting={isSessionFauceting}
-        isFixingAllowance={isFixingAllowance}
-        stepState={sessionStepState}
-        error={sessionError}
-        allowanceStatus={allowanceStatus}
-        onConnectWallet={connectWallet}
-        onDisconnectWallet={disconnectWallet}
-        onSwitchNetwork={switchNetwork}
-        onClaimFaucet={claimCollateralFaucet}
-        onCreateSession={createSession}
-        onRevokeSession={revokeSession}
-        onEnsureAllowances={ensureAllowances}
-        onRefreshAllowance={refreshAllowanceStatus}
-        onClearError={clearSessionError}
-      />
+      <React.Suspense fallback={null}>
+        <SessionDelegationModal
+          isOpen={isSessionModalOpen}
+          onClose={() => setIsSessionModalOpen(false)}
+          wallet={wallet}
+          activeSession={activeSession}
+          isSigning={isSessionSigning}
+          isLoading={isSessionLoading}
+          isFauceting={isSessionFauceting}
+          isFixingAllowance={isFixingAllowance}
+          stepState={sessionStepState}
+          error={sessionError}
+          allowanceStatus={allowanceStatus}
+          onConnectWallet={connectWallet}
+          onDisconnectWallet={disconnectWallet}
+          onSwitchNetwork={switchNetwork}
+          onClaimFaucet={claimCollateralFaucet}
+          onCreateSession={createSession}
+          onRevokeSession={revokeSession}
+          onEnsureAllowances={ensureAllowances}
+          onRefreshAllowance={refreshAllowanceStatus}
+          onClearError={clearSessionError}
+        />
+      </React.Suspense>
     </div>
   );
 };

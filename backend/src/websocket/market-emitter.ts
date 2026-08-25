@@ -3,9 +3,10 @@ import { marketService } from '../services/market-service.js';
 
 let emitterInterval: NodeJS.Timeout | null = null;
 let isRunning = false;
+let depthCycleCounter = 0;
 
 /**
- * Starts high-frequency telemetry broadcast loop emitting market ticks, depth updates, and AI agent thoughts.
+ * Starts high-frequency telemetry broadcast loop emitting batched market ticks, depth updates, and AI agent thoughts.
  */
 export function startMarketEmitter(tickIntervalMs: number = 100): void {
   if (isRunning) return;
@@ -18,17 +19,30 @@ export function startMarketEmitter(tickIntervalMs: number = 100): void {
   emitterInterval = setInterval(() => {
     try {
       const activeMarkets = marketService.getActiveMarkets({ status: 'Open' });
+      if (activeMarkets.length === 0) return;
+
       const spotMap = marketService.getAllSpotTickers();
+      const now = Date.now();
+      const ticksBatch: Array<{
+        marketId: string;
+        symbol: string;
+        spotPrice: number;
+        strikePrice: number;
+        timeLeftSeconds: number;
+        impliedProb: number;
+        fairValue: number;
+        edge: number;
+        hasAnomaly: boolean;
+      }> = [];
 
       for (const market of activeMarkets) {
         const spot = spotMap[market.symbol]?.price || market.strikePrice;
         const closeTime = new Date(market.closeTimestamp).getTime();
-        const timeLeftSeconds = Math.max(0, Math.floor((closeTime - Date.now()) / 1000));
+        const timeLeftSeconds = Math.max(0, Math.floor((closeTime - now) / 1000));
         const absEdge = Math.abs(market.edgePercentage);
         const hasAnomaly = absEdge >= 0.03;
 
-        // 1. Broadcast Market Tick
-        telemetryWsGateway.broadcastMarketTick({
+        ticksBatch.push({
           marketId: market.id,
           symbol: market.symbol,
           spotPrice: spot,
@@ -39,13 +53,22 @@ export function startMarketEmitter(tickIntervalMs: number = 100): void {
           edge: market.edgePercentage,
           hasAnomaly,
         });
+      }
 
-        // 2. Broadcast Depth Update (throttled to every ~5 ticks per market)
-        if (Math.random() < 0.2) {
-          const depth = marketService.getMarketDepth(market.id);
+      // 1. Broadcast Batched Market Ticks in a single pre-serialized JSON frame
+      if (ticksBatch.length > 0) {
+        telemetryWsGateway.broadcastMarketTicksBatch(ticksBatch);
+      }
+
+      // 2. Coordinated Depth Ladder Broadcast (round-robin 1 market depth per tick cycle)
+      depthCycleCounter++;
+      if (activeMarkets.length > 0) {
+        const targetMarket = activeMarkets[depthCycleCounter % activeMarkets.length];
+        if (targetMarket) {
+          const depth = marketService.getMarketDepth(targetMarket.id);
           if (depth) {
             telemetryWsGateway.broadcastDepthUpdate({
-              marketId: market.id,
+              marketId: targetMarket.id,
               bestBid: depth.bestBidYes,
               bestAsk: depth.bestAskYes,
               bids: depth.yesBids.map((b) => [b.price, b.quantity]),
@@ -59,7 +82,7 @@ export function startMarketEmitter(tickIntervalMs: number = 100): void {
     }
   }, tickIntervalMs);
 
-  console.log(`[Market Emitter] Market & depth telemetry broadcaster started (${tickIntervalMs}ms tick rate)`);
+  console.log(`[Market Emitter] Batched market & depth telemetry broadcaster started (${tickIntervalMs}ms tick rate)`);
 }
 
 /**

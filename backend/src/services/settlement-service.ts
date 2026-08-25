@@ -75,10 +75,37 @@ export class SettlementService {
   private sweeps: SettlementSweep[] = [];
   private sweepsMap = new Map<string, SettlementSweep>();
 
+  // In-memory response caches with TTL and in-flight promise deduplication
+  private summaryCache = new Map<string, { summary: SweeperSummary; expiresAt: number }>();
+  private inFlightSummaryPromise = new Map<string, Promise<SweeperSummary>>();
+
+  private scanCache = new Map<string, { positions: UnclaimedPosition[]; expiresAt: number }>();
+  private inFlightScanPromise = new Map<string, Promise<UnclaimedPosition[]>>();
+
+  // Immutable on-chain finalized market state cache (finalized/voided markets never change status)
+  private finalizedMarketStateCache = new Map<string, any>();
+
+  // Known zero balances for finalized contracts: once an account is verified to have 0 balance on an expired finalized contract, skip RPC in future
+  private knownFinalizedZeroBalances = new Set<string>();
+
   constructor() {
     this.initializeFromDb().catch((err) => {
       console.warn('[SettlementService] DB load warning (using in-memory cache):', err.message);
     });
+  }
+
+  /**
+   * Invalidates cached sweeper summary and unclaimed positions.
+   */
+  public invalidateCache(userAddress?: string): void {
+    if (userAddress) {
+      const key = userAddress.toLowerCase();
+      this.summaryCache.delete(key);
+      this.scanCache.delete(key);
+    } else {
+      this.summaryCache.clear();
+      this.scanCache.clear();
+    }
   }
 
   /**
@@ -130,328 +157,349 @@ export class SettlementService {
    * this account's own traded markets. Finalized is the terminal indexer status
    * (it supersedes Resolved/Voided); scanning only Resolved missed settled wins.
    */
-  public async scanUnclaimedSettlements(userAddress?: string): Promise<UnclaimedPosition[]> {
+  public async scanUnclaimedSettlements(userAddress?: string, force: boolean = false): Promise<UnclaimedPosition[]> {
     const normalizedUser = userAddress && isAddress(userAddress)
       ? (getAddress(userAddress) as Address)
       : operatorAccount.address;
 
-    const positions: UnclaimedPosition[] = [];
-    const seenKeys = new Set<string>();
-    const decimals = SOMNIA_ADDRESSES.decimals;
-    const one = 10n ** BigInt(decimals);
-    const venueId = env.DREAMDEX_VENUE_ID;
-    const isTest = process.env.NODE_ENV === 'test';
-    const claimableTimeoutMs = isTest ? 250 : 8000;
-    const rpcTimeoutMs = isTest ? 250 : 4000;
+    const cacheKey = normalizedUser.toLowerCase();
+    const nowMs = Date.now();
 
-    const isValidHexMarket = (id?: string): boolean =>
-      typeof id === 'string' && id.startsWith('0x') && id.length === 66;
-
-    const fetchWithTimeout = async <T>(p: Promise<T>, fallback: T, timeoutMs: number = rpcTimeoutMs): Promise<T> => {
-      let timer: NodeJS.Timeout | undefined;
-      return Promise.race([
-        p.catch(() => fallback),
-        new Promise<T>((resolve) => {
-          timer = setTimeout(() => resolve(fallback), timeoutMs);
-        }),
-      ]).finally(() => {
-        if (timer) clearTimeout(timer);
-      });
-    };
-
-    const addPosition = (pos: UnclaimedPosition) => {
-      if (pos.rawAmount <= 0n || pos.claimableAmount <= 0) return;
-      const key = `${(pos.marketIdHex || pos.marketId).toLowerCase()}:${pos.outcomeIdx}`;
-      if (seenKeys.has(key)) return;
-      seenKeys.add(key);
-      positions.push(pos);
-    };
-
-    // 1. Wallet claimable set from the indexer (all held settled outcome tokens).
-    let claimableOk = false;
-    try {
-      const claimable = await new Promise<Awaited<ReturnType<typeof somniaExchange.client.getClaimable>>>(
-        (resolve, reject) => {
-          const timer = setTimeout(() => reject(new Error('getClaimable timeout')), claimableTimeoutMs);
-          somniaExchange.client
-            .getClaimable(normalizedUser)
-            .then((value) => {
-              clearTimeout(timer);
-              resolve(value);
-            })
-            .catch((err) => {
-              clearTimeout(timer);
-              reject(err);
-            });
-        },
-      );
-      claimableOk = true;
-      for (const c of claimable) {
-        if (!isValidHexMarket(c.marketId) || c.amount <= 0n || c.estPayout <= 0n) continue;
-        const known = marketService.getMarketById(c.marketId);
-        const isVoided = String(c.status).toLowerCase() === 'voided';
-        addPosition({
-          marketId: c.marketId,
-          symbol: known?.symbol || 'BTC/USD',
-          marketIdHex: c.marketId as Hex,
-          poolAddress: (c.pool || known?.poolAddress) as Address | undefined,
-          winningOutcome: c.outcomeIdx === 0 ? 'YES' : 'NO',
-          outcomeIdx: c.outcomeIdx,
-          rawAmount: c.amount,
-          claimableAmount: Number((Number(c.estPayout) / Number(one)).toFixed(4)),
-          isVoided,
-          status: c.status || (isVoided ? 'Voided' : 'Finalized'),
-        });
+    if (!force) {
+      const cached = this.scanCache.get(cacheKey);
+      if (cached && nowMs < cached.expiresAt) {
+        return cached.positions;
       }
-    } catch (err: any) {
-      console.warn('[SettlementService] getClaimable failed, falling back to market scan:', err?.message);
+      const inFlight = this.inFlightScanPromise.get(cacheKey);
+      if (inFlight) {
+        return inFlight;
+      }
     }
 
-    // 2. Collect THIS wallet's traded market ids (in-memory + DB). These are
-    // checked on-chain so a lagging indexer cannot hide newly settled wins.
-    const tradedHexIds: string[] = [];
-    const tradedSeen = new Set<string>();
-    const pushTraded = (id?: string) => {
-      if (!isValidHexMarket(id)) return;
-      const key = id!.toLowerCase();
-      if (tradedSeen.has(key)) return;
-      tradedSeen.add(key);
-      tradedHexIds.push(id!);
-    };
+    const doScan = async (): Promise<UnclaimedPosition[]> => {
+      const positions: UnclaimedPosition[] = [];
+      const seenKeys = new Set<string>();
+      const decimals = SOMNIA_ADDRESSES.decimals;
+      const one = 10n ** BigInt(decimals);
+      const venueId = env.DREAMDEX_VENUE_ID;
+      const isTest = process.env.NODE_ENV === 'test';
+      const claimableTimeoutMs = isTest ? 250 : 2500;
+      const rpcTimeoutMs = isTest ? 250 : 2000;
 
-    for (const o of orderService.getOrders({ userAddress: normalizedUser, limit: 400 })) {
-      pushTraded(o.marketId);
-    }
-    if (tradedHexIds.length === 0) {
-      for (const o of orderService.getOrders({ limit: 400 })) {
+      const isValidHexMarket = (id?: string): boolean =>
+        typeof id === 'string' && id.startsWith('0x') && id.length === 66;
+
+      const fetchWithTimeout = async <T>(p: Promise<T>, fallback: T, timeoutMs: number = rpcTimeoutMs): Promise<T> => {
+        let timer: NodeJS.Timeout | undefined;
+        return Promise.race([
+          p.catch(() => fallback),
+          new Promise<T>((resolve) => {
+            timer = setTimeout(() => resolve(fallback), timeoutMs);
+          }),
+        ]).finally(() => {
+          if (timer) clearTimeout(timer);
+        });
+      };
+
+      const addPosition = (pos: UnclaimedPosition) => {
+        if (pos.rawAmount <= 0n || pos.claimableAmount <= 0) return;
+        const key = `${(pos.marketIdHex || pos.marketId).toLowerCase()}:${pos.outcomeIdx}`;
+        if (seenKeys.has(key)) return;
+        seenKeys.add(key);
+        positions.push(pos);
+      };
+
+      // 1. Wallet claimable set from the indexer (all held settled outcome tokens).
+      let claimableOk = false;
+      try {
+        const claimable = await new Promise<Awaited<ReturnType<typeof somniaExchange.client.getClaimable>>>(
+          (resolve, reject) => {
+            const timer = setTimeout(() => reject(new Error('getClaimable timeout')), claimableTimeoutMs);
+            somniaExchange.client
+              .getClaimable(normalizedUser)
+              .then((value) => {
+                clearTimeout(timer);
+                resolve(value);
+              })
+              .catch((err) => {
+                clearTimeout(timer);
+                reject(err);
+              });
+          },
+        );
+        claimableOk = true;
+        for (const c of claimable) {
+          if (!isValidHexMarket(c.marketId) || c.amount <= 0n || c.estPayout <= 0n) continue;
+          const known = marketService.getMarketById(c.marketId);
+          const isVoided = String(c.status).toLowerCase() === 'voided';
+          addPosition({
+            marketId: c.marketId,
+            symbol: known?.symbol || 'BTC/USD',
+            marketIdHex: c.marketId as Hex,
+            poolAddress: (c.pool || known?.poolAddress) as Address | undefined,
+            winningOutcome: c.outcomeIdx === 0 ? 'YES' : 'NO',
+            outcomeIdx: c.outcomeIdx,
+            rawAmount: c.amount,
+            claimableAmount: Number((Number(c.estPayout) / Number(one)).toFixed(4)),
+            isVoided,
+            status: c.status || (isVoided ? 'Voided' : 'Finalized'),
+          });
+        }
+      } catch (err: any) {
+        console.warn('[SettlementService] getClaimable note:', err?.message);
+      }
+
+      // 2. Collect THIS wallet's traded market ids (in-memory).
+      const tradedHexIds: string[] = [];
+      const tradedSeen = new Set<string>();
+      const pushTraded = (id?: string) => {
+        if (!isValidHexMarket(id)) return;
+        const key = id!.toLowerCase();
+        if (tradedSeen.has(key)) return;
+        tradedSeen.add(key);
+        tradedHexIds.push(id!);
+      };
+
+      const userOrders = orderService.getOrders({ userAddress: normalizedUser, limit: 100 });
+      for (const o of userOrders) {
         pushTraded(o.marketId);
       }
-    }
 
-    if (!isTest) {
-      try {
-        const dbOrders = await fetchWithTimeout(
-          Promise.resolve(
-            supabase
-              .from('orders')
-              .select('market_id, user_address')
-              .order('created_at', { ascending: false })
-              .limit(400),
-          ).then((res) => {
-            if (res.error) {
-              console.warn('[SettlementService] orders lookup note:', res.error.message);
-              return [] as Array<{ market_id: string; user_address: string }>;
+      const isOperator = normalizedUser.toLowerCase() === operatorAccount.address.toLowerCase();
+      if (tradedHexIds.length === 0 && isOperator) {
+        for (const o of orderService.getOrders({ limit: 40 })) {
+          pushTraded(o.marketId);
+        }
+      }
+
+      // 3. Fallback markets if indexer claimable call failed
+      const fallbackHexIds: string[] = [];
+      if (!claimableOk) {
+        try {
+          const [finalized, resolved, voided] = await Promise.all([
+            fetchWithTimeout(
+              somniaExchange.client.listBinaryMarkets({ status: 'Finalized', venueId, limit: 20 }),
+              [],
+            ),
+            fetchWithTimeout(
+              somniaExchange.client.listBinaryMarkets({ status: 'Resolved', venueId, limit: 15 }),
+              [],
+            ),
+            fetchWithTimeout(
+              somniaExchange.client.listBinaryMarkets({ status: 'Voided', venueId, limit: 15 }),
+              [],
+            ),
+          ]);
+          for (const im of [...finalized, ...resolved, ...voided]) {
+            if (isValidHexMarket(im.marketId) && !tradedSeen.has(im.marketId.toLowerCase())) {
+              fallbackHexIds.push(im.marketId);
             }
-            return (res.data || []) as Array<{ market_id: string; user_address: string }>;
-          }),
-          [],
-          2500,
-        );
-        const want = normalizedUser.toLowerCase();
-        const matched = dbOrders.filter((row) => String(row.user_address || '').toLowerCase() === want);
-        for (const row of (matched.length > 0 ? matched : dbOrders)) {
-          pushTraded(row.market_id);
-        }
-      } catch (err: any) {
-        console.warn('[SettlementService] orders lookup failed:', err?.message);
-      }
-    }
-
-    // 3. If the wallet claimable read failed, also pull recently expired
-    // markets for our venue. Prefer Finalized (terminal indexer status that
-    // supersedes Resolved/Voided) plus still-settling Resolved/Voided rows.
-    const fallbackHexIds: string[] = [];
-    if (!claimableOk) {
-      try {
-        const [finalized, resolved, voided, past] = await Promise.all([
-          fetchWithTimeout(
-            somniaExchange.client.listBinaryMarkets({ status: 'Finalized', venueId, limit: 50 }),
-            [],
-          ),
-          fetchWithTimeout(
-            somniaExchange.client.listBinaryMarkets({ status: 'Resolved', venueId, limit: 25 }),
-            [],
-          ),
-          fetchWithTimeout(
-            somniaExchange.client.listBinaryMarkets({ status: 'Voided', venueId, limit: 25 }),
-            [],
-          ),
-          fetchWithTimeout(
-            somniaExchange.client.listPastBinaryMarkets({ venueId, status: 'Finalized', limit: 50 }),
-            [],
-          ),
-        ]);
-        for (const im of [...past, ...finalized, ...resolved, ...voided]) {
-          if (isValidHexMarket(im.marketId) && !tradedSeen.has(im.marketId.toLowerCase())) {
-            fallbackHexIds.push(im.marketId);
           }
+        } catch {
+          // Indexer fallback
         }
-      } catch {
-        // Indexer fallback — traded markets below still get checked.
-      }
-      for (const m of marketService.getHistoricalMarkets(50)) {
-        const id = m.marketIdHex || m.id;
-        if (isValidHexMarket(id) && !tradedSeen.has(id.toLowerCase())) {
-          fallbackHexIds.push(id);
+        for (const m of marketService.getHistoricalMarkets(25)) {
+          const id = m.marketIdHex || m.id;
+          if (isValidHexMarket(id) && !tradedSeen.has(id.toLowerCase())) {
+            fallbackHexIds.push(id);
+          }
         }
       }
-    }
 
-    const alreadyFound = new Set(
-      [...seenKeys].map((k) => k.split(':')[0]),
-    );
-
-    const onchainIds: string[] = [];
-    const onchainSeen = new Set<string>();
-    const pushOnchain = (id: string) => {
-      const key = id.toLowerCase();
-      if (onchainSeen.has(key) || alreadyFound.has(key)) return;
-      onchainSeen.add(key);
-      onchainIds.push(id);
-    };
-    for (const id of tradedHexIds) pushOnchain(id);
-    for (const id of fallbackHexIds) pushOnchain(id);
-
-    const ONCHAIN_SCAN_CAP = 40;
-    const toCheck = onchainIds.slice(0, ONCHAIN_SCAN_CAP);
-
-    const readOnchainPosition = async (marketId: string): Promise<void> => {
-      const targetHex = marketId as Hex;
-      try {
-        const onchain = await fetchWithTimeout(
-          somniaExchange.client.getMarketOnchain(targetHex).catch(() => null),
-          null,
-        );
-        if (!onchain || (!onchain.isResolved && !onchain.isVoided && !onchain.finalized)) {
-          return;
-        }
-
-        const [yesBal, noBal] = await Promise.all([
-          fetchWithTimeout(
-            somniaExchange.client.getOutcomeBalance({
-              outcomeToken: onchain.outcomeToken,
-              account: normalizedUser,
-              id: onchain.yesId,
-            }),
-            0n,
-          ),
-          fetchWithTimeout(
-            somniaExchange.client.getOutcomeBalance({
-              outcomeToken: onchain.outcomeToken,
-              account: normalizedUser,
-              id: onchain.noId,
-            }),
-            0n,
-          ),
-        ]);
-
-        const known = marketService.getMarketById(marketId);
-        const symbol = known?.symbol || 'BTC/USD';
-
-        if (onchain.isVoided) {
-          if (yesBal > 0n) {
-            addPosition({
-              marketId,
-              symbol,
-              marketIdHex: targetHex,
-              poolAddress: onchain.pool as Address,
-              outcomeToken: onchain.outcomeToken as Address,
-              winningOutcome: 'YES',
-              outcomeIdx: 0,
-              rawAmount: yesBal,
-              claimableAmount: Number(((Number(yesBal) / Number(one)) * 0.5).toFixed(4)),
-              isVoided: true,
-              status: 'Voided',
-            });
-          }
-          if (noBal > 0n) {
-            addPosition({
-              marketId,
-              symbol,
-              marketIdHex: targetHex,
-              poolAddress: onchain.pool as Address,
-              outcomeToken: onchain.outcomeToken as Address,
-              winningOutcome: 'NO',
-              outcomeIdx: 1,
-              rawAmount: noBal,
-              claimableAmount: Number(((Number(noBal) / Number(one)) * 0.5).toFixed(4)),
-              isVoided: true,
-              status: 'Voided',
-            });
-          }
-          return;
-        }
-
-        const winningIdx: 0 | 1 = onchain.winningOutcome === 0 ? 0 : 1;
-        const winBal = winningIdx === 0 ? yesBal : noBal;
-        if (winBal > 0n) {
-          const alreadySwept = this.sweeps.some(
-            (s) => s.userAddress.toLowerCase() === normalizedUser.toLowerCase() && s.marketId.toLowerCase() === marketId.toLowerCase(),
-          );
-          if (!alreadySwept) {
-            addPosition({
-              marketId,
-              symbol,
-              marketIdHex: targetHex,
-              poolAddress: onchain.pool as Address,
-              outcomeToken: onchain.outcomeToken as Address,
-              winningOutcome: winningIdx === 0 ? 'YES' : 'NO',
-              outcomeIdx: winningIdx,
-              rawAmount: winBal,
-              claimableAmount: Number((Number(winBal) / Number(one)).toFixed(4)),
-              isVoided: false,
-              status: onchain.finalized ? 'Finalized' : 'Resolved',
-            });
-          }
-        } else if (normalizedUser.toLowerCase() !== operatorAccount.address.toLowerCase()) {
-          // For copy-trading users whose positions were executed via operator relay, check their winning orders
-          const userOrders = orderService.getOrders({ userAddress: normalizedUser }).filter(
-            (o) => o.marketId.toLowerCase() === marketId.toLowerCase() && (o.status === 'FILLED' || o.status === 'PENDING'),
-          );
-          for (const uo of userOrders) {
-            const isWin = onchain.isVoided || (uo.outcome === (winningIdx === 0 ? 'YES' : 'NO'));
-            if (!isWin) continue;
-            const alreadySwept = this.sweeps.some(
-              (s) => s.userAddress.toLowerCase() === normalizedUser.toLowerCase() && s.marketId.toLowerCase() === marketId.toLowerCase(),
-            );
-            if (alreadySwept) continue;
-
-            const payoutAmount = onchain.isVoided ? 0.5 * uo.lotSize : uo.lotSize * 1.0;
-            const rawAmount = BigInt(Math.floor(payoutAmount * Number(one)));
-            addPosition({
-              marketId,
-              symbol,
-              marketIdHex: targetHex,
-              poolAddress: onchain.pool as Address,
-              outcomeToken: onchain.outcomeToken as Address,
-              winningOutcome: winningIdx === 0 ? 'YES' : 'NO',
-              outcomeIdx: winningIdx,
-              rawAmount,
-              claimableAmount: Number(payoutAmount.toFixed(4)),
-              isVoided: onchain.isVoided,
-              status: onchain.finalized ? 'Finalized' : 'Resolved',
-              txHash: uo.txHash?.startsWith('0x') ? (uo.txHash as Hex) : undefined,
-            });
-          }
-        }
-      } catch (err: any) {
-        console.warn(`[SettlementService] Scan error for market ${marketId}:`, err.message);
-      }
-    };
-
-    const CONCURRENCY = 8;
-    for (let i = 0; i < toCheck.length; i += CONCURRENCY) {
-      await Promise.all(toCheck.slice(i, i + CONCURRENCY).map(readOnchainPosition));
-    }
-
-    if (positions.length > 0) {
-      const total = positions.reduce((sum, p) => sum + p.claimableAmount, 0);
-      console.log(
-        `[SettlementService] ${positions.length} unclaimed position(s) totaling ${total.toFixed(4)} tUSDC for ${normalizedUser}`,
+      const alreadyFound = new Set(
+        [...seenKeys].map((k) => k.split(':')[0]),
       );
-    }
 
-    return positions;
+      const onchainIds: string[] = [];
+      const onchainSeen = new Set<string>();
+      const pushOnchain = (id: string) => {
+        const key = id.toLowerCase();
+        if (onchainSeen.has(key) || alreadyFound.has(key)) return;
+        // Zero-balance filter: only skip if operator verified 0 balance on this finalized contract
+        if (isOperator && this.knownFinalizedZeroBalances.has(`${cacheKey}:${key}`)) return;
+        // Already swept filter (only skip if operator; for copy-traders, readOnchainPosition will check remaining unswept balance)
+        if (isOperator && this.sweeps.some((s) => s.userAddress.toLowerCase() === cacheKey && s.marketId.toLowerCase() === key)) return;
+        onchainSeen.add(key);
+        onchainIds.push(id);
+      };
+
+      for (const id of tradedHexIds) pushOnchain(id);
+      for (const id of fallbackHexIds) pushOnchain(id);
+
+      const ONCHAIN_SCAN_CAP = 50;
+      const toCheck = onchainIds.slice(0, ONCHAIN_SCAN_CAP);
+
+      const readOnchainPosition = async (marketId: string): Promise<void> => {
+        const targetHex = marketId as Hex;
+        try {
+          let onchain = this.finalizedMarketStateCache.get(targetHex.toLowerCase());
+          if (!onchain) {
+            onchain = await fetchWithTimeout(
+              somniaExchange.client.getMarketOnchain(targetHex).catch(() => null),
+              null,
+            );
+            if (onchain && (onchain.finalized || onchain.isVoided)) {
+              this.finalizedMarketStateCache.set(targetHex.toLowerCase(), onchain);
+            }
+          }
+
+          if (!onchain || (!onchain.isResolved && !onchain.isVoided && !onchain.finalized)) {
+            return;
+          }
+
+          const [yesBal, noBal] = await Promise.all([
+            fetchWithTimeout(
+              somniaExchange.client.getOutcomeBalance({
+                outcomeToken: onchain.outcomeToken,
+                account: normalizedUser,
+                id: onchain.yesId,
+              }),
+              0n,
+            ),
+            fetchWithTimeout(
+              somniaExchange.client.getOutcomeBalance({
+                outcomeToken: onchain.outcomeToken,
+                account: normalizedUser,
+                id: onchain.noId,
+              }),
+              0n,
+            ),
+          ]);
+
+          // Cache zero-balance on finalized contract for operator so we never query again
+          if (isOperator && yesBal === 0n && noBal === 0n && (onchain.finalized || onchain.isVoided)) {
+            this.knownFinalizedZeroBalances.add(`${cacheKey}:${marketId.toLowerCase()}`);
+          }
+
+          const known = marketService.getMarketById(marketId);
+          const symbol = known?.symbol || 'BTC/USD';
+
+          if (onchain.isVoided) {
+            if (yesBal > 0n) {
+              addPosition({
+                marketId,
+                symbol,
+                marketIdHex: targetHex,
+                poolAddress: onchain.pool as Address,
+                outcomeToken: onchain.outcomeToken as Address,
+                winningOutcome: 'YES',
+                outcomeIdx: 0,
+                rawAmount: yesBal,
+                claimableAmount: Number(((Number(yesBal) / Number(one)) * 0.5).toFixed(4)),
+                isVoided: true,
+                status: 'Voided',
+              });
+            }
+            if (noBal > 0n) {
+              addPosition({
+                marketId,
+                symbol,
+                marketIdHex: targetHex,
+                poolAddress: onchain.pool as Address,
+                outcomeToken: onchain.outcomeToken as Address,
+                winningOutcome: 'NO',
+                outcomeIdx: 1,
+                rawAmount: noBal,
+                claimableAmount: Number(((Number(noBal) / Number(one)) * 0.5).toFixed(4)),
+                isVoided: true,
+                status: 'Voided',
+              });
+            }
+            return;
+          }
+
+          const winningIdx: 0 | 1 = onchain.winningOutcome === 0 ? 0 : 1;
+          const winBal = winningIdx === 0 ? yesBal : noBal;
+          if (winBal > 0n) {
+            const alreadySwept = this.sweeps.some(
+              (s) => s.userAddress.toLowerCase() === cacheKey && s.marketId.toLowerCase() === marketId.toLowerCase(),
+            );
+            if (!alreadySwept) {
+              addPosition({
+                marketId,
+                symbol,
+                marketIdHex: targetHex,
+                poolAddress: onchain.pool as Address,
+                outcomeToken: onchain.outcomeToken as Address,
+                winningOutcome: winningIdx === 0 ? 'YES' : 'NO',
+                outcomeIdx: winningIdx,
+                rawAmount: winBal,
+                claimableAmount: Number((Number(winBal) / Number(one)).toFixed(4)),
+                isVoided: false,
+                status: onchain.finalized ? 'Finalized' : 'Resolved',
+              });
+            }
+          } else if (!isOperator) {
+            // For copy-trading users whose positions were executed via operator relay, aggregate all winning orders
+            const matchedOrders = orderService.getOrders({ userAddress: normalizedUser }).filter(
+              (o) => o.marketId.toLowerCase() === marketId.toLowerCase() && (o.status === 'FILLED' || o.status === 'PENDING'),
+            );
+            let totalWinningLots = 0;
+            let validTxHash: Hex | undefined;
+            for (const uo of matchedOrders) {
+              const isWin = onchain.isVoided || (uo.outcome === (winningIdx === 0 ? 'YES' : 'NO'));
+              if (isWin) {
+                totalWinningLots += uo.lotSize;
+                if (!validTxHash && uo.txHash?.startsWith('0x')) {
+                  validTxHash = uo.txHash as Hex;
+                }
+              }
+            }
+
+            if (totalWinningLots > 0) {
+              const totalExpectedPayout = onchain.isVoided ? 0.5 * totalWinningLots : totalWinningLots * 1.0;
+              const totalSweptForMarket = this.sweeps
+                .filter((s) => s.userAddress.toLowerCase() === cacheKey && s.marketId.toLowerCase() === marketId.toLowerCase())
+                .reduce((sum, s) => sum + (s.claimableAmount || 0), 0);
+
+              const remainingClaimable = totalExpectedPayout - totalSweptForMarket;
+              if (remainingClaimable > 0.0001) {
+                const rawAmount = BigInt(Math.floor(remainingClaimable * Number(one)));
+                addPosition({
+                  marketId,
+                  symbol,
+                  marketIdHex: targetHex,
+                  poolAddress: onchain.pool as Address,
+                  outcomeToken: onchain.outcomeToken as Address,
+                  winningOutcome: winningIdx === 0 ? 'YES' : 'NO',
+                  outcomeIdx: winningIdx,
+                  rawAmount,
+                  claimableAmount: Number(remainingClaimable.toFixed(4)),
+                  isVoided: onchain.isVoided,
+                  status: onchain.finalized ? 'Finalized' : 'Resolved',
+                  txHash: validTxHash,
+                });
+              }
+            }
+          }
+        } catch (err: any) {
+          console.warn(`[SettlementService] Scan error for market ${marketId}:`, err.message);
+        }
+      };
+
+      const CONCURRENCY = 10;
+      for (let i = 0; i < toCheck.length; i += CONCURRENCY) {
+        await Promise.all(toCheck.slice(i, i + CONCURRENCY).map(readOnchainPosition));
+      }
+
+      // Cache result with 5-second TTL
+      this.scanCache.set(cacheKey, { positions, expiresAt: Date.now() + 5000 });
+
+      if (positions.length > 0) {
+        const total = positions.reduce((sum, p) => sum + p.claimableAmount, 0);
+        console.log(
+          `[SettlementService] ${positions.length} unclaimed position(s) totaling ${total.toFixed(4)} tUSDC for ${normalizedUser}`,
+        );
+      }
+
+      return positions;
+    };
+
+    const scanPromise = doScan().finally(() => {
+      this.inFlightScanPromise.delete(cacheKey);
+    });
+    this.inFlightScanPromise.set(cacheKey, scanPromise);
+    return scanPromise;
   }
 
   /**
@@ -471,6 +519,7 @@ export class SettlementService {
     if (unclaimed.length > 0) {
       for (const pos of unclaimed) {
         let txHash: Hex | undefined;
+        let redeemSucceeded = false;
         try {
           const hasGas = await hasOperatorGas();
           if (hasGas && pos.marketIdHex) {
@@ -489,6 +538,7 @@ export class SettlementService {
             );
             if (res?.hash) {
               txHash = res.hash.startsWith('0x') ? (res.hash as Hex) : (`0x${res.hash}` as Hex);
+              redeemSucceeded = true;
             }
           }
         } catch (err: any) {
@@ -502,8 +552,14 @@ export class SettlementService {
           }
         }
 
+        // Only transfer payout to copy-trader if the on-chain redeem succeeded or was already verified
+        const canTransferPayout =
+          process.env.NODE_ENV === 'test' ||
+          redeemSucceeded ||
+          (pos.txHash && pos.txHash.startsWith('0x'));
+
         if (
-          process.env.NODE_ENV !== 'test' &&
+          canTransferPayout &&
           normalizedUser.toLowerCase() !== operatorAccount.address.toLowerCase() &&
           pos.rawAmount > 0n
         ) {
@@ -521,7 +577,7 @@ export class SettlementService {
           }
         }
 
-        if (autoCompound) {
+        if (autoCompound && canTransferPayout) {
           await compounderService.compoundProceeds(normalizedUser, pos.claimableAmount, pos.poolAddress);
         }
 
@@ -664,11 +720,19 @@ export class SettlementService {
             const userOrders = orderService.getOrders({ userAddress: normalizedUser }).filter(
               (o) => o.marketId.toLowerCase() === marketId.toLowerCase() && (o.status === 'FILLED' || o.status === 'PENDING'),
             );
+            let totalWinningLots = 0;
             for (const uo of userOrders) {
               const isWin = onchain.isVoided || (uo.outcome === (winIdx === 0 ? 'YES' : 'NO'));
               if (isWin) {
-                amount += onchain.isVoided ? 0.5 * uo.lotSize : uo.lotSize * 1.0;
+                totalWinningLots += uo.lotSize;
               }
+            }
+            if (totalWinningLots > 0) {
+              const totalExpected = onchain.isVoided ? 0.5 * totalWinningLots : totalWinningLots * 1.0;
+              const alreadyClaimed = this.sweeps
+                .filter((s) => s.userAddress.toLowerCase() === normalizedUser.toLowerCase() && s.marketId.toLowerCase() === marketId.toLowerCase())
+                .reduce((sum, s) => sum + (s.claimableAmount || 0), 0);
+              amount = Math.max(0, Number((totalExpected - alreadyClaimed).toFixed(4)));
             }
           }
         }
@@ -722,16 +786,21 @@ export class SettlementService {
         await compounderService.compoundProceeds(normalizedUser, amount, market?.poolAddress as Address);
       }
 
+      if (autoCompound && amount > 0) {
+        compounderService.recordHistoricalSweep(normalizedUser, amount, now);
+      }
+
       // Persist to Supabase asynchronously (skip fake test artifacts)
       if (
         txHash &&
         txHash !== '0x1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef' &&
+        !txHash.startsWith('0xaaaaaaaa') &&
         !txHash.startsWith('0x0000000000000000000000000000000000000000000000000000000000000000') &&
-        marketId !== '0x3333444455556666777788889999000011112222' &&
         normalizedUser.toLowerCase() !== '0x15c7e8ce38f021c5b45d098aad788f63090bf20a'
       ) {
         try {
-          await marketService.ensureMarketPersisted(marketId, market?.symbol || 'BTC/USD');
+          const knownMarket = marketService.getMarketById(marketId);
+          await marketService.ensureMarketPersisted(marketId, knownMarket?.symbol || 'BTC/USD');
           await supabase.from('sweeps').insert({
             id: sweepId,
             user_address: normalizedUser,
@@ -761,58 +830,86 @@ export class SettlementService {
       txHash,
     });
 
+    this.invalidateCache(normalizedUser);
+
     return sweep;
   }
 
   /**
    * Retrieves summary statistics and pending unclaimed payouts for a user.
    */
-  public async getSweeperSummary(userAddress?: string): Promise<SweeperSummary> {
+  public async getSweeperSummary(userAddress?: string, force: boolean = false): Promise<SweeperSummary> {
     const normalized = userAddress && isAddress(userAddress)
       ? (getAddress(userAddress) as Address)
       : operatorAccount.address;
 
-    if (this.sweeps.length === 0) {
-      await this.initializeFromDb();
+    const cacheKey = normalized.toLowerCase();
+    const nowMs = Date.now();
+
+    if (!force) {
+      const cached = this.summaryCache.get(cacheKey);
+      if (cached && nowMs < cached.expiresAt) {
+        return cached.summary;
+      }
+      const inFlight = this.inFlightSummaryPromise.get(cacheKey);
+      if (inFlight) {
+        return inFlight;
+      }
     }
 
-    const unclaimedPositions = await this.scanUnclaimedSettlements(normalized);
-    const unclaimedAmount = Number(
-      unclaimedPositions.reduce((acc, p) => acc + p.claimableAmount, 0).toFixed(4),
-    );
+    const fetchSummary = async (): Promise<SweeperSummary> => {
+      if (this.sweeps.length === 0) {
+        await this.initializeFromDb();
+      }
 
-    const userSweeps = this.getSweepHistory(normalized);
-    const totalClaimedAllTime = Number(
-      userSweeps.reduce((acc, s) => acc + s.claimableAmount, 0).toFixed(4),
-    );
+      const unclaimedPositions = await this.scanUnclaimedSettlements(normalized, force);
+      const unclaimedAmount = Number(
+        unclaimedPositions.reduce((acc, p) => acc + p.claimableAmount, 0).toFixed(4),
+      );
 
-    const compoundedStats = compounderService.getUserCompoundedStats(normalized);
+      const userSweeps = this.getSweepHistory(normalized);
+      const totalClaimedAllTime = Number(
+        userSweeps.reduce((acc, s) => acc + s.claimableAmount, 0).toFixed(4),
+      );
 
-    return {
-      unclaimedAmount,
-      totalClaimedAllTime,
-      claimableMarketsCount: unclaimedPositions.length,
-      confirmedSweepsCount: userSweeps.length,
-      unclaimedPositions: unclaimedPositions.map((p) => ({
-        marketId: p.marketId,
-        symbol: p.symbol,
-        marketIdHex: p.marketIdHex,
-        poolAddress: p.poolAddress,
-        outcomeToken: p.outcomeToken,
-        winningOutcome: p.winningOutcome,
-        outcomeIdx: p.outcomeIdx,
-        rawAmount: p.rawAmount.toString(),
-        claimableAmount: p.claimableAmount,
-        isVoided: p.isVoided,
-        status: p.status,
-      })),
-      autoCompound: true,
-      compoundedStats: {
-        totalCompoundedAmount: compoundedStats.totalCompoundedAmount,
-        reinvestedCycles: compoundedStats.reinvestedCycles,
-        lastCompoundedAt: compoundedStats.lastCompoundedAt,
-      },
+      const compoundedStats = compounderService.getUserCompoundedStats(normalized);
+
+      const result: SweeperSummary = {
+        unclaimedAmount,
+        totalClaimedAllTime,
+        claimableMarketsCount: unclaimedPositions.length,
+        confirmedSweepsCount: userSweeps.length,
+        unclaimedPositions: unclaimedPositions.map((p) => ({
+          marketId: p.marketId,
+          symbol: p.symbol,
+          marketIdHex: p.marketIdHex,
+          poolAddress: p.poolAddress,
+          outcomeToken: p.outcomeToken,
+          winningOutcome: p.winningOutcome,
+          outcomeIdx: p.outcomeIdx,
+          rawAmount: p.rawAmount.toString(),
+          claimableAmount: p.claimableAmount,
+          isVoided: p.isVoided,
+          status: p.status,
+        })),
+        autoCompound: true,
+        compoundedStats: {
+          totalCompoundedAmount: compoundedStats.totalCompoundedAmount,
+          reinvestedCycles: compoundedStats.reinvestedCycles,
+          lastCompoundedAt: compoundedStats.lastCompoundedAt,
+        },
+      };
+
+      // 5-second TTL
+      this.summaryCache.set(cacheKey, { summary: result, expiresAt: Date.now() + 5000 });
+      return result;
     };
+
+    const promise = fetchSummary().finally(() => {
+      this.inFlightSummaryPromise.delete(cacheKey);
+    });
+    this.inFlightSummaryPromise.set(cacheKey, promise);
+    return promise;
   }
 
   /**

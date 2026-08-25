@@ -42,7 +42,7 @@ interface DashboardHeaderProps {
   onSwitchNetwork: () => Promise<void>;
 }
 
-export const DashboardHeader: React.FC<DashboardHeaderProps> = ({
+const DashboardHeaderComponent: React.FC<DashboardHeaderProps> = ({
   activeTab,
   onSelectTab,
   onToggleCollapse,
@@ -247,3 +247,5 @@ export const DashboardHeader: React.FC<DashboardHeaderProps> = ({
     </header>
   );
 };
+
+export const DashboardHeader = React.memo(DashboardHeaderComponent);

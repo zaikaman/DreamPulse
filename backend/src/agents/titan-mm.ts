@@ -82,15 +82,15 @@ export class TitanMMAgent extends BaseAgent {
     const halfSpread = this.titanConfig.targetSpread / 2.0;
     const inventorySkew = netInventory * this.titanConfig.inventoryAversion;
 
-    const rawBid = Math.max(0.01, fair.fairValueYes - halfSpread - inventorySkew);
-    const rawAsk = Math.min(0.99, fair.fairValueYes + halfSpread - inventorySkew);
+    const rawBid = Math.max(0.05, fair.fairValueYes - halfSpread - inventorySkew);
+    const rawAsk = Math.min(0.95, fair.fairValueYes + halfSpread - inventorySkew);
 
     let snappedBid = quantizePrice(rawBid);
     let snappedAsk = quantizePrice(rawAsk);
 
     // Invariant: Bid must strictly be less than Ask
     if (snappedBid >= snappedAsk) {
-      snappedBid = Math.max(0.01, quantizePrice(snappedAsk - 0.02));
+      snappedBid = Math.max(0.05, quantizePrice(snappedAsk - 0.02));
     }
 
     const lotSize = quantizeLotSize(this.titanConfig.lotSize);

@@ -243,8 +243,8 @@ export class MultiAgentSwarmRunner {
             const lastTradeTime = this.lastTradeTimes.get(type) || 0;
 
             // 1. Conservative In-Flight Risk Control: Wait for existing trade to resolve before opening a new one
-            // A. Don't enter another position on the same market until the current window resolves
-            if (orderService.hasActivePosition(type, market.id)) {
+            // A. Don't enter another position on the same market until the current window resolves (swarm-wide single market cap)
+            if (orderService.hasActivePosition(undefined, market.id)) {
               continue;
             }
 

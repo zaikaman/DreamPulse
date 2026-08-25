@@ -320,98 +320,121 @@ function breakdownWindow(orders: OrderExecution[]) {
 }
 
 export class AnalyticsService {
-  public async getAnalytics(userAddress: string | undefined, range: AnalyticsRange = '30d'): Promise<AnalyticsResponse> {
-    const normalizedUser = userAddress && userAddress.trim().length > 0 ? userAddress.trim().toLowerCase() : undefined;
-    const isOperator = normalizedUser ? normalizedUser === operatorAccount.address.toLowerCase() : false;
-    const cutoffMs = getRangeCutoff(range);
+  private analyticsCache = new Map<string, { data: AnalyticsResponse; expiresAt: number }>();
+  private inFlightPromise = new Map<string, Promise<AnalyticsResponse>>();
 
-    // Fetch orders for user and swarm
-    const allOrders = orderService.getOrders({ limit: undefined } as any); // get all in memory (no limit)
-    // Actually getOrders with no limit returns all (500 max internally but we have up to 500 cached)
-    // For analytics we need paginated from service, but we can directly access via getOrders with undefined limit gives all cached 500
-    // To be safe, if userAddress provided, filter
-    const userOrders = normalizedUser ? allOrders.filter((o) => o.userAddress.toLowerCase() === normalizedUser) : [];
-    const swarmOrders = allOrders; // all orders are swarm inclusive; operator orders are subset where userAddress == operator
-    // For comparison, swarmEquity should be operator's equity OR all swarm orders aggregated
-    const operatorOrders = allOrders.filter((o) => o.userAddress.toLowerCase() === operatorAccount.address.toLowerCase());
-
-    // Use userOrders if connected, otherwise show swarm as primary (guest)
-    const primaryOrders = normalizedUser ? userOrders : operatorOrders;
-    // If user has no trades but is connected, we still show empty primary but swarm comparison shows activity
-
-    const primaryComputed = computeEquityAndDaily(primaryOrders, cutoffMs);
-    const swarmComputed = computeEquityAndDaily(operatorOrders, cutoffMs);
-
-    // Enrich summary with on-chain unclaimed + claimed
-    let unclaimedPnl = 0;
-    let totalClaimed = 0;
-    if (normalizedUser) {
-      try {
-        const sweeperSummary = await settlementService.getSweeperSummary(normalizedUser).catch(() => null);
-        if (sweeperSummary) {
-          unclaimedPnl = sweeperSummary.unclaimedAmount || 0;
-          totalClaimed = sweeperSummary.totalClaimedAllTime || 0;
-        }
-      } catch {}
+  public invalidateCache(userAddress?: string): void {
+    if (userAddress) {
+      const prefix = userAddress.toLowerCase();
+      for (const k of this.analyticsCache.keys()) {
+        if (k.startsWith(prefix)) this.analyticsCache.delete(k);
+      }
     } else {
+      this.analyticsCache.clear();
+    }
+  }
+
+  public async getAnalytics(userAddress: string | undefined, range: AnalyticsRange = '30d', force: boolean = false): Promise<AnalyticsResponse> {
+    const normalizedUser = userAddress && userAddress.trim().length > 0 ? userAddress.trim().toLowerCase() : undefined;
+    const cacheKey = `${normalizedUser || 'swarm'}:${range}`;
+    const nowMs = Date.now();
+
+    if (!force) {
+      const cached = this.analyticsCache.get(cacheKey);
+      if (cached && nowMs < cached.expiresAt) {
+        return cached.data;
+      }
+      const inFlight = this.inFlightPromise.get(cacheKey);
+      if (inFlight) {
+        return inFlight;
+      }
+    }
+
+    const computeAnalytics = async (): Promise<AnalyticsResponse> => {
+      const isOperator = normalizedUser ? normalizedUser === operatorAccount.address.toLowerCase() : false;
+      const cutoffMs = getRangeCutoff(range);
+
+      // Fetch orders for user and swarm
+      const allOrders = orderService.getOrders({ limit: undefined } as any); // get all in memory (no limit)
+      const userOrders = normalizedUser ? allOrders.filter((o) => o.userAddress.toLowerCase() === normalizedUser) : [];
+      const operatorOrders = allOrders.filter((o) => o.userAddress.toLowerCase() === operatorAccount.address.toLowerCase());
+
+      const primaryOrders = normalizedUser ? userOrders : operatorOrders;
+
+      const primaryComputed = computeEquityAndDaily(primaryOrders, cutoffMs);
+      const swarmComputed = computeEquityAndDaily(operatorOrders, cutoffMs);
+
+      // Enrich summary with on-chain unclaimed + claimed
+      let unclaimedPnl = 0;
+      let totalClaimed = 0;
       try {
-        const sweeperSummary = await settlementService.getSweeperSummary(operatorAccount.address).catch(() => null);
+        const sweeperSummary = await settlementService.getSweeperSummary(normalizedUser || operatorAccount.address).catch(() => null);
         if (sweeperSummary) {
           unclaimedPnl = sweeperSummary.unclaimedAmount || 0;
           totalClaimed = sweeperSummary.totalClaimedAllTime || 0;
         }
       } catch {}
-    }
-    primaryComputed.summary.unclaimedPnl = Number(unclaimedPnl.toFixed(2));
-    primaryComputed.summary.totalClaimed = Number(totalClaimed.toFixed(2));
-    primaryComputed.summary.totalPnl = Number((primaryComputed.summary.realizedPnl + 0).toFixed(2)); // realized already includes all settled
-    // For display, totalPnl is realized; keep separate
 
-    swarmComputed.summary.unclaimedPnl = 0;
-    swarmComputed.summary.totalClaimed = 0;
+      primaryComputed.summary.unclaimedPnl = Number(unclaimedPnl.toFixed(2));
+      primaryComputed.summary.totalClaimed = Number(totalClaimed.toFixed(2));
+      primaryComputed.summary.totalPnl = Number((primaryComputed.summary.realizedPnl + 0).toFixed(2));
 
-    // Breakdowns
-    const agentBreakdown = breakdownByAgent(primaryOrders.filter((o) => {
-      const ts = o.settledAt ? new Date(o.settledAt).getTime() : new Date(o.createdAt).getTime();
-      return ts >= cutoffMs;
-    }));
-    const swarmAgentBreakdown = breakdownByAgent(operatorOrders.filter((o) => {
-      const ts = o.settledAt ? new Date(o.settledAt).getTime() : new Date(o.createdAt).getTime();
-      return ts >= cutoffMs;
-    }));
-    const outcomeBreakdown = breakdownOutcome(primaryOrders.filter((o) => {
-      const ts = o.settledAt ? new Date(o.settledAt).getTime() : new Date(o.createdAt).getTime();
-      return ts >= cutoffMs;
-    }));
-    const symbolBreakdown = breakdownSymbol(primaryOrders.filter((o) => {
-      const ts = o.settledAt ? new Date(o.settledAt).getTime() : new Date(o.createdAt).getTime();
-      return ts >= cutoffMs;
-    }));
-    const windowBreakdown = breakdownWindow(primaryOrders.filter((o) => {
-      const ts = o.settledAt ? new Date(o.settledAt).getTime() : new Date(o.createdAt).getTime();
-      return ts >= cutoffMs;
-    }));
+      swarmComputed.summary.unclaimedPnl = 0;
+      swarmComputed.summary.totalClaimed = 0;
 
-    // Recent trades (last 10)
-    const recentTrades = [...primaryOrders].sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()).slice(0, 10);
+      // Breakdowns
+      const agentBreakdown = breakdownByAgent(primaryOrders.filter((o) => {
+        const ts = o.settledAt ? new Date(o.settledAt).getTime() : new Date(o.createdAt).getTime();
+        return ts >= cutoffMs;
+      }));
+      const swarmAgentBreakdown = breakdownByAgent(operatorOrders.filter((o) => {
+        const ts = o.settledAt ? new Date(o.settledAt).getTime() : new Date(o.createdAt).getTime();
+        return ts >= cutoffMs;
+      }));
+      const outcomeBreakdown = breakdownOutcome(primaryOrders.filter((o) => {
+        const ts = o.settledAt ? new Date(o.settledAt).getTime() : new Date(o.createdAt).getTime();
+        return ts >= cutoffMs;
+      }));
+      const symbolBreakdown = breakdownSymbol(primaryOrders.filter((o) => {
+        const ts = o.settledAt ? new Date(o.settledAt).getTime() : new Date(o.createdAt).getTime();
+        return ts >= cutoffMs;
+      }));
+      const windowBreakdown = breakdownWindow(primaryOrders.filter((o) => {
+        const ts = o.settledAt ? new Date(o.settledAt).getTime() : new Date(o.createdAt).getTime();
+        return ts >= cutoffMs;
+      }));
 
-    return {
-      range,
-      userAddress: normalizedUser || operatorAccount.address,
-      isOperator,
-      generatedAt: new Date().toISOString(),
-      summary: primaryComputed.summary,
-      equityCurve: primaryComputed.equity,
-      swarmEquityCurve: swarmComputed.equity,
-      dailyBars: primaryComputed.daily,
-      agentBreakdown,
-      swarmAgentBreakdown,
-      outcomeBreakdown,
-      symbolBreakdown,
-      windowBreakdown,
-      ledger: primaryComputed.ledger,
-      recentTrades,
+      // Recent trades (last 10)
+      const recentTrades = [...primaryOrders].sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()).slice(0, 10);
+
+      const result: AnalyticsResponse = {
+        range,
+        userAddress: normalizedUser || operatorAccount.address,
+        isOperator,
+        generatedAt: new Date().toISOString(),
+        summary: primaryComputed.summary,
+        equityCurve: primaryComputed.equity,
+        swarmEquityCurve: swarmComputed.equity,
+        dailyBars: primaryComputed.daily,
+        agentBreakdown,
+        swarmAgentBreakdown,
+        outcomeBreakdown,
+        symbolBreakdown,
+        windowBreakdown,
+        ledger: primaryComputed.ledger,
+        recentTrades,
+      };
+
+      // 4-second TTL
+      this.analyticsCache.set(cacheKey, { data: result, expiresAt: Date.now() + 4000 });
+      return result;
     };
+
+    const promise = computeAnalytics().finally(() => {
+      this.inFlightPromise.delete(cacheKey);
+    });
+    this.inFlightPromise.set(cacheKey, promise);
+    return promise;
   }
 
   public async getBalanceHistory(userAddress: string | undefined, range: AnalyticsRange = '30d'): Promise<{ equityCurve: EquityPoint[]; swarmEquityCurve: EquityPoint[] }> {

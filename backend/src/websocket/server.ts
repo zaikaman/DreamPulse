@@ -104,7 +104,39 @@ export class TelemetryWebSocketServer {
   }
 
   /**
-   * Broadcasts a 100ms market tick update to subscribers.
+   * High-performance batched market tick broadcaster.
+   * Serializes the array once and broadcasts to all markets channel subscribers.
+   */
+  public broadcastMarketTicksBatch(
+    ticks: Array<{
+      marketId: string;
+      symbol: string;
+      spotPrice: number;
+      strikePrice: number;
+      timeLeftSeconds: number;
+      impliedProb: number;
+      fairValue: number;
+      edge: number;
+      hasAnomaly: boolean;
+    }>,
+  ): void {
+    if (ticks.length === 0 || this.clients.size === 0) return;
+
+    const payloadString = JSON.stringify({
+      event: 'market_ticks',
+      timestamp: Date.now(),
+      data: ticks,
+    });
+
+    for (const [, sub] of this.clients) {
+      if (sub.ws.readyState === WebSocket.OPEN && sub.channels.has('markets')) {
+        sub.ws.send(payloadString);
+      }
+    }
+  }
+
+  /**
+   * Broadcasts a 100ms market tick update to subscribers (single legacy format).
    */
   public broadcastMarketTick(data: {
     marketId: string;
@@ -117,11 +149,11 @@ export class TelemetryWebSocketServer {
     edge: number;
     hasAnomaly: boolean;
   }): void {
-    const payload = {
+    const payloadString = JSON.stringify({
       event: 'market_tick',
       timestamp: Date.now(),
       data,
-    };
+    });
 
     for (const [, sub] of this.clients) {
       if (
@@ -129,13 +161,13 @@ export class TelemetryWebSocketServer {
         sub.channels.has('markets') &&
         (sub.symbols.size === 0 || sub.symbols.has(data.symbol))
       ) {
-        sub.ws.send(JSON.stringify(payload));
+        sub.ws.send(payloadString);
       }
     }
   }
 
   /**
-   * Broadcasts order book depth ladder updates.
+   * Broadcasts order book depth ladder updates with pre-serialization.
    */
   public broadcastDepthUpdate(data: {
     marketId: string;
@@ -144,21 +176,21 @@ export class TelemetryWebSocketServer {
     bids: Array<[number, number]>;
     asks: Array<[number, number]>;
   }): void {
-    const payload = {
+    const payloadString = JSON.stringify({
       event: 'depth_update',
       timestamp: Date.now(),
       ...data,
-    };
+    });
 
     for (const [, sub] of this.clients) {
       if (sub.ws.readyState === WebSocket.OPEN && sub.channels.has('markets')) {
-        sub.ws.send(JSON.stringify(payload));
+        sub.ws.send(payloadString);
       }
     }
   }
 
   /**
-   * Broadcasts live executed AI agent trade log on main feed.
+   * Broadcasts live executed AI agent trade log on main feed with pre-serialization.
    */
   public broadcastAgentThought(thought: {
     id?: string;
@@ -174,12 +206,12 @@ export class TelemetryWebSocketServer {
     isExecution?: boolean;
     timestamp?: number;
   }): void {
-    const payload = {
+    const payloadString = JSON.stringify({
       event: 'agent_thought',
       timestamp: thought.timestamp || Date.now(),
       isExecution: thought.isExecution ?? true,
       ...thought,
-    };
+    });
 
     for (const [, sub] of this.clients) {
       if (
@@ -187,7 +219,7 @@ export class TelemetryWebSocketServer {
         sub.channels.has('agent_thoughts') &&
         (sub.agentTypes.size === 0 || sub.agentTypes.has(thought.agent))
       ) {
-        sub.ws.send(JSON.stringify(payload));
+        sub.ws.send(payloadString);
       }
     }
   }
@@ -207,12 +239,12 @@ export class TelemetryWebSocketServer {
     isExecution?: boolean;
     timestamp?: number;
   }): void {
-    const payload = {
+    const payloadString = JSON.stringify({
       event: 'debug_thought',
       timestamp: thought.timestamp || Date.now(),
       isExecution: false,
       ...thought,
-    };
+    });
 
     for (const [, sub] of this.clients) {
       if (
@@ -220,13 +252,13 @@ export class TelemetryWebSocketServer {
         sub.channels.has('debug_thoughts') &&
         (sub.agentTypes.size === 0 || sub.agentTypes.has(thought.agent))
       ) {
-        sub.ws.send(JSON.stringify(payload));
+        sub.ws.send(payloadString);
       }
     }
   }
 
   /**
-   * Broadcasts order fill confirmation to user portfolio subscribers.
+   * Broadcasts order fill confirmation to user portfolio subscribers with pre-serialization.
    */
   public broadcastOrderFilled(order: {
     userAddress: string;
@@ -239,24 +271,26 @@ export class TelemetryWebSocketServer {
     lotSize: number;
     txHash?: string;
   }): void {
-    const payload = {
+    const payloadString = JSON.stringify({
       event: 'order_filled',
       timestamp: Date.now(),
       ...order,
-    };
+    });
+
+    const targetUser = order.userAddress ? order.userAddress.toLowerCase() : '';
 
     for (const [, sub] of this.clients) {
       if (
         sub.ws.readyState === WebSocket.OPEN &&
-        (sub.channels.has('user_portfolio') || sub.userAddresses.has(order.userAddress.toLowerCase()))
+        (sub.channels.has('user_portfolio') || (targetUser && sub.userAddresses.has(targetUser)))
       ) {
-        sub.ws.send(JSON.stringify(payload));
+        sub.ws.send(payloadString);
       }
     }
   }
 
   /**
-   * Broadcasts completed settlement sweep confirmation.
+   * Broadcasts completed settlement sweep confirmation with pre-serialization.
    */
   public broadcastSweepCompleted(sweep: {
     userAddress: string;
@@ -264,45 +298,46 @@ export class TelemetryWebSocketServer {
     claimedAmount: string;
     txHash?: string;
   }): void {
-    const payload = {
+    const payloadString = JSON.stringify({
       event: 'sweep_completed',
       timestamp: Date.now(),
       ...sweep,
-    };
+    });
+
+    const targetUser = sweep.userAddress ? sweep.userAddress.toLowerCase() : '';
 
     for (const [, sub] of this.clients) {
       if (
         sub.ws.readyState === WebSocket.OPEN &&
-        (sub.channels.has('user_portfolio') || sub.userAddresses.has(sweep.userAddress.toLowerCase()))
+        (sub.channels.has('user_portfolio') || (targetUser && sub.userAddresses.has(targetUser)))
       ) {
-        sub.ws.send(JSON.stringify(payload));
+        sub.ws.send(payloadString);
       }
     }
   }
 
   /**
    * Broadcasts realtime PnL settlement updates (per-trade resolved PnL) to all clients.
-   * This ensures swarm and portfolio PnL reflect true trade-by-trade results instantly without polling delay.
    */
   public broadcastPnlUpdate(data: {
     updatedOrders: Array<{ orderId: string; marketId: string; pnl: number; outcome: string; winningOutcome: string }>;
     timestamp: number;
   }): void {
-    const payload = {
+    const payloadString = JSON.stringify({
       event: 'pnl_update',
       timestamp: data.timestamp,
       updatedOrders: data.updatedOrders,
-    };
+    });
+
     for (const [, sub] of this.clients) {
       if (sub.ws.readyState === WebSocket.OPEN) {
-        // Broadcast to all connected clients; frontends filter by user if needed
-        sub.ws.send(JSON.stringify(payload));
+        sub.ws.send(payloadString);
       }
     }
   }
 
   /**
-   * Broadcasts aggregated swarm PnL telementry tick (for header KPI streaming).
+   * Broadcasts aggregated swarm PnL telemetry tick (for header KPI streaming).
    */
   public broadcastSwarmPnl(telemetry: {
     volt: number;
@@ -312,13 +347,14 @@ export class TelemetryWebSocketServer {
     totalSwarm: number;
     timestamp: number;
   }): void {
-    const payload = {
+    const payloadString = JSON.stringify({
       event: 'swarm_pnl_tick',
       ...telemetry,
-    };
+    });
+
     for (const [, sub] of this.clients) {
       if (sub.ws.readyState === WebSocket.OPEN) {
-        sub.ws.send(JSON.stringify(payload));
+        sub.ws.send(payloadString);
       }
     }
   }

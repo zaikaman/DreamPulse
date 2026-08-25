@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback, useRef } from 'react';
 import { apiClient } from '../services/api.js';
 import type { PortfolioSummary } from '../types/index.js';
 import type { WalletState } from './useSessionKey.js';
+import { telemetryClient, type OrderFillData, type SweepCompleteData, type PnlUpdateData } from '../services/telemetry-client.js';
 
 export interface UseUserPortfolioReturn {
   portfolio: PortfolioSummary | null;
@@ -92,77 +93,35 @@ export function useUserPortfolio(wallet?: WalletState): UseUserPortfolioReturn {
     // Initial fetch on mount / address change
     fetchPortfolio(true);
 
-    // Periodic 5-second polling fallback (was 10s — 2x faster without storm)
-    const interval = setInterval(() => fetchPortfolio(false), 5000);
+    // Dynamic user address subscription on multiplexed client
+    telemetryClient.setUserAddress(address);
 
-    // Realtime WebSocket subscriber for user trade & settlement events
-    let ws: WebSocket | null = null;
-    let reconnectTimer: number | null = null;
-    let isCleanedUp = false;
+    // Periodic 30-second polling fallback (heartbeat only, instant pushes handle real-time)
+    const interval = setInterval(() => fetchPortfolio(false), 30000);
 
-    const connectRealtime = () => {
-      if (isCleanedUp) return;
-      try {
-        const wsUrl = (import.meta as any).env?.VITE_BACKEND_WS_URL
-          ? (import.meta as any).env.VITE_BACKEND_WS_URL
-          : (() => {
-              const loc = window.location;
-              const protocol = loc.protocol === 'https:' ? 'wss:' : 'ws:';
-              const host = loc.hostname;
-              const port = loc.port === '5173' ? '5000' : loc.port || '5000';
-              return `${protocol}//${host}:${port}/ws/telemetry`;
-            })();
-        ws = new WebSocket(wsUrl);
-        ws.onopen = () => {
-          if (isCleanedUp) {
-            try { ws?.close(); } catch {}
-            return;
-          }
-          try {
-            ws?.send(JSON.stringify({
-              action: 'subscribe',
-              channel: 'user_portfolio',
-              params: { userAddress: address },
-            }));
-          } catch {}
-        };
-        ws.onmessage = (event) => {
-          try {
-            const payload = JSON.parse((event as MessageEvent).data);
-            // ONLY trigger on relevant user events: PnL settlement updates, order fills, or sweeps
-            // Do NOT trigger on swarm_pnl_tick (autonomous bot background ticks) to prevent rapid flashing
-            if (
-              payload.event === 'pnl_update' ||
-              payload.event === 'order_filled' ||
-              payload.event === 'sweep_completed'
-            ) {
-              debouncedFetch(100);
-            }
-          } catch {}
-        };
-        ws.onclose = () => {
-          if (!isCleanedUp) {
-            reconnectTimer = window.setTimeout(connectRealtime, 3000);
-          }
-        };
-        ws.onerror = () => {
-          try { ws?.close(); } catch {}
-        };
-      } catch {
-        if (!isCleanedUp) {
-          reconnectTimer = window.setTimeout(connectRealtime, 3000);
-        }
+    // Subscribe to real-time user events via shared telemetry bus
+    const unsubOrder = telemetryClient.on('order_filled', (order: OrderFillData) => {
+      if (!order.userAddress || order.userAddress.toLowerCase() === address) {
+        debouncedFetch(100);
       }
-    };
+    });
 
-    connectRealtime();
+    const unsubPnl = telemetryClient.on('pnl_update', (_pnl: PnlUpdateData) => {
+      debouncedFetch(100);
+    });
+
+    const unsubSweep = telemetryClient.on('sweep_completed', (sweep: SweepCompleteData) => {
+      if (!sweep.userAddress || sweep.userAddress.toLowerCase() === address) {
+        debouncedFetch(100);
+      }
+    });
 
     return () => {
-      isCleanedUp = true;
       clearInterval(interval);
-      if (reconnectTimer) clearTimeout(reconnectTimer);
       if (debounceTimerRef.current) clearTimeout(debounceTimerRef.current);
-      try { ws?.close(); } catch {}
+      unsubOrder();
+      unsubPnl();
+      unsubSweep();
     };
   }, [address, fetchPortfolio, debouncedFetch]);
 

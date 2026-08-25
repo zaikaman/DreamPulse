@@ -101,4 +101,13 @@ describe('Express REST API Endpoints', () => {
     expect(Array.isArray(res.body.data)).toBe(true);
     expect(typeof res.body.totalVolume).toBe('number');
   });
+
+  it('GET /api/v1/orders?swarmOnly=true filters exclusively to canonical operator swarm orders', async () => {
+    const res = await request(app).get('/api/v1/orders?swarmOnly=true&page=1&pageSize=10');
+    expect(res.status).toBe(200);
+    expect(res.body.success).toBe(true);
+    expect(res.body).toHaveProperty('total');
+    expect(res.body).toHaveProperty('totalFills');
+    expect(Array.isArray(res.body.data)).toBe(true);
+  });
 });

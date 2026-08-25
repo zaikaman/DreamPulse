@@ -1,6 +1,7 @@
 import { EventEmitter } from 'events';
 import type { Market } from '../types/index.js';
 import { calculateFairValue, calculateEdge } from '../quantitative/pricing.js';
+import { priceFeedService } from './price-feed-service.js';
 
 export type AnomalySeverity = 'LOW' | 'MEDIUM' | 'HIGH';
 
@@ -42,6 +43,11 @@ export class AnomalyService extends EventEmitter {
     const timeLeft = Math.max(0, Math.floor((closeTime - now) / 1000));
 
     if (market.status !== 'Open' || timeLeft <= 0) {
+      return null;
+    }
+
+    // Guard against stale price feeds during REST fallback delays or disconnects
+    if (process.env.NODE_ENV !== 'test' && priceFeedService.isPriceStale(market.symbol, 6000)) {
       return null;
     }
 

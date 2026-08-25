@@ -15,7 +15,7 @@ interface MarketsDepthViewProps {
   isLoading?: boolean;
 }
 
-export const MarketsDepthView: React.FC<MarketsDepthViewProps> = ({
+const MarketsDepthViewComponent: React.FC<MarketsDepthViewProps> = ({
   markets,
   selectedMarket,
   selectedMarketId,
@@ -50,3 +50,5 @@ export const MarketsDepthView: React.FC<MarketsDepthViewProps> = ({
     </div>
   );
 };
+
+export const MarketsDepthView = React.memo(MarketsDepthViewComponent);

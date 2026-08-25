@@ -16,6 +16,7 @@ import {
 import { apiClient } from '../services/api.js';
 import { SOMNIA_ADDRESSES } from '../services/web3.js';
 import type { SettlementSweep } from '../types/index.js';
+import { telemetryClient, type SweepCompleteData, type PnlUpdateData } from '../services/telemetry-client.js';
 import { ClaimCelebration } from './ClaimCelebration.js';
 import { Spinner } from './ui/Spinner.js';
 
@@ -25,6 +26,20 @@ interface SweeperControlsProps {
   onConnectWallet?: () => Promise<void>;
 }
 
+const SWEEPER_SUMMARY_CACHE_KEY = 'dreampulse_sweeper_summary_';
+const SWEEPER_HISTORY_CACHE_KEY = 'dreampulse_sweeper_history_';
+
+interface CachedSweeperData {
+  unclaimedAmount: number;
+  totalClaimedAllTime: number;
+  claimableMarketsCount: number;
+  compoundedStats: {
+    totalCompoundedAmount: number;
+    reinvestedCycles: number;
+    lastCompoundedAt?: string;
+  };
+}
+
 export const SweeperControls: React.FC<SweeperControlsProps> = ({
   userAddress,
   onRefreshPortfolio,
@@ -32,24 +47,44 @@ export const SweeperControls: React.FC<SweeperControlsProps> = ({
 }) => {
   // Derive strictly from prop — no internal mutable scope that can race.
   // When user is connected we show personal settlements; otherwise protocol (swarm).
-  const activeAddress = userAddress ?? SOMNIA_ADDRESSES.operatorAccount;
+  const activeAddress = (userAddress ?? SOMNIA_ADDRESSES.operatorAccount).toLowerCase();
   const isViewingSelf = !!userAddress;
+
+  // Hydrate initial state from localStorage cache for instant 0ms mount
+  const initialCache = (() => {
+    try {
+      const raw = localStorage.getItem(`${SWEEPER_SUMMARY_CACHE_KEY}${activeAddress}`);
+      return raw ? (JSON.parse(raw) as CachedSweeperData) : null;
+    } catch {
+      return null;
+    }
+  })();
+
+  const initialHistory = (() => {
+    try {
+      const raw = localStorage.getItem(`${SWEEPER_HISTORY_CACHE_KEY}${activeAddress}`);
+      return raw ? (JSON.parse(raw) as SettlementSweep[]) : [];
+    } catch {
+      return [];
+    }
+  })();
 
   const [autoCompound, setAutoCompound] = useState<boolean>(true);
   const [isSweeping, setIsSweeping] = useState<boolean>(false);
-  const [isLoading, setIsLoading] = useState<boolean>(true);
-  const [history, setHistory] = useState<SettlementSweep[]>([]);
-  const [unclaimedAmount, setUnclaimedAmount] = useState<number>(0);
-  const [totalClaimedAllTime, setTotalClaimedAllTime] = useState<number>(0);
-  const [claimableMarketsCount, setClaimableMarketsCount] = useState<number>(0);
+  const [isLoading, setIsLoading] = useState<boolean>(!initialCache);
+  const [history, setHistory] = useState<SettlementSweep[]>(initialHistory);
+  const [unclaimedAmount, setUnclaimedAmount] = useState<number>(initialCache?.unclaimedAmount || 0);
+  const [totalClaimedAllTime, setTotalClaimedAllTime] = useState<number>(initialCache?.totalClaimedAllTime || 0);
+  const [claimableMarketsCount, setClaimableMarketsCount] = useState<number>(initialCache?.claimableMarketsCount || 0);
 
   const [compoundedStats, setCompoundedStats] = useState<{
     totalCompoundedAmount: number;
     reinvestedCycles: number;
     lastCompoundedAt?: string;
   }>({
-    totalCompoundedAmount: 0,
-    reinvestedCycles: 0,
+    totalCompoundedAmount: initialCache?.compoundedStats?.totalCompoundedAmount || 0,
+    reinvestedCycles: initialCache?.compoundedStats?.reinvestedCycles || 0,
+    lastCompoundedAt: initialCache?.compoundedStats?.lastCompoundedAt,
   });
 
   // Celebration modal state
@@ -78,20 +113,41 @@ export const SweeperControls: React.FC<SweeperControlsProps> = ({
       if (reqId !== requestIdRef.current) return;
 
       if (summaryRes?.success && summaryRes.data) {
-        setUnclaimedAmount(summaryRes.data.unclaimedAmount || 0);
-        setTotalClaimedAllTime(summaryRes.data.totalClaimedAllTime || 0);
-        setClaimableMarketsCount(summaryRes.data.claimableMarketsCount || 0);
-        if (summaryRes.data.compoundedStats) {
-          setCompoundedStats({
-            totalCompoundedAmount: summaryRes.data.compoundedStats.totalCompoundedAmount || 0,
-            reinvestedCycles: summaryRes.data.compoundedStats.reinvestedCycles || 0,
-            lastCompoundedAt: summaryRes.data.compoundedStats.lastCompoundedAt,
-          });
-        }
+        const uAmount = summaryRes.data.unclaimedAmount || 0;
+        const tClaimed = summaryRes.data.totalClaimedAllTime || 0;
+        const cCount = summaryRes.data.claimableMarketsCount || 0;
+        const cStats = {
+          totalCompoundedAmount: summaryRes.data.compoundedStats?.totalCompoundedAmount || 0,
+          reinvestedCycles: summaryRes.data.compoundedStats?.reinvestedCycles || 0,
+          lastCompoundedAt: summaryRes.data.compoundedStats?.lastCompoundedAt,
+        };
+
+        setUnclaimedAmount(uAmount);
+        setTotalClaimedAllTime(tClaimed);
+        setClaimableMarketsCount(cCount);
+        setCompoundedStats(cStats);
+
+        try {
+          localStorage.setItem(
+            `${SWEEPER_SUMMARY_CACHE_KEY}${addr}`,
+            JSON.stringify({
+              unclaimedAmount: uAmount,
+              totalClaimedAllTime: tClaimed,
+              claimableMarketsCount: cCount,
+              compoundedStats: cStats,
+            }),
+          );
+        } catch {}
       }
 
       if (historyRes?.success && Array.isArray(historyRes.data)) {
         setHistory(historyRes.data);
+        try {
+          localStorage.setItem(
+            `${SWEEPER_HISTORY_CACHE_KEY}${addr}`,
+            JSON.stringify(historyRes.data),
+          );
+        } catch {}
       }
     } catch (err: any) {
       if (reqId !== requestIdRef.current) return;
@@ -104,21 +160,69 @@ export const SweeperControls: React.FC<SweeperControlsProps> = ({
   useEffect(() => {
     // Invalidate any in-flight fetch for the previous address before starting new one.
     requestIdRef.current++;
-    setIsLoading(true);
-    // Clear stale account's data immediately so we never flash swarm history
-    // while the new address's history is loading (avoids showing operator's
-    // settlements under the user's personal badge).
-    setHistory([]);
-    setUnclaimedAmount(0);
-    setTotalClaimedAllTime(0);
-    setClaimableMarketsCount(0);
-    setCompoundedStats({ totalCompoundedAmount: 0, reinvestedCycles: 0 });
+    
+    // Hydrate from localStorage for the active address immediately
+    try {
+      const rawSummary = localStorage.getItem(`${SWEEPER_SUMMARY_CACHE_KEY}${activeAddress}`);
+      const rawHistory = localStorage.getItem(`${SWEEPER_HISTORY_CACHE_KEY}${activeAddress}`);
+      if (rawSummary) {
+        const parsed = JSON.parse(rawSummary) as CachedSweeperData;
+        setUnclaimedAmount(parsed.unclaimedAmount || 0);
+        setTotalClaimedAllTime(parsed.totalClaimedAllTime || 0);
+        setClaimableMarketsCount(parsed.claimableMarketsCount || 0);
+        setCompoundedStats({
+          totalCompoundedAmount: parsed.compoundedStats?.totalCompoundedAmount || 0,
+          reinvestedCycles: parsed.compoundedStats?.reinvestedCycles || 0,
+          lastCompoundedAt: parsed.compoundedStats?.lastCompoundedAt,
+        });
+        setIsLoading(false);
+      } else {
+        setHistory([]);
+        setUnclaimedAmount(0);
+        setTotalClaimedAllTime(0);
+        setClaimableMarketsCount(0);
+        setCompoundedStats({ totalCompoundedAmount: 0, reinvestedCycles: 0 });
+        setIsLoading(true);
+      }
+      if (rawHistory) {
+        setHistory(JSON.parse(rawHistory));
+      }
+    } catch {}
+
     fetchSweeperData();
+
+    // 1. WebSocket event triggers for instant unclaimed & sweep history updates
+    let debounceTimer: number | null = null;
+    const scheduleRefresh = (delay = 200) => {
+      if (debounceTimer) window.clearTimeout(debounceTimer);
+      debounceTimer = window.setTimeout(() => {
+        fetchSweeperData();
+        if (onRefreshPortfolio) onRefreshPortfolio();
+      }, delay);
+    };
+
+    const unsubSweep = telemetryClient.on('sweep_completed', (sweep: SweepCompleteData) => {
+      if (!sweep.userAddress || sweep.userAddress.toLowerCase() === activeAddress.toLowerCase()) {
+        scheduleRefresh(150);
+      }
+    });
+
+    const unsubPnl = telemetryClient.on('pnl_update', (_pnl: PnlUpdateData) => {
+      scheduleRefresh(300);
+    });
+
+    // 2. Periodic 25-second background fallback
     const interval = setInterval(() => {
       fetchSweeperData();
-    }, 15000);
-    return () => clearInterval(interval);
-  }, [fetchSweeperData]);
+    }, 25000);
+
+    return () => {
+      if (debounceTimer) window.clearTimeout(debounceTimer);
+      clearInterval(interval);
+      unsubSweep();
+      unsubPnl();
+    };
+  }, [activeAddress, fetchSweeperData, onRefreshPortfolio]);
 
   const handleManualSweep = async () => {
     if (!activeAddress) return;

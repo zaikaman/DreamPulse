@@ -113,10 +113,21 @@ apiRouter.get('/markets/:id/depth', (req: Request, res: Response) => {
   });
 });
 
+// Cache for /markets/pools/future (30s TTL)
+const futurePoolsCache = new Map<string, { data: { success: boolean; count: number; pools: Address[]; horizonHours: number; window: string }; expiresAt: number }>();
+
 apiRouter.get('/markets/pools/future', async (req: Request, res: Response) => {
   try {
     const horizonHours = req.query.horizonHours ? parseInt(req.query.horizonHours as string, 10) : 24;
     const windowFilter = typeof req.query.window === 'string' ? (req.query.window as string).toLowerCase() : undefined;
+    const cacheKey = `${horizonHours}:${windowFilter || 'all'}`;
+    const nowMs = Date.now();
+
+    const cached = futurePoolsCache.get(cacheKey);
+    if (cached && nowMs < cached.expiresAt) {
+      return res.json(cached.data);
+    }
+
     const horizonSec = Math.floor(Date.now() / 1000) + Math.max(1, Math.min(168, horizonHours)) * 3600;
     const poolSet = new Set<string>();
 
@@ -167,9 +178,7 @@ apiRouter.get('/markets/pools/future', async (req: Request, res: Response) => {
     } catch {}
 
     // 4) Ensure 7d pools are included even when horizon is large — group by window+symbol and take next pool per group
-    // This prevents 5m pools (many) from crowding out 7d pools (few but far expiry) when slicing to maxPools
     if (windowFilter === '7d' || horizonHours >= 24) {
-      // Rebuild to ensure per-window coverage for 7d
       const byWindow = new Map<string, string>();
       try {
         const all = await somniaExchange.client.listBinaryMarkets({ limit: 200 } as any).catch(() => [] as any[]);
@@ -193,7 +202,9 @@ apiRouter.get('/markets/pools/future', async (req: Request, res: Response) => {
     }
     const maxPools = windowFilter === '7d' ? 20 : horizonHours >= 168 ? 120 : 80;
     const pools = [...poolSet].slice(0, maxPools) as Address[];
-    res.json({ success: true, count: pools.length, pools, horizonHours: Math.max(1, Math.min(168, horizonHours)), window: windowFilter || 'all' });
+    const responsePayload = { success: true, count: pools.length, pools, horizonHours: Math.max(1, Math.min(168, horizonHours)), window: windowFilter || 'all' };
+    futurePoolsCache.set(cacheKey, { data: responsePayload, expiresAt: Date.now() + 30000 });
+    res.json(responsePayload);
   } catch (err: any) {
     res.status(500).json({ success: false, error: err.message || 'Failed to fetch future pools' });
   }
@@ -555,7 +566,7 @@ apiRouter.get('/agents/logs', (req: Request, res: Response) => {
 // 4. Order Execution & History Endpoints
 // ------------------------------------------------------------------------------
 apiRouter.get('/orders', (req: Request, res: Response) => {
-  const { userAddress, agentType, status, outcome, marketId, limit, page, pageSize, search } = req.query;
+  const { userAddress, agentType, status, outcome, marketId, limit, page, pageSize, search, swarmOnly, scope } = req.query;
 
   const result = orderService.queryOrdersPaginated({
     userAddress: typeof userAddress === 'string' ? userAddress : undefined,
@@ -564,6 +575,8 @@ apiRouter.get('/orders', (req: Request, res: Response) => {
     outcome: typeof outcome === 'string' && (outcome === 'YES' || outcome === 'NO' || outcome === 'VOID') ? (outcome as any) : undefined,
     marketId: typeof marketId === 'string' ? marketId : undefined,
     searchQuery: typeof search === 'string' ? search : undefined,
+    scope: scope === 'SWARM' || scope === 'MY_ORDERS' || scope === 'ALL' ? scope : undefined,
+    swarmOnly: swarmOnly === 'true' || scope === 'SWARM',
     limit: limit !== undefined ? parseInt(limit as string, 10) : undefined,
     page: page !== undefined ? parseInt(page as string, 10) : undefined,
     pageSize: pageSize !== undefined ? parseInt(pageSize as string, 10) : undefined,

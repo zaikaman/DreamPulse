@@ -65,6 +65,19 @@ export class VoltSniperAgent extends BaseAgent {
     const now = Date.now();
     const timeLeftSeconds = Math.max(1, Math.floor((closeTime - now) / 1000));
 
+    // Execution window calibration: latency momentum sniping is highest conviction in the final 120s before expiry
+    // If >120s remain, require 2x spot drift (0.40%) to avoid getting caught in mean-reverting intra-candle swings
+    const requiredDrift = timeLeftSeconds > 120 ? this.voltConfig.driftThreshold * 2.0 : this.voltConfig.driftThreshold;
+    if (absDrift < requiredDrift) {
+      return {
+        agentType: 'Volt',
+        action: 'HOLD',
+        targetMarketId: market.id,
+        confidence: 0.5,
+        rationale: `Spot drift (${(drift * 100).toFixed(2)}%) is below current window threshold (${(requiredDrift * 100).toFixed(2)}% with ${timeLeftSeconds}s remaining).`,
+      };
+    }
+
     // Calculate theoretical Black-Scholes fair value with latest drifted spot price
     const fair = calculateFairValue(spotTicker.price, market.strikePrice, timeLeftSeconds, market.symbol);
 
@@ -79,13 +92,25 @@ export class VoltSniperAgent extends BaseAgent {
 
         if (edge >= this.voltConfig.minEdge) {
           const snappedPrice = quantizePrice(bestAskYes);
-          const maxLots = this.voltConfig.maxTradeSize > 0
-            ? Math.floor(this.voltConfig.maxTradeSize / snappedPrice)
-            : this.voltConfig.lotSize;
-          const lotSize = quantizeLotSize(Math.min(this.voltConfig.lotSize, Math.max(1, maxLots)));
+
+          // Safe probability envelope: avoid extreme tail buying (<0.15 or >0.85) to eliminate negative skew steamroller risk
+          if (snappedPrice < 0.15 || snappedPrice > 0.85) {
+            return {
+              agentType: 'Volt',
+              action: 'HOLD',
+              targetMarketId: market.id,
+              confidence: 0.5,
+              rationale: `YES ask price (${snappedPrice.toFixed(2)}) is outside the optimal risk/reward boundary [0.15, 0.85]. Holding.`,
+            };
+          }
+
+          // Dynamic risk-adjusted position sizing: caps maximum capital at risk to ~$2.50 per trade
+          const targetRiskUsd = Math.min(2.5, this.voltConfig.maxTradeSize > 0 ? this.voltConfig.maxTradeSize : 2.5);
+          const dynamicLots = Math.max(1, Math.min(this.voltConfig.lotSize, Math.floor(targetRiskUsd / snappedPrice)));
+          const lotSize = quantizeLotSize(dynamicLots);
           const confidence = Math.min(0.99, Number((0.75 + edge * 2.0).toFixed(2)));
 
-          const rationale = `[SPOT JUMP] ${market.symbol} surged +${(drift * 100).toFixed(2)}%. Resting YES ask at ${bestAskYes.toFixed(2)} is lagging theoretical fair value ${fair.fairValueYes.toFixed(2)} (Edge: +${(edge * 100).toFixed(1)}%). Firing IOC taker buy.`;
+          const rationale = `[SPOT JUMP] ${market.symbol} surged +${(drift * 100).toFixed(2)}%. Resting YES ask at ${bestAskYes.toFixed(2)} is lagging theoretical fair value ${fair.fairValueYes.toFixed(2)} (Edge: +${(edge * 100).toFixed(1)}%). Firing IOC taker buy (${lotSize} lots at ${snappedPrice.toFixed(2)}).`;
 
           const decision: IAgentDecision = {
             agentType: 'Volt',
@@ -133,13 +158,25 @@ export class VoltSniperAgent extends BaseAgent {
 
         if (edge >= this.voltConfig.minEdge) {
           const snappedPrice = quantizePrice(bestAskNo);
-          const maxLots = this.voltConfig.maxTradeSize > 0
-            ? Math.floor(this.voltConfig.maxTradeSize / snappedPrice)
-            : this.voltConfig.lotSize;
-          const lotSize = quantizeLotSize(Math.min(this.voltConfig.lotSize, Math.max(1, maxLots)));
+
+          // Safe probability envelope: avoid extreme tail buying (<0.15 or >0.85) to eliminate negative skew steamroller risk
+          if (snappedPrice < 0.15 || snappedPrice > 0.85) {
+            return {
+              agentType: 'Volt',
+              action: 'HOLD',
+              targetMarketId: market.id,
+              confidence: 0.5,
+              rationale: `NO ask price (${snappedPrice.toFixed(2)}) is outside the optimal risk/reward boundary [0.15, 0.85]. Holding.`,
+            };
+          }
+
+          // Dynamic risk-adjusted position sizing: caps maximum capital at risk to ~$2.50 per trade
+          const targetRiskUsd = Math.min(2.5, this.voltConfig.maxTradeSize > 0 ? this.voltConfig.maxTradeSize : 2.5);
+          const dynamicLots = Math.max(1, Math.min(this.voltConfig.lotSize, Math.floor(targetRiskUsd / snappedPrice)));
+          const lotSize = quantizeLotSize(dynamicLots);
           const confidence = Math.min(0.99, Number((0.75 + edge * 2.0).toFixed(2)));
 
-          const rationale = `[SPOT DUMP] ${market.symbol} dropped ${(drift * 100).toFixed(2)}%. Resting NO ask at ${bestAskNo.toFixed(2)} is lagging theoretical fair value ${fair.fairValueNo.toFixed(2)} (Edge: +${(edge * 100).toFixed(1)}%). Firing IOC taker buy.`;
+          const rationale = `[SPOT DUMP] ${market.symbol} dropped ${(drift * 100).toFixed(2)}%. Resting NO ask at ${bestAskNo.toFixed(2)} is lagging theoretical fair value ${fair.fairValueNo.toFixed(2)} (Edge: +${(edge * 100).toFixed(1)}%). Firing IOC taker buy (${lotSize} lots at ${snappedPrice.toFixed(2)}).`;
 
           const decision: IAgentDecision = {
             agentType: 'Volt',

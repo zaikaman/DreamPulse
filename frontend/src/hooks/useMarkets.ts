@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback, useRef } from 'react';
 import type { Market, MarketStatus } from '../types/index.js';
 import { apiClient } from '../services/api.js';
 import { subscribeToTable } from '../services/supabase.js';
+import { telemetryClient, type MarketTickData } from '../services/telemetry-client.js';
 
 export interface UseMarketsOptions {
   symbol?: string;
@@ -10,10 +11,27 @@ export interface UseMarketsOptions {
   pollIntervalMs?: number;
 }
 
+const LOCAL_MARKETS_CACHE_KEY = 'dreampulse_markets_cache';
+
 export function useMarkets(options?: UseMarketsOptions) {
-  const [markets, setMarkets] = useState<Market[]>([]);
-  const [selectedMarketId, setSelectedMarketId] = useState<string | null>(null);
-  const [loading, setLoading] = useState<boolean>(true);
+  const [markets, setMarkets] = useState<Market[]>(() => {
+    try {
+      const cached = localStorage.getItem(LOCAL_MARKETS_CACHE_KEY);
+      if (cached) return JSON.parse(cached);
+    } catch {}
+    return [];
+  });
+  const [selectedMarketId, setSelectedMarketId] = useState<string | null>(() => {
+    try {
+      const cached = localStorage.getItem(LOCAL_MARKETS_CACHE_KEY);
+      if (cached) {
+        const parsed = JSON.parse(cached) as Market[];
+        return parsed.length > 0 ? parsed[0].id : null;
+      }
+    } catch {}
+    return null;
+  });
+  const [loading, setLoading] = useState<boolean>(markets.length === 0);
   const [error, setError] = useState<string | null>(null);
   const isMountedRef = useRef<boolean>(true);
 
@@ -28,6 +46,11 @@ export function useMarkets(options?: UseMarketsOptions) {
       if (isMountedRef.current && response.success) {
         setMarkets(response.data);
         setError(null);
+        try {
+          if (!options?.symbol && !options?.window && !options?.status) {
+            localStorage.setItem(LOCAL_MARKETS_CACHE_KEY, JSON.stringify(response.data));
+          }
+        } catch {}
 
         // Auto-select first market if none selected
         setSelectedMarketId((prev) => {
@@ -49,12 +72,12 @@ export function useMarkets(options?: UseMarketsOptions) {
     }
   }, [options?.symbol, options?.window, options?.status]);
 
-  // Initial fetch and periodic polling
+  // Initial fetch and periodic polling fallback (heartbeat)
   useEffect(() => {
     isMountedRef.current = true;
     fetchMarkets();
 
-    const interval = setInterval(fetchMarkets, options?.pollIntervalMs || 4000);
+    const interval = setInterval(fetchMarkets, options?.pollIntervalMs || 25000);
 
     return () => {
       isMountedRef.current = false;
@@ -96,9 +119,47 @@ export function useMarkets(options?: UseMarketsOptions) {
 
   const selectedMarket = markets.find((m) => m.id === selectedMarketId) || (markets.length > 0 ? markets[0] : null);
 
-  /**
-   * Helper to merge a high-frequency WebSocket market tick directly into React state.
-   */
+  // Real-time market tick listener via multiplexed telemetry bus
+  useEffect(() => {
+    let tickRaf: number | null = null;
+    const pendingTicks = new Map<string, MarketTickData>();
+
+    const unsubTicks = telemetryClient.on('market_ticks', (ticks: MarketTickData[]) => {
+      for (const t of ticks) {
+        if (t.marketId) pendingTicks.set(t.marketId, t);
+      }
+      if (tickRaf == null) {
+        tickRaf = requestAnimationFrame(() => {
+          tickRaf = null;
+          if (!isMountedRef.current || pendingTicks.size === 0) return;
+          setMarkets((prev) => {
+            let changed = false;
+            const next = prev.map((m) => {
+              const tick = pendingTicks.get(m.id);
+              if (tick) {
+                changed = true;
+                return {
+                  ...m,
+                  impliedProbYes: tick.impliedProb,
+                  fairValueYes: tick.fairValue,
+                  edgePercentage: tick.edge,
+                };
+              }
+              return m;
+            });
+            pendingTicks.clear();
+            return changed ? next : prev;
+          });
+        });
+      }
+    });
+
+    return () => {
+      unsubTicks();
+      if (tickRaf != null) cancelAnimationFrame(tickRaf);
+    };
+  }, []);
+
   const updateMarketFromTick = useCallback(
     (tick: {
       marketId: string;

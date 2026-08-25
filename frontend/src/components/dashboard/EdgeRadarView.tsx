@@ -14,7 +14,7 @@ interface EdgeRadarViewProps {
   isLoading?: boolean;
 }
 
-export const EdgeRadarView: React.FC<EdgeRadarViewProps> = ({
+const EdgeRadarViewComponent: React.FC<EdgeRadarViewProps> = ({
   markets,
   selectedMarketId,
   onSelectMarket,
@@ -148,3 +148,5 @@ export const EdgeRadarView: React.FC<EdgeRadarViewProps> = ({
     </div>
   );
 };
+
+export const EdgeRadarView = React.memo(EdgeRadarViewComponent);
