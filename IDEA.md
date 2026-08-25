@@ -45,8 +45,8 @@ In high-speed binary prediction markets (5-minute, 15-minute, and 1-hour BTC/ETH
        └─────────────┬─────────────┘                                       └─────────────┬─────────────┘
                      │                                                                   │
  ┌───────────────────┴───────────────────┐                                 ┌─────────────┴─────────────┐
- │ ⚡ Volt: Spot Staleness Sniper         │                                 │ • 1-Click Session Key     │
- │ 📐 Oracle: Volatility Surface Arb      │                                 │ • Strict Zero-Withdrawal  │
+ │ ⚡ Volt: Spot Staleness Sniper        │                                 │ • 1-Click Session Key     │
+ │ 📐 Oracle: Volatility Surface Arb     │                                 │ • Strict Zero-Withdrawal  │
  │ 🛡️ Titan: Adaptive Market Maker       │                                 │ • Custom Risk Guardrails  │
  │ 🔄 Sweeper: Auto-Claim & Compounder   │                                 │ • Dynamic Capital Alloc   │
  └───────────────────┬───────────────────┘                                 └─────────────┬─────────────┘
