@@ -58,7 +58,7 @@ export class AnomalyService extends EventEmitter {
         severity = 'MEDIUM';
       }
 
-      // Expected edge in dollar/STT terms per 1-lot position
+      // Expected edge in dollar/tUSDC terms per 1-lot position
       const expectedEdgeValue = Number((absEdge * 1.0).toFixed(4));
 
       const report: AnomalyReport = {

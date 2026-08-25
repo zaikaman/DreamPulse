@@ -191,20 +191,20 @@ describe('Task T038 & T040: Session Management Service & Risk Guardrails', () =>
       dailyVolumeCap: 50,
     });
 
-    // Execute first trade: 20 STT
+    // Execute first trade: 20 tUSDC
     expect(sessionService.validateTradeAllowance(session.id, 20).allowed).toBe(true);
     await sessionService.recordTradeSpend(session.id, 20);
 
-    // Execute second trade: 20 STT (Total 40 STT)
+    // Execute second trade: 20 tUSDC (Total 40 tUSDC)
     expect(sessionService.validateTradeAllowance(session.id, 20).allowed).toBe(true);
     await sessionService.recordTradeSpend(session.id, 20);
 
-    // Third trade of 15 STT would push total to 55 STT > 50 STT cap
+    // Third trade of 15 tUSDC would push total to 55 tUSDC > 50 tUSDC cap
     const rejected = sessionService.validateTradeAllowance(session.id, 15);
     expect(rejected.allowed).toBe(false);
     expect(rejected.reason).toContain('exceeds remaining daily volume cap');
 
-    // But smaller trade of 10 STT should be allowed (Total exactly 50 STT)
+    // But smaller trade of 10 tUSDC should be allowed (Total exactly 50 tUSDC)
     const allowed = sessionService.validateTradeAllowance(session.id, 10);
     expect(allowed.allowed).toBe(true);
   });

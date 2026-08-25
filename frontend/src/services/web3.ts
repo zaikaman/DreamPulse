@@ -42,9 +42,11 @@ export const somniaShannonTestnet = defineChain({
 export const SOMNIA_ADDRESSES = {
   chainId: 50312,
   operatorPermissionsRegistry: '0x15C7e8CE38F021c5b45d098AaD788f63090bF20A' as Address,
+  operatorAccount: '0x93e300607c363E7D7a47e50f5c9fDf1723e859Cf' as Address,
   testUsdc: '0x70a86D8842FB63C4Ad2b7cdddF530eBf1BB25d8E' as Address,
   binaryModule: '0x3ecC694Cef705358864a646142ac17A90E29e388' as Address,
   marketsCore: '0x2802504314685D89bF6C992CA5a8e7cC78bc0294' as Address,
+  collateralRouter: '0xbC0C9834B15ACE38bB50dDaa7d7f7C7CC4DC183C' as Address,
 };
 
 export const OPERATOR_SELECTORS = {
@@ -109,9 +111,21 @@ export const OPERATOR_REGISTRY_ABI = [
   },
   {
     type: 'function',
-    name: 'isOperatorAuthorized',
+    name: 'isGloballyApproved',
     stateMutability: 'view',
     inputs: [
+      { name: 'owner', type: 'address' },
+      { name: 'operator', type: 'address' },
+      { name: 'selector', type: 'bytes4' },
+    ],
+    outputs: [{ name: '', type: 'bool' }],
+  },
+  {
+    type: 'function',
+    name: 'isApprovedForPool',
+    stateMutability: 'view',
+    inputs: [
+      { name: 'pool', type: 'address' },
       { name: 'owner', type: 'address' },
       { name: 'operator', type: 'address' },
       { name: 'selector', type: 'bytes4' },
@@ -179,6 +193,13 @@ export const SPOT_POOL_ABI = [
 ] as const;
 
 export const ERC20_ABI = [
+  {
+    type: 'function',
+    name: 'faucet',
+    stateMutability: 'nonpayable',
+    inputs: [{ name: 'amount', type: 'uint256' }],
+    outputs: [],
+  },
   {
     type: 'function',
     name: 'approve',
@@ -251,6 +272,35 @@ export class Web3Service {
       chain: somniaShannonTestnet,
       transport: custom(window.ethereum),
     });
+  }
+
+  /**
+   * Checks if an account is already authorized in window.ethereum without opening a prompt (eth_accounts).
+   */
+  public async getAuthorizedAccount(): Promise<{ address: Address; chainId: number } | null> {
+    if (!this.isWalletAvailable()) {
+      return null;
+    }
+
+    try {
+      const accounts: string[] = await window.ethereum.request({
+        method: 'eth_accounts',
+      });
+
+      if (!accounts || accounts.length === 0) {
+        return null;
+      }
+
+      const rawChainId = await window.ethereum.request({ method: 'eth_chainId' });
+      const chainId = parseInt(rawChainId, 16);
+
+      return {
+        address: accounts[0] as Address,
+        chainId,
+      };
+    } catch {
+      return null;
+    }
   }
 
   /**
@@ -361,7 +411,7 @@ export class Web3Service {
     selectors?: Hex[];
     approved?: boolean;
   }): Promise<{ hash: Hex }> {
-    const operator = params.operator || SOMNIA_ADDRESSES.operatorPermissionsRegistry;
+    const operator = params.operator || SOMNIA_ADDRESSES.operatorAccount;
     const selectors = params.selectors || [
       OPERATOR_SELECTORS.placeOrderFor,
       OPERATOR_SELECTORS.cancelOrderFor,
@@ -390,7 +440,7 @@ export class Web3Service {
     selectors?: Hex[];
     approved?: boolean;
   }): Promise<{ hash: Hex }> {
-    const operator = params.operator || SOMNIA_ADDRESSES.operatorPermissionsRegistry;
+    const operator = params.operator || SOMNIA_ADDRESSES.operatorAccount;
     const selectors = params.selectors || [
       OPERATOR_SELECTORS.placeOrderFor,
       OPERATOR_SELECTORS.cancelOrderFor,
@@ -414,7 +464,7 @@ export class Web3Service {
    */
   public async setupPoolVault(params: {
     userAddress: Address;
-    pool: Address;
+    pool?: Address;
     token?: Address;
     amount: number;
   }): Promise<{
@@ -427,37 +477,18 @@ export class Web3Service {
     const wallet = this.getWalletClient(params.userAddress);
     const result: { approvalHash?: Hex; vaultModeHash?: Hex; depositHash?: Hex } = {};
 
-    // 1. Check and set manual vault mode if needed
-    try {
-      const isManualMode = await publicClient.readContract({
-        address: params.pool,
-        abi: SPOT_POOL_ABI,
-        functionName: 'getManualVaultMode',
-        args: [params.userAddress],
-      });
-
-      if (!isManualMode) {
-        const modeHash = await wallet.writeContract({
-          address: params.pool,
-          abi: SPOT_POOL_ABI,
-          functionName: 'setManualVaultMode',
-          args: [true],
-        });
-        await publicClient.waitForTransactionReceipt({ hash: modeHash });
-        result.vaultModeHash = modeHash;
-      }
-    } catch (err: any) {
-      console.warn('[Web3Service] Vault mode notice:', err.message);
-    }
-
+    // 1. Ensure token allowance is approved for DreamDEX trading
     if (amountRaw > 0n) {
-      // 2. Check and approve token allowance
       try {
+        const spender = params.pool && params.pool !== SOMNIA_ADDRESSES.binaryModule
+          ? params.pool
+          : SOMNIA_ADDRESSES.collateralRouter;
+
         const allowance = await publicClient.readContract({
           address: token,
           abi: ERC20_ABI,
           functionName: 'allowance',
-          args: [params.userAddress, params.pool],
+          args: [params.userAddress, spender],
         });
 
         if (allowance < amountRaw) {
@@ -465,7 +496,7 @@ export class Web3Service {
             address: token,
             abi: ERC20_ABI,
             functionName: 'approve',
-            args: [params.pool, amountRaw * 10n], // Approve with headroom
+            args: [spender, parseUnits('1000000', 6)], // 1,000,000 USDC allowance for seamless trading
           });
           await publicClient.waitForTransactionReceipt({ hash: appHash });
           result.approvalHash = appHash;
@@ -473,17 +504,39 @@ export class Web3Service {
       } catch (err: any) {
         console.warn('[Web3Service] Token approval notice:', err.message);
       }
+    }
 
-      // 3. Deposit collateral into pool vault
+    // 2. If a specific spot pool is provided, attempt manual vault mode and vault deposit
+    if (params.pool && params.pool.startsWith('0x') && params.pool !== SOMNIA_ADDRESSES.binaryModule) {
       try {
-        const depHash = await wallet.writeContract({
+        const isManualMode = await publicClient.readContract({
           address: params.pool,
           abi: SPOT_POOL_ABI,
-          functionName: 'deposit',
-          args: [token, amountRaw],
+          functionName: 'getManualVaultMode',
+          args: [params.userAddress],
         });
-        await publicClient.waitForTransactionReceipt({ hash: depHash });
-        result.depositHash = depHash;
+
+        if (!isManualMode) {
+          const modeHash = await wallet.writeContract({
+            address: params.pool,
+            abi: SPOT_POOL_ABI,
+            functionName: 'setManualVaultMode',
+            args: [true],
+          });
+          await publicClient.waitForTransactionReceipt({ hash: modeHash });
+          result.vaultModeHash = modeHash;
+        }
+
+        if (amountRaw > 0n) {
+          const depHash = await wallet.writeContract({
+            address: params.pool,
+            abi: SPOT_POOL_ABI,
+            functionName: 'deposit',
+            args: [token, amountRaw],
+          });
+          await publicClient.waitForTransactionReceipt({ hash: depHash });
+          result.depositHash = depHash;
+        }
       } catch (err: any) {
         console.warn('[Web3Service] Pool vault deposit notice:', err.message);
       }
@@ -501,24 +554,28 @@ export class Web3Service {
     pool?: Address;
     selector?: Hex;
   }): Promise<boolean> {
-    const operator = params.operator || SOMNIA_ADDRESSES.operatorPermissionsRegistry;
+    const operator = params.operator || SOMNIA_ADDRESSES.operatorAccount;
     const selector = params.selector || OPERATOR_SELECTORS.placeOrderFor;
 
     try {
-      if (params.pool) {
-        const poolAuthed = await publicClient.readContract({
-          address: params.pool,
-          abi: SPOT_POOL_ABI,
-          functionName: 'isOperatorAuthorized',
-          args: [params.owner, operator, selector as `0x${string}`],
-        });
-        if (poolAuthed) return true;
+      if (params.pool && params.pool !== SOMNIA_ADDRESSES.binaryModule) {
+        try {
+          const poolAuthed = await publicClient.readContract({
+            address: SOMNIA_ADDRESSES.operatorPermissionsRegistry,
+            abi: OPERATOR_REGISTRY_ABI,
+            functionName: 'isApprovedForPool',
+            args: [params.pool, params.owner, operator, selector as `0x${string}`],
+          });
+          if (poolAuthed) return true;
+        } catch {
+          // fallback to global check
+        }
       }
 
       const regAuthed = await publicClient.readContract({
         address: SOMNIA_ADDRESSES.operatorPermissionsRegistry,
         abi: OPERATOR_REGISTRY_ABI,
-        functionName: 'isOperatorAuthorized',
+        functionName: 'isGloballyApproved',
         args: [params.owner, operator, selector as `0x${string}`],
       });
 
@@ -558,7 +615,7 @@ export class Web3Service {
     operator?: Address;
     pool?: Address;
   }): Promise<{ hash: Hex }> {
-    const operator = params.operator || SOMNIA_ADDRESSES.operatorPermissionsRegistry;
+    const operator = params.operator || SOMNIA_ADDRESSES.operatorAccount;
     const selectors = [
       OPERATOR_SELECTORS.placeOrderFor,
       OPERATOR_SELECTORS.cancelOrderFor,
@@ -566,7 +623,7 @@ export class Web3Service {
     const wallet = this.getWalletClient(params.userAddress);
 
     let hash: Hex;
-    if (params.pool) {
+    if (params.pool && params.pool !== SOMNIA_ADDRESSES.binaryModule) {
       hash = await wallet.writeContract({
         address: SOMNIA_ADDRESSES.operatorPermissionsRegistry,
         abi: OPERATOR_REGISTRY_ABI,
@@ -651,6 +708,26 @@ export class Web3Service {
       }
       throw new Error(`Failed to sign session delegation: ${err.message}`);
     }
+  }
+
+  /**
+   * Mints TestUSDC collateral tokens for the user wallet using the on-chain faucet.
+   */
+  public async claimTestUsdcFaucet(
+    userAddress: Address,
+    amount: number = 1000,
+  ): Promise<{ hash: Hex }> {
+    const amountRaw = parseUnits(amount.toString(), 6);
+    const wallet = this.getWalletClient(userAddress);
+    const hash = await wallet.writeContract({
+      address: SOMNIA_ADDRESSES.testUsdc,
+      abi: ERC20_ABI,
+      functionName: 'faucet',
+      args: [amountRaw],
+    });
+
+    await publicClient.waitForTransactionReceipt({ hash });
+    return { hash };
   }
 
   /**

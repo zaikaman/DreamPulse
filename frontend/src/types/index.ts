@@ -159,3 +159,18 @@ export interface SwarmStatusSummary {
   titan: { status: string; activeQuotes: number; spreadCaptured: string };
   sweeper: { status: string; lastSweep: string; totalClaimed: string };
 }
+
+export interface PortfolioSummary {
+  userAddress: string;
+  isOperator: boolean;
+  realizedPnl: number;
+  unclaimedPnl: number;
+  totalClaimedAllTime: number;
+  totalPnl: number;
+  activePositionsCount: number;
+  ordersTodayCount: number;
+  volumeToday: number;
+  dailyVolumeCap: number;
+  maxTradeSize: number;
+  hasActiveSession: boolean;
+}

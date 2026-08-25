@@ -95,7 +95,7 @@ CREATE TABLE IF NOT EXISTS public.sweeps (
     market_id VARCHAR(66) REFERENCES public.markets(id) ON DELETE CASCADE,
     winning_outcome VARCHAR(10) NOT NULL,
     claimable_amount NUMERIC(18, 4) NOT NULL,
-    payout_token VARCHAR(20) NOT NULL DEFAULT 'STT',
+    payout_token VARCHAR(20) NOT NULL DEFAULT 'tUSDC',
     is_compounded BOOLEAN NOT NULL DEFAULT TRUE,
     tx_hash VARCHAR(66),
     status VARCHAR(20) NOT NULL DEFAULT 'PENDING', -- 'PENDING', 'CONFIRMED', 'FAILED'

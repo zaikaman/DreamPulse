@@ -28,10 +28,10 @@ export interface UseAgentSwarmReturn {
 
 export const useAgentSwarm = (): UseAgentSwarmReturn => {
   const [summary, setSummary] = useState<SwarmStatusSummary>({
-    volt: { status: 'ACTIVE', evalLatencyMs: 0, tradesToday: 0, pnl: '+0.00 STT' },
-    oracle: { status: 'ACTIVE', evalLatencyMs: 0, tradesToday: 0, pnl: '+0.00 STT' },
-    titan: { status: 'ACTIVE', activeQuotes: 0, spreadCaptured: '+0.00 STT' },
-    sweeper: { status: 'ACTIVE', lastSweep: new Date().toISOString(), totalClaimed: '0.00 STT' },
+    volt: { status: 'ACTIVE', evalLatencyMs: 0, tradesToday: 0, pnl: '+0.00 tUSDC' },
+    oracle: { status: 'ACTIVE', evalLatencyMs: 0, tradesToday: 0, pnl: '+0.00 tUSDC' },
+    titan: { status: 'ACTIVE', activeQuotes: 0, spreadCaptured: '+0.00 tUSDC' },
+    sweeper: { status: 'ACTIVE', lastSweep: new Date().toISOString(), totalClaimed: '0.00 tUSDC' },
   });
 
   const [detailed, setDetailed] = useState<Record<string, AgentDetail>>({

@@ -118,9 +118,9 @@ export const OrderBookDepth: React.FC<OrderBookDepthProps> = ({
 
       {/* Book Table Headers */}
       <div className="book-table-header">
-        <span className="col-header text-left">PRICE (STT)</span>
+        <span className="col-header text-left">PRICE (USDC)</span>
         <span className="col-header text-right">SIZE (SHARES)</span>
-        <span className="col-header text-right">TOTAL (STT)</span>
+        <span className="col-header text-right">TOTAL (USDC)</span>
       </div>
 
       {/* ASKS (Sells) - Rendered Top-to-Bottom */}
@@ -156,7 +156,7 @@ export const OrderBookDepth: React.FC<OrderBookDepthProps> = ({
       <div className="book-spread-banner">
         <div className="spread-col">
           <span className="spread-label">SPREAD</span>
-          <span className="spread-val tabular-num">{spread.toFixed(2)} STT</span>
+          <span className="spread-val tabular-num">{spread.toFixed(2)} USDC</span>
         </div>
 
         <div className="midpoint-col">

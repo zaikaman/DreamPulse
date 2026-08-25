@@ -2,8 +2,21 @@ import React from 'react';
 import { useAgentSwarm } from '../../hooks/useAgentSwarm.js';
 import { AgentSwarmCockpit } from '../AgentSwarmCockpit.js';
 import { OrderHistoryTable } from '../OrderHistoryTable.js';
+import type { WalletState } from '../../hooks/useSessionKey.js';
+import type { AgentType } from '../../types/index.js';
+import { useUserRole } from '../../hooks/useUserRole.js';
 
-export const SwarmCockpitView: React.FC = () => {
+interface SwarmCockpitViewProps {
+  wallet: WalletState;
+  onForkToStudio?: (agentType: AgentType, config: Record<string, any>) => void;
+  onConnectWallet?: () => Promise<void>;
+}
+
+export const SwarmCockpitView: React.FC<SwarmCockpitViewProps> = ({
+  wallet,
+  onForkToStudio,
+  onConnectWallet,
+}) => {
   const {
     detailed,
     orders,
@@ -11,6 +24,8 @@ export const SwarmCockpitView: React.FC = () => {
     toggleAgent,
     updateConfig,
   } = useAgentSwarm();
+
+  const { isOperator } = useUserRole(wallet);
 
   return (
     <div
@@ -25,15 +40,21 @@ export const SwarmCockpitView: React.FC = () => {
       {/* 1. Multi-Agent Swarm Strategy Cockpit & Controls */}
       <AgentSwarmCockpit
         detailedAgents={detailed}
+        isOperator={isOperator}
         onToggleAgent={toggleAgent}
         onUpdateConfig={updateConfig}
+        onForkToStudio={onForkToStudio}
       />
 
-      {/* 2. Real-Time Order History & Fills */}
+      {/* 2. Real-Time Order History & Fills (Public Swarm vs My Orders) */}
       <OrderHistoryTable
         orders={orders}
         isLoading={isLoading}
+        userAddress={wallet.address || undefined}
+        onConnectWallet={onConnectWallet}
       />
     </div>
   );
 };
+
+export default SwarmCockpitView;

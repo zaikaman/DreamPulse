@@ -19,11 +19,13 @@ export interface UseSessionKeyReturn {
   activeSession: SessionGrant | null;
   isLoading: boolean;
   isSigning: boolean;
+  isFauceting: boolean;
   stepState: 'idle' | 'authorizing_onchain' | 'depositing_vault' | 'signing_eip712' | 'registering_backend';
   error: string | null;
   connectWallet: () => Promise<void>;
   disconnectWallet: () => void;
   switchNetwork: () => Promise<void>;
+  claimCollateralFaucet: (amount?: number) => Promise<void>;
   createSession: (params: {
     maxTradeSize: number;
     dailyVolumeCap: number;
@@ -37,6 +39,7 @@ export interface UseSessionKeyReturn {
 }
 
 const LOCAL_SESSION_KEY = 'dreampulse_active_session';
+const LOCAL_WALLET_CONNECTED_KEY = 'dreampulse_wallet_connected';
 
 export function useSessionKey(): UseSessionKeyReturn {
   const [wallet, setWallet] = useState<WalletState>({
@@ -65,12 +68,35 @@ export function useSessionKey(): UseSessionKeyReturn {
 
   const [isLoading, setIsLoading] = useState<boolean>(false);
   const [isSigning, setIsSigning] = useState<boolean>(false);
+  const [isFauceting, setIsFauceting] = useState<boolean>(false);
   const [stepState, setStepState] = useState<
     'idle' | 'authorizing_onchain' | 'depositing_vault' | 'signing_eip712' | 'registering_backend'
   >('idle');
   const [error, setError] = useState<string | null>(null);
 
   const clearError = useCallback(() => setError(null), []);
+
+  /**
+   * Claims 1,000 TestUSDC collateral tokens from testnet faucet.
+   */
+  const claimCollateralFaucet = useCallback(async (amount: number = 1000) => {
+    if (!wallet.address) {
+      setError('Please connect your wallet first');
+      return;
+    }
+    setError(null);
+    setIsFauceting(true);
+    try {
+      await web3Service.claimTestUsdcFaucet(wallet.address, amount);
+      await refreshBalances(wallet.address);
+    } catch (err: any) {
+      console.error('[useSessionKey] Faucet claim error:', err);
+      setError(err?.message || 'Failed to claim TestUSDC faucet');
+      throw err;
+    } finally {
+      setIsFauceting(false);
+    }
+  }, [wallet.address]);
 
   /**
    * Refreshes balances for connected wallet.
@@ -180,6 +206,8 @@ export function useSessionKey(): UseSessionKeyReturn {
       const { address, chainId } = await web3Service.connectWallet();
       const isCorrect = chainId === somniaShannonTestnet.id;
 
+      localStorage.setItem(LOCAL_WALLET_CONNECTED_KEY, 'true');
+
       setWallet({
         isConnected: true,
         address,
@@ -202,6 +230,8 @@ export function useSessionKey(): UseSessionKeyReturn {
    * Disconnects current wallet.
    */
   const disconnectWallet = useCallback(() => {
+    localStorage.removeItem(LOCAL_WALLET_CONNECTED_KEY);
+    localStorage.removeItem(LOCAL_SESSION_KEY);
     setWallet({
       isConnected: false,
       address: null,
@@ -211,7 +241,6 @@ export function useSessionKey(): UseSessionKeyReturn {
       isCorrectNetwork: false,
     });
     setActiveSession(null);
-    localStorage.removeItem(LOCAL_SESSION_KEY);
   }, []);
 
   /**
@@ -261,21 +290,21 @@ export function useSessionKey(): UseSessionKeyReturn {
           const res = await web3Service.grantOperatorForPool({
             userAddress: wallet.address,
             pool: params.targetPool,
-            operator: SOMNIA_ADDRESSES.operatorPermissionsRegistry,
+            operator: SOMNIA_ADDRESSES.operatorAccount,
             approved: true,
           });
           onChainTxHash = res.hash;
         } else {
           const res = await web3Service.grantOperatorGlobal({
             userAddress: wallet.address,
-            operator: SOMNIA_ADDRESSES.operatorPermissionsRegistry,
+            operator: SOMNIA_ADDRESSES.operatorAccount,
             approved: true,
           });
           onChainTxHash = res.hash;
         }
 
         // Step 2: (Optional) Collateral Deposit & Vault Mode Setup
-        if (params.depositAmount && params.depositAmount > 0 && params.targetPool) {
+        if (params.depositAmount && params.depositAmount > 0) {
           setStepState('depositing_vault');
           await web3Service.setupPoolVault({
             userAddress: wallet.address,
@@ -294,7 +323,7 @@ export function useSessionKey(): UseSessionKeyReturn {
 
         const signature = await web3Service.signSessionDelegation({
           delegator: wallet.address,
-          operator: SOMNIA_ADDRESSES.operatorPermissionsRegistry,
+          operator: SOMNIA_ADDRESSES.operatorAccount,
           maxTradeSize: params.maxTradeSize,
           dailyVolumeCap: params.dailyVolumeCap,
           nonce,
@@ -305,7 +334,7 @@ export function useSessionKey(): UseSessionKeyReturn {
         setStepState('registering_backend');
         const res = await apiClient.registerSession({
           userAddress: wallet.address,
-          operatorAddress: SOMNIA_ADDRESSES.operatorPermissionsRegistry,
+          operatorAddress: SOMNIA_ADDRESSES.operatorAccount,
           maxTradeSize: params.maxTradeSize,
           dailyVolumeCap: params.dailyVolumeCap,
           expiresAt,
@@ -319,7 +348,7 @@ export function useSessionKey(): UseSessionKeyReturn {
         const createdSession: SessionGrant = {
           id: res.session.id,
           userAddress: wallet.address,
-          operatorAddress: SOMNIA_ADDRESSES.operatorPermissionsRegistry,
+          operatorAddress: SOMNIA_ADDRESSES.operatorAccount,
           permissions: ['placeOrderFor', 'cancelOrderFor'],
           maxTradeSize: params.maxTradeSize,
           dailyVolumeCap: params.dailyVolumeCap,
@@ -362,7 +391,7 @@ export function useSessionKey(): UseSessionKeyReturn {
         if (options?.onChain && wallet.address) {
           await web3Service.revokeOperatorOnChain({
             userAddress: wallet.address,
-            operator: SOMNIA_ADDRESSES.operatorPermissionsRegistry,
+            operator: SOMNIA_ADDRESSES.operatorAccount,
             pool: activeSession.targetPoolAddress,
           });
         }
@@ -384,6 +413,42 @@ export function useSessionKey(): UseSessionKeyReturn {
       await fetchActiveSession(wallet.address);
     }
   }, [wallet.address, refreshBalances, fetchActiveSession]);
+
+  // Auto-reconnect on mount if previously connected in localStorage
+  useEffect(() => {
+    let isMounted = true;
+
+    async function autoReconnect() {
+      const wasConnected = localStorage.getItem(LOCAL_WALLET_CONNECTED_KEY) === 'true';
+      if (!wasConnected) return;
+
+      try {
+        const auth = await web3Service.getAuthorizedAccount();
+        if (!auth || !isMounted) return;
+
+        const isCorrect = auth.chainId === somniaShannonTestnet.id;
+        setWallet({
+          isConnected: true,
+          address: auth.address,
+          balanceSTT: '0.00',
+          balanceCollateral: '0.00',
+          chainId: auth.chainId,
+          isCorrectNetwork: isCorrect,
+        });
+
+        await refreshBalances(auth.address);
+        await fetchActiveSession(auth.address);
+      } catch (err) {
+        console.warn('[useSessionKey] Auto-reconnect notice:', err);
+      }
+    }
+
+    autoReconnect();
+
+    return () => {
+      isMounted = false;
+    };
+  }, [refreshBalances, fetchActiveSession]);
 
   // Wallet event subscriptions
   useEffect(() => {
@@ -468,11 +533,13 @@ export function useSessionKey(): UseSessionKeyReturn {
     activeSession,
     isLoading,
     isSigning,
+    isFauceting,
     stepState,
     error,
     connectWallet,
     disconnectWallet,
     switchNetwork,
+    claimCollateralFaucet,
     createSession,
     revokeSession,
     refreshSession,

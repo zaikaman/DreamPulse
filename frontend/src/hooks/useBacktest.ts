@@ -2,9 +2,17 @@ import { useState, useEffect, useCallback } from 'react';
 import type { AgentType } from '../types/index.js';
 import { apiClient } from '../services/api.js';
 
+export interface FrictionParams {
+  slippageBps?: number;
+  feeBps?: number;
+  latencyMs?: number;
+}
+
 export interface BacktestParams {
   agentType: AgentType;
   symbol: string;
+  timeframe?: '1m' | '5m' | '15m' | '1h';
+  period?: '24h' | '3d' | '7d' | '14d' | '30d' | 'custom';
   startDate?: string;
   endDate?: string;
   initialCapital?: number;
@@ -15,13 +23,20 @@ export interface BacktestParams {
     inventoryAversion?: number;
     lotSize?: number;
     maxTradeSize?: number;
+    confidenceThreshold?: number;
   };
+  frictionConfig?: FrictionParams;
 }
 
 export interface BacktestEquityPoint {
   timestamp: string;
   equity: number;
   pnl: number;
+}
+
+export interface BacktestUnderwaterPoint {
+  timestamp: string;
+  drawdownPct: number;
 }
 
 export interface BacktestTradeFill {
@@ -31,6 +46,8 @@ export interface BacktestTradeFill {
   outcome: 'YES' | 'NO';
   price: number;
   lots: number;
+  grossPnl: number;
+  fee: number;
   pnl: number;
   cumulativePnl: number;
 }
@@ -40,6 +57,8 @@ export interface BacktestDetailedResult {
   userAddress: string;
   agentType: AgentType;
   symbol: string;
+  timeframe: string;
+  period: string;
   startDate: string;
   endDate: string;
   initialCapital: number;
@@ -49,8 +68,18 @@ export interface BacktestDetailedResult {
   netPnl: number;
   maxDrawdown: number;
   sharpeRatio: number;
+  sortinoRatio: number;
+  profitFactor: number;
+  expectancy: number;
+  payoffRatio: number;
+  avgWin: number;
+  avgLoss: number;
+  totalWins: number;
+  totalLosses: number;
+  totalFeesPaid: number;
   createdAt: string;
   equityCurve: BacktestEquityPoint[];
+  underwaterCurve: BacktestUnderwaterPoint[];
   trades: BacktestTradeFill[];
 }
 
@@ -82,7 +111,7 @@ export const useBacktest = (userAddress?: string) => {
 
       try {
         const payload = {
-          userAddress: userAddress || '0x15C7e8CE38F021c5b45d098AaD788f63090bF20A',
+          userAddress: userAddress || undefined,
           ...params,
         };
 

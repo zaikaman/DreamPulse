@@ -11,7 +11,14 @@ import {
   ChevronsLeft,
   ChevronsRight,
   Bot,
+  Eye,
+  Wallet,
+  ShieldCheck,
+  LogOut,
 } from 'lucide-react';
+import type { SessionGrant } from '../../types/index.js';
+import type { WalletState } from '../../hooks/useSessionKey.js';
+import { useUserRole } from '../../hooks/useUserRole.js';
 
 interface AppSidebarProps {
   activeTab: string;
@@ -19,6 +26,11 @@ interface AppSidebarProps {
   collapsed: boolean;
   onToggleCollapse: () => void;
   activeMarketsCount: number;
+  wallet: WalletState;
+  activeSession?: SessionGrant | null;
+  onConnectWallet?: () => Promise<void>;
+  onDisconnectWallet?: () => void;
+  onOpenSessionModal?: () => void;
 }
 
 export const AppSidebar: React.FC<AppSidebarProps> = ({
@@ -27,8 +39,15 @@ export const AppSidebar: React.FC<AppSidebarProps> = ({
   collapsed,
   onToggleCollapse,
   activeMarketsCount,
+  wallet,
+  activeSession,
+  onConnectWallet,
+  onDisconnectWallet,
+  onOpenSessionModal,
 }) => {
-  const mainNavItems = [
+  const { isGuest, isTrader, isOperator } = useUserRole(wallet);
+
+  const intelligenceNavItems = [
     {
       id: 'Overview',
       label: 'Mission Control',
@@ -53,23 +72,26 @@ export const AppSidebar: React.FC<AppSidebarProps> = ({
       Icon: Brain,
       badge: '4 Agents',
     },
-  ];
-
-  const protocolNavItems = [
     {
       id: 'Swarm Cockpit',
-      label: 'Swarm Strategy Cockpit',
+      label: 'Swarm Transparency',
       Icon: Cpu,
+      badge: isOperator ? 'Admin' : 'Public',
     },
+  ];
+
+  const personalNavItems = [
     {
       id: 'Strategy Studio',
-      label: 'Backtest Studio',
+      label: 'Strategy & Bot Studio',
       Icon: LineChart,
+      badge: isGuest ? 'Demo' : undefined,
     },
     {
       id: 'Settlement',
       label: 'Settlement Sweeper',
       Icon: Sparkles,
+      badge: isTrader ? 'My Payouts' : undefined,
     },
     {
       id: 'Docs',
@@ -120,8 +142,35 @@ export const AppSidebar: React.FC<AppSidebarProps> = ({
       <div className="sidebar-content">
         {/* Core Trading & Intelligence */}
         <div className="sidebar-group">
-          {!collapsed && <span className="sidebar-group-label">Intelligence & Trading</span>}
-          {mainNavItems.map((item) => {
+          {!collapsed && <span className="sidebar-group-label">Intelligence & Alpha</span>}
+          {intelligenceNavItems.map((item) => {
+            const Icon = item.Icon;
+            return (
+              <button
+                key={item.id}
+                type="button"
+                className={`sidebar-nav-item ${activeTab === item.id ? 'active' : ''}`}
+                onClick={() => onSelectTab(item.id)}
+                title={collapsed ? item.label : undefined}
+              >
+                <Icon size={16} className="sidebar-nav-icon" />
+                {!collapsed && <span className="sidebar-nav-label">{item.label}</span>}
+                {!collapsed && item.badge && (
+                  <span
+                    className={`sidebar-nav-badge ${item.badge === 'Admin' ? 'tag-amber' : ''}`}
+                  >
+                    {item.badge}
+                  </span>
+                )}
+              </button>
+            );
+          })}
+        </div>
+
+        {/* Personal Workspace & Studio */}
+        <div className="sidebar-group">
+          {!collapsed && <span className="sidebar-group-label">Personal Workspace</span>}
+          {personalNavItems.map((item) => {
             const Icon = item.Icon;
             return (
               <button
@@ -140,38 +189,146 @@ export const AppSidebar: React.FC<AppSidebarProps> = ({
             );
           })}
         </div>
-
-        {/* Protocols & Studio */}
-        <div className="sidebar-group">
-          {!collapsed && <span className="sidebar-group-label">Protocols & Studio</span>}
-          {protocolNavItems.map((item) => {
-            const Icon = item.Icon;
-            return (
-              <button
-                key={item.id}
-                type="button"
-                className={`sidebar-nav-item ${activeTab === item.id ? 'active' : ''}`}
-                onClick={() => onSelectTab(item.id)}
-                title={collapsed ? item.label : undefined}
-              >
-                <Icon size={16} className="sidebar-nav-icon" />
-                {!collapsed && <span className="sidebar-nav-label">{item.label}</span>}
-              </button>
-            );
-          })}
-        </div>
       </div>
 
-      {/* Footer User / Session Card */}
+      {/* Footer User / Identity / Session Card */}
       <div className="sidebar-footer">
         <div className="sidebar-user-card">
-          <div className="user-avatar">
-            <Bot size={15} />
+          <div
+            className="user-avatar"
+            style={{
+              background: isOperator
+                ? 'rgba(255, 170, 0, 0.15)'
+                : isTrader
+                ? 'rgba(0, 240, 255, 0.15)'
+                : 'rgba(255, 255, 255, 0.06)',
+              color: isOperator
+                ? 'var(--trade-anomaly)'
+                : isTrader
+                ? 'var(--brand-cyan)'
+                : 'var(--muted-foreground)',
+            }}
+          >
+            {isOperator ? (
+              <Bot size={15} />
+            ) : isTrader ? (
+              activeSession?.isActive ? (
+                <ShieldCheck size={15} />
+              ) : (
+                <Wallet size={15} />
+              )
+            ) : (
+              <Eye size={15} />
+            )}
           </div>
           {!collapsed ? (
-            <div className="user-info">
-              <span className="user-name">Somnia Swarm Operator</span>
-              <span className="user-role">0x15C7...F20A (Active)</span>
+            <div className="user-info" style={{ flex: 1, minWidth: 0 }}>
+              {isGuest ? (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                    <span className="user-name" style={{ color: 'var(--muted-foreground)' }}>Watch-Only Mode</span>
+                    <span className="sidebar-nav-badge" style={{ fontSize: '9px', padding: '1px 5px' }}>Guest</span>
+                  </div>
+                  {onConnectWallet && (
+                    <button
+                      type="button"
+                      onClick={onConnectWallet}
+                      className="btn-header-wallet"
+                      style={{
+                        padding: '3px 8px',
+                        fontSize: '11px',
+                        justifyContent: 'center',
+                        width: '100%',
+                        marginTop: '2px',
+                      }}
+                    >
+                      <Wallet size={11} />
+                      <span>Connect Wallet</span>
+                    </button>
+                  )}
+                </div>
+              ) : isTrader ? (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                    <span className="user-name" style={{ color: 'var(--foreground)' }}>Connected Trader</span>
+                    <button
+                      type="button"
+                      onClick={onOpenSessionModal}
+                      className="sidebar-nav-badge"
+                      style={{
+                        fontSize: '9px',
+                        padding: '1px 5px',
+                        background: activeSession?.isActive ? 'rgba(0, 255, 136, 0.15)' : 'rgba(0, 240, 255, 0.15)',
+                        color: activeSession?.isActive ? 'var(--trade-yes)' : 'var(--brand-cyan)',
+                        border: 'none',
+                        cursor: onOpenSessionModal ? 'pointer' : 'default',
+                      }}
+                      title={activeSession?.isActive ? 'Manage Session Delegation' : 'Authorize Session Delegation'}
+                    >
+                      {activeSession?.isActive ? 'DELEGATED' : 'DIRECT'}
+                    </button>
+                  </div>
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                    <span className="user-role tabular-num" style={{ fontSize: '11px' }}>
+                      {wallet.address?.slice(0, 6)}...{wallet.address?.slice(-4)}
+                    </span>
+                    {onDisconnectWallet && (
+                      <button
+                        type="button"
+                        onClick={onDisconnectWallet}
+                        style={{
+                          background: 'none',
+                          border: 'none',
+                          color: 'var(--muted-foreground)',
+                          cursor: 'pointer',
+                          padding: '2px',
+                          display: 'flex',
+                          alignItems: 'center',
+                          transition: 'color 0.15s ease',
+                        }}
+                        title="Disconnect Wallet"
+                        onMouseEnter={(e) => (e.currentTarget.style.color = 'var(--trade-no)')}
+                        onMouseLeave={(e) => (e.currentTarget.style.color = 'var(--muted-foreground)')}
+                      >
+                        <LogOut size={12} />
+                      </button>
+                    )}
+                  </div>
+                </div>
+              ) : (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                    <span className="user-name" style={{ color: 'var(--trade-anomaly)' }}>Protocol Operator</span>
+                    <span className="sidebar-nav-badge tag-amber" style={{ fontSize: '9px', padding: '1px 5px' }}>ADMIN</span>
+                  </div>
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                    <span className="user-role tabular-num" style={{ fontSize: '11px' }}>
+                      {wallet.address?.slice(0, 6)}...{wallet.address?.slice(-4)}
+                    </span>
+                    {onDisconnectWallet && (
+                      <button
+                        type="button"
+                        onClick={onDisconnectWallet}
+                        style={{
+                          background: 'none',
+                          border: 'none',
+                          color: 'var(--muted-foreground)',
+                          cursor: 'pointer',
+                          padding: '2px',
+                          display: 'flex',
+                          alignItems: 'center',
+                          transition: 'color 0.15s ease',
+                        }}
+                        title="Disconnect Wallet"
+                        onMouseEnter={(e) => (e.currentTarget.style.color = 'var(--trade-no)')}
+                        onMouseLeave={(e) => (e.currentTarget.style.color = 'var(--muted-foreground)')}
+                      >
+                        <LogOut size={12} />
+                      </button>
+                    )}
+                  </div>
+                </div>
+              )}
             </div>
           ) : (
             <button

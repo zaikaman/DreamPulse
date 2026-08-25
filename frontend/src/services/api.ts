@@ -7,6 +7,7 @@ import type {
   BacktestResult,
   SettlementSweep,
   SweeperSummary,
+  PortfolioSummary,
 } from '../types/index.js';
 
 const API_BASE_URL = import.meta.env.VITE_BACKEND_HTTP_URL || '/api/v1';
@@ -103,7 +104,6 @@ export const apiClient = {
     return fetchJson<{ success: boolean; logs: AgentThoughtLog[] }>(`/agents/logs?${params.toString()}`);
   },
 
-  // Orders
   async getOrders(params?: {
     userAddress?: string;
     agentType?: string;
@@ -118,6 +118,11 @@ export const apiClient = {
     const query = searchParams.toString();
     const endpoint = query ? `/orders?${query}` : '/orders';
     return fetchJson(endpoint);
+  },
+
+  async getPortfolioSummary(userAddress?: string): Promise<{ success: boolean; data: PortfolioSummary }> {
+    const endpoint = userAddress ? `/portfolio/summary?userAddress=${encodeURIComponent(userAddress)}` : '/portfolio/summary';
+    return fetchJson<{ success: boolean; data: PortfolioSummary }>(endpoint);
   },
 
   // Sweeper & Backtest

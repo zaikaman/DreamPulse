@@ -4,6 +4,7 @@ import './styles/landing.css';
 import './styles/terminal.css';
 import './styles/dashboard.css';
 
+import type { AgentType } from './types/index.js';
 import { useMarkets } from './hooks/useMarkets.js';
 import { useTelemetry } from './hooks/useTelemetry.js';
 import { useSessionKey } from './hooks/useSessionKey.js';
@@ -107,16 +108,26 @@ export const App: React.FC = () => {
     activeSession,
     isLoading: isSessionLoading,
     isSigning: isSessionSigning,
+    isFauceting: isSessionFauceting,
     stepState: sessionStepState,
     error: sessionError,
     connectWallet,
+    disconnectWallet,
     switchNetwork,
+    claimCollateralFaucet,
     createSession,
     revokeSession,
     clearError: clearSessionError,
   } = useSessionKey();
 
   const [isSessionModalOpen, setIsSessionModalOpen] = useState<boolean>(false);
+  const [forkedStrategyConfig, setForkedStrategyConfig] = useState<{ agentType: AgentType; config: Record<string, any> } | null>(null);
+
+  const handleForkToStudio = (agentType: AgentType, config: Record<string, any>) => {
+    setForkedStrategyConfig({ agentType, config });
+    setActiveNav('Strategy Studio');
+    window.location.hash = '#studio';
+  };
 
   // Listen to URL hash changes
   useEffect(() => {
@@ -434,6 +445,11 @@ export const App: React.FC = () => {
         collapsed={sidebarCollapsed}
         onToggleCollapse={() => setSidebarCollapsed(!sidebarCollapsed)}
         activeMarketsCount={markets.length}
+        wallet={wallet}
+        activeSession={activeSession}
+        onConnectWallet={connectWallet}
+        onDisconnectWallet={disconnectWallet}
+        onOpenSessionModal={() => setIsSessionModalOpen(true)}
       />
 
       {/* Main Content Area */}
@@ -460,8 +476,11 @@ export const App: React.FC = () => {
           onSearchChange={setGlobalSearch}
           wallet={wallet}
           activeSession={activeSession}
+          isFauceting={isSessionFauceting}
+          onClaimFaucet={claimCollateralFaucet}
           onOpenSessionModal={() => setIsSessionModalOpen(true)}
           onConnectWallet={connectWallet}
+          onDisconnectWallet={disconnectWallet}
           onSwitchNetwork={switchNetwork}
         />
 
@@ -492,6 +511,8 @@ export const App: React.FC = () => {
               }}
               wallet={wallet}
               activeSession={activeSession}
+              isFauceting={isSessionFauceting}
+              onClaimFaucet={claimCollateralFaucet}
               onOpenSessionModal={() => setIsSessionModalOpen(true)}
               onRevokeSession={revokeSession}
               onConnectWallet={connectWallet}
@@ -524,11 +545,24 @@ export const App: React.FC = () => {
               isConnected={isConnected}
             />
           ) : activeNav === 'Swarm Cockpit' ? (
-            <SwarmCockpitView />
+            <SwarmCockpitView
+              wallet={wallet}
+              onForkToStudio={handleForkToStudio}
+              onConnectWallet={connectWallet}
+            />
           ) : activeNav === 'Strategy Studio' ? (
-            <StrategyStudio />
+            <StrategyStudio
+              initialConfig={forkedStrategyConfig}
+              wallet={wallet}
+              activeSession={activeSession}
+              onOpenSessionModal={() => setIsSessionModalOpen(true)}
+              onConnectWallet={connectWallet}
+            />
           ) : activeNav === 'Settlement' ? (
-            <SweeperControls userAddress={wallet.address || undefined} />
+            <SweeperControls
+              userAddress={wallet.address || undefined}
+              onConnectWallet={connectWallet}
+            />
           ) : (
             /* Upcoming Protocol View Placeholder */
             <div className="stat-card" style={{ minHeight: '340px', alignItems: 'center', justifyContent: 'center', textAlign: 'center' }}>
@@ -562,10 +596,13 @@ export const App: React.FC = () => {
         activeSession={activeSession}
         isSigning={isSessionSigning}
         isLoading={isSessionLoading}
+        isFauceting={isSessionFauceting}
         stepState={sessionStepState}
         error={sessionError}
         onConnectWallet={connectWallet}
+        onDisconnectWallet={disconnectWallet}
         onSwitchNetwork={switchNetwork}
+        onClaimFaucet={claimCollateralFaucet}
         onCreateSession={createSession}
         onRevokeSession={revokeSession}
         onClearError={clearSessionError}

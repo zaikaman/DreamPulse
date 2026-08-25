@@ -49,9 +49,21 @@ export const OPERATOR_PERMISSIONS_REGISTRY_ABI = [
   },
   {
     type: 'function',
-    name: 'isOperatorAuthorized',
+    name: 'isGloballyApproved',
     stateMutability: 'view',
     inputs: [
+      { name: 'owner', type: 'address' },
+      { name: 'operator', type: 'address' },
+      { name: 'selector', type: 'bytes4' },
+    ],
+    outputs: [{ name: '', type: 'bool' }],
+  },
+  {
+    type: 'function',
+    name: 'isApprovedForPool',
+    stateMutability: 'view',
+    inputs: [
+      { name: 'pool', type: 'address' },
       { name: 'owner', type: 'address' },
       { name: 'operator', type: 'address' },
       { name: 'selector', type: 'bytes4' },
@@ -331,20 +343,24 @@ export async function checkOnChainOperatorAuthorization(
   selector: Hex = OPERATOR_SELECTORS.placeOrderFor,
 ): Promise<boolean> {
   try {
-    if (pool && pool.startsWith('0x')) {
-      const authorizedOnPool = await publicClient.readContract({
-        address: pool,
-        abi: SPOT_POOL_ABI,
-        functionName: 'isOperatorAuthorized',
-        args: [owner, operator, selector as `0x${string}`],
-      });
-      if (authorizedOnPool) return true;
+    if (pool && pool.startsWith('0x') && pool !== SOMNIA_ADDRESSES.binaryModule) {
+      try {
+        const authorizedOnPool = await publicClient.readContract({
+          address: SOMNIA_ADDRESSES.operatorPermissionsRegistry,
+          abi: OPERATOR_PERMISSIONS_REGISTRY_ABI,
+          functionName: 'isApprovedForPool',
+          args: [pool, owner, operator, selector as `0x${string}`],
+        });
+        if (authorizedOnPool) return true;
+      } catch {
+        // fallback
+      }
     }
 
     const authorizedOnRegistry = await publicClient.readContract({
       address: SOMNIA_ADDRESSES.operatorPermissionsRegistry,
       abi: OPERATOR_PERMISSIONS_REGISTRY_ABI,
-      functionName: 'isOperatorAuthorized',
+      functionName: 'isGloballyApproved',
       args: [owner, operator, selector as `0x${string}`],
     });
 

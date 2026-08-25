@@ -11,6 +11,9 @@ import {
   Wallet,
   Clock,
   ChevronRight,
+  Coins,
+  Loader2,
+  AlertTriangle,
 } from 'lucide-react';
 import type { SessionGrant } from '../types/index.js';
 import type { WalletState } from '../hooks/useSessionKey.js';
@@ -19,6 +22,8 @@ import { SOMNIA_ADDRESSES } from '../services/web3.js';
 interface SessionStatusBarProps {
   wallet: WalletState;
   activeSession: SessionGrant | null;
+  isFauceting?: boolean;
+  onClaimFaucet?: (amount?: number) => Promise<void>;
   onOpenModal: () => void;
   onRevokeSession: () => Promise<void>;
   onConnectWallet: () => Promise<void>;
@@ -28,6 +33,8 @@ interface SessionStatusBarProps {
 export const SessionStatusBar: React.FC<SessionStatusBarProps> = ({
   wallet,
   activeSession,
+  isFauceting = false,
+  onClaimFaucet,
   onOpenModal,
   onRevokeSession,
   onConnectWallet,
@@ -68,7 +75,7 @@ export const SessionStatusBar: React.FC<SessionStatusBarProps> = ({
 
   const handleCopy = (e: React.MouseEvent) => {
     e.stopPropagation();
-    navigator.clipboard.writeText(SOMNIA_ADDRESSES.operatorPermissionsRegistry);
+    navigator.clipboard.writeText(SOMNIA_ADDRESSES.operatorAccount);
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
   };
@@ -76,6 +83,7 @@ export const SessionStatusBar: React.FC<SessionStatusBarProps> = ({
   const spent = activeSession ? activeSession.spentToday : 0;
   const cap = activeSession ? activeSession.dailyVolumeCap : 100;
   const spentPercent = Math.min(100, Math.max(0, (spent / (cap || 1)) * 100));
+  const isCollateralZero = parseFloat(wallet.balanceCollateral || '0') === 0;
 
   // If wallet not connected
   if (!wallet.isConnected) {
@@ -147,9 +155,9 @@ export const SessionStatusBar: React.FC<SessionStatusBarProps> = ({
               <div
                 className="operator-chip"
                 onClick={handleCopy}
-                title="Click to copy Somnia OperatorPermissionsRegistry address"
+                title="Click to copy Somnia Delegated Operator address"
               >
-                <code>{SOMNIA_ADDRESSES.operatorPermissionsRegistry.slice(0, 6)}...{SOMNIA_ADDRESSES.operatorPermissionsRegistry.slice(-4)}</code>
+                <code>{SOMNIA_ADDRESSES.operatorAccount.slice(0, 6)}...{SOMNIA_ADDRESSES.operatorAccount.slice(-4)}</code>
                 {copied ? <Check size={11} className="copy-success-icon" /> : <Copy size={11} />}
               </div>
             </div>
@@ -158,7 +166,7 @@ export const SessionStatusBar: React.FC<SessionStatusBarProps> = ({
 
             <div className="session-metric-item">
               <span className="metric-label">SINGLE CAP</span>
-              <span className="metric-value tabular-num">{activeSession.maxTradeSize} STT</span>
+              <span className="metric-value tabular-num">{activeSession.maxTradeSize} tUSDC</span>
             </div>
 
             <div className="session-metric-divider"></div>
@@ -167,7 +175,7 @@ export const SessionStatusBar: React.FC<SessionStatusBarProps> = ({
               <div className="budget-label-row">
                 <span className="metric-label">24H VOLUME BUDGET</span>
                 <span className="budget-numbers tabular-num">
-                  {spent.toFixed(1)} / {cap} STT ({spentPercent.toFixed(0)}%)
+                  {spent.toFixed(1)} / {cap} tUSDC ({spentPercent.toFixed(0)}%)
                 </span>
               </div>
               <div className="budget-progress-track">
@@ -195,6 +203,39 @@ export const SessionStatusBar: React.FC<SessionStatusBarProps> = ({
                 <span className="tabular-num">{timeRemaining}</span>
               </div>
             </div>
+
+            {isCollateralZero && onClaimFaucet && (
+              <>
+                <div className="session-metric-divider"></div>
+                <div className="session-metric-item" style={{ color: 'var(--color-anomaly)', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                  <AlertTriangle size={13} />
+                  <span style={{ fontSize: '11px', fontWeight: 600 }}>0.00 tUSDC Collateral</span>
+                  <button
+                    type="button"
+                    className="btn-faucet-action-compact"
+                    onClick={() => onClaimFaucet(1000)}
+                    disabled={isFauceting}
+                    style={{
+                      background: 'var(--trade-anomaly)',
+                      color: '#000',
+                      border: 'none',
+                      padding: '3px 8px',
+                      borderRadius: '4px',
+                      fontSize: '10px',
+                      fontWeight: 700,
+                      cursor: 'pointer',
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: '4px',
+                      marginLeft: '4px',
+                    }}
+                  >
+                    {isFauceting ? <Loader2 size={10} className="spin" /> : <Coins size={10} />}
+                    <span>Claim 1k tUSDC</span>
+                  </button>
+                </div>
+              </>
+            )}
           </div>
         </div>
 
@@ -230,21 +271,37 @@ export const SessionStatusBar: React.FC<SessionStatusBarProps> = ({
           <KeyRound size={14} />
         </div>
         <div className="session-banner-text">
-          <span className="session-banner-title">No Active Session Delegation</span>
+          <span className="session-banner-title">
+            No Active Session Delegation {isCollateralZero && <span style={{ color: 'var(--color-anomaly)', fontSize: '11px', marginLeft: '6px' }}>(0.00 tUSDC Collateral)</span>}
+          </span>
           <span className="session-banner-desc">
             Authorize autonomous agents with 1-click EIP-712 signing & zero-withdrawal risk ceilings.
           </span>
         </div>
       </div>
-      <button
-        type="button"
-        className="btn-banner-action primary"
-        onClick={onOpenModal}
-      >
-        <KeyRound size={13} />
-        <span>Authorize Session</span>
-        <ChevronRight size={13} />
-      </button>
+      <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+        {isCollateralZero && onClaimFaucet && (
+          <button
+            type="button"
+            className="btn-banner-action"
+            onClick={() => onClaimFaucet(1000)}
+            disabled={isFauceting}
+            style={{ background: 'rgba(245, 158, 11, 0.15)', borderColor: 'rgba(245, 158, 11, 0.4)', color: 'var(--color-anomaly)' }}
+          >
+            {isFauceting ? <Loader2 size={13} className="spin" /> : <Coins size={13} />}
+            <span>Claim 1,000 tUSDC Faucet</span>
+          </button>
+        )}
+        <button
+          type="button"
+          className="btn-banner-action primary"
+          onClick={onOpenModal}
+        >
+          <KeyRound size={13} />
+          <span>Authorize Session</span>
+          <ChevronRight size={13} />
+        </button>
+      </div>
     </div>
   );
 };

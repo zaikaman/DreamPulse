@@ -1,15 +1,20 @@
-import React from 'react';
+import React, { useMemo, useState, useEffect } from 'react';
 import {
   Zap,
   ArrowRight,
   ExternalLink,
   ListOrdered,
   Brain,
+  Shield,
+  Sparkles,
+  Pause,
+  Activity,
 } from 'lucide-react';
 import type { Market, AgentThoughtLog, SessionGrant } from '../../types/index.js';
 import type { MarketTickData } from '../../hooks/useTelemetry.js';
 import type { WalletState } from '../../hooks/useSessionKey.js';
 import { useAgentSwarm } from '../../hooks/useAgentSwarm.js';
+import { useUserPortfolio } from '../../hooks/useUserPortfolio.js';
 import { StatCardsGrid } from './StatCardsGrid.js';
 import { SessionStatusBar } from '../SessionStatusBar.js';
 
@@ -23,6 +28,8 @@ interface OverviewViewProps {
   onNavigateToTab: (tab: string) => void;
   wallet?: WalletState;
   activeSession?: SessionGrant | null;
+  isFauceting?: boolean;
+  onClaimFaucet?: (amount?: number) => Promise<void>;
   onOpenSessionModal?: () => void;
   onRevokeSession?: () => Promise<void>;
   onConnectWallet?: () => Promise<void>;
@@ -39,12 +46,22 @@ export const OverviewView: React.FC<OverviewViewProps> = ({
   onNavigateToTab,
   wallet,
   activeSession,
+  isFauceting,
+  onClaimFaucet,
   onOpenSessionModal,
   onRevokeSession,
   onConnectWallet,
   onSwitchNetwork,
 }) => {
-  // Extract top anomaly opportunities (edge >= 0.03 or highest edge)
+  const [isHovered, setIsHovered] = useState<boolean>(false);
+  const [nowTime, setNowTime] = useState<number>(Date.now());
+
+  useEffect(() => {
+    const timer = setInterval(() => setNowTime(Date.now()), 1000);
+    return () => clearInterval(timer);
+  }, []);
+
+  // Top 5 alpha opportunities by absolute mathematical edge
   const opportunities = markets
     .map((m) => {
       const tick = liveTicks.get(m.id);
@@ -63,9 +80,30 @@ export const OverviewView: React.FC<OverviewViewProps> = ({
     .sort((a, b) => b.absEdge - a.absEdge)
     .slice(0, 5);
 
-  const recentThoughts = agentThoughts.slice(0, 4);
+  // Distinct thoughts across the 4 agents to prevent repetitive single-agent spam
+  const distinctThoughts = useMemo(() => {
+    const map = new Map<string, AgentThoughtLog>();
+    for (const t of agentThoughts) {
+      if (!map.has(t.agentType)) {
+        map.set(t.agentType, t);
+      }
+      if (map.size >= 4) break;
+    }
+    // If fewer than 4 unique agents, backfill with most recent unique thoughts
+    const list = Array.from(map.values());
+    if (list.length < 4) {
+      for (const t of agentThoughts) {
+        if (!list.some((existing) => existing.id === t.id)) {
+          list.push(t);
+        }
+        if (list.length >= 4) break;
+      }
+    }
+    return list;
+  }, [agentThoughts]);
 
   const { detailed: swarmDetailed, orders } = useAgentSwarm();
+  const { portfolio } = useUserPortfolio(wallet);
 
   return (
     <div className="overview-container" style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
@@ -74,6 +112,8 @@ export const OverviewView: React.FC<OverviewViewProps> = ({
         <SessionStatusBar
           wallet={wallet}
           activeSession={activeSession || null}
+          isFauceting={isFauceting}
+          onClaimFaucet={onClaimFaucet}
           onOpenModal={onOpenSessionModal}
           onRevokeSession={onRevokeSession}
           onConnectWallet={onConnectWallet}
@@ -88,6 +128,13 @@ export const OverviewView: React.FC<OverviewViewProps> = ({
         latencyMs={latencyMs}
         swarmDetailed={swarmDetailed}
         ordersCount={orders.length}
+        wallet={wallet}
+        activeSession={activeSession}
+        portfolio={portfolio}
+        isFauceting={isFauceting}
+        onClaimFaucet={onClaimFaucet}
+        onOpenSessionModal={onOpenSessionModal}
+        onNavigateToTab={onNavigateToTab}
       />
 
       {/* 2. Primary Focal Point: Top Arbitrage Opportunities */}
@@ -293,12 +340,33 @@ export const OverviewView: React.FC<OverviewViewProps> = ({
         </div>
 
         {/* Right: Live AI Reasoning Snapshot */}
-        <div className="terminal-panel" style={{ padding: '16px 20px' }}>
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '14px' }}>
+        <div
+          className="terminal-panel"
+          style={{ padding: '16px 20px' }}
+          onMouseEnter={() => setIsHovered(true)}
+          onMouseLeave={() => setIsHovered(false)}
+        >
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '12px' }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
               <Brain size={16} style={{ color: '#a855f7' }} />
-              <span style={{ fontWeight: 600, fontSize: '14px' }}>Live Swarm Intelligence</span>
-              <span className="stat-pill-tag tag-green">Streaming</span>
+              <span style={{ fontWeight: 700, fontSize: '14px' }}>Live Swarm Intelligence</span>
+              <span
+                style={{
+                  fontSize: '10px',
+                  fontFamily: 'var(--font-mono)',
+                  padding: '2px 7px',
+                  borderRadius: '999px',
+                  background: isHovered ? 'rgba(245, 158, 11, 0.18)' : 'rgba(16, 185, 129, 0.15)',
+                  color: isHovered ? '#fbbf24' : '#34d399',
+                  border: isHovered ? '1px solid rgba(245, 158, 11, 0.4)' : '1px solid rgba(16, 185, 129, 0.3)',
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: '4px',
+                }}
+              >
+                {isHovered ? <Pause size={9} /> : <Activity size={9} />}
+                {isHovered ? 'HOVERING TO READ' : 'STREAMING'}
+              </span>
             </div>
             <button
               type="button"
@@ -312,42 +380,90 @@ export const OverviewView: React.FC<OverviewViewProps> = ({
           </div>
 
           <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-            {recentThoughts.length === 0 ? (
+            {distinctThoughts.length === 0 ? (
               <div style={{ padding: '24px', textAlign: 'center', color: 'var(--muted-foreground)', fontSize: '12px' }}>
                 AI Swarm initializing autonomous thought stream...
               </div>
             ) : (
-              recentThoughts.map((t, idx) => (
-                <div
-                  key={idx}
-                  style={{
-                    padding: '10px 12px',
-                    background: '#18181b',
-                    border: '1px solid var(--border)',
-                    borderRadius: '8px',
-                    display: 'flex',
-                    flexDirection: 'column',
-                    gap: '4px',
-                  }}
-                >
-                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                      <span style={{ fontWeight: 700, fontSize: '11px', color: t.agentType === 'Volt' ? '#f59e0b' : t.agentType === 'Oracle' ? '#00ffcc' : '#3b82f6' }}>
-                        {t.agentType.toUpperCase()}
-                      </span>
-                      <span className="badge" style={{ fontSize: '9px', background: '#27272a', padding: '1px 4px' }}>
-                        {t.triggerEvent}
-                      </span>
+              distinctThoughts.map((t, idx) => {
+                const isVolt = t.agentType === 'Volt';
+                const isOracle = t.agentType === 'Oracle';
+                const isTitan = t.agentType === 'Titan';
+                const color = isVolt ? '#f59e0b' : isOracle ? '#00ffcc' : isTitan ? '#a855f7' : '#10b981';
+                const AgentIcon = isVolt ? Zap : isOracle ? Brain : isTitan ? Shield : Sparkles;
+                const timeDiff = Math.max(0, Math.floor((nowTime - new Date(t.createdAt).getTime()) / 1000));
+                const relTime = timeDiff < 5 ? 'Just now' : `${timeDiff}s ago`;
+
+                return (
+                  <div
+                    key={t.id || idx}
+                    style={{
+                      padding: '10px 12px',
+                      background: '#141417',
+                      border: '1px solid var(--border)',
+                      borderLeft: `3px solid ${color}`,
+                      borderRadius: '8px',
+                      display: 'flex',
+                      flexDirection: 'column',
+                      gap: '5px',
+                      transition: 'border-color 0.15s ease',
+                    }}
+                  >
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                        <div
+                          style={{
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            gap: '4px',
+                            fontWeight: 700,
+                            fontSize: '11px',
+                            color,
+                            fontFamily: 'var(--font-mono)',
+                          }}
+                        >
+                          <AgentIcon size={12} />
+                          <span>{t.agentType.toUpperCase()}</span>
+                        </div>
+                        <span
+                          className="badge"
+                          style={{
+                            fontSize: '9px',
+                            background: '#27272a',
+                            padding: '1px 5px',
+                            color: '#a1a1aa',
+                          }}
+                        >
+                          {t.actionTaken || t.triggerEvent}
+                        </span>
+                      </div>
+
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                        <span style={{ fontSize: '10.5px', fontFamily: 'var(--font-mono)', color: 'var(--trade-yes)', fontWeight: 600 }}>
+                          {(t.confidence * 100).toFixed(0)}% Conf
+                        </span>
+                        <span style={{ fontSize: '9.5px', color: 'var(--muted-foreground)', fontFamily: 'var(--font-mono)' }}>
+                          {relTime}
+                        </span>
+                      </div>
                     </div>
-                    <span style={{ fontSize: '10px', fontFamily: 'var(--font-mono)', color: 'var(--trade-yes)' }}>
-                      {(t.confidence * 100).toFixed(0)}% Conf
-                    </span>
+                    <p
+                      style={{
+                        margin: 0,
+                        fontSize: '11.5px',
+                        color: '#d4d4d8',
+                        lineHeight: 1.35,
+                        display: '-webkit-box',
+                        WebkitLineClamp: 2,
+                        WebkitBoxOrient: 'vertical',
+                        overflow: 'hidden',
+                      }}
+                    >
+                      {t.reasoningText}
+                    </p>
                   </div>
-                  <p style={{ margin: 0, fontSize: '11.5px', color: '#d4d4d8', lineHeight: 1.35, display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>
-                    {t.reasoningText}
-                  </p>
-                </div>
-              ))
+                );
+              })
             )}
           </div>
         </div>

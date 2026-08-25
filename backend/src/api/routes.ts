@@ -5,8 +5,11 @@ import { sessionService } from '../services/session-service.js';
 import { swarmRunner } from '../agents/swarm-runner.js';
 import { orderService } from '../services/order-service.js';
 import { settlementService } from '../services/settlement-service.js';
+import { compounderService } from '../services/compounder-service.js';
 import { backtestService } from '../services/backtest-service.js';
+import { operatorAccount, SOMNIA_ADDRESSES } from '../config/somnia.js';
 import type { MarketStatus, AgentType, OrderStatus } from '../types/index.js';
+import type { Address } from 'viem';
 
 export const apiRouter = Router();
 
@@ -138,8 +141,20 @@ apiRouter.get('/sessions/:userAddress', async (req: Request, res: Response) => {
     const { userAddress } = req.params;
     const activeOnly = req.query.active === 'true';
 
+    const activeSession = await sessionService.getUserActiveSession(userAddress);
+    if (activeSession) {
+      const userOrders = orderService.getOrders({ userAddress });
+      const realSpend = userOrders
+        .filter((o) => o.status === 'FILLED' || o.status === 'PENDING')
+        .reduce((sum, o) => sum + (o.totalCost || 0), 0);
+
+      if (activeSession.spentToday > realSpend) {
+        activeSession.spentToday = Number(realSpend.toFixed(4));
+        sessionService.updateSessionSpend(activeSession.id, activeSession.spentToday);
+      }
+    }
+
     if (activeOnly) {
-      const activeSession = await sessionService.getUserActiveSession(userAddress);
       return res.json({
         success: true,
         session: activeSession,
@@ -147,7 +162,6 @@ apiRouter.get('/sessions/:userAddress', async (req: Request, res: Response) => {
     }
 
     const sessions = sessionService.listUserSessions(userAddress);
-    const activeSession = await sessionService.getUserActiveSession(userAddress);
 
     return res.json({
       success: true,
@@ -160,6 +174,24 @@ apiRouter.get('/sessions/:userAddress', async (req: Request, res: Response) => {
       success: false,
       error: err.message || 'Failed to query user sessions',
     });
+  }
+});
+
+apiRouter.post('/sessions/:userAddress/reset-spend', async (req: Request, res: Response) => {
+  try {
+    const { userAddress } = req.params;
+    const session = await sessionService.getUserActiveSession(userAddress);
+    if (!session) {
+      return res.status(404).json({ success: false, error: 'No active session found for user' });
+    }
+    sessionService.updateSessionSpend(session.id, 0);
+    return res.json({
+      success: true,
+      message: 'Session spend reset to 0 tUSDC',
+      session: { ...session, spentToday: 0 },
+    });
+  } catch (err: any) {
+    return res.status(500).json({ success: false, error: err.message || 'Failed to reset session spend' });
   }
 });
 
@@ -200,8 +232,30 @@ apiRouter.get('/agents/detailed', (_req: Request, res: Response) => {
   });
 });
 
+function isOperatorAuthorized(req: Request): boolean {
+  const operatorSecret = process.env.OPERATOR_ADMIN_SECRET;
+  const authHeader = req.headers['x-operator-auth'] || req.headers['authorization'];
+  const userAddress = req.body.operatorAddress || req.body.userAddress;
+
+  if (operatorSecret && authHeader === `Bearer ${operatorSecret}`) {
+    return true;
+  }
+  if (userAddress && typeof userAddress === 'string' && userAddress.toLowerCase() === operatorAccount.address.toLowerCase()) {
+    return true;
+  }
+  if (!operatorSecret) {
+    // If no secret env set, verify match with operator account address
+    return !userAddress || userAddress.toLowerCase() === operatorAccount.address.toLowerCase();
+  }
+  return false;
+}
+
 apiRouter.post('/agents/toggle', (req: Request, res: Response) => {
   try {
+    if (!isOperatorAuthorized(req)) {
+      return res.status(403).json({ success: false, error: 'Forbidden: Only the protocol operator can modify global swarm policies' });
+    }
+
     const { agentType, enabled } = req.body;
     if (!agentType || typeof enabled !== 'boolean') {
       return res.status(400).json({ success: false, error: 'Missing agentType or enabled boolean' });
@@ -221,6 +275,10 @@ apiRouter.post('/agents/toggle', (req: Request, res: Response) => {
 
 apiRouter.post('/agents/config', (req: Request, res: Response) => {
   try {
+    if (!isOperatorAuthorized(req)) {
+      return res.status(403).json({ success: false, error: 'Forbidden: Only the protocol operator can modify global swarm policies' });
+    }
+
     const { agentType, config } = req.body;
     if (!agentType || !config || typeof config !== 'object') {
       return res.status(400).json({ success: false, error: 'Missing agentType or config payload' });
@@ -317,15 +375,68 @@ apiRouter.get('/orders/:id', (req: Request, res: Response) => {
   });
 });
 
+apiRouter.get('/portfolio/summary', async (req: Request, res: Response) => {
+  try {
+    const { userAddress } = req.query;
+    const targetAddress = typeof userAddress === 'string' && userAddress.trim().length > 0
+      ? userAddress.trim()
+      : undefined;
+
+    const opAddress = (SOMNIA_ADDRESSES.operatorAccount || operatorAccount.address).toLowerCase();
+    const effectiveAddress = targetAddress || operatorAccount.address;
+    const isOperator = targetAddress ? targetAddress.toLowerCase() === opAddress : true;
+    const sweeperSummary = await settlementService.getSweeperSummary(effectiveAddress).catch(() => null);
+    const userOrders = orderService.getOrders({ userAddress: targetAddress });
+    const session = targetAddress ? await sessionService.getUserActiveSession(targetAddress).catch(() => null) : null;
+    if (session) {
+      const realSpend = userOrders
+        .filter((o) => o.status === 'FILLED' || o.status === 'PENDING')
+        .reduce((sum, o) => sum + (o.totalCost || 0), 0);
+
+      if (session.spentToday > realSpend) {
+        session.spentToday = Number(realSpend.toFixed(4));
+        sessionService.updateSessionSpend(session.id, session.spentToday);
+      }
+    }
+
+    const realizedPnl = orderService.getTotalRealizedPnl(undefined, targetAddress);
+    const unclaimedPnl = sweeperSummary?.unclaimedAmount || 0;
+    const totalClaimed = sweeperSummary?.totalClaimedAllTime || 0;
+    const totalPnl = Number((realizedPnl + unclaimedPnl).toFixed(2));
+    const activePositionsCount = orderService.getActivePositionCount(undefined, targetAddress);
+
+    return res.json({
+      success: true,
+      data: {
+        userAddress: effectiveAddress,
+        isOperator,
+        realizedPnl,
+        unclaimedPnl,
+        totalClaimedAllTime: totalClaimed,
+        totalPnl,
+        activePositionsCount,
+        ordersTodayCount: userOrders.length,
+        volumeToday: session?.spentToday || 0,
+        dailyVolumeCap: session?.dailyVolumeCap || 100,
+        maxTradeSize: session?.maxTradeSize || 10,
+        hasActiveSession: !!session?.isActive,
+      },
+    });
+  } catch (err: any) {
+    return res.status(500).json({ success: false, error: err.message || 'Failed to fetch portfolio summary' });
+  }
+});
+
 // ------------------------------------------------------------------------------
 // 5. Sweeper Settlement & Payout Redemptions
 // ------------------------------------------------------------------------------
 apiRouter.get('/sweeper/summary', async (req: Request, res: Response) => {
   try {
     const { userAddress } = req.query;
-    const summary = await settlementService.getSweeperSummary(
-      typeof userAddress === 'string' ? userAddress : undefined,
-    );
+    const targetAddress = typeof userAddress === 'string' && userAddress.trim().length > 0
+      ? userAddress.trim()
+      : operatorAccount.address;
+    const summary = await settlementService.getSweeperSummary(targetAddress);
     return res.json({
       success: true,
       data: summary,
@@ -338,18 +449,28 @@ apiRouter.get('/sweeper/summary', async (req: Request, res: Response) => {
 apiRouter.get('/sweeper/unclaimed', async (req: Request, res: Response) => {
   try {
     const { userAddress } = req.query;
-    const unclaimed = await settlementService.scanUnclaimedSettlements(
-      typeof userAddress === 'string' ? userAddress : undefined,
-    );
+    const targetAddress = typeof userAddress === 'string' && userAddress.trim().length > 0
+      ? userAddress.trim()
+      : operatorAccount.address;
+    const unclaimed = await settlementService.scanUnclaimedSettlements(targetAddress);
     const totalUnclaimed = Number(
       unclaimed.reduce((acc, p) => acc + p.claimableAmount, 0).toFixed(4),
     );
     return res.json({
       success: true,
       count: unclaimed.length,
-      totalUnclaimedAmount: `${totalUnclaimed.toFixed(2)} STT`,
+      totalUnclaimedAmount: `${totalUnclaimed.toFixed(2)} tUSDC`,
       unclaimedAmountNum: totalUnclaimed,
-      positions: unclaimed,
+      positions: unclaimed.map((p) => ({
+        marketId: p.marketId,
+        symbol: p.symbol,
+        marketIdHex: p.marketIdHex,
+        winningOutcome: p.winningOutcome,
+        claimableAmount: p.claimableAmount,
+        rawAmount: p.rawAmount.toString(),
+        isVoided: p.isVoided,
+        status: p.status,
+      })),
     });
   } catch (err: any) {
     return res.status(500).json({ success: false, error: err.message || 'Failed to scan unclaimed settlements' });
@@ -360,7 +481,7 @@ apiRouter.post('/sweeper/trigger', async (req: Request, res: Response) => {
   try {
     const { userAddress, autoCompound } = req.body;
     const result = await settlementService.triggerBatchSweep(
-      userAddress || '0x15C7e8CE38F021c5b45d098AaD788f63090bF20A',
+      userAddress || operatorAccount.address,
       autoCompound ?? true,
     );
 
@@ -378,7 +499,10 @@ apiRouter.post('/sweeper/trigger', async (req: Request, res: Response) => {
 
 apiRouter.get('/sweeper/history', (req: Request, res: Response) => {
   const { userAddress } = req.query;
-  const history = settlementService.getSweepHistory(typeof userAddress === 'string' ? userAddress : undefined);
+  const targetAddress = typeof userAddress === 'string' && userAddress.trim().length > 0
+    ? userAddress.trim()
+    : operatorAccount.address;
+  const history = settlementService.getSweepHistory(targetAddress);
   res.json({
     success: true,
     count: history.length,
@@ -391,16 +515,30 @@ apiRouter.get('/sweeper/history', (req: Request, res: Response) => {
 // ------------------------------------------------------------------------------
 apiRouter.post('/backtest/run', async (req: Request, res: Response) => {
   try {
-    const { userAddress, agentType, symbol, startDate, endDate, initialCapital, strategyConfig } = req.body;
+    const {
+      userAddress,
+      agentType,
+      symbol,
+      period,
+      timeframe,
+      startDate,
+      endDate,
+      initialCapital,
+      strategyConfig,
+      frictionConfig,
+    } = req.body;
 
     const result = await backtestService.runSimulation({
       userAddress,
       agentType: agentType || 'Volt',
       symbol: symbol || 'BTC/USD',
+      period,
+      timeframe,
       startDate,
       endDate,
       initialCapital: initialCapital ? parseFloat(initialCapital) : 1000.0,
       strategyConfig: strategyConfig || {},
+      frictionConfig: frictionConfig || {},
     });
 
     res.json({

@@ -33,7 +33,7 @@ app.use(errorHandler);
 // Initialize WebSocket Telemetry Gateway
 telemetryWsGateway.initialize(server);
 
-if (process.env.NODE_ENV !== 'test') {
+if (!process.env.VITEST) {
   server.listen(env.PORT, async () => {
     console.log(`[DreamPulse Engine] HTTP & WebSocket Server listening on port ${env.PORT}`);
     console.log(`[DreamPulse Engine] REST API: http://localhost:${env.PORT}/api/v1`);
@@ -46,6 +46,12 @@ if (process.env.NODE_ENV !== 'test') {
     // Start Real-Time Market Telemetry & Anomaly Broadcaster
     const { startMarketEmitter } = await import('./websocket/market-emitter.js');
     startMarketEmitter(100);
+
+    // Ensure operator wallet is funded with TestUSDC collateral
+    const { ensureOperatorCollateral } = await import('./services/order-service.js');
+    await ensureOperatorCollateral().catch((err) => {
+      console.warn('[DreamPulse Engine] Operator collateral startup check notice:', err.message);
+    });
 
     // Start Autonomous Multi-Agent Swarm Runner Loop (1000ms evaluation tick)
     const { swarmRunner } = await import('./agents/swarm-runner.js');

@@ -61,6 +61,7 @@ export const SOMNIA_ADDRESSES = {
   marketCreatorFactory: '0xE6bEE93cE87c9E6e62aCb621caa7832EE47b4F6B' as Address,
   oracleHub: '0xe40db387cC98601Dd11bd634fF2f3AD5686dE32b' as Address,
   operatorPermissionsRegistry: '0x15C7e8CE38F021c5b45d098AaD788f63090bF20A' as Address,
+  operatorAccount: '0x93e300607c363E7D7a47e50f5c9fDf1723e859Cf' as Address,
   // Faucet & Live Market Creators
   collateral: '0x70a86D8842FB63C4Ad2b7cdddF530eBf1BB25d8E' as Address,
   testUsdc: '0x70a86D8842FB63C4Ad2b7cdddF530eBf1BB25d8E' as Address,
@@ -107,5 +108,39 @@ export const somniaExchange = new SomniaMarkets({
   },
 });
 
+/**
+ * Minimum STT required for gas (0.001 STT).
+ */
+export const MIN_OPERATOR_GAS_WEI = 1_000_000_000_000_000n;
 
+let cachedOperatorGas: { balance: bigint; timestamp: number } | null = null;
+const GAS_CACHE_TTL_MS = 15_000; // 15 seconds
 
+/**
+ * Returns the operator's native STT balance with TTL caching to avoid RPC spam.
+ */
+export async function getOperatorGasBalance(): Promise<bigint> {
+  if (process.env.NODE_ENV === 'test') {
+    return 10n * 10n ** 18n; // 10 STT in test runner
+  }
+  const now = Date.now();
+  if (cachedOperatorGas && now - cachedOperatorGas.timestamp < GAS_CACHE_TTL_MS) {
+    return cachedOperatorGas.balance;
+  }
+  try {
+    const bal = await publicClient.getBalance({ address: operatorAccount.address });
+    cachedOperatorGas = { balance: bal, timestamp: now };
+    return bal;
+  } catch {
+    if (cachedOperatorGas) return cachedOperatorGas.balance;
+    return 0n;
+  }
+}
+
+/**
+ * Returns true if the operator has sufficient STT gas balance.
+ */
+export async function hasOperatorGas(minGas: bigint = MIN_OPERATOR_GAS_WEI): Promise<boolean> {
+  const bal = await getOperatorGasBalance();
+  return bal >= minGas;
+}

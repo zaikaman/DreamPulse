@@ -3,10 +3,12 @@ import { supabase } from '../config/supabase.js';
 import { compounderService } from './compounder-service.js';
 import { telemetryWsGateway } from '../websocket/server.js';
 import { marketService } from './market-service.js';
+import { orderService } from './order-service.js';
 import {
   SOMNIA_ADDRESSES,
   somniaExchange,
   operatorAccount,
+  hasOperatorGas,
 } from '../config/somnia.js';
 import type { SettlementSweep, OutcomeType } from '../types/index.js';
 
@@ -24,12 +26,26 @@ export interface UnclaimedPosition {
   status: string;
 }
 
+export interface SerializableUnclaimedPosition {
+  marketId: string;
+  symbol: string;
+  marketIdHex?: Hex;
+  poolAddress?: Address;
+  outcomeToken?: Address;
+  winningOutcome: OutcomeType;
+  outcomeIdx: 0 | 1;
+  rawAmount: string;
+  claimableAmount: number;
+  isVoided: boolean;
+  status: string;
+}
+
 export interface SweeperSummary {
   unclaimedAmount: number;
   totalClaimedAllTime: number;
   claimableMarketsCount: number;
   confirmedSweepsCount: number;
-  unclaimedPositions: UnclaimedPosition[];
+  unclaimedPositions: SerializableUnclaimedPosition[];
   autoCompound: boolean;
   compoundedStats: {
     totalCompoundedAmount: number;
@@ -60,6 +76,9 @@ export class SettlementService {
    * Loads recent settlement sweeps from Supabase on startup.
    */
   private async initializeFromDb(): Promise<void> {
+    this.sweeps = [];
+    this.sweepsMap.clear();
+
     const { data, error } = await supabase
       .from('sweeps')
       .select('*')
@@ -67,9 +86,6 @@ export class SettlementService {
       .limit(50);
 
     if (error || !data || data.length === 0) {
-      // Initialize with empty sweep history (no fake hardcoded seeds)
-      this.sweeps = [];
-      this.sweepsMap.clear();
       return;
     }
 
@@ -80,7 +96,7 @@ export class SettlementService {
         marketId: row.market_id,
         winningOutcome: row.winning_outcome as OutcomeType,
         claimableAmount: Number(row.claimable_amount),
-        payoutToken: row.payout_token || 'STT',
+        payoutToken: row.payout_token || 'tUSDC',
         isCompounded: row.is_compounded ?? true,
         txHash: (row.tx_hash as Hex) || undefined,
         status: row.status as 'PENDING' | 'CONFIRMED' | 'FAILED',
@@ -89,6 +105,10 @@ export class SettlementService {
 
       this.sweepsMap.set(sweep.id, sweep);
       this.sweeps.push(sweep);
+
+      if (sweep.isCompounded && sweep.claimableAmount > 0) {
+        compounderService.recordHistoricalSweep(sweep.userAddress, sweep.claimableAmount, sweep.claimedAt);
+      }
     }
   }
 
@@ -104,22 +124,56 @@ export class SettlementService {
     const decimals = SOMNIA_ADDRESSES.decimals;
     const one = 10n ** BigInt(decimals);
 
-    // 1. Gather candidate finalized/resolving markets
+    // 1. Gather candidate finalized/resolving markets from active markets and order history
     const candidateMarkets = marketService.getActiveMarkets().filter(
       (m) => m.status === 'Finalized' || m.status === 'Closed' || m.status === 'Resolving',
     );
 
+    // Include all historical markets that have traded orders
+    const tradedMarketIds = new Set(orderService.getOrders({ limit: 100 }).map((o) => o.marketId));
+    for (const mId of tradedMarketIds) {
+      if (mId.startsWith('0x') && !candidateMarkets.some((cm) => cm.id === mId || cm.marketIdHex === mId)) {
+        const m = marketService.getMarketById(mId);
+        if (m) {
+          candidateMarkets.push(m);
+        } else {
+          candidateMarkets.push({
+            id: mId,
+            symbol: 'BTC/USD',
+            strikePrice: 0,
+            windowDuration: '5m',
+            openTimestamp: new Date().toISOString(),
+            closeTimestamp: new Date().toISOString(),
+            resolutionTimestamp: new Date().toISOString(),
+            status: 'Finalized',
+            marketIdHex: mId as Hex,
+            bestBidYes: 1,
+            bestAskYes: 1,
+            bestBidNo: 0,
+            bestAskNo: 0,
+            impliedProbYes: 1,
+            fairValueYes: 1,
+            edgePercentage: 0,
+          });
+        }
+      }
+    }
+
+    const fetchWithTimeout = async <T>(p: Promise<T>, fallback: T, timeoutMs: number = 4000): Promise<T> => {
+      let timer: NodeJS.Timeout;
+      return Promise.race([
+        p.catch(() => fallback),
+        new Promise<T>((resolve) => {
+          timer = setTimeout(() => resolve(fallback), timeoutMs);
+        }),
+      ]).finally(() => clearTimeout(timer));
+    };
+
     // 2. Query indexer for any additional resolved/voided markets
     try {
       const [indexerResolved, indexerVoided] = await Promise.all([
-        somniaExchange.client.listBinaryMarkets({
-          status: 'Resolved' as any,
-          limit: 25,
-        }).catch(() => []),
-        somniaExchange.client.listBinaryMarkets({
-          status: 'Voided' as any,
-          limit: 25,
-        }).catch(() => []),
+        fetchWithTimeout(somniaExchange.client.listBinaryMarkets({ status: 'Resolved' as any, limit: 10 }), [], 3500),
+        fetchWithTimeout(somniaExchange.client.listBinaryMarkets({ status: 'Voided' as any, limit: 10 }), [], 3500),
       ]);
 
       for (const im of [...indexerResolved, ...indexerVoided]) {
@@ -149,29 +203,42 @@ export class SettlementService {
       // Indexer fallback
     }
 
-    // 3. Check outcome balances for each candidate market
-    for (const m of candidateMarkets) {
-      if (!m.marketIdHex || !m.marketIdHex.startsWith('0x')) {
-        continue;
+    // 3. Check outcome balances for all candidate markets in parallel
+    const marketChecks = candidateMarkets.slice(0, 20).map(async (m) => {
+      const targetHex = m.marketIdHex || (m.id.startsWith('0x') && m.id.length === 66 ? (m.id as Hex) : undefined);
+      if (!targetHex) {
+        return;
       }
 
       try {
-        const onchain = await somniaExchange.client.getMarketOnchain(m.marketIdHex as Hex).catch(() => null);
+        const onchain = await fetchWithTimeout(
+          somniaExchange.client.getMarketOnchain(targetHex).catch(() => null),
+          null,
+          3500,
+        );
         if (!onchain || (!onchain.isResolved && !onchain.isVoided && !onchain.finalized)) {
-          continue;
+          return;
         }
 
         const [yesBal, noBal] = await Promise.all([
-          somniaExchange.client.getOutcomeBalance({
-            outcomeToken: onchain.outcomeToken,
-            account: normalizedUser,
-            id: onchain.yesId,
-          }).catch(() => 0n),
-          somniaExchange.client.getOutcomeBalance({
-            outcomeToken: onchain.outcomeToken,
-            account: normalizedUser,
-            id: onchain.noId,
-          }).catch(() => 0n),
+          fetchWithTimeout(
+            somniaExchange.client.getOutcomeBalance({
+              outcomeToken: onchain.outcomeToken,
+              account: normalizedUser,
+              id: onchain.yesId,
+            }),
+            0n,
+            3000,
+          ),
+          fetchWithTimeout(
+            somniaExchange.client.getOutcomeBalance({
+              outcomeToken: onchain.outcomeToken,
+              account: normalizedUser,
+              id: onchain.noId,
+            }),
+            0n,
+            3000,
+          ),
         ]);
 
         if (onchain.isVoided) {
@@ -230,7 +297,9 @@ export class SettlementService {
       } catch (err: any) {
         console.warn(`[SettlementService] Scan error for market ${m.id}:`, err.message);
       }
-    }
+    });
+
+    await Promise.all(marketChecks);
 
     return positions;
   }
@@ -253,7 +322,8 @@ export class SettlementService {
       for (const pos of unclaimed) {
         let txHash: Hex | undefined;
         try {
-          if (pos.marketIdHex && pos.outcomeToken) {
+          const hasGas = await hasOperatorGas();
+          if (hasGas && pos.marketIdHex && pos.outcomeToken) {
             const res = await somniaExchange.trader.redeem({
               marketId: pos.marketIdHex,
               outcomeIdx: pos.outcomeIdx,
@@ -265,14 +335,17 @@ export class SettlementService {
             }
           }
         } catch (err: any) {
-          console.warn(`[SettlementService] On-chain redeem note for market ${pos.marketId}:`, err.message);
+          if (
+            !err.message?.includes('Missing or invalid parameters') &&
+            !err.message?.includes('account does not exist') &&
+            !err.message?.includes('gas')
+          ) {
+            console.warn(`[SettlementService] On-chain redeem note for market ${pos.marketId}:`, err.message);
+          }
         }
 
         if (!txHash) {
-          const randomHex = Array.from(crypto.getRandomValues(new Uint8Array(32)))
-            .map((b) => b.toString(16).padStart(2, '0'))
-            .join('');
-          txHash = `0x${randomHex}` as Hex;
+          continue;
         }
         lastTxHash = txHash;
 
@@ -283,7 +356,7 @@ export class SettlementService {
           marketId: pos.marketId,
           winningOutcome: pos.winningOutcome,
           claimableAmount: pos.claimableAmount,
-          payoutToken: 'STT',
+          payoutToken: 'tUSDC',
           isCompounded: autoCompound,
           txHash,
           status: 'CONFIRMED',
@@ -300,70 +373,14 @@ export class SettlementService {
         }
 
         try {
+          await marketService.ensureMarketPersisted(pos.marketId, pos.symbol);
           await supabase.from('sweeps').insert({
             id: sweepId,
             user_address: normalizedUser,
             market_id: pos.marketId,
             winning_outcome: pos.winningOutcome,
             claimable_amount: pos.claimableAmount,
-            payout_token: 'STT',
-            is_compounded: autoCompound,
-            tx_hash: txHash,
-            status: 'CONFIRMED',
-            claimed_at: now,
-          });
-        } catch (err) {
-          console.warn('[SettlementService] DB persist note:', err);
-        }
-      }
-    } else if (process.env.NODE_ENV === 'test') {
-      // Test environment fallback only
-      const allMarkets = marketService.getActiveMarkets();
-      const finalizedMarkets = allMarkets.filter(
-        (m) => m.status === 'Finalized' || m.status === 'Closed' || m.status === 'Resolving',
-      );
-      const targetMarkets = finalizedMarkets.length > 0 ? finalizedMarkets : allMarkets.slice(0, 1);
-
-      if (targetMarkets.length > 0) {
-        const targetMarket = targetMarkets[0];
-        const amount = 10.0;
-        const randomHex = Array.from(crypto.getRandomValues(new Uint8Array(32)))
-          .map((b) => b.toString(16).padStart(2, '0'))
-          .join('');
-        const txHash = `0x${randomHex}` as Hex;
-        lastTxHash = txHash;
-
-        const sweepId = crypto.randomUUID();
-        const sweep: SettlementSweep = {
-          id: sweepId,
-          userAddress: normalizedUser,
-          marketId: targetMarket.id,
-          winningOutcome: targetMarket.winningOutcome || 'YES',
-          claimableAmount: amount,
-          payoutToken: 'STT',
-          isCompounded: autoCompound,
-          txHash,
-          status: 'CONFIRMED',
-          claimedAt: now,
-        };
-
-        this.sweepsMap.set(sweepId, sweep);
-        this.sweeps.unshift(sweep);
-        claimedSweeps.push(sweep);
-        totalClaimed += amount;
-
-        if (autoCompound) {
-          await compounderService.compoundProceeds(normalizedUser, amount, targetMarket.poolAddress as Address);
-        }
-
-        try {
-          await supabase.from('sweeps').insert({
-            id: sweepId,
-            user_address: normalizedUser,
-            market_id: targetMarket.id,
-            winning_outcome: sweep.winningOutcome,
-            claimable_amount: amount,
-            payout_token: 'STT',
+            payout_token: 'tUSDC',
             is_compounded: autoCompound,
             tx_hash: txHash,
             status: 'CONFIRMED',
@@ -375,105 +392,105 @@ export class SettlementService {
       }
     }
 
-    if (!lastTxHash) {
-      const randomHex = Array.from(crypto.getRandomValues(new Uint8Array(32)))
-        .map((b) => b.toString(16).padStart(2, '0'))
-        .join('');
-      lastTxHash = `0x${randomHex}` as Hex;
-    }
+    const resolvedTxHash: Hex = lastTxHash || ('0x0000000000000000000000000000000000000000000000000000000000000000' as Hex);
 
     // Broadcast WebSocket event
     if (claimedSweeps.length > 0) {
       telemetryWsGateway.broadcastSweepCompleted({
         userAddress: normalizedUser,
-        marketId: claimedSweeps[0]?.marketId || 'batch-sweep',
-        claimedAmount: `${totalClaimed.toFixed(2)} STT`,
-        txHash: lastTxHash,
+        marketId: claimedSweeps[0].marketId,
+        claimedAmount: `${totalClaimed.toFixed(2)} tUSDC`,
+        txHash: resolvedTxHash,
       });
     }
 
     return {
       success: true,
       claimedMarketsCount: claimedSweeps.length,
-      totalClaimedAmount: `${totalClaimed.toFixed(2)} STT`,
-      txHash: lastTxHash,
+      totalClaimedAmount: `${totalClaimed.toFixed(2)} tUSDC`,
+      txHash: resolvedTxHash,
       sweeps: claimedSweeps,
     };
   }
 
   /**
-   * Redeems a specific market payout for a user.
+   * Executes settlement claim for an individual market contract.
    */
   public async claimMarketPayout(
     marketId: string,
-    userAddress: string,
-    winningOutcome: string = 'YES',
+    userAddress?: string,
+    winningOutcomePreference: string = 'YES',
     autoCompound: boolean = true,
   ): Promise<SettlementSweep> {
-    const normalizedUser = isAddress(userAddress)
-      ? (getAddress(userAddress) as `0x${string}`)
+    const normalizedUser = userAddress && isAddress(userAddress)
+      ? (getAddress(userAddress) as Address)
       : operatorAccount.address;
 
     const market = marketService.getMarketById(marketId);
+    let winningOutcome: 'YES' | 'NO' = winningOutcomePreference === 'NO' ? 'NO' : 'YES';
+    let amount = 0;
     let txHash: Hex | undefined;
-    let amount = 10.0;
 
-    if (market?.marketIdHex && market.marketIdHex.startsWith('0x')) {
+    const targetHex = market?.marketIdHex || (marketId.startsWith('0x') && marketId.length === 66 ? (marketId as Hex) : undefined);
+    if (targetHex) {
       try {
-        const onchain = await somniaExchange.client.getMarketOnchain(market.marketIdHex as Hex);
-        if (onchain && (onchain.isResolved || onchain.isVoided || onchain.finalized)) {
-          const outcomeIdx: 0 | 1 = winningOutcome === 'YES' ? 0 : 1;
-          const outcomeId = outcomeIdx === 0 ? onchain.yesId : onchain.noId;
-          const held = await somniaExchange.client.getOutcomeBalance({
+        const onchain = await somniaExchange.client.getMarketOnchain(targetHex).catch(() => null);
+        if (onchain && (onchain.isResolved || onchain.finalized)) {
+          const winIdx: 0 | 1 = typeof onchain.winningOutcome === 'number'
+            ? (onchain.winningOutcome === 0 ? 0 : 1)
+            : (winningOutcomePreference === 'NO' ? 1 : 0);
+          winningOutcome = winIdx === 0 ? 'YES' : 'NO';
+          const winId = winIdx === 0 ? onchain.yesId : onchain.noId;
+
+          const bal = await somniaExchange.client.getOutcomeBalance({
             outcomeToken: onchain.outcomeToken,
             account: normalizedUser,
-            id: outcomeId,
-          }).catch(() => 0n);
+            id: winId,
+          });
 
-          const decimals = SOMNIA_ADDRESSES.decimals;
-          const one = 10n ** BigInt(decimals);
+          if (bal > 0n) {
+            const decimals = SOMNIA_ADDRESSES.decimals;
+            const one = 10n ** BigInt(decimals);
+            amount = Number(bal) / Number(one);
 
-          if (held > 0n) {
-            amount = Number(held) / Number(one);
-            const res = await somniaExchange.trader.redeem({
-              marketId: market.marketIdHex,
-              outcomeIdx,
-              amount: held,
-              outcomeToken: onchain.outcomeToken,
-            });
-            if (res?.hash) {
-              txHash = res.hash.startsWith('0x') ? (res.hash as Hex) : (`0x${res.hash}` as Hex);
+            const hasGas = await hasOperatorGas();
+            if (hasGas) {
+              const res = await somniaExchange.trader.redeem({
+                marketId: targetHex,
+                outcomeIdx: winIdx,
+                amount: bal,
+                outcomeToken: onchain.outcomeToken,
+              });
+              if (res?.hash) {
+                txHash = res.hash.startsWith('0x') ? (res.hash as Hex) : (`0x${res.hash}` as Hex);
+              }
             }
-          } else {
-            amount = 0;
           }
         }
       } catch (err: any) {
-        console.warn(`[SettlementService] On-chain claimMarketPayout note for ${marketId}:`, err.message);
+        if (
+          !err.message?.includes('Missing or invalid parameters') &&
+          !err.message?.includes('account does not exist') &&
+          !err.message?.includes('gas')
+        ) {
+          console.warn(`[SettlementService] Individual redeem note:`, err.message);
+        }
       }
     }
 
     if (!txHash) {
-      if (process.env.NODE_ENV === 'test') {
-        const randomHex = Array.from(crypto.getRandomValues(new Uint8Array(32)))
-          .map((b) => b.toString(16).padStart(2, '0'))
-          .join('');
-        txHash = `0x${randomHex}` as Hex;
-        amount = 10.0;
-      } else {
-        return {
-          id: crypto.randomUUID(),
-          userAddress: normalizedUser,
-          marketId,
-          winningOutcome: winningOutcome as OutcomeType,
-          claimableAmount: 0,
-          payoutToken: 'STT',
-          isCompounded: false,
-          txHash: '0x0000000000000000000000000000000000000000000000000000000000000000' as Hex,
-          status: 'PENDING',
-          claimedAt: new Date().toISOString(),
-        };
-      }
+      return {
+        id: crypto.randomUUID(),
+        userAddress: normalizedUser,
+        marketId,
+        winningOutcome: winningOutcome as OutcomeType,
+        claimableAmount: 0,
+        payoutToken: 'tUSDC',
+        isCompounded: false,
+        txHash: '0x0000000000000000000000000000000000000000000000000000000000000000' as Hex,
+        status: 'PENDING',
+        claimedAt: new Date().toISOString(),
+      };
     }
 
     const sweepId = crypto.randomUUID();
@@ -485,7 +502,7 @@ export class SettlementService {
       marketId,
       winningOutcome: winningOutcome as OutcomeType,
       claimableAmount: amount,
-      payoutToken: 'STT',
+      payoutToken: 'tUSDC',
       isCompounded: autoCompound,
       txHash,
       status: 'CONFIRMED',
@@ -495,16 +512,34 @@ export class SettlementService {
     if (amount > 0) {
       this.sweepsMap.set(sweepId, sweep);
       this.sweeps.unshift(sweep);
-    }
 
-    if (autoCompound && amount > 0) {
-      await compounderService.compoundProceeds(normalizedUser, amount, market?.poolAddress as Address);
+      if (autoCompound) {
+        await compounderService.compoundProceeds(normalizedUser, amount, market?.poolAddress as Address);
+      }
+
+      try {
+        await marketService.ensureMarketPersisted(marketId, market?.symbol || 'BTC/USD');
+        await supabase.from('sweeps').insert({
+          id: sweepId,
+          user_address: normalizedUser,
+          market_id: marketId,
+          winning_outcome: sweep.winningOutcome,
+          claimable_amount: sweep.claimableAmount,
+          payout_token: 'tUSDC',
+          is_compounded: autoCompound,
+          tx_hash: txHash,
+          status: 'CONFIRMED',
+          claimed_at: now,
+        });
+      } catch (err) {
+        console.warn('[SettlementService] Single claim DB persist note:', err);
+      }
     }
 
     telemetryWsGateway.broadcastSweepCompleted({
       userAddress: normalizedUser,
       marketId,
-      claimedAmount: `${amount.toFixed(2)} STT`,
+      claimedAmount: `${amount.toFixed(2)} tUSDC`,
       txHash,
     });
 
@@ -518,6 +553,10 @@ export class SettlementService {
     const normalized = userAddress && isAddress(userAddress)
       ? (getAddress(userAddress) as Address)
       : operatorAccount.address;
+
+    if (this.sweeps.length === 0) {
+      await this.initializeFromDb();
+    }
 
     const unclaimedPositions = await this.scanUnclaimedSettlements(normalized);
     const unclaimedAmount = Number(
@@ -536,7 +575,19 @@ export class SettlementService {
       totalClaimedAllTime,
       claimableMarketsCount: unclaimedPositions.length,
       confirmedSweepsCount: userSweeps.length,
-      unclaimedPositions,
+      unclaimedPositions: unclaimedPositions.map((p) => ({
+        marketId: p.marketId,
+        symbol: p.symbol,
+        marketIdHex: p.marketIdHex,
+        poolAddress: p.poolAddress,
+        outcomeToken: p.outcomeToken,
+        winningOutcome: p.winningOutcome,
+        outcomeIdx: p.outcomeIdx,
+        rawAmount: p.rawAmount.toString(),
+        claimableAmount: p.claimableAmount,
+        isVoided: p.isVoided,
+        status: p.status,
+      })),
       autoCompound: true,
       compoundedStats: {
         totalCompoundedAmount: compoundedStats.totalCompoundedAmount,

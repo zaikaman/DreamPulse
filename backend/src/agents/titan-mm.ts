@@ -19,6 +19,8 @@ export class TitanMMAgent extends BaseAgent {
   public readonly agentType: AgentType = 'Titan';
   public titanConfig: TitanConfig;
   private inventoryMap = new Map<string, number>(); // marketId -> netInventory (YES - NO)
+  private lastThoughtTimes = new Map<string, number>(); // marketId -> last timestamp
+  private lastQuotes = new Map<string, { bid: number; ask: number }>();
 
   constructor(config?: Partial<TitanConfig>) {
     super(config);
@@ -107,24 +109,34 @@ export class TitanMMAgent extends BaseAgent {
       rationale,
     };
 
-    this.emitThought({
-      id: `thought-${crypto.randomUUID()}`,
-      agentType: 'Titan',
-      marketId: market.id,
-      triggerEvent: 'CONTINUOUS_MARKET_MAKING',
-      confidence,
-      actionTaken: 'LIMIT_QUOTE_YES',
-      reasoningText: rationale,
-      metadata: {
-        spot: spotTicker.price,
-        strike: market.strikePrice,
-        fairValue: fair.fairValueYes,
-        bid: snappedBid,
-        ask: snappedAsk,
-        netInventory,
-      },
-      createdAt: new Date().toISOString(),
-    });
+    // Throttle thoughts: only emit if price shifted >= 0.02 or at least 4s has elapsed
+    const lastTime = this.lastThoughtTimes.get(market.id) || 0;
+    const lastQuote = this.lastQuotes.get(market.id);
+    const priceShifted = !lastQuote || Math.abs(lastQuote.bid - snappedBid) >= 0.02 || Math.abs(lastQuote.ask - snappedAsk) >= 0.02;
+
+    if (priceShifted || now - lastTime >= 4000) {
+      this.lastThoughtTimes.set(market.id, now);
+      this.lastQuotes.set(market.id, { bid: snappedBid, ask: snappedAsk });
+
+      this.emitThought({
+        id: `thought-${crypto.randomUUID()}`,
+        agentType: 'Titan',
+        marketId: market.id,
+        triggerEvent: 'CONTINUOUS_MARKET_MAKING',
+        confidence,
+        actionTaken: 'LIMIT_QUOTE_YES',
+        reasoningText: rationale,
+        metadata: {
+          spot: spotTicker.price,
+          strike: market.strikePrice,
+          fairValue: fair.fairValueYes,
+          bid: snappedBid,
+          ask: snappedAsk,
+          netInventory,
+        },
+        createdAt: new Date().toISOString(),
+      });
+    }
 
     return decision;
   }

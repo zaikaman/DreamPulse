@@ -5,6 +5,7 @@ import { sweeperAgent, SweeperAgent } from './sweeper.js';
 import { marketService } from '../services/market-service.js';
 import { sessionService } from '../services/session-service.js';
 import { orderService } from '../services/order-service.js';
+import { settlementService } from '../services/settlement-service.js';
 import { operatorAccount } from '../config/somnia.js';
 import { telemetryWsGateway } from '../websocket/server.js';
 import type { IAgentContext, IAgentDecision } from './base-agent.js';
@@ -26,7 +27,10 @@ export class MultiAgentSwarmRunner {
   private isRunning: boolean = false;
   private intervalHandle: NodeJS.Timeout | null = null;
   private intervalMs: number = 100;
-  private lastTradeTimes = new Map<AgentType, number>(); // Rate limiting per agent
+  private lastTradeTimes = new Map<string, number>(); // Rate limiting per agent
+  private lastOpportunityKeys = new Map<string, number>(); // Opportunity deduplication
+  private lastThoughtTimes = new Map<AgentType, number>(); // Rate limiting per agent
+  private lastThoughtTexts = new Map<AgentType, string>(); // Deduplication
 
   private telemetry: Record<AgentType, AgentTelemetryState> = {
     Volt: {
@@ -76,9 +80,27 @@ export class MultiAgentSwarmRunner {
   };
 
   constructor() {
-    // Hook thought events from agents to broadcast via WebSocket
+    // Hook thought events from agents to broadcast via WebSocket with strict pacing & deduplication
     [voltSniperAgent, oracleArbAgent, titanMMAgent, sweeperAgent].forEach((agent) => {
       agent.on('thought', (thought) => {
+        const now = Date.now();
+        const agentType = thought.agentType as AgentType;
+        const lastTime = this.lastThoughtTimes.get(agentType) || 0;
+        const lastText = this.lastThoughtTexts.get(agentType) || '';
+
+        // 1. Strict deduplication: minimum 15.0s before the same agent can broadcast the exact same reasoning text
+        if (lastText === thought.reasoningText && now - lastTime < 15000) {
+          return;
+        }
+
+        // 2. Strict per-agent pacing: minimum 3.5s between any thoughts from the same agent
+        if (now - lastTime < 3500) {
+          return;
+        }
+
+        this.lastThoughtTimes.set(agentType, now);
+        this.lastThoughtTexts.set(agentType, thought.reasoningText);
+
         telemetryWsGateway.broadcastAgentThought({
           agent: thought.agentType,
           marketId: thought.marketId,
@@ -123,6 +145,7 @@ export class MultiAgentSwarmRunner {
    * Executes a single evaluation tick across all active markets for all agents.
    */
   private async evaluateCycle(): Promise<void> {
+    orderService.syncResolvedOrdersPnL();
     const markets = marketService.getActiveMarkets();
     if (markets.length === 0) return;
 
@@ -184,17 +207,47 @@ export class MultiAgentSwarmRunner {
           continue;
         }
 
-        // Check if decision is actionable (not HOLD) and meets confidence threshold
-        if (decision && decision.action !== 'HOLD' && decision.action !== 'CANCEL_QUOTE' && decision.confidence >= 0.75) {
-          state.lastAction = `${decision.action}_${decision.targetOutcome || 'YES'}`;
-          state.lastActionTimestamp = Date.now();
-
-          // Rate limit: Max 1 execution per 15,000ms (15 seconds) per agent
-          const lastTradeTime = this.lastTradeTimes.get(type) || 0;
+        // Check if decision is actionable (not HOLD) and meets strict high conviction threshold (>= 88%)
+        if (decision && decision.action !== 'HOLD' && decision.action !== 'CANCEL_QUOTE' && decision.confidence >= 0.88) {
           const now = Date.now();
-          if (now - lastTradeTime < 15000) {
+          const lastTradeTime = this.lastTradeTimes.get(type) || 0;
+
+          // 1. Conservative In-Flight Risk Control: Wait for existing trade to resolve before opening a new one
+          if (decision.action !== 'BATCH_SWEEP') {
+            // A. Don't enter another position on the same market until the current window resolves
+            if (orderService.hasActivePosition(type, market.id)) {
+              continue;
+            }
+
+            // B. Max 1 active trade at a time per agent (wait for settlement/expiry)
+            if (orderService.getActivePositionCount(type) >= 1) {
+              continue;
+            }
+
+            // C. Max 3 active positions concurrently across the entire swarm portfolio
+            if (orderService.getActivePositionCount() >= 3) {
+              continue;
+            }
+          }
+
+          // 2. Strict per-agent trading cooldown: minimum 30,000ms (30 seconds) between trade attempts
+          if (now - lastTradeTime < 30000) {
             continue;
           }
+
+          // 3. Strict opportunity deduplication: minimum 60,000ms (60 seconds) before trading the same market/direction/price
+          const oppKey = `${type}:${market.id}:${decision.action}:${decision.targetOutcome || 'YES'}:${decision.price || 0}`;
+          const lastOppTime = this.lastOpportunityKeys.get(oppKey) || 0;
+          if (now - lastOppTime < 60000) {
+            continue;
+          }
+
+          // Immediately record attempt timestamps to prevent rapid-fire loop if on-chain transaction fails/reverts
+          this.lastTradeTimes.set(type, now);
+          this.lastOpportunityKeys.set(oppKey, now);
+
+          state.lastAction = `${decision.action}_${decision.targetOutcome || 'YES'}`;
+          state.lastActionTimestamp = now;
 
           // Execute under configured system operator address
           const systemOperatorAddress = operatorAccount.address;
@@ -211,19 +264,41 @@ export class MultiAgentSwarmRunner {
           };
 
           if (decision.action === 'BATCH_SWEEP') {
-            const sweep = await sweeperAgent.execute(decision, defaultSession);
-            if (sweep && 'claimableAmount' in sweep && (sweep.claimableAmount ?? 0) > 0) {
-              this.lastTradeTimes.set(type, now);
-              state.tradesToday++;
-              state.pnlAmount = Number((state.pnlAmount + (sweep.claimableAmount || 0)).toFixed(2));
-            }
+            await sweeperAgent.execute(decision, defaultSession);
           } else {
-            const order = await orderService.executeAgentDecision(decision, defaultSession);
-            if (order && (order.status === 'FILLED' || order.status === 'PENDING') && order.txHash && order.txHash !== '0x0000000000000000000000000000000000000000000000000000000000000000') {
-              this.lastTradeTimes.set(type, now);
-              state.tradesToday++;
-              // Real PnL accumulation based on actual order executions & settlement outcomes
-              state.pnlAmount = Number((state.pnlAmount + (order.pnl || 0)).toFixed(2));
+            await orderService.executeAgentDecision(decision, defaultSession);
+
+            // Autonomous Copy-Trading: Mirror trade signal to all active delegated user sessions
+            const activeUserSessions = sessionService.getActiveSessions();
+            for (const userSession of activeUserSessions) {
+              if (userSession.userAddress.toLowerCase() === systemOperatorAddress.toLowerCase()) {
+                continue;
+              }
+              const estCost = (decision.price ?? 0.5) * (decision.lotSize ?? 1.0);
+              const allowance = sessionService.validateTradeAllowance(userSession.id, estCost);
+              if (!allowance.allowed) {
+                continue;
+              }
+              try {
+                const sessionGrant: SessionGrant = {
+                  id: userSession.id,
+                  userAddress: userSession.userAddress,
+                  operatorAddress: userSession.operatorAddress,
+                  permissions: userSession.permissions as Array<'placeOrderFor' | 'cancelOrderFor'>,
+                  maxTradeSize: userSession.maxTradeSize,
+                  dailyVolumeCap: userSession.dailyVolumeCap,
+                  spentToday: userSession.spentToday,
+                  expiresAt: userSession.expiresAt,
+                  isActive: userSession.isActive,
+                  onChainTxHash: userSession.onChainTxHash,
+                  vaultDepositAmount: userSession.vaultDepositAmount,
+                  targetPoolAddress: userSession.targetPoolAddress,
+                  onChainAuthorized: userSession.onChainAuthorized,
+                };
+                await orderService.executeAgentDecision(decision, sessionGrant);
+              } catch (copyErr: any) {
+                console.warn(`[SwarmRunner] Copy-trade skipped for user ${userSession.userAddress}:`, copyErr.message);
+              }
             }
           }
         }
@@ -297,32 +372,52 @@ export class MultiAgentSwarmRunner {
    * Returns current swarm telemetry status summary.
    */
   public getSwarmStatus(): SwarmStatusSummary {
-    const voltPrefix = this.telemetry.Volt.pnlAmount >= 0 ? '+' : '';
-    const oraclePrefix = this.telemetry.Oracle.pnlAmount >= 0 ? '+' : '';
-    const titanPrefix = this.telemetry.Titan.pnlAmount >= 0 ? '+' : '';
+    const voltPnl = orderService.getTotalRealizedPnl('Volt');
+    const oraclePnl = orderService.getTotalRealizedPnl('Oracle');
+    const titanPnl = orderService.getTotalRealizedPnl('Titan');
+
+    this.telemetry.Volt.pnlAmount = voltPnl;
+    this.telemetry.Oracle.pnlAmount = oraclePnl;
+    this.telemetry.Titan.pnlAmount = titanPnl;
+
+    this.telemetry.Volt.tradesToday = orderService.getOrders({ agentType: 'Volt' }).length;
+    this.telemetry.Oracle.tradesToday = orderService.getOrders({ agentType: 'Oracle' }).length;
+    this.telemetry.Titan.tradesToday = orderService.getOrders({ agentType: 'Titan' }).length;
+
+    const userSweeps = settlementService.getSweepHistory(operatorAccount.address);
+    const confirmedSweeps = userSweeps.filter(
+      (s) => s.status === 'CONFIRMED' && s.txHash && s.txHash !== '0x0000000000000000000000000000000000000000000000000000000000000000',
+    );
+    const sweeperPnl = confirmedSweeps.reduce((acc, s) => acc + (s.claimableAmount || 0), 0);
+    this.telemetry.Sweeper.pnlAmount = Number(sweeperPnl.toFixed(2));
+    this.telemetry.Sweeper.tradesToday = confirmedSweeps.length;
+
+    const voltPrefix = voltPnl >= 0 ? '+' : '';
+    const oraclePrefix = oraclePnl >= 0 ? '+' : '';
+    const titanPrefix = titanPnl >= 0 ? '+' : '';
 
     return {
       volt: {
         status: this.telemetry.Volt.status,
         evalLatencyMs: this.telemetry.Volt.evalLatencyMs,
         tradesToday: this.telemetry.Volt.tradesToday,
-        pnl: `${voltPrefix}${this.telemetry.Volt.pnlAmount.toFixed(2)} STT`,
+        pnl: `${voltPrefix}${voltPnl.toFixed(2)} tUSDC`,
       },
       oracle: {
         status: this.telemetry.Oracle.status,
         evalLatencyMs: this.telemetry.Oracle.evalLatencyMs,
         tradesToday: this.telemetry.Oracle.tradesToday,
-        pnl: `${oraclePrefix}${this.telemetry.Oracle.pnlAmount.toFixed(2)} STT`,
+        pnl: `${oraclePrefix}${oraclePnl.toFixed(2)} tUSDC`,
       },
       titan: {
         status: this.telemetry.Titan.status,
         activeQuotes: 6,
-        spreadCaptured: `${titanPrefix}${this.telemetry.Titan.pnlAmount.toFixed(2)} STT`,
+        spreadCaptured: `${titanPrefix}${titanPnl.toFixed(2)} tUSDC`,
       },
       sweeper: {
         status: this.telemetry.Sweeper.status,
         lastSweep: new Date(this.telemetry.Sweeper.lastActionTimestamp).toISOString(),
-        totalClaimed: `${this.telemetry.Sweeper.pnlAmount.toFixed(2)} STT`,
+        totalClaimed: `+${this.telemetry.Sweeper.pnlAmount.toFixed(2)} tUSDC`,
       },
     };
   }
@@ -331,22 +426,31 @@ export class MultiAgentSwarmRunner {
    * Returns detailed agent configurations and telemetry for cockpit.
    */
   public getDetailedSwarmState(): Record<string, any> {
+    this.getSwarmStatus();
     return {
       agents: {
         volt: {
           ...this.telemetry.Volt,
+          pnlAmount: this.telemetry.Volt.pnlAmount,
+          tradesToday: this.telemetry.Volt.tradesToday,
           config: voltSniperAgent.voltConfig,
         },
         oracle: {
           ...this.telemetry.Oracle,
+          pnlAmount: this.telemetry.Oracle.pnlAmount,
+          tradesToday: this.telemetry.Oracle.tradesToday,
           config: oracleArbAgent.oracleConfig,
         },
         titan: {
           ...this.telemetry.Titan,
+          pnlAmount: this.telemetry.Titan.pnlAmount,
+          tradesToday: this.telemetry.Titan.tradesToday,
           config: titanMMAgent.titanConfig,
         },
         sweeper: {
           ...this.telemetry.Sweeper,
+          pnlAmount: this.telemetry.Sweeper.pnlAmount,
+          tradesToday: this.telemetry.Sweeper.tradesToday,
         },
       },
       isRunning: this.isRunning,

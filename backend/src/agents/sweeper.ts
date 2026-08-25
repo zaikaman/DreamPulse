@@ -9,7 +9,7 @@ import { settlementService } from '../services/settlement-service.js';
 
 export interface SweeperConfig extends AgentRiskConfig {
   autoCompound: boolean;
-  minClaimableAmount: number; // Minimum STT to trigger claim
+  minClaimableAmount: number; // Minimum tUSDC to trigger claim
   sweepIntervalMs: number;
 }
 

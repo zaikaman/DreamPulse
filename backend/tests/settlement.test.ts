@@ -1,9 +1,11 @@
-import { describe, it, expect, beforeEach } from 'vitest';
+import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { SweeperAgent } from '../src/agents/sweeper.js';
 import { SettlementService } from '../src/services/settlement-service.js';
 import { CompounderService } from '../src/services/compounder-service.js';
+import { somniaExchange } from '../src/config/somnia.js';
 import type { IAgentContext } from '../src/agents/base-agent.js';
 import type { Market, SessionGrant } from '../src/types/index.js';
+import type { Address, Hex } from 'viem';
 
 describe('Phase 6 Settlement Sweeper & Collateral Compounder Tests', () => {
   const finalizedMarket: Market = {
@@ -101,6 +103,26 @@ describe('Phase 6 Settlement Sweeper & Collateral Compounder Tests', () => {
       const settlementService = new SettlementService();
       const userAddress = '0x15C7e8CE38F021c5b45d098AaD788f63090bF20A';
 
+      vi.spyOn(settlementService, 'scanUnclaimedSettlements').mockResolvedValue([
+        {
+          marketId: finalizedMarket.id,
+          symbol: 'BTC/USD',
+          marketIdHex: finalizedMarket.id as Hex,
+          winningOutcome: 'YES',
+          outcomeIdx: 0,
+          rawAmount: 10_000_000n,
+          claimableAmount: 10.0,
+          outcomeToken: '0x2222222222222222222222222222222222222222' as Address,
+          poolAddress: '0x1111111111111111111111111111111111111111' as Address,
+          isVoided: false,
+          status: 'Resolved',
+        },
+      ]);
+      vi.spyOn(somniaExchange.trader, 'redeem').mockResolvedValue({
+        hash: '0x1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef',
+        receipt: { status: 'success' },
+      } as any);
+
       const result = await settlementService.triggerBatchSweep(userAddress, true);
       expect(result.success).toBe(true);
       expect(result.claimedMarketsCount).toBeGreaterThan(0);
@@ -124,25 +146,47 @@ describe('Phase 6 Settlement Sweeper & Collateral Compounder Tests', () => {
       expect(summary.compoundedStats).toBeDefined();
     });
 
-    it('compounds claimed proceeds into active user allocation', async () => {
+    it('compounds claimed proceeds into active user allocation using 100% compounding', async () => {
       const compounderService = new CompounderService();
       const userAddress = '0x15C7e8CE38F021c5b45d098AaD788f63090bF20A';
 
       const initial = compounderService.getUserCompoundedStats(userAddress);
       expect(initial.totalCompoundedAmount).toBe(0);
 
-      const allocation = await compounderService.compoundProceeds(userAddress, 45.5);
-      expect(allocation.totalCompoundedAmount).toBe(45.5);
+      const allocation = await compounderService.compoundProceeds(userAddress, 100.0);
+      expect(allocation.totalCompoundedAmount).toBe(100.0); // 100% to trading capital
       expect(allocation.reinvestedCycles).toBe(1);
 
-      const secondAllocation = await compounderService.compoundProceeds(userAddress, 20.0);
-      expect(secondAllocation.totalCompoundedAmount).toBe(65.5);
+      const secondAllocation = await compounderService.compoundProceeds(userAddress, 50.0);
+      expect(secondAllocation.totalCompoundedAmount).toBe(150.0); // 100 + 50
       expect(secondAllocation.reinvestedCycles).toBe(2);
     });
 
     it('claims individual market payout with valid confirmation', async () => {
       const settlementService = new SettlementService();
       const userAddress = '0x15C7e8CE38F021c5b45d098AaD788f63090bF20A';
+
+      const { marketService } = await import('../src/services/market-service.js');
+      vi.spyOn(marketService, 'getMarketById').mockReturnValue({
+        ...finalizedMarket,
+        marketIdHex: finalizedMarket.id as Hex,
+      });
+
+      vi.spyOn(somniaExchange.client, 'getMarketOnchain').mockResolvedValue({
+        pool: '0x1111111111111111111111111111111111111111' as Address,
+        status: 2, // Finalized
+        finalized: true,
+        isResolved: true,
+        outcomeToken: '0x2222222222222222222222222222222222222222' as Address,
+        winningOutcome: 0,
+        yesId: 1n,
+        noId: 2n,
+      } as any);
+      vi.spyOn(somniaExchange.client, 'getOutcomeBalance').mockResolvedValue(10_000_000n);
+      vi.spyOn(somniaExchange.trader, 'redeem').mockResolvedValue({
+        hash: '0x1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef',
+        receipt: { status: 'success' },
+      } as any);
 
       const sweep = await settlementService.claimMarketPayout(
         finalizedMarket.id,

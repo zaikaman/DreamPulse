@@ -3,7 +3,7 @@ import type { Market, MarketStatus, OutcomeType } from '../types/index.js';
 import { calculateFairValue, calculateEdge, parseWindowToSeconds } from '../quantitative/pricing.js';
 import { SOMNIA_ADDRESSES, somniaExchange, MARKET_STATUS } from '../config/somnia.js';
 import { env } from '../config/env.js';
-import { getServiceSupabase } from '../config/supabase.js';
+import { getServiceSupabase, supabase } from '../config/supabase.js';
 import { priceFeedService, type SpotTicker } from './price-feed-service.js';
 import type { UnifiedMarket, UnifiedOrderBook } from '@somnia-chain/markets-sdk';
 import type { Hex } from 'viem';
@@ -32,6 +32,7 @@ export interface OrderBookDepth {
 
 export class MarketService extends EventEmitter {
   private markets: Map<string, Market> = new Map();
+  private historicalMarkets: Map<string, Market> = new Map();
   private depthBooks: Map<string, OrderBookDepth> = new Map();
   private spotPrices: Map<string, SpotTicker> = new Map();
   private unifiedMarketsMap: Map<string, UnifiedMarket> = new Map();
@@ -59,6 +60,13 @@ export class MarketService extends EventEmitter {
     for (const [symbol, ticker] of Object.entries(all)) {
       this.spotPrices.set(symbol, ticker);
     }
+  }
+
+  /**
+   * Returns latest spot price for an asset symbol.
+   */
+  public getSpotPrice(symbol: string): number {
+    return this.spotPrices.get(symbol)?.price || (symbol.startsWith('ETH') ? 2400 : 77000);
   }
 
   private handleLiveSpotUpdate(ticker: SpotTicker): void {
@@ -226,10 +234,10 @@ export class MarketService extends EventEmitter {
         const obResult = orderBooks[i];
         const depthLevels = obResult && obResult.status === 'fulfilled' ? obResult.value : null;
 
-        if (depthLevels && depthLevels.bids.length > 0 && depthLevels.bids[0]?.[0] !== undefined) {
+        if (depthLevels && depthLevels.bids.length > 0 && depthLevels.bids[0]?.[0] !== undefined && depthLevels.bids[0][0] > 0) {
           bestBidYes = Number(depthLevels.bids[0][0].toFixed(3));
         }
-        if (depthLevels && depthLevels.asks.length > 0 && depthLevels.asks[0]?.[0] !== undefined) {
+        if (depthLevels && depthLevels.asks.length > 0 && depthLevels.asks[0]?.[0] !== undefined && depthLevels.asks[0][0] > 0) {
           bestAskYes = Number(depthLevels.asks[0][0].toFixed(3));
         }
 
@@ -269,10 +277,11 @@ export class MarketService extends EventEmitter {
         this.buildDepthBookFromClob(marketObj, depthLevels);
       }
 
-      // Remove any stale markets that are no longer in the active on-chain set
+      // Archive any stale markets to historicalMarkets cache so orders can resolve
       if (discoveredIds.size > 0) {
-        for (const [id] of this.markets.entries()) {
+        for (const [id, m] of this.markets.entries()) {
           if (!discoveredIds.has(id)) {
+            this.historicalMarkets.set(id, m);
             this.markets.delete(id);
             this.depthBooks.delete(id);
             this.unifiedMarketsMap.delete(id);
@@ -454,6 +463,7 @@ export class MarketService extends EventEmitter {
         const spot = this.spotPrices.get(market.symbol)?.price || 0;
         market.settlementPrice = spot;
         market.winningOutcome = spot >= market.strikePrice ? 'YES' : 'NO';
+        this.historicalMarkets.set(market.id, { ...market });
       } else if (market.status === 'Open') {
         const spot = this.spotPrices.get(market.symbol)?.price || market.strikePrice;
         const fair = calculateFairValue(spot, market.strikePrice, timeLeftSeconds, market.symbol);
@@ -501,6 +511,36 @@ export class MarketService extends EventEmitter {
     }
   }
 
+  /**
+   * Ensures an arbitrary on-chain or rolling market ID exists in Supabase so orders and sweeps foreign keys never fail.
+   */
+  public async ensureMarketPersisted(marketId: string, symbol: string = 'BTC/USD'): Promise<void> {
+    if (!marketId) return;
+    try {
+      const existing = this.markets.get(marketId);
+      await supabase.from('markets').upsert({
+        id: marketId,
+        symbol: existing?.symbol || symbol,
+        strike_price: existing?.strikePrice || 0,
+        window_duration: existing?.windowDuration || '5m',
+        open_timestamp: existing?.openTimestamp || new Date().toISOString(),
+        close_timestamp: existing?.closeTimestamp || new Date().toISOString(),
+        resolution_timestamp: existing?.resolutionTimestamp || new Date().toISOString(),
+        status: existing?.status || 'Active',
+        best_bid_yes: existing?.bestBidYes ?? 0.5,
+        best_ask_yes: existing?.bestAskYes ?? 0.5,
+        best_bid_no: existing?.bestBidNo ?? 0.5,
+        best_ask_no: existing?.bestAskNo ?? 0.5,
+        implied_prob_yes: existing?.impliedProbYes ?? 0.5,
+        fair_value_yes: existing?.fairValueYes ?? 0.5,
+        edge_percentage: existing?.edgePercentage ?? 0,
+        updated_at: new Date().toISOString(),
+      }, { onConflict: 'id' });
+    } catch (_err) {
+      // Non-fatal
+    }
+  }
+
   // ----------------------------------------------------------------------------
   // Public Accessors
   // ----------------------------------------------------------------------------
@@ -522,7 +562,7 @@ export class MarketService extends EventEmitter {
   }
 
   public getMarketById(id: string): Market | undefined {
-    return this.markets.get(id);
+    return this.markets.get(id) || this.historicalMarkets.get(id);
   }
 
   public getUnifiedMarket(id: string): UnifiedMarket | undefined {

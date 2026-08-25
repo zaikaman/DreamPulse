@@ -81,11 +81,6 @@ export class PriceFeedService extends EventEmitter {
       console.warn('[PriceFeed] Initial REST snapshot seed error, will rely on WebSocket:', err.message);
     });
 
-    // In unit test environment, don't keep persistent WS connection open unless explicitly desired
-    if (process.env.NODE_ENV === 'test') {
-      return;
-    }
-
     // 2. Connect to live Binance WebSocket stream
     this.connectWebSocket();
 

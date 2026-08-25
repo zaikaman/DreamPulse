@@ -151,7 +151,16 @@ export function useTelemetry(userAddress?: string) {
                 createdAt: new Date(payload.timestamp || now).toISOString(),
               };
 
-              setAgentThoughts((prev) => [newThought, ...prev.slice(0, 49)]);
+              setAgentThoughts((prev) => {
+                // Avoid duplicates: drop if identical reasoning text from this agent exists in recent 10 thoughts
+                const isDuplicate = prev.slice(0, 10).some(
+                  (t) => t.agentType === newThought.agentType && t.reasoningText === newThought.reasoningText,
+                );
+                if (isDuplicate) {
+                  return prev;
+                }
+                return [newThought, ...prev.slice(0, 79)];
+              });
               break;
 
             case 'order_filled':

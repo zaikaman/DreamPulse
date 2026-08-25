@@ -1,6 +1,7 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
 import request from 'supertest';
 import { app } from '../src/index.js';
+import { settlementService } from '../src/services/settlement-service.js';
 
 describe('Express REST API Endpoints', () => {
   it('GET /api/health returns ok status', async () => {
@@ -70,6 +71,14 @@ describe('Express REST API Endpoints', () => {
   });
 
   it('POST /api/v1/sweeper/trigger executes batch sweep and returns claim confirmation', async () => {
+    vi.spyOn(settlementService, 'triggerBatchSweep').mockResolvedValueOnce({
+      success: true,
+      claimedMarketsCount: 1,
+      totalClaimedAmount: '10.00 tUSDC',
+      txHash: '0x1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef',
+      sweeps: [],
+    });
+
     const res = await request(app)
       .post('/api/v1/sweeper/trigger')
       .send({ userAddress: '0x15C7e8CE38F021c5b45d098AaD788f63090bF20A', autoCompound: true });

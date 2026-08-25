@@ -2,6 +2,7 @@ import React from 'react';
 import { Zap, Brain, Shield, Sparkles } from 'lucide-react';
 import type { AgentThoughtLog } from '../../types/index.js';
 import { AgentThoughtFeed } from '../AgentThoughtFeed.js';
+import { useAgentSwarm } from '../../hooks/useAgentSwarm.js';
 
 interface SwarmFeedViewProps {
   agentThoughts: AgentThoughtLog[];
@@ -12,30 +13,35 @@ export const SwarmFeedView: React.FC<SwarmFeedViewProps> = ({
   agentThoughts,
   isConnected,
 }) => {
+  const { summary } = useAgentSwarm();
+
   const agents = [
     {
       name: 'Volt',
       role: 'Expiry Sniper',
       Icon: Zap,
       color: '#f59e0b',
-      status: 'Active (5m/15m scan)',
-      trades: 18,
+      status: `Active (${summary.volt.evalLatencyMs || 2}ms latency)`,
+      trades: summary.volt.tradesToday,
+      pnl: summary.volt.pnl,
     },
     {
       name: 'Oracle',
       role: 'Vol Surface Arbitrage',
       Icon: Brain,
       color: '#00ffcc',
-      status: 'Active (Φ(z) skew)',
-      trades: 12,
+      status: `Active (Φ(z) skew)`,
+      trades: summary.oracle.tradesToday,
+      pnl: summary.oracle.pnl,
     },
     {
       name: 'Titan',
       role: 'Two-Sided Market Maker',
       Icon: Shield,
-      color: '#3b82f6',
-      status: 'Active (CLOB quotes)',
-      trades: 8,
+      color: '#a855f7',
+      status: `Active (${summary.titan.activeQuotes || 4} quotes)`,
+      trades: summary.titan.activeQuotes,
+      pnl: summary.titan.spreadCaptured,
     },
     {
       name: 'Sweeper',
@@ -43,7 +49,8 @@ export const SwarmFeedView: React.FC<SwarmFeedViewProps> = ({
       Icon: Sparkles,
       color: '#10b981',
       status: 'Monitoring expiries',
-      trades: 0,
+      trades: summary.sweeper.totalClaimed && !summary.sweeper.totalClaimed.startsWith('0.00') && !summary.sweeper.totalClaimed.startsWith('+0.00') ? 1 : 0,
+      pnl: summary.sweeper.totalClaimed,
     },
   ];
 

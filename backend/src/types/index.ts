@@ -129,6 +129,17 @@ export interface BacktestResult {
   netPnl: number;
   maxDrawdown: number;
   sharpeRatio: number;
+  sortinoRatio?: number;
+  profitFactor?: number;
+  expectancy?: number;
+  payoffRatio?: number;
+  avgWin?: number;
+  avgLoss?: number;
+  totalWins?: number;
+  totalLosses?: number;
+  totalFeesPaid?: number;
+  timeframe?: string;
+  period?: string;
   createdAt: string;
 }
 
@@ -137,5 +148,20 @@ export interface SwarmStatusSummary {
   oracle: { status: string; evalLatencyMs: number; tradesToday: number; pnl: string };
   titan: { status: string; activeQuotes: number; spreadCaptured: string };
   sweeper: { status: string; lastSweep: string; totalClaimed: string };
+}
+
+export interface PortfolioSummary {
+  userAddress: string;
+  isOperator: boolean;
+  realizedPnl: number;
+  unclaimedPnl: number;
+  totalClaimedAllTime: number;
+  totalPnl: number;
+  activePositionsCount: number;
+  ordersTodayCount: number;
+  volumeToday: number;
+  dailyVolumeCap: number;
+  maxTradeSize: number;
+  hasActiveSession: boolean;
 }
 

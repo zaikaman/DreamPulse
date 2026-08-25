@@ -33,7 +33,9 @@ describe('Phase 7 Strategy Studio & Historical Backtest Tests', () => {
     expect(result.agentType).toBe('Volt');
     expect(result.symbol).toBe('BTC/USD');
     expect(result.initialCapital).toBe(1000.0);
-    expect(result.totalTrades).toBeGreaterThanOrEqual(0);
+    expect(result.totalTrades).toBeGreaterThan(0);
+    expect(result.winRate).toBeGreaterThan(40);
+    expect(result.winRate).toBeLessThan(95);
     expect(result.maxDrawdown).toBeGreaterThanOrEqual(0);
     expect(result.sharpeRatio).toBeGreaterThan(0);
     expect(result.equityCurve.length).toBeGreaterThan(0);
@@ -53,7 +55,7 @@ describe('Phase 7 Strategy Studio & Historical Backtest Tests', () => {
       symbol: 'ETH/USD',
       initialCapital: 2000.0,
       strategyConfig: {
-        minEdge: 0.04,
+        minEdge: 0.03,
         lotSize: 8.0,
       },
     });
@@ -61,7 +63,10 @@ describe('Phase 7 Strategy Studio & Historical Backtest Tests', () => {
     expect(result.agentType).toBe('Oracle');
     expect(result.symbol).toBe('ETH/USD');
     expect(result.initialCapital).toBe(2000.0);
-    expect(result.totalTrades).toBeGreaterThanOrEqual(0);
+    expect(result.totalTrades).toBeGreaterThan(0);
+    expect(result.winRate).toBeGreaterThan(40);
+    expect(result.winRate).toBeLessThan(95);
+    expect(result.trades.length).toBe(result.totalTrades);
 
     const history = backtestService.getBacktestHistory(userAddress);
     expect(history.length).toBeGreaterThan(0);
@@ -74,8 +79,8 @@ describe('Phase 7 Strategy Studio & Historical Backtest Tests', () => {
       symbol: 'BTC/USD',
       initialCapital: 1500.0,
       strategyConfig: {
-        targetSpread: 0.05,
-        inventoryAversion: 0.02,
+        targetSpread: 0.04,
+        inventoryAversion: 0.015,
         lotSize: 2.0,
       },
     });
@@ -83,5 +88,64 @@ describe('Phase 7 Strategy Studio & Historical Backtest Tests', () => {
     expect(result.agentType).toBe('Titan');
     expect(result.totalTrades).toBeGreaterThan(0);
     expect(result.winRate).toBeGreaterThan(50);
+    expect(result.winRate).toBeLessThan(95); // Must not be hardcoded 100% win rate!
+    expect(result.maxDrawdown).toBeGreaterThanOrEqual(0);
+    expect(result.sharpeRatio).toBeGreaterThan(0);
+    expect(result.sharpeRatio).toBeLessThan(10.0); // Realistic Sharpe ratio
+  });
+
+  it('computes institutional quant metrics: Sortino Ratio, Profit Factor, and Underwater Curve', async () => {
+    const backtestService = new BacktestService();
+    const result = await backtestService.runSimulation({
+      agentType: 'Volt',
+      symbol: 'BTC/USD',
+      period: '7d',
+      timeframe: '5m',
+      initialCapital: 1000.0,
+      strategyConfig: {
+        driftThreshold: 0.002,
+        minEdge: 0.03,
+        lotSize: 5.0,
+      },
+      frictionConfig: {
+        slippageBps: 5.0,
+        feeBps: 2.5,
+        latencyMs: 30.0,
+      },
+    });
+
+    expect(result.period).toBe('7d');
+    expect(result.timeframe).toBe('5m');
+    expect(result.sortinoRatio).toBeDefined();
+    expect(result.profitFactor).toBeGreaterThan(0);
+    expect(result.expectancy).toBeDefined();
+    expect(result.payoffRatio).toBeGreaterThan(0);
+    expect(result.underwaterCurve.length).toBe(result.equityCurve.length);
+    expect(result.totalFeesPaid).toBeGreaterThanOrEqual(0);
+
+    // Verify trade log contains fee and grossPnl
+    if (result.trades.length > 0) {
+      expect(result.trades[0]?.fee).toBeGreaterThanOrEqual(0);
+      expect(result.trades[0]?.grossPnl).toBeDefined();
+    }
+  });
+
+  it('supports custom candle timeframes like 1m scalping and 15m swing', async () => {
+    const backtestService = new BacktestService();
+    const result1m = await backtestService.runSimulation({
+      agentType: 'Volt',
+      symbol: 'ETH/USD',
+      period: '24h',
+      timeframe: '1m',
+      initialCapital: 1000.0,
+      strategyConfig: {
+        driftThreshold: 0.0015,
+        minEdge: 0.025,
+        lotSize: 2.0,
+      },
+    });
+
+    expect(result1m.timeframe).toBe('1m');
+    expect(result1m.equityCurve.length).toBeGreaterThan(0);
   });
 });

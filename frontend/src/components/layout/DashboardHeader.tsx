@@ -8,16 +8,18 @@ import {
   Cpu,
   Search,
   Wifi,
-  KeyRound,
-  ShieldCheck,
   Wallet,
   Zap,
   Volume2,
   VolumeX,
+  Eye,
+  Bot,
 } from 'lucide-react';
 import type { SessionGrant } from '../../types/index.js';
 import type { WalletState } from '../../hooks/useSessionKey.js';
+import { useUserRole } from '../../hooks/useUserRole.js';
 import { soundEngine } from '../../services/audio.js';
+import { WalletAccountDropdown } from './WalletAccountDropdown.js';
 
 interface DashboardHeaderProps {
   activeTab: string;
@@ -32,8 +34,11 @@ interface DashboardHeaderProps {
   onSearchChange: (q: string) => void;
   wallet: WalletState;
   activeSession: SessionGrant | null;
+  isFauceting?: boolean;
+  onClaimFaucet?: (amount?: number) => Promise<void>;
   onOpenSessionModal: () => void;
   onConnectWallet: () => Promise<void>;
+  onDisconnectWallet: () => void;
   onSwitchNetwork: () => Promise<void>;
 }
 
@@ -48,21 +53,26 @@ export const DashboardHeader: React.FC<DashboardHeaderProps> = ({
   onSearchChange,
   wallet,
   activeSession,
+  isFauceting,
+  onClaimFaucet,
   onOpenSessionModal,
   onConnectWallet,
+  onDisconnectWallet,
   onSwitchNetwork,
 }) => {
+  const { isTrader, isOperator } = useUserRole(wallet);
+
   const topTabs = [
     { id: 'Overview', label: 'Overview', Icon: Gauge },
     { id: 'Edge Radar', label: 'Edge Radar', Icon: Crosshair },
     { id: 'Markets & Depth', label: 'Markets & Depth', Icon: ListOrdered },
     { id: 'AI Swarm Feed', label: 'AI Stream', Icon: Brain },
-    { id: 'Swarm Cockpit', label: 'Swarm Cockpit', Icon: Cpu },
+    { id: 'Swarm Cockpit', label: isOperator ? 'Swarm Cockpit (Admin)' : 'Swarm Transparency', Icon: Cpu },
   ];
 
   return (
     <header className="dashboard-top-header">
-      {/* Left: Sidebar Toggle & Breadcrumbs */}
+      {/* Left: Sidebar Toggle & Top Navigation */}
       <div className="header-left-section">
         <button
           type="button"
@@ -117,7 +127,7 @@ export const DashboardHeader: React.FC<DashboardHeaderProps> = ({
         </div>
       </div>
 
-      {/* Right: Search, Network, Session & Wallet */}
+      {/* Right: Search, Mode, Network, Session & Wallet */}
       <div className="header-right-section">
         <div className="header-search-bar">
           <Search size={14} />
@@ -129,6 +139,40 @@ export const DashboardHeader: React.FC<DashboardHeaderProps> = ({
             className="header-search-input"
           />
           <span className="search-shortcut-kbd">⌘K</span>
+        </div>
+
+        {/* User Role Indicator Badge */}
+        <div
+          className="header-network-pill"
+          style={{
+            borderColor: isOperator ? 'rgba(255, 170, 0, 0.4)' : isTrader ? 'rgba(0, 240, 255, 0.4)' : 'rgba(255, 255, 255, 0.1)',
+            background: isOperator ? 'rgba(255, 170, 0, 0.08)' : isTrader ? 'rgba(0, 240, 255, 0.08)' : 'rgba(255, 255, 255, 0.04)',
+            color: isOperator ? 'var(--trade-anomaly)' : isTrader ? 'var(--brand-cyan)' : 'var(--muted-foreground)',
+          }}
+          title={
+            isOperator
+              ? 'Logged in as Protocol Swarm Operator'
+              : isTrader
+              ? 'Logged in as Connected Trader'
+              : 'Watch-Only Guest (Public Telemetry)'
+          }
+        >
+          {isOperator ? (
+            <>
+              <Bot size={12} />
+              <span style={{ fontWeight: 600, letterSpacing: '0.04em' }}>OPERATOR</span>
+            </>
+          ) : isTrader ? (
+            <>
+              <Wallet size={12} />
+              <span style={{ fontWeight: 600, letterSpacing: '0.04em' }}>TRADER</span>
+            </>
+          ) : (
+            <>
+              <Eye size={12} />
+              <span>WATCH-ONLY</span>
+            </>
+          )}
         </div>
 
         <div className="header-network-pill">
@@ -150,7 +194,6 @@ export const DashboardHeader: React.FC<DashboardHeaderProps> = ({
           className="sidebar-toggle-btn"
           onClick={() => {
             soundEngine.toggleMute();
-            // force re-render if needed
             window.dispatchEvent(new Event('audio_mute_toggled'));
           }}
           title={soundEngine.getMuted() ? 'Unmute Sound Effects (M)' : 'Mute Sound Effects (M)'}
@@ -181,26 +224,16 @@ export const DashboardHeader: React.FC<DashboardHeaderProps> = ({
             <span>Switch Network</span>
           </button>
         ) : (
-          <button
-            type="button"
-            className={`btn-header-session ${activeSession?.isActive ? 'active' : 'inactive'}`}
-            onClick={onOpenSessionModal}
-            title={activeSession?.isActive ? 'Manage Active Session Delegation' : 'Authorize Non-Custodial Session'}
-          >
-            {activeSession?.isActive ? (
-              <>
-                <ShieldCheck size={13} className="session-icon-active" />
-                <span className="tabular-num">{wallet.address?.slice(0, 5)}...{wallet.address?.slice(-3)}</span>
-                <span className="header-session-badge active">ACTIVE</span>
-              </>
-            ) : (
-              <>
-                <KeyRound size={13} />
-                <span className="tabular-num">{wallet.address?.slice(0, 5)}...{wallet.address?.slice(-3)}</span>
-                <span className="header-session-badge delegate">DELEGATE</span>
-              </>
-            )}
-          </button>
+          <WalletAccountDropdown
+            wallet={wallet}
+            activeSession={activeSession}
+            isFauceting={isFauceting}
+            onClaimFaucet={onClaimFaucet}
+            onOpenSessionModal={onOpenSessionModal}
+            onDisconnectWallet={onDisconnectWallet}
+            onSwitchNetwork={onSwitchNetwork}
+            isOperator={isOperator}
+          />
         )}
       </div>
     </header>

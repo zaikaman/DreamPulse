@@ -560,8 +560,8 @@ html, body {
 .stat-label {
   font-family: var(--font-sans);
   font-size: clamp(11px, 1.2vw, 12.5px);
-  color: var(--muted);
-  font-weight: 400;
+  color: var(--muted-foreground, #a1a1aa);
+  font-weight: 500;
   letter-spacing: -0.01em;
   margin-top: 4px;
   white-space: nowrap;

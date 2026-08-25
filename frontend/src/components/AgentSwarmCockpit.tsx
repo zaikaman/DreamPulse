@@ -8,20 +8,27 @@ import {
   Layers,
   Power,
   CheckCircle2,
+  Lock,
+  ArrowUpRight,
+  Shield,
 } from 'lucide-react';
 import type { AgentType } from '../types/index.js';
 import type { AgentDetail } from '../hooks/useAgentSwarm.js';
 
 interface AgentSwarmCockpitProps {
   detailedAgents: Record<string, AgentDetail>;
+  isOperator?: boolean;
   onToggleAgent: (agentType: AgentType, enabled: boolean) => Promise<boolean>;
   onUpdateConfig: (agentType: AgentType, config: Record<string, any>) => Promise<boolean>;
+  onForkToStudio?: (agentType: AgentType, config: Record<string, any>) => void;
 }
 
 export const AgentSwarmCockpit: React.FC<AgentSwarmCockpitProps> = ({
   detailedAgents,
+  isOperator = false,
   onToggleAgent,
   onUpdateConfig,
+  onForkToStudio,
 }) => {
   const [activeTab, setActiveTab] = useState<'ALL' | 'VOLT' | 'ORACLE' | 'TITAN'>('ALL');
   const [isSaving, setIsSaving] = useState<Record<string, boolean>>({});
@@ -47,6 +54,7 @@ export const AgentSwarmCockpit: React.FC<AgentSwarmCockpitProps> = ({
   });
 
   const handleSaveVolt = async () => {
+    if (!isOperator) return;
     setIsSaving((prev) => ({ ...prev, Volt: true }));
     const success = await onUpdateConfig('Volt', {
       driftThreshold: voltSliders.driftThreshold / 100.0,
@@ -61,6 +69,7 @@ export const AgentSwarmCockpit: React.FC<AgentSwarmCockpitProps> = ({
   };
 
   const handleSaveOracle = async () => {
+    if (!isOperator) return;
     setIsSaving((prev) => ({ ...prev, Oracle: true }));
     const success = await onUpdateConfig('Oracle', {
       minEdge: oracleSliders.minEdge / 100.0,
@@ -75,6 +84,7 @@ export const AgentSwarmCockpit: React.FC<AgentSwarmCockpitProps> = ({
   };
 
   const handleSaveTitan = async () => {
+    if (!isOperator) return;
     setIsSaving((prev) => ({ ...prev, Titan: true }));
     const success = await onUpdateConfig('Titan', {
       targetSpread: titanSliders.targetSpread / 100.0,
@@ -138,6 +148,76 @@ export const AgentSwarmCockpit: React.FC<AgentSwarmCockpitProps> = ({
 
   return (
     <div className="agent-swarm-cockpit" style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
+      {/* Transparency / Admin Status Banner */}
+      {!isOperator ? (
+        <div
+          style={{
+            background: 'rgba(0, 240, 255, 0.04)',
+            border: '1px solid rgba(0, 240, 255, 0.2)',
+            borderRadius: '8px',
+            padding: '12px 16px',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            gap: '12px',
+            flexWrap: 'wrap',
+          }}
+        >
+          <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+            <Lock size={16} style={{ color: 'var(--brand-cyan)' }} />
+            <div style={{ fontSize: '12px', color: 'var(--muted-foreground)' }}>
+              <span style={{ color: 'var(--foreground)', fontWeight: 600 }}>Protocol Swarm Transparency: </span>
+              You are observing real-time quantitative policies of the Somnia L1 Autonomous Operator. Parameters are read-only.
+            </div>
+          </div>
+          <span
+            style={{
+              fontSize: '11px',
+              fontWeight: 600,
+              padding: '2px 8px',
+              borderRadius: '4px',
+              background: 'rgba(0, 240, 255, 0.1)',
+              color: 'var(--brand-cyan)',
+              border: '1px solid rgba(0, 240, 255, 0.3)',
+            }}
+          >
+            Public Transparency Mode
+          </span>
+        </div>
+      ) : (
+        <div
+          style={{
+            background: 'rgba(255, 170, 0, 0.06)',
+            border: '1px solid rgba(255, 170, 0, 0.3)',
+            borderRadius: '8px',
+            padding: '12px 16px',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            gap: '12px',
+          }}
+        >
+          <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+            <Shield size={16} style={{ color: 'var(--trade-anomaly)' }} />
+            <div style={{ fontSize: '12px', color: 'var(--foreground)' }}>
+              <span style={{ fontWeight: 700, color: 'var(--trade-anomaly)' }}>Operator Admin Active: </span>
+              Your changes will immediately modify live market-making policies and quote loops on Somnia Shannon Testnet.
+            </div>
+          </div>
+          <span
+            className="tag-amber"
+            style={{
+              fontSize: '11px',
+              fontWeight: 700,
+              padding: '2px 8px',
+              borderRadius: '4px',
+            }}
+          >
+            ADMIN CONTROLS UNLOCKED
+          </span>
+        </div>
+      )}
+
       {/* Top Cockpit Header Card */}
       <div className="terminal-panel" style={{ padding: '20px' }}>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '16px' }}>
@@ -205,7 +285,7 @@ export const AgentSwarmCockpit: React.FC<AgentSwarmCockpitProps> = ({
                 Cumulative Swarm PnL
               </div>
               <div style={{ fontSize: '16px', fontWeight: 700, color: numericTotalPnl >= 0 ? 'var(--trade-buy)' : 'var(--trade-sell)', fontFamily: 'var(--font-mono)' }}>
-                {numericTotalPnl >= 0 ? `+${totalPnl}` : totalPnl} STT
+                {numericTotalPnl >= 0 ? `+${totalPnl}` : totalPnl} tUSDC
               </div>
             </div>
           </div>
@@ -280,28 +360,43 @@ export const AgentSwarmCockpit: React.FC<AgentSwarmCockpitProps> = ({
                 </div>
               </div>
 
-              {/* Toggle Switch */}
-              <button
-                type="button"
-                onClick={() => onToggleAgent('Volt', !voltData.isEnabled)}
-                style={{
-                  background: voltData.isEnabled ? 'var(--brand-cyan)' : 'rgba(255, 255, 255, 0.1)',
-                  color: voltData.isEnabled ? '#000' : 'var(--muted-foreground)',
-                  border: 'none',
-                  borderRadius: '20px',
-                  padding: '4px 10px',
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: '6px',
-                  fontSize: '11px',
-                  fontWeight: 700,
-                  cursor: 'pointer',
-                  transition: 'all 0.2s ease',
-                }}
-              >
-                <Power size={12} />
-                <span>{voltData.isEnabled ? 'ON' : 'OFF'}</span>
-              </button>
+              {/* Toggle Switch (or Read-Only Indicator) */}
+              {isOperator ? (
+                <button
+                  type="button"
+                  onClick={() => onToggleAgent('Volt', !voltData.isEnabled)}
+                  style={{
+                    background: voltData.isEnabled ? 'var(--brand-cyan)' : 'rgba(255, 255, 255, 0.1)',
+                    color: voltData.isEnabled ? '#000' : 'var(--muted-foreground)',
+                    border: 'none',
+                    borderRadius: '20px',
+                    padding: '4px 10px',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '6px',
+                    fontSize: '11px',
+                    fontWeight: 700,
+                    cursor: 'pointer',
+                  }}
+                >
+                  <Power size={12} />
+                  <span>{voltData.isEnabled ? 'ON' : 'OFF'}</span>
+                </button>
+              ) : (
+                <div
+                  style={{
+                    fontSize: '10px',
+                    fontWeight: 600,
+                    padding: '3px 8px',
+                    borderRadius: '12px',
+                    background: voltData.isEnabled ? 'rgba(0, 255, 102, 0.1)' : 'rgba(255, 51, 102, 0.1)',
+                    color: voltData.isEnabled ? 'var(--trade-buy)' : 'var(--trade-sell)',
+                    border: `1px solid ${voltData.isEnabled ? 'rgba(0, 255, 102, 0.25)' : 'rgba(255, 51, 102, 0.25)'}`,
+                  }}
+                >
+                  {voltData.isEnabled ? '● AUTONOMOUS' : '○ PAUSED'}
+                </div>
+              )}
             </div>
 
             {/* Metrics Row */}
@@ -321,7 +416,7 @@ export const AgentSwarmCockpit: React.FC<AgentSwarmCockpitProps> = ({
               <div style={{ background: 'rgba(255, 255, 255, 0.02)', padding: '8px', borderRadius: '6px', border: '1px solid var(--border)' }}>
                 <div style={{ fontSize: '10px', color: 'var(--muted-foreground)' }}>Captured PnL</div>
                 <div style={{ fontSize: '13px', fontWeight: 700, color: voltData.pnlAmount >= 0 ? 'var(--trade-buy)' : 'var(--trade-sell)', fontFamily: 'var(--font-mono)' }}>
-                  {voltData.pnlAmount >= 0 ? `+${voltData.pnlAmount.toFixed(2)}` : voltData.pnlAmount.toFixed(2)} STT
+                  {voltData.pnlAmount >= 0 ? `+${voltData.pnlAmount.toFixed(2)}` : voltData.pnlAmount.toFixed(2)} tUSDC
                 </div>
               </div>
             </div>
@@ -354,9 +449,10 @@ export const AgentSwarmCockpit: React.FC<AgentSwarmCockpitProps> = ({
                   min="0.05"
                   max="1.0"
                   step="0.05"
+                  disabled={!isOperator}
                   value={voltSliders.driftThreshold}
                   onChange={(e) => setVoltSliders({ ...voltSliders, driftThreshold: parseFloat(e.target.value) })}
-                  style={{ width: '100%', accentColor: 'var(--brand-cyan)', cursor: 'pointer' }}
+                  style={{ width: '100%', accentColor: 'var(--brand-cyan)', cursor: isOperator ? 'pointer' : 'default', opacity: isOperator ? 1 : 0.75 }}
                 />
               </div>
 
@@ -372,9 +468,10 @@ export const AgentSwarmCockpit: React.FC<AgentSwarmCockpitProps> = ({
                   min="1.0"
                   max="10.0"
                   step="0.5"
+                  disabled={!isOperator}
                   value={voltSliders.minEdge}
                   onChange={(e) => setVoltSliders({ ...voltSliders, minEdge: parseFloat(e.target.value) })}
-                  style={{ width: '100%', accentColor: 'var(--brand-cyan)', cursor: 'pointer' }}
+                  style={{ width: '100%', accentColor: 'var(--brand-cyan)', cursor: isOperator ? 'pointer' : 'default', opacity: isOperator ? 1 : 0.75 }}
                 />
               </div>
 
@@ -390,31 +487,50 @@ export const AgentSwarmCockpit: React.FC<AgentSwarmCockpitProps> = ({
                   min="1"
                   max="20"
                   step="1"
+                  disabled={!isOperator}
                   value={voltSliders.lotSize}
                   onChange={(e) => setVoltSliders({ ...voltSliders, lotSize: parseFloat(e.target.value) })}
-                  style={{ width: '100%', accentColor: 'var(--brand-cyan)', cursor: 'pointer' }}
+                  style={{ width: '100%', accentColor: 'var(--brand-cyan)', cursor: isOperator ? 'pointer' : 'default', opacity: isOperator ? 1 : 0.75 }}
                 />
               </div>
 
-              <button
-                type="button"
-                className="btn-glow"
-                onClick={handleSaveVolt}
-                disabled={isSaving.Volt}
-                style={{ width: '100%', justifyContent: 'center', marginTop: '4px', fontSize: '11px', padding: '6px' }}
-              >
-                {saveSuccess.Volt ? (
-                  <>
-                    <CheckCircle2 size={12} style={{ color: 'var(--trade-buy)' }} />
-                    <span>Parameters Synced</span>
-                  </>
-                ) : (
-                  <>
-                    <Sliders size={12} />
-                    <span>{isSaving.Volt ? 'Saving...' : 'Apply Strategy Parameters'}</span>
-                  </>
-                )}
-              </button>
+              {isOperator ? (
+                <button
+                  type="button"
+                  className="btn-glow"
+                  onClick={handleSaveVolt}
+                  disabled={isSaving.Volt}
+                  style={{ width: '100%', justifyContent: 'center', marginTop: '4px', fontSize: '11px', padding: '6px' }}
+                >
+                  {saveSuccess.Volt ? (
+                    <>
+                      <CheckCircle2 size={12} style={{ color: 'var(--trade-buy)' }} />
+                      <span>Parameters Synced</span>
+                    </>
+                  ) : (
+                    <>
+                      <Sliders size={12} />
+                      <span>{isSaving.Volt ? 'Saving...' : 'Apply Strategy Parameters'}</span>
+                    </>
+                  )}
+                </button>
+              ) : (
+                <button
+                  type="button"
+                  className="shadcn-tab-btn"
+                  onClick={() =>
+                    onForkToStudio?.('Volt', {
+                      driftThreshold: voltSliders.driftThreshold / 100.0,
+                      minEdge: voltSliders.minEdge / 100.0,
+                      lotSize: voltSliders.lotSize,
+                    })
+                  }
+                  style={{ width: '100%', justifyContent: 'center', marginTop: '4px', fontSize: '11px', padding: '6px', color: 'var(--brand-cyan)', borderColor: 'rgba(0, 240, 255, 0.3)' }}
+                >
+                  <ArrowUpRight size={12} />
+                  <span>Fork to My Strategy Studio</span>
+                </button>
+              )}
             </div>
           </div>
         )}
@@ -465,27 +581,42 @@ export const AgentSwarmCockpit: React.FC<AgentSwarmCockpitProps> = ({
               </div>
 
               {/* Toggle Switch */}
-              <button
-                type="button"
-                onClick={() => onToggleAgent('Oracle', !oracleData.isEnabled)}
-                style={{
-                  background: oracleData.isEnabled ? 'var(--brand-cyan)' : 'rgba(255, 255, 255, 0.1)',
-                  color: oracleData.isEnabled ? '#000' : 'var(--muted-foreground)',
-                  border: 'none',
-                  borderRadius: '20px',
-                  padding: '4px 10px',
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: '6px',
-                  fontSize: '11px',
-                  fontWeight: 700,
-                  cursor: 'pointer',
-                  transition: 'all 0.2s ease',
-                }}
-              >
-                <Power size={12} />
-                <span>{oracleData.isEnabled ? 'ON' : 'OFF'}</span>
-              </button>
+              {isOperator ? (
+                <button
+                  type="button"
+                  onClick={() => onToggleAgent('Oracle', !oracleData.isEnabled)}
+                  style={{
+                    background: oracleData.isEnabled ? 'var(--brand-cyan)' : 'rgba(255, 255, 255, 0.1)',
+                    color: oracleData.isEnabled ? '#000' : 'var(--muted-foreground)',
+                    border: 'none',
+                    borderRadius: '20px',
+                    padding: '4px 10px',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '6px',
+                    fontSize: '11px',
+                    fontWeight: 700,
+                    cursor: 'pointer',
+                  }}
+                >
+                  <Power size={12} />
+                  <span>{oracleData.isEnabled ? 'ON' : 'OFF'}</span>
+                </button>
+              ) : (
+                <div
+                  style={{
+                    fontSize: '10px',
+                    fontWeight: 600,
+                    padding: '3px 8px',
+                    borderRadius: '12px',
+                    background: oracleData.isEnabled ? 'rgba(0, 255, 102, 0.1)' : 'rgba(255, 51, 102, 0.1)',
+                    color: oracleData.isEnabled ? 'var(--trade-buy)' : 'var(--trade-sell)',
+                    border: `1px solid ${oracleData.isEnabled ? 'rgba(0, 255, 102, 0.25)' : 'rgba(255, 51, 102, 0.25)'}`,
+                  }}
+                >
+                  {oracleData.isEnabled ? '● AUTONOMOUS' : '○ PAUSED'}
+                </div>
+              )}
             </div>
 
             {/* Metrics Row */}
@@ -505,7 +636,7 @@ export const AgentSwarmCockpit: React.FC<AgentSwarmCockpitProps> = ({
               <div style={{ background: 'rgba(255, 255, 255, 0.02)', padding: '8px', borderRadius: '6px', border: '1px solid var(--border)' }}>
                 <div style={{ fontSize: '10px', color: 'var(--muted-foreground)' }}>Captured PnL</div>
                 <div style={{ fontSize: '13px', fontWeight: 700, color: oracleData.pnlAmount >= 0 ? 'var(--trade-buy)' : 'var(--trade-sell)', fontFamily: 'var(--font-mono)' }}>
-                  {oracleData.pnlAmount >= 0 ? `+${oracleData.pnlAmount.toFixed(2)}` : oracleData.pnlAmount.toFixed(2)} STT
+                  {oracleData.pnlAmount >= 0 ? `+${oracleData.pnlAmount.toFixed(2)}` : oracleData.pnlAmount.toFixed(2)} tUSDC
                 </div>
               </div>
             </div>
@@ -538,9 +669,10 @@ export const AgentSwarmCockpit: React.FC<AgentSwarmCockpitProps> = ({
                   min="1.5"
                   max="12.0"
                   step="0.5"
+                  disabled={!isOperator}
                   value={oracleSliders.minEdge}
                   onChange={(e) => setOracleSliders({ ...oracleSliders, minEdge: parseFloat(e.target.value) })}
-                  style={{ width: '100%', accentColor: 'var(--brand-cyan)', cursor: 'pointer' }}
+                  style={{ width: '100%', accentColor: 'var(--brand-cyan)', cursor: isOperator ? 'pointer' : 'default', opacity: isOperator ? 1 : 0.75 }}
                 />
               </div>
 
@@ -556,31 +688,50 @@ export const AgentSwarmCockpit: React.FC<AgentSwarmCockpitProps> = ({
                   min="1"
                   max="25"
                   step="1"
+                  disabled={!isOperator}
                   value={oracleSliders.lotSize}
                   onChange={(e) => setOracleSliders({ ...oracleSliders, lotSize: parseFloat(e.target.value) })}
-                  style={{ width: '100%', accentColor: 'var(--brand-cyan)', cursor: 'pointer' }}
+                  style={{ width: '100%', accentColor: 'var(--brand-cyan)', cursor: isOperator ? 'pointer' : 'default', opacity: isOperator ? 1 : 0.75 }}
                 />
               </div>
 
-              <button
-                type="button"
-                className="btn-glow"
-                onClick={handleSaveOracle}
-                disabled={isSaving.Oracle}
-                style={{ width: '100%', justifyContent: 'center', marginTop: '4px', fontSize: '11px', padding: '6px' }}
-              >
-                {saveSuccess.Oracle ? (
-                  <>
-                    <CheckCircle2 size={12} style={{ color: 'var(--trade-buy)' }} />
-                    <span>Parameters Synced</span>
-                  </>
-                ) : (
-                  <>
-                    <Sliders size={12} />
-                    <span>{isSaving.Oracle ? 'Saving...' : 'Apply Strategy Parameters'}</span>
-                  </>
-                )}
-              </button>
+              {isOperator ? (
+                <button
+                  type="button"
+                  className="btn-glow"
+                  onClick={handleSaveOracle}
+                  disabled={isSaving.Oracle}
+                  style={{ width: '100%', justifyContent: 'center', marginTop: '4px', fontSize: '11px', padding: '6px' }}
+                >
+                  {saveSuccess.Oracle ? (
+                    <>
+                      <CheckCircle2 size={12} style={{ color: 'var(--trade-buy)' }} />
+                      <span>Parameters Synced</span>
+                    </>
+                  ) : (
+                    <>
+                      <Sliders size={12} />
+                      <span>{isSaving.Oracle ? 'Saving...' : 'Apply Strategy Parameters'}</span>
+                    </>
+                  )}
+                </button>
+              ) : (
+                <button
+                  type="button"
+                  className="shadcn-tab-btn"
+                  onClick={() =>
+                    onForkToStudio?.('Oracle', {
+                      minEdge: oracleSliders.minEdge / 100.0,
+                      lotSize: oracleSliders.lotSize,
+                      maxTradeSize: oracleSliders.maxTradeSize,
+                    })
+                  }
+                  style={{ width: '100%', justifyContent: 'center', marginTop: '4px', fontSize: '11px', padding: '6px', color: 'var(--brand-cyan)', borderColor: 'rgba(0, 240, 255, 0.3)' }}
+                >
+                  <ArrowUpRight size={12} />
+                  <span>Fork to My Strategy Studio</span>
+                </button>
+              )}
             </div>
           </div>
         )}
@@ -631,27 +782,42 @@ export const AgentSwarmCockpit: React.FC<AgentSwarmCockpitProps> = ({
               </div>
 
               {/* Toggle Switch */}
-              <button
-                type="button"
-                onClick={() => onToggleAgent('Titan', !titanData.isEnabled)}
-                style={{
-                  background: titanData.isEnabled ? 'var(--brand-cyan)' : 'rgba(255, 255, 255, 0.1)',
-                  color: titanData.isEnabled ? '#000' : 'var(--muted-foreground)',
-                  border: 'none',
-                  borderRadius: '20px',
-                  padding: '4px 10px',
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: '6px',
-                  fontSize: '11px',
-                  fontWeight: 700,
-                  cursor: 'pointer',
-                  transition: 'all 0.2s ease',
-                }}
-              >
-                <Power size={12} />
-                <span>{titanData.isEnabled ? 'ON' : 'OFF'}</span>
-              </button>
+              {isOperator ? (
+                <button
+                  type="button"
+                  onClick={() => onToggleAgent('Titan', !titanData.isEnabled)}
+                  style={{
+                    background: titanData.isEnabled ? 'var(--brand-cyan)' : 'rgba(255, 255, 255, 0.1)',
+                    color: titanData.isEnabled ? '#000' : 'var(--muted-foreground)',
+                    border: 'none',
+                    borderRadius: '20px',
+                    padding: '4px 10px',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '6px',
+                    fontSize: '11px',
+                    fontWeight: 700,
+                    cursor: 'pointer',
+                  }}
+                >
+                  <Power size={12} />
+                  <span>{titanData.isEnabled ? 'ON' : 'OFF'}</span>
+                </button>
+              ) : (
+                <div
+                  style={{
+                    fontSize: '10px',
+                    fontWeight: 600,
+                    padding: '3px 8px',
+                    borderRadius: '12px',
+                    background: titanData.isEnabled ? 'rgba(0, 255, 102, 0.1)' : 'rgba(255, 51, 102, 0.1)',
+                    color: titanData.isEnabled ? 'var(--trade-buy)' : 'var(--trade-sell)',
+                    border: `1px solid ${titanData.isEnabled ? 'rgba(0, 255, 102, 0.25)' : 'rgba(255, 51, 102, 0.25)'}`,
+                  }}
+                >
+                  {titanData.isEnabled ? '● AUTONOMOUS' : '○ PAUSED'}
+                </div>
+              )}
             </div>
 
             {/* Metrics Row */}
@@ -671,7 +837,7 @@ export const AgentSwarmCockpit: React.FC<AgentSwarmCockpitProps> = ({
               <div style={{ background: 'rgba(255, 255, 255, 0.02)', padding: '8px', borderRadius: '6px', border: '1px solid var(--border)' }}>
                 <div style={{ fontSize: '10px', color: 'var(--muted-foreground)' }}>Spread PnL</div>
                 <div style={{ fontSize: '13px', fontWeight: 700, color: titanData.pnlAmount >= 0 ? 'var(--trade-buy)' : 'var(--trade-sell)', fontFamily: 'var(--font-mono)' }}>
-                  {titanData.pnlAmount >= 0 ? `+${titanData.pnlAmount.toFixed(2)}` : titanData.pnlAmount.toFixed(2)} STT
+                  {titanData.pnlAmount >= 0 ? `+${titanData.pnlAmount.toFixed(2)}` : titanData.pnlAmount.toFixed(2)} tUSDC
                 </div>
               </div>
             </div>
@@ -701,9 +867,10 @@ export const AgentSwarmCockpit: React.FC<AgentSwarmCockpitProps> = ({
                   min="2.0"
                   max="8.0"
                   step="0.5"
+                  disabled={!isOperator}
                   value={titanSliders.targetSpread}
                   onChange={(e) => setTitanSliders({ ...titanSliders, targetSpread: parseFloat(e.target.value) })}
-                  style={{ width: '100%', accentColor: 'var(--brand-cyan)', cursor: 'pointer' }}
+                  style={{ width: '100%', accentColor: 'var(--brand-cyan)', cursor: isOperator ? 'pointer' : 'default', opacity: isOperator ? 1 : 0.75 }}
                 />
               </div>
 
@@ -719,31 +886,50 @@ export const AgentSwarmCockpit: React.FC<AgentSwarmCockpitProps> = ({
                   min="0.005"
                   max="0.040"
                   step="0.005"
+                  disabled={!isOperator}
                   value={titanSliders.inventoryAversion}
                   onChange={(e) => setTitanSliders({ ...titanSliders, inventoryAversion: parseFloat(e.target.value) })}
-                  style={{ width: '100%', accentColor: 'var(--brand-cyan)', cursor: 'pointer' }}
+                  style={{ width: '100%', accentColor: 'var(--brand-cyan)', cursor: isOperator ? 'pointer' : 'default', opacity: isOperator ? 1 : 0.75 }}
                 />
               </div>
 
-              <button
-                type="button"
-                className="btn-glow"
-                onClick={handleSaveTitan}
-                disabled={isSaving.Titan}
-                style={{ width: '100%', justifyContent: 'center', marginTop: '4px', fontSize: '11px', padding: '6px' }}
-              >
-                {saveSuccess.Titan ? (
-                  <>
-                    <CheckCircle2 size={12} style={{ color: 'var(--trade-buy)' }} />
-                    <span>Parameters Synced</span>
-                  </>
-                ) : (
-                  <>
-                    <Sliders size={12} />
-                    <span>{isSaving.Titan ? 'Saving...' : 'Apply Strategy Parameters'}</span>
-                  </>
-                )}
-              </button>
+              {isOperator ? (
+                <button
+                  type="button"
+                  className="btn-glow"
+                  onClick={handleSaveTitan}
+                  disabled={isSaving.Titan}
+                  style={{ width: '100%', justifyContent: 'center', marginTop: '4px', fontSize: '11px', padding: '6px' }}
+                >
+                  {saveSuccess.Titan ? (
+                    <>
+                      <CheckCircle2 size={12} style={{ color: 'var(--trade-buy)' }} />
+                      <span>Parameters Synced</span>
+                    </>
+                  ) : (
+                    <>
+                      <Sliders size={12} />
+                      <span>{isSaving.Titan ? 'Saving...' : 'Apply Strategy Parameters'}</span>
+                    </>
+                  )}
+                </button>
+              ) : (
+                <button
+                  type="button"
+                  className="shadcn-tab-btn"
+                  onClick={() =>
+                    onForkToStudio?.('Titan', {
+                      targetSpread: titanSliders.targetSpread / 100.0,
+                      inventoryAversion: titanSliders.inventoryAversion,
+                      lotSize: titanSliders.lotSize,
+                    })
+                  }
+                  style={{ width: '100%', justifyContent: 'center', marginTop: '4px', fontSize: '11px', padding: '6px', color: 'var(--brand-cyan)', borderColor: 'rgba(0, 240, 255, 0.3)' }}
+                >
+                  <ArrowUpRight size={12} />
+                  <span>Fork to My Strategy Studio</span>
+                </button>
+              )}
             </div>
           </div>
         )}
@@ -799,7 +985,7 @@ export const AgentSwarmCockpit: React.FC<AgentSwarmCockpitProps> = ({
               <div style={{ background: 'rgba(255, 255, 255, 0.02)', padding: '8px', borderRadius: '6px', border: '1px solid var(--border)' }}>
                 <div style={{ fontSize: '10px', color: 'var(--muted-foreground)' }}>Total Claimed</div>
                 <div style={{ fontSize: '13px', fontWeight: 700, color: sweeperData.pnlAmount >= 0 ? 'var(--trade-buy)' : 'var(--trade-sell)', fontFamily: 'var(--font-mono)' }}>
-                  {sweeperData.pnlAmount >= 0 ? `+${sweeperData.pnlAmount.toFixed(2)}` : sweeperData.pnlAmount.toFixed(2)} STT
+                  {sweeperData.pnlAmount >= 0 ? `+${sweeperData.pnlAmount.toFixed(2)}` : sweeperData.pnlAmount.toFixed(2)} tUSDC
                 </div>
               </div>
               <div style={{ background: 'rgba(255, 255, 255, 0.02)', padding: '8px', borderRadius: '6px', border: '1px solid var(--border)' }}>

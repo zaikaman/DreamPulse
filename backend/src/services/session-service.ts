@@ -76,6 +76,11 @@ export class SessionService {
       const expiresTimestamp = new Date(row.expires_at).getTime();
       const isActive = row.is_active && expiresTimestamp > now;
 
+      const updatedAtTimestamp = new Date(row.updated_at || row.created_at).getTime();
+      const isPastDay = now - updatedAtTimestamp > 24 * 3600 * 1000 || new Date(updatedAtTimestamp).getUTCDate() !== new Date(now).getUTCDate();
+      const spentToday = isPastDay ? 0 : Number(row.spent_today || 0);
+      const lastSpendResetTimestamp = isPastDay ? now : updatedAtTimestamp;
+
       const record: SessionRecord = {
         id: row.id,
         userAddress: getAddress(row.user_address) as Address,
@@ -83,8 +88,8 @@ export class SessionService {
         permissions: Array.isArray(row.permissions) ? row.permissions : ['placeOrderFor', 'cancelOrderFor'],
         maxTradeSize: Number(row.max_trade_size),
         dailyVolumeCap: Number(row.daily_volume_cap),
-        spentToday: Number(row.spent_today || 0),
-        lastSpendResetTimestamp: new Date(row.updated_at).getTime(),
+        spentToday,
+        lastSpendResetTimestamp,
         expiresAt: row.expires_at,
         isActive,
         nonce: 0,
@@ -113,7 +118,7 @@ export class SessionService {
     }
 
     const normalizedUser = getAddress(params.userAddress) as Address;
-    const rawOperator = params.operatorAddress || SOMNIA_ADDRESSES.operatorPermissionsRegistry;
+    const rawOperator = params.operatorAddress || SOMNIA_ADDRESSES.operatorAccount || SOMNIA_ADDRESSES.operatorPermissionsRegistry;
     if (!isAddress(rawOperator)) {
       throw new Error(`Invalid operatorAddress: ${rawOperator}`);
     }
@@ -323,6 +328,21 @@ export class SessionService {
   }
 
   /**
+   * Returns all currently active, non-expired delegated user sessions.
+   */
+  public getActiveSessions(): SessionRecord[] {
+    const now = Date.now();
+    const result: SessionRecord[] = [];
+    for (const [_, sessionId] of this.userToActiveSessionId.entries()) {
+      const session = this.sessions.get(sessionId);
+      if (session && session.isActive && new Date(session.expiresAt).getTime() > now) {
+        result.push(session);
+      }
+    }
+    return result;
+  }
+
+  /**
    * Lists all sessions (active and past) for a specific user.
    */
   public listUserSessions(userAddress: string): SessionRecord[] {
@@ -360,14 +380,20 @@ export class SessionService {
     if (tradeCost > session.maxTradeSize) {
       return {
         allowed: false,
-        reason: `Trade cost (${tradeCost.toFixed(2)} STT) exceeds maximum trade size limit of ${session.maxTradeSize.toFixed(2)} STT`,
+        reason: `Trade cost (${tradeCost.toFixed(2)} tUSDC) exceeds maximum trade size limit of ${session.maxTradeSize.toFixed(2)} tUSDC`,
       };
     }
 
-    // Reset 24-hour window if day passed
-    if (now - session.lastSpendResetTimestamp > 24 * 3600 * 1000) {
+    // Reset 24-hour window if day passed or new calendar day started
+    const isDifferentDay = new Date(session.lastSpendResetTimestamp).getUTCDate() !== new Date(now).getUTCDate();
+    if (now - session.lastSpendResetTimestamp > 24 * 3600 * 1000 || isDifferentDay) {
       session.spentToday = 0;
       session.lastSpendResetTimestamp = now;
+      session.updatedAt = new Date().toISOString();
+      void supabase
+        .from('sessions')
+        .update({ spent_today: 0, updated_at: session.updatedAt })
+        .eq('id', session.id);
     }
 
     // Daily volume cap guardrail
@@ -375,7 +401,7 @@ export class SessionService {
       const remaining = Math.max(0, session.dailyVolumeCap - session.spentToday);
       return {
         allowed: false,
-        reason: `Trade cost (${tradeCost.toFixed(2)} STT) exceeds remaining daily volume cap of ${remaining.toFixed(2)} STT (Spent: ${session.spentToday.toFixed(2)} / Cap: ${session.dailyVolumeCap.toFixed(2)} STT)`,
+        reason: `Trade cost (${tradeCost.toFixed(2)} tUSDC) exceeds remaining daily volume cap of ${remaining.toFixed(2)} tUSDC (Spent: ${session.spentToday.toFixed(2)} / Cap: ${session.dailyVolumeCap.toFixed(2)} tUSDC)`,
       };
     }
 
@@ -389,7 +415,7 @@ export class SessionService {
     const session = this.sessions.get(sessionId);
     if (!session) return false;
 
-    session.spentToday += tradeCost;
+    session.spentToday = Number((session.spentToday + tradeCost).toFixed(4));
     session.updatedAt = new Date().toISOString();
 
     try {
@@ -400,6 +426,24 @@ export class SessionService {
     } catch {
       // ignore
     }
+
+    return true;
+  }
+
+  /**
+   * Updates or resets the exact spend amount for a session.
+   */
+  public updateSessionSpend(sessionId: string, amount: number): boolean {
+    const session = this.sessions.get(sessionId);
+    if (!session) return false;
+
+    session.spentToday = Number(Math.max(0, amount).toFixed(4));
+    session.updatedAt = new Date().toISOString();
+
+    void supabase
+      .from('sessions')
+      .update({ spent_today: session.spentToday, updated_at: session.updatedAt })
+      .eq('id', session.id);
 
     return true;
   }
