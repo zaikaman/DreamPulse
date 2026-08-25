@@ -7,9 +7,9 @@ import { orderService } from '../services/order-service.js';
 import { settlementService } from '../services/settlement-service.js';
 import { compounderService } from '../services/compounder-service.js';
 import { backtestService } from '../services/backtest-service.js';
-import { operatorAccount, SOMNIA_ADDRESSES } from '../config/somnia.js';
+import { operatorAccount, SOMNIA_ADDRESSES, publicClient, somniaExchange } from '../config/somnia.js';
 import type { MarketStatus, AgentType, OrderStatus } from '../types/index.js';
-import type { Address } from 'viem';
+import { type Address, isAddress, getAddress, parseAbi } from 'viem';
 
 export const apiRouter = Router();
 
@@ -29,6 +29,16 @@ apiRouter.get('/markets', (req: Request, res: Response) => {
     success: true,
     count: markets.length,
     data: markets,
+  });
+});
+
+apiRouter.get('/markets/historical', (req: Request, res: Response) => {
+  const limit = req.query.limit ? parseInt(req.query.limit as string, 10) : 60;
+  const history = marketService.getHistoricalMarkets(limit);
+  res.json({
+    success: true,
+    count: history.length,
+    data: history,
   });
 });
 
@@ -102,12 +112,77 @@ apiRouter.get('/markets/:id/depth', (req: Request, res: Response) => {
   });
 });
 
+apiRouter.get('/markets/pools/future', async (_req: Request, res: Response) => {
+  try {
+    const nowSec = Math.floor(Date.now() / 1000);
+    const horizonSec = nowSec + 24 * 3600;
+    const poolSet = new Set<string>();
+
+    // 1) Current Open + Listed via indexer (covers deployed pools for next windows)
+    try {
+      const all = await somniaExchange.client.listBinaryMarkets({ limit: 100 } as any).catch(() => [] as any[]);
+      for (const m of all as any[]) {
+        const expiry = Number(m.expiry || 0);
+        const pool = m.poolAddress as string | undefined;
+        if (!pool || pool === SOMNIA_ADDRESSES.binaryModule) continue;
+        // Include if expiry within 24h horizon or status is Trading/Listed and not voided
+        const status = String(m.status || '');
+        const isRelevant = (expiry > 0 && expiry >= nowSec - 3600 && expiry <= horizonSec + 3600) || status === 'Trading' || status === 'Listed' || status === '1' || status === '0';
+        if (isRelevant) poolSet.add(pool.toLowerCase());
+      }
+    } catch {}
+
+    // 2) Also include pools from active in-memory markets (fallback for synthetic/rolling)
+    for (const m of marketService.getActiveMarkets({ status: 'Open' })) {
+      if (m.poolAddress) poolSet.add(m.poolAddress.toLowerCase());
+    }
+
+    // 3) Free pools via binaryModule (deployed but not yet bound to a market) — covers next windows pre-deployed
+    try {
+      const freePoolsAbi = parseAbi(['function getFreePools(address creator, address collateral) view returns (address[])']);
+      const creators: Address[] = [SOMNIA_ADDRESSES.marketCreator as Address, SOMNIA_ADDRESSES.marketCreatorFactory as Address];
+      for (const creator of creators) {
+        try {
+          const free = (await publicClient.readContract({
+            address: SOMNIA_ADDRESSES.binaryModule as Address,
+            abi: freePoolsAbi,
+            functionName: 'getFreePools',
+            args: [creator, SOMNIA_ADDRESSES.testUsdc as Address],
+          })) as Address[];
+          for (const p of free) {
+            if (p && p !== '0x0000000000000000000000000000000000000000') poolSet.add(p.toLowerCase());
+          }
+        } catch {}
+      }
+    } catch {}
+
+    // 4) Fallback: if still empty, use known venue pools from recent markets
+    const pools = [...poolSet].slice(0, 80) as Address[];
+    res.json({ success: true, count: pools.length, pools, horizonHours: 24 });
+  } catch (err: any) {
+    res.status(500).json({ success: false, error: err.message || 'Failed to fetch future pools' });
+  }
+});
+
 // ------------------------------------------------------------------------------
 // 2. Session Key Delegation Endpoints
 // ------------------------------------------------------------------------------
 apiRouter.post('/sessions/register', async (req: Request, res: Response) => {
   try {
-    const { userAddress, operatorAddress, maxTradeSize, dailyVolumeCap, expiresAt, signature, nonce, permissions } = req.body;
+    const {
+      userAddress,
+      operatorAddress,
+      maxTradeSize,
+      dailyVolumeCap,
+      expiresAt,
+      signature,
+      nonce,
+      permissions,
+      onChainTxHash,
+      vaultDepositAmount,
+      targetPoolAddress,
+      onChainAuthorized,
+    } = req.body;
 
     if (!userAddress) {
       return res.status(400).json({ success: false, error: 'Missing required userAddress parameter' });
@@ -122,6 +197,10 @@ apiRouter.post('/sessions/register', async (req: Request, res: Response) => {
       signature,
       nonce,
       permissions,
+      onChainTxHash,
+      vaultDepositAmount,
+      targetPoolAddress,
+      onChainAuthorized,
     });
 
     return res.status(201).json({
@@ -213,29 +292,136 @@ apiRouter.post('/sessions/:id/revoke', async (req: Request, res: Response) => {
   }
 });
 
-// ------------------------------------------------------------------------------
-// 3. Swarm Agents Status & Telemetry Endpoints
-// ------------------------------------------------------------------------------
-apiRouter.get('/agents/status', (_req: Request, res: Response) => {
-  const statusSummary = swarmRunner.getSwarmStatus();
-  res.json({
-    success: true,
-    agents: statusSummary,
-  });
+apiRouter.get('/sessions/:userAddress/allowance-status', async (req: Request, res: Response) => {
+  try {
+    const { userAddress } = req.params;
+    if (!userAddress || !isAddress(userAddress)) {
+      return res.status(400).json({ success: false, error: 'Invalid userAddress' });
+    }
+    const normalized = getAddress(userAddress) as Address;
+    const session = await sessionService.getUserActiveSession(normalized).catch(() => null);
+    // Build pool set covering current Open + Listed + FreePools for 24h horizon (same as /pools/future)
+    const poolSet = new Set<string>();
+    for (const m of marketService.getActiveMarkets({ status: 'Open' }).slice(0, 20)) {
+      if (m.poolAddress) poolSet.add(m.poolAddress.toLowerCase());
+    }
+    try {
+      const all = await somniaExchange.client.listBinaryMarkets({ limit: 100 } as any).catch(() => [] as any[]);
+      const nowSec = Math.floor(Date.now() / 1000);
+      const horizonSec = nowSec + 24 * 3600;
+      for (const m of all as any[]) {
+        const expiry = Number(m.expiry || 0);
+        const pool = m.poolAddress as string | undefined;
+        if (!pool || pool === SOMNIA_ADDRESSES.binaryModule) continue;
+        const status = String(m.status || '');
+        const isRelevant = (expiry > 0 && expiry >= nowSec - 3600 && expiry <= horizonSec + 3600) || status === 'Trading' || status === 'Listed' || status === '1' || status === '0';
+        if (isRelevant) poolSet.add(pool.toLowerCase());
+      }
+    } catch {}
+    try {
+      const freePoolsAbi = parseAbi(['function getFreePools(address creator, address collateral) view returns (address[])']);
+      for (const creator of [SOMNIA_ADDRESSES.marketCreator as Address, SOMNIA_ADDRESSES.marketCreatorFactory as Address]) {
+        try {
+          const free = (await publicClient.readContract({
+            address: SOMNIA_ADDRESSES.binaryModule as Address,
+            abi: freePoolsAbi,
+            functionName: 'getFreePools',
+            args: [creator, SOMNIA_ADDRESSES.testUsdc as Address],
+          })) as Address[];
+          for (const p of free) if (p && p !== '0x0000000000000000000000000000000000000000') poolSet.add(p.toLowerCase());
+        } catch {}
+      }
+    } catch {}
+    const pools = [...poolSet].slice(0, 40) as Address[];
+
+    const erc20Abi = parseAbi(['function allowance(address owner, address spender) view returns (uint256)', 'function balanceOf(address account) view returns (uint256)']);
+    const checks = await Promise.all(
+      pools.map(async (pool) => {
+        try {
+          const [allowance, balance, vault] = await Promise.all([
+            publicClient.readContract({ address: SOMNIA_ADDRESSES.testUsdc, abi: erc20Abi, functionName: 'allowance', args: [normalized, pool] }).catch(() => 0n),
+            publicClient.readContract({ address: SOMNIA_ADDRESSES.testUsdc, abi: erc20Abi, functionName: 'balanceOf', args: [normalized] }).catch(() => 0n),
+            // Vault balance via SDK (per-pool vault)
+            (async () => {
+              try {
+                const { somniaExchange } = await import('../config/somnia.js');
+                return await somniaExchange.client.getVaultBalance({ vault: pool, owner: normalized, token: SOMNIA_ADDRESSES.testUsdc }).catch(() => 0n);
+              } catch {
+                return 0n;
+              }
+            })(),
+          ]);
+          const allowanceHuman = Number(allowance) / 1_000_000;
+          const balanceHuman = Number(balance) / 1_000_000;
+          const vaultHuman = Number(vault) / 1_000_000;
+          const ready = allowanceHuman >= 1000 || vaultHuman >= 10;
+          return { pool, allowance: allowance.toString(), allowanceHuman, balanceHuman, vaultHuman, ready };
+        } catch (e: any) {
+          return { pool, error: e.message, ready: false };
+        }
+      }),
+    );
+
+    const hasDelegated = !!session?.onChainAuthorized;
+    const allReady = checks.length === 0 ? true : checks.every((c: any) => c.ready);
+    return res.json({
+      success: true,
+      userAddress: normalized,
+      hasActiveSession: !!session?.isActive,
+      hasDelegated,
+      poolsChecked: checks.length,
+      allReady,
+      checks,
+      guidance: !hasDelegated
+        ? 'No on-chain operator delegation found — approve OperatorPermissionsRegistry first.'
+        : !allReady
+          ? 'One or more pools have insufficient TestUSDC allowance (<1000) and vault (<10). Call wallet approve for those pools via frontend.'
+          : 'All checked pools have sufficient allowance/vault for copy-trades.',
+    });
+  } catch (err: any) {
+    return res.status(500).json({ success: false, error: err.message || 'Failed to check allowance status' });
+  }
 });
 
-apiRouter.get('/agents/detailed', (_req: Request, res: Response) => {
-  const detailed = swarmRunner.getDetailedSwarmState();
-  res.json({
-    success: true,
-    ...detailed,
-  });
+// ------------------------------------------------------------------------------
+// 3. Swarm Agents Status & Telemetry Endpoints (cached 2s to prevent ERR_INSUFFICIENT_RESOURCES storm)
+// ------------------------------------------------------------------------------
+let cachedSwarmStatus: { at: number; data: any } | null = null;
+let cachedSwarmDetailed: { at: number; data: any } | null = null;
+const SWARM_CACHE_MS = 2000;
+
+export function invalidateSwarmCache(): void {
+  cachedSwarmStatus = null;
+  cachedSwarmDetailed = null;
+}
+
+orderService.onStateChange(invalidateSwarmCache);
+
+apiRouter.get('/agents/status', async (_req: Request, res: Response) => {
+  if (cachedSwarmStatus && Date.now() - cachedSwarmStatus.at < SWARM_CACHE_MS) {
+    return res.json(cachedSwarmStatus.data);
+  }
+  const statusSummary = await swarmRunner.getSwarmStatusAsync();
+  const payload = { success: true, agents: statusSummary };
+  cachedSwarmStatus = { at: Date.now(), data: payload };
+  res.json(payload);
+});
+
+apiRouter.get('/agents/detailed', async (_req: Request, res: Response) => {
+  if (cachedSwarmDetailed && Date.now() - cachedSwarmDetailed.at < SWARM_CACHE_MS) {
+    return res.json(cachedSwarmDetailed.data);
+  }
+  const detailed = await swarmRunner.getDetailedSwarmStateAsync();
+  const payload = { success: true, ...detailed };
+  cachedSwarmDetailed = { at: Date.now(), data: payload };
+  res.json(payload);
 });
 
 function isOperatorAuthorized(req: Request): boolean {
   const operatorSecret = process.env.OPERATOR_ADMIN_SECRET;
   const authHeader = req.headers['x-operator-auth'] || req.headers['authorization'];
-  const userAddress = req.body.operatorAddress || req.body.userAddress;
+  const headerOp = (req.headers['x-operator-address'] as string) || (req.headers['x-operator-auth-address'] as string);
+  const userAddress = req.body.operatorAddress || req.body.userAddress || headerOp;
 
   if (operatorSecret && authHeader === `Bearer ${operatorSecret}`) {
     return true;
@@ -244,7 +430,7 @@ function isOperatorAuthorized(req: Request): boolean {
     return true;
   }
   if (!operatorSecret) {
-    // If no secret env set, verify match with operator account address
+    // If no secret env set, allow if no address provided (legacy) or if it matches operator
     return !userAddress || userAddress.toLowerCase() === operatorAccount.address.toLowerCase();
   }
   return false;
@@ -262,6 +448,7 @@ apiRouter.post('/agents/toggle', (req: Request, res: Response) => {
     }
 
     const updated = swarmRunner.toggleAgent(agentType as AgentType, enabled);
+    invalidateSwarmCache();
     return res.json({
       success: updated,
       agentType,
@@ -285,6 +472,7 @@ apiRouter.post('/agents/config', (req: Request, res: Response) => {
     }
 
     const updated = swarmRunner.updateAgentConfig(agentType as AgentType, config);
+    invalidateSwarmCache();
     return res.json({
       success: updated,
       agentType,
@@ -344,20 +532,33 @@ apiRouter.get('/agents/logs', (req: Request, res: Response) => {
 // 4. Order Execution & History Endpoints
 // ------------------------------------------------------------------------------
 apiRouter.get('/orders', (req: Request, res: Response) => {
-  const { userAddress, agentType, status, marketId, limit } = req.query;
+  // Fire-and-forget PnL settlement — do not block paginated reads. Previous `await` caused
+  // `priceFeedService.getHistoricalPriceAt` network stalls to hang the entire table on Loading forever.
+  orderService.syncResolvedOrdersPnL();
+  const { userAddress, agentType, status, outcome, marketId, limit, page, pageSize, search } = req.query;
 
-  const orders = orderService.getOrders({
+  const result = orderService.queryOrdersPaginated({
     userAddress: typeof userAddress === 'string' ? userAddress : undefined,
     agentType: typeof agentType === 'string' ? (agentType as AgentType) : undefined,
     status: typeof status === 'string' ? (status as OrderStatus) : undefined,
+    outcome: typeof outcome === 'string' && (outcome === 'YES' || outcome === 'NO' || outcome === 'VOID') ? (outcome as any) : undefined,
     marketId: typeof marketId === 'string' ? marketId : undefined,
-    limit: limit ? parseInt(limit as string, 10) : 50,
+    searchQuery: typeof search === 'string' ? search : undefined,
+    limit: limit !== undefined ? parseInt(limit as string, 10) : undefined,
+    page: page !== undefined ? parseInt(page as string, 10) : undefined,
+    pageSize: pageSize !== undefined ? parseInt(pageSize as string, 10) : undefined,
   });
 
   res.json({
     success: true,
-    count: orders.length,
-    data: orders,
+    count: result.orders.length,
+    total: result.total,
+    totalFills: result.totalFills,
+    totalVolume: result.totalVolume,
+    page: result.page,
+    pageSize: result.pageSize,
+    totalPages: result.totalPages,
+    data: result.orders,
   });
 });
 
@@ -399,10 +600,13 @@ apiRouter.get('/portfolio/summary', async (req: Request, res: Response) => {
       }
     }
 
-    const realizedPnl = orderService.getTotalRealizedPnl(undefined, targetAddress);
+    // Realized PnL is authoritative: sum of per-trade (payout - cost) for every expired market, handling BUY/SELL and VOID correctly via historically accurate settlement price
+    const realizedPnl = await orderService.getTotalRealizedPnlAsync(undefined, targetAddress);
+    // Unclaimed is gross payout awaiting on-chain redemption (1 USDC per winning lot), NOT net profit - keep separate to avoid double counting
     const unclaimedPnl = sweeperSummary?.unclaimedAmount || 0;
     const totalClaimed = sweeperSummary?.totalClaimedAllTime || 0;
-    const totalPnl = Number((realizedPnl + unclaimedPnl).toFixed(2));
+    // Total portfolio PnL = net realized profit (already includes wins even if not yet swept). Do NOT add gross unclaimed.
+    const totalPnl = Number(realizedPnl.toFixed(2));
     const activePositionsCount = orderService.getActivePositionCount(undefined, targetAddress);
 
     return res.json({
@@ -569,6 +773,13 @@ apiRouter.get('/health', (_req: Request, res: Response) => {
     service: 'DreamPulse Engine',
     timestamp: new Date().toISOString(),
   });
+});
+
+apiRouter.get('/debug/market/:id', (req: Request, res: Response) => {
+  const m = marketService.getMarketById(req.params.id);
+  const active = (marketService as any).markets?.size;
+  const hist = (marketService as any).historicalMarkets?.size;
+  res.json({ found: !!m, market: m, activeCount: active, histCount: hist });
 });
 
 

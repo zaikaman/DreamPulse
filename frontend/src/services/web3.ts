@@ -6,6 +6,7 @@ import {
   defineChain,
   parseUnits,
   formatUnits,
+  encodeFunctionData,
   type Address,
   type Hex,
   type PublicClient,
@@ -51,6 +52,7 @@ export const SOMNIA_ADDRESSES = {
 
 export const OPERATOR_SELECTORS = {
   placeOrderFor: '0x80054449' as Hex,
+  placeBinaryOrderFor: '0x5d97c566' as Hex,
   cancelOrderFor: '0xe37b444b' as Hex,
   reduceOrderFor: '0x364c2587' as Hex,
 } as const;
@@ -238,6 +240,12 @@ export const ERC20_ABI = [
 
 export const ERC20_BALANCE_ABI = ERC20_ABI;
 
+function chunkArray<T>(arr: T[], size: number): T[][] {
+  const out: T[][] = [];
+  for (let i = 0; i < arr.length; i += size) out.push(arr.slice(i, i + size));
+  return out;
+}
+
 /**
  * Public Viem client for querying Somnia testnet state.
  */
@@ -414,6 +422,7 @@ export class Web3Service {
     const operator = params.operator || SOMNIA_ADDRESSES.operatorAccount;
     const selectors = params.selectors || [
       OPERATOR_SELECTORS.placeOrderFor,
+      OPERATOR_SELECTORS.placeBinaryOrderFor,
       OPERATOR_SELECTORS.cancelOrderFor,
     ];
     const approved = params.approved ?? true;
@@ -443,6 +452,7 @@ export class Web3Service {
     const operator = params.operator || SOMNIA_ADDRESSES.operatorAccount;
     const selectors = params.selectors || [
       OPERATOR_SELECTORS.placeOrderFor,
+      OPERATOR_SELECTORS.placeBinaryOrderFor,
       OPERATOR_SELECTORS.cancelOrderFor,
     ];
     const approved = params.approved ?? true;
@@ -461,6 +471,8 @@ export class Web3Service {
 
   /**
    * Configures manual vault mode, approves collateral, and deposits working capital into a pool's vault.
+   * For BinaryPools (DreamDEX Event Contracts) the vault is not used — trading pulls via ERC20 allowance to the pool.
+   * For SpotPools the vault path is required.
    */
   public async setupPoolVault(params: {
     userAddress: Address;
@@ -478,7 +490,9 @@ export class Web3Service {
     const result: { approvalHash?: Hex; vaultModeHash?: Hex; depositHash?: Hex } = {};
 
     // 1. Ensure token allowance is approved for DreamDEX trading
-    if (amountRaw > 0n) {
+    // For BinaryPools we approve the pool itself; for global (no pool) we approve collateralRouter as fallback
+    const shouldApprove = amountRaw > 0n || (params.pool && params.pool !== SOMNIA_ADDRESSES.binaryModule);
+    if (shouldApprove) {
       try {
         const spender = params.pool && params.pool !== SOMNIA_ADDRESSES.binaryModule
           ? params.pool
@@ -491,7 +505,9 @@ export class Web3Service {
           args: [params.userAddress, spender],
         });
 
-        if (allowance < amountRaw) {
+        // BinaryPool copy-trades need allowance to cover trade size; approve max if below 1000 USDC threshold
+        const needThreshold = params.pool ? parseUnits('1000', 6) : amountRaw;
+        if (allowance < needThreshold) {
           const appHash = await wallet.writeContract({
             address: token,
             abi: ERC20_ABI,
@@ -506,8 +522,35 @@ export class Web3Service {
       }
     }
 
-    // 2. If a specific spot pool is provided, attempt manual vault mode and vault deposit
+    // 2. If a specific pool is provided, attempt manual vault mode and vault deposit
+    // BinaryPools do NOT implement getManualVaultMode / deposit vault — skip gracefully
     if (params.pool && params.pool.startsWith('0x') && params.pool !== SOMNIA_ADDRESSES.binaryModule) {
+      // Detect BinaryPool by probing getManualVaultMode; if it reverts with empty data, treat as BinaryPool and skip vault flow
+      let isBinaryPool = false;
+      try {
+        await publicClient.readContract({
+          address: params.pool,
+          abi: SPOT_POOL_ABI,
+          functionName: 'getManualVaultMode',
+          args: [params.userAddress],
+        });
+      } catch (readErr: any) {
+        const msg = String(readErr?.message || '');
+        if (msg.includes('execution reverted') && !msg.includes('0x')) {
+          // generic revert, keep as spot
+        } else {
+          // BinaryPool reverts with data 0x (no function) — skip vault logic
+          isBinaryPool = true;
+        }
+        // If read itself reverted with 0x, it's a BinaryPool
+        if (msg.includes('0x') && msg.length < 20) isBinaryPool = true;
+      }
+
+      if (isBinaryPool) {
+        // BinaryPool: only allowance matters, vault deposit is via allowance path — nothing more to do
+        return result;
+      }
+
       try {
         const isManualMode = await publicClient.readContract({
           address: params.pool,
@@ -543,6 +586,304 @@ export class Web3Service {
     }
 
     return result;
+  }
+
+  /**
+   * One-shot batch: global operator approval + TestUSDC allowances to active pools in a single wallet_sendCalls.
+   * Falls back to sequential if EIP-5792 not supported.
+   * Reduces clicks from 1 + N + 1 (EIP-712) to 1 + 1.
+   */
+  public async batchAuthorizeAndApprovePools(params: {
+    userAddress: Address;
+    operator?: Address;
+    pools: Address[];
+    token?: Address;
+  }): Promise<{ operatorHash?: Hex; allowanceHashes: Hex[] }> {
+    const operator = params.operator || SOMNIA_ADDRESSES.operatorAccount;
+    const token = params.token || SOMNIA_ADDRESSES.testUsdc;
+    const selectors = [OPERATOR_SELECTORS.placeOrderFor, OPERATOR_SELECTORS.placeBinaryOrderFor, OPERATOR_SELECTORS.cancelOrderFor];
+
+    // Check which calls are actually needed
+    const needsOperator = !(await this.isOperatorAuthorized({ owner: params.userAddress, operator, selector: OPERATOR_SELECTORS.placeOrderFor }));
+    const poolsToApprove: Address[] = [];
+    for (const pool of [...new Set(params.pools.map((p) => p.toLowerCase()))] as Address[]) {
+      if (!pool || pool === SOMNIA_ADDRESSES.binaryModule) continue;
+      try {
+        const allowance = await publicClient.readContract({
+          address: token,
+          abi: ERC20_ABI,
+          functionName: 'allowance',
+          args: [params.userAddress, pool],
+        });
+        if (allowance < parseUnits('1000', 6)) poolsToApprove.push(pool);
+      } catch {
+        poolsToApprove.push(pool);
+      }
+    }
+
+    if (!needsOperator && poolsToApprove.length === 0) return { allowanceHashes: [] };
+
+    const calls: Array<{ to: Address; data: Hex }> = [];
+    if (needsOperator) {
+      calls.push({
+        to: SOMNIA_ADDRESSES.operatorPermissionsRegistry,
+        data: encodeFunctionData({ abi: OPERATOR_REGISTRY_ABI, functionName: 'setOperatorApprovalGlobal', args: [operator, selectors, true] }),
+      });
+    }
+    for (const pool of poolsToApprove) {
+      calls.push({
+        to: token,
+        data: encodeFunctionData({ abi: ERC20_ABI, functionName: 'approve', args: [pool, parseUnits('1000000', 6)] }),
+      });
+    }
+
+    // Try EIP-5792 batch
+    const canBatch = typeof window !== 'undefined' && window.ethereum && typeof window.ethereum.request === 'function';
+    if (canBatch && calls.length > 1) {
+      try {
+        const wallet = this.getWalletClient(params.userAddress) as any;
+        if (typeof wallet.sendCalls === 'function') {
+          const id: string = await wallet.sendCalls({ account: params.userAddress, calls, chain: somniaShannonTestnet });
+          const start = Date.now();
+          while (Date.now() - start < 90_000) {
+            try {
+              const status: any = await window.ethereum.request({ method: 'wallet_getCallsStatus', params: [id] });
+              if (status?.status === 'CONFIRMED' || status?.status === 200 || status?.receipts) {
+                const receipts: Hex[] = (status.receipts || []).map((r: any) => r.transactionHash || r.hash).filter(Boolean);
+                return { operatorHash: receipts[0], allowanceHashes: receipts.slice(needsOperator ? 1 : 0) };
+              }
+              if (status?.status === 'FAILED') throw new Error('Batch failed');
+            } catch {}
+            await new Promise((r) => setTimeout(r, 1500));
+          }
+          return { allowanceHashes: [id as Hex] };
+        }
+        const batchId: string = await window.ethereum.request({
+          method: 'wallet_sendCalls',
+          params: [{ version: '1.0', chainId: `0x${somniaShannonTestnet.id.toString(16)}`, from: params.userAddress, calls }],
+        });
+        const start = Date.now();
+        while (Date.now() - start < 90_000) {
+          try {
+            const status: any = await window.ethereum.request({ method: 'wallet_getCallsStatus', params: [batchId] });
+            if (status?.status === 'CONFIRMED' || status?.status === 200 || status?.receipts) {
+              const receipts: Hex[] = (status.receipts || []).map((r: any) => r.transactionHash || r.hash).filter(Boolean);
+              return { operatorHash: receipts[0], allowanceHashes: receipts.slice(needsOperator ? 1 : 0) };
+            }
+            if (status?.status === 'FAILED') throw new Error('Batch failed');
+          } catch {}
+          await new Promise((r) => setTimeout(r, 1500));
+        }
+        return { allowanceHashes: [batchId as Hex] };
+      } catch (batchErr: any) {
+        const msg = String(batchErr?.message || '');
+        if (msg.includes('User rejected') || msg.includes('rejected')) throw batchErr;
+        console.warn('[Web3Service] batchAuthorizeAndApprovePools fallback:', msg);
+      }
+    }
+
+    // Fallback: sequential
+    let operatorHash: Hex | undefined;
+    if (needsOperator) {
+      const res = await this.grantOperatorGlobal({ userAddress: params.userAddress, operator });
+      operatorHash = res.hash;
+    }
+    const allowanceHashes = await this.ensureAllowancesForPools({ userAddress: params.userAddress, pools: poolsToApprove });
+    return { operatorHash, allowanceHashes };
+  }
+
+  /**
+   * Ensures TestUSDC allowance to a list of pools (used for global copy-trading sessions where pools are dynamic).
+   * Approves max (1M USDC) for any pool where current allowance < 1000 USDC.
+   * Optimized to use EIP-5792 wallet_sendCalls batching when available — 1 wallet popup for N pools instead of N popups.
+   */
+  public async ensureAllowancesForPools(params: {
+    userAddress: Address;
+    pools: Address[];
+    token?: Address;
+  }): Promise<Hex[]> {
+    const token = params.token || SOMNIA_ADDRESSES.testUsdc;
+    const uniquePools = [...new Set(params.pools.map((p) => p.toLowerCase()))] as Address[];
+    const poolsToApprove: Address[] = [];
+
+    // 1. Filter to only pools needing approval (single batched read)
+    for (const pool of uniquePools) {
+      if (!pool || pool === SOMNIA_ADDRESSES.binaryModule) continue;
+      try {
+        const allowance = await publicClient.readContract({
+          address: token,
+          abi: ERC20_ABI,
+          functionName: 'allowance',
+          args: [params.userAddress, pool as Address],
+        });
+        if (allowance < parseUnits('1000', 6)) {
+          poolsToApprove.push(pool as Address);
+        }
+      } catch (err: any) {
+        console.warn(`[Web3Service] Allowance read for pool ${pool} notice:`, err.message);
+        poolsToApprove.push(pool as Address);
+      }
+    }
+
+    if (poolsToApprove.length === 0) return [];
+
+    // 2. Try EIP-5792 batch via wallet_sendCalls — 1 popup for all approves
+    const calls = poolsToApprove.map((pool) => ({
+      to: token,
+      data: encodeFunctionData({ abi: ERC20_ABI, functionName: 'approve', args: [pool, parseUnits('1000000', 6)] }),
+    }));
+
+    // Feature-detect wallet_sendCalls support
+    const canBatch = typeof window !== 'undefined' && window.ethereum && typeof window.ethereum.request === 'function';
+
+    if (canBatch) {
+      try {
+        // viem's walletClient may expose sendCalls directly
+        const wallet = this.getWalletClient(params.userAddress) as any;
+        if (typeof wallet.sendCalls === 'function') {
+          const sendCallsId: string = await wallet.sendCalls({
+            account: params.userAddress,
+            calls: calls.map((c) => ({ to: c.to, data: c.data })),
+            chain: somniaShannonTestnet,
+          });
+          // Poll wallet_getCallsStatus until confirmed (EIP-5792)
+          const start = Date.now();
+          while (Date.now() - start < 90_000) {
+            try {
+              const status: any = await window.ethereum.request({
+                method: 'wallet_getCallsStatus',
+                params: [sendCallsId],
+              });
+              if (status?.status === 'CONFIRMED' || status?.status === 200 || status?.receipts) {
+                const receipts: Hex[] = (status.receipts || []).map((r: any) => r.transactionHash || r.hash).filter(Boolean);
+                if (receipts.length > 0) return receipts as Hex[];
+                return [sendCallsId as Hex];
+              }
+              if (status?.status === 'FAILED') throw new Error('Batch approve failed');
+            } catch {}
+            await new Promise((r) => setTimeout(r, 1500));
+          }
+          return [sendCallsId as Hex];
+        }
+
+        // Raw wallet_sendCalls
+        const batchId: string = await window.ethereum.request({
+          method: 'wallet_sendCalls',
+          params: [
+            {
+              version: '1.0',
+              chainId: `0x${somniaShannonTestnet.id.toString(16)}`,
+              from: params.userAddress,
+              calls,
+            },
+          ],
+        });
+        // Poll for batch status
+        const start = Date.now();
+        while (Date.now() - start < 90_000) {
+          try {
+            const status: any = await window.ethereum.request({
+              method: 'wallet_getCallsStatus',
+              params: [batchId],
+            });
+            if (status?.status === 'CONFIRMED' || status?.status === 200 || status?.receipts) {
+              const receipts: Hex[] = (status.receipts || []).map((r: any) => r.transactionHash || r.hash).filter(Boolean);
+              if (receipts.length > 0) return receipts as Hex[];
+              return [batchId as Hex];
+            }
+            if (status?.status === 'FAILED') throw new Error('Batch approve failed');
+          } catch {}
+          await new Promise((r) => setTimeout(r, 1500));
+        }
+        return [batchId as Hex];
+      } catch (batchErr: any) {
+        // EIP-5792 not supported or user rejected — fall through to sequential
+        const msg = String(batchErr?.message || '');
+        if (msg.includes('not support') || msg.includes('not found') || msg.includes('Method')) {
+          console.info('[Web3Service] wallet_sendCalls not supported, falling back to sequential approves');
+        } else if (msg.includes('User rejected') || msg.includes('rejected')) {
+          throw batchErr;
+        } else {
+          console.warn('[Web3Service] Batch approve notice, falling back:', msg);
+        }
+      }
+    }
+
+    // 3. Fallback: chunked wallet_sendCalls (20 per batch) → still 1 popup per chunk, fallback to sequential
+    const canBatchFallback = typeof window !== 'undefined' && window.ethereum && typeof window.ethereum.request === 'function';
+    if (canBatchFallback && poolsToApprove.length > 1) {
+      const chunks = chunkArray(poolsToApprove, 20);
+      const allHashes: Hex[] = [];
+      for (const chunk of chunks) {
+        const chunkCalls = chunk.map((pool) => ({
+          to: token,
+          data: encodeFunctionData({ abi: ERC20_ABI, functionName: 'approve', args: [pool as Address, parseUnits('1000000', 6)] }),
+        }));
+        try {
+          const walletAny = this.getWalletClient(params.userAddress) as any;
+          let batchId: string | undefined;
+          if (typeof walletAny.sendCalls === 'function') {
+            batchId = await walletAny.sendCalls({ account: params.userAddress, calls: chunkCalls.map((c) => ({ to: c.to, data: c.data })), chain: somniaShannonTestnet });
+          } else {
+            batchId = await window.ethereum.request({
+              method: 'wallet_sendCalls',
+              params: [{ version: '1.0', chainId: `0x${somniaShannonTestnet.id.toString(16)}`, from: params.userAddress, calls: chunkCalls }],
+            });
+          }
+          const start = Date.now();
+          while (Date.now() - start < 60_000) {
+            try {
+              const status: any = await window.ethereum.request({ method: 'wallet_getCallsStatus', params: [batchId] });
+              if (status?.status === 'CONFIRMED' || status?.status === 200 || status?.receipts) {
+                const receipts: Hex[] = (status.receipts || []).map((r: any) => r.transactionHash || r.hash).filter(Boolean);
+                if (receipts.length > 0) { allHashes.push(...(receipts as Hex[])); break; }
+                allHashes.push(batchId as Hex); break;
+              }
+              if (status?.status === 'FAILED') throw new Error('Chunk batch failed');
+            } catch {}
+            await new Promise((r) => setTimeout(r, 1500));
+          }
+          if (allHashes.length === 0) allHashes.push(batchId as Hex);
+        } catch (chunkErr: any) {
+          if (String(chunkErr?.message || '').includes('User rejected')) throw chunkErr;
+          // Fallback chunk to sequential within chunk
+          const wallet = this.getWalletClient(params.userAddress);
+          for (const pool of chunk) {
+            try {
+              const hash = await wallet.writeContract({ address: token, abi: ERC20_ABI, functionName: 'approve', args: [pool as Address, parseUnits('1000000', 6)] });
+              await publicClient.waitForTransactionReceipt({ hash });
+              allHashes.push(hash);
+              await new Promise((r) => setTimeout(r, 600));
+            } catch (err: any) {
+              if (String(err?.message || '').includes('User rejected')) throw err;
+              console.warn(`[Web3Service] Allowance ensure for pool ${pool} notice:`, err.message);
+            }
+          }
+        }
+      }
+      return allHashes;
+    }
+
+    // Final fallback: sequential one-by-one
+    const wallet = this.getWalletClient(params.userAddress);
+    const hashes: Hex[] = [];
+    for (const pool of poolsToApprove) {
+      try {
+        const hash = await wallet.writeContract({
+          address: token,
+          abi: ERC20_ABI,
+          functionName: 'approve',
+          args: [pool as Address, parseUnits('1000000', 6)],
+        });
+        await publicClient.waitForTransactionReceipt({ hash });
+        hashes.push(hash);
+        if (poolsToApprove.length > 1) await new Promise((r) => setTimeout(r, 600));
+      } catch (err: any) {
+        if (String(err?.message || '').includes('User rejected')) throw err;
+        console.warn(`[Web3Service] Allowance ensure for pool ${pool} notice:`, err.message);
+      }
+    }
+    return hashes;
   }
 
   /**
@@ -618,6 +959,7 @@ export class Web3Service {
     const operator = params.operator || SOMNIA_ADDRESSES.operatorAccount;
     const selectors = [
       OPERATOR_SELECTORS.placeOrderFor,
+      OPERATOR_SELECTORS.placeBinaryOrderFor,
       OPERATOR_SELECTORS.cancelOrderFor,
     ];
     const wallet = this.getWalletClient(params.userAddress);

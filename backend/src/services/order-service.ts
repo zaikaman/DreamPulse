@@ -15,6 +15,7 @@ import {
   MIN_OPERATOR_GAS_WEI,
 } from '../config/somnia.js';
 import { ORDER_TYPE, type BinarySide, type MarketOnchain } from '@somnia-chain/markets-sdk';
+import { BINARY_POOL_WRITE_ABI } from '../config/permissions-abi.js';
 import type { IAgentDecision } from '../agents/base-agent.js';
 import type {
   OrderExecution,
@@ -31,7 +32,10 @@ export interface QueryOrdersParams {
   agentType?: AgentType;
   marketId?: string;
   status?: OrderStatus;
+  outcome?: OutcomeType;
+  searchQuery?: string;
   limit?: number;
+  offset?: number;
 }
 
 const testUsdcAbi = parseAbi([
@@ -39,50 +43,105 @@ const testUsdcAbi = parseAbi([
   'function faucet(uint256 amount)',
 ]);
 
+const erc20AllowanceAbi = parseAbi([
+  'function allowance(address owner, address spender) view returns (uint256)',
+]);
+
 let isFauceting = false;
+let faucetingPromise: Promise<void> | null = null;
 let lastGasWarningTime = 0;
+let lastOnChainErrorTime = 0;
+let consecutiveOnChainReverts = 0;
+let circuitBreakerUntil = 0;
 const GAS_WARN_THROTTLE_MS = 60_000;
+const ONCHAIN_ERROR_THROTTLE_MS = 10_000;
+const CIRCUIT_BREAKER_THRESHOLD = 5;
+const CIRCUIT_BREAKER_COOLDOWN_MS = 120_000;
+const poolFailureUntil = new Map<string, number>();
+const POOL_FAILURE_COOLDOWN_MS = 10 * 60 * 1000; // per-pool 10m cooldown after revert to avoid gas drain on bad pools
 
 /**
  * Ensures the operator wallet has sufficient TestUSDC collateral for swarm order execution.
+ * Concurrent callers await the same faucet promise instead of silently skipping.
  */
 export async function ensureOperatorCollateral(minCollateral: bigint = 5_000n * 1_000_000n): Promise<void> {
-  if (isFauceting) return;
-  try {
-    const operatorAddress = operatorAccount.address;
-    const hasGas = await hasOperatorGas();
-    if (!hasGas) {
-      // Do not attempt faucet transaction if operator has no native STT for gas
-      return;
-    }
+  if (faucetingPromise) return faucetingPromise;
+  // Circuit breaker: if we recently hit many reverts, pause faucet attempts briefly to avoid gas burn
+  if (Date.now() < circuitBreakerUntil) return;
+  const task = (async () => {
+    try {
+      const operatorAddress = operatorAccount.address;
+      const hasGas = await hasOperatorGas();
+      if (!hasGas) {
+        // Do not attempt faucet transaction if operator has no native STT for gas
+        return;
+      }
 
-    const currentBal = await publicClient.readContract({
-      address: SOMNIA_ADDRESSES.testUsdc,
-      abi: testUsdcAbi,
-      functionName: 'balanceOf',
-      args: [operatorAddress],
-    }).catch(() => 0n);
-
-    if (currentBal < minCollateral) {
-      isFauceting = true;
-      console.log(`[OrderService] Operator balance (${currentBal} raw) is below required ${minCollateral} raw. Calling TestUSDC faucet...`);
-      const faucetAmount = 10_000n * 1_000_000n; // 10,000 USDC
-      const hash = await walletClient.writeContract({
+      const currentBal = await publicClient.readContract({
         address: SOMNIA_ADDRESSES.testUsdc,
         abi: testUsdcAbi,
-        functionName: 'faucet',
-        args: [faucetAmount],
-        chain: somniaShannonTestnet,
-        account: operatorAccount,
-      });
-      await publicClient.waitForTransactionReceipt({ hash });
-      console.log(`[OrderService] Successfully funded operator wallet (${operatorAddress}) with 10,000 TestUSDC (tx: ${hash})`);
+        functionName: 'balanceOf',
+        args: [operatorAddress],
+      }).catch(() => 0n);
+
+      if (currentBal < minCollateral) {
+        isFauceting = true;
+        console.log(`[OrderService] Operator balance (${currentBal} raw) is below required ${minCollateral} raw. Calling TestUSDC faucet...`);
+        const faucetAmount = 10_000n * 1_000_000n; // 10,000 USDC
+        const hash = await walletClient.writeContract({
+          address: SOMNIA_ADDRESSES.testUsdc,
+          abi: testUsdcAbi,
+          functionName: 'faucet',
+          args: [faucetAmount],
+          chain: somniaShannonTestnet,
+          account: operatorAccount,
+        });
+        await publicClient.waitForTransactionReceipt({ hash });
+        console.log(`[OrderService] Successfully funded operator wallet (${operatorAddress}) with 10,000 TestUSDC (tx: ${hash})`);
+        // Reset revert counter on successful funding
+        consecutiveOnChainReverts = 0;
+      }
+    } catch (err: any) {
+      console.warn(`[OrderService] Collateral faucet check notice:`, err.message);
+    } finally {
+      isFauceting = false;
     }
-  } catch (err: any) {
-    console.warn(`[OrderService] Collateral faucet check notice:`, err.message);
+  })();
+  faucetingPromise = task;
+  try {
+    await task;
   } finally {
-    isFauceting = false;
+    faucetingPromise = null;
   }
+}
+
+/**
+ * Returns true if on-chain writes are currently circuit-broken due to repeated reverts.
+ */
+export function isOnChainCircuitBroken(): boolean {
+  return Date.now() < circuitBreakerUntil;
+}
+
+/**
+ * Records an on-chain revert for circuit breaking and throttled logging.
+ * Returns true if caller should log this error (throttled), false if suppressed.
+ */
+function recordOnChainRevert(): boolean {
+  consecutiveOnChainReverts++;
+  if (consecutiveOnChainReverts >= CIRCUIT_BREAKER_THRESHOLD) {
+    circuitBreakerUntil = Date.now() + CIRCUIT_BREAKER_COOLDOWN_MS;
+    console.warn(`[OrderService] Circuit breaker triggered: ${consecutiveOnChainReverts} consecutive on-chain reverts. Pausing on-chain placements for ${CIRCUIT_BREAKER_COOLDOWN_MS / 1000}s to preserve gas.`);
+  }
+  const now = Date.now();
+  if (now - lastOnChainErrorTime > ONCHAIN_ERROR_THROTTLE_MS) {
+    lastOnChainErrorTime = now;
+    return true;
+  }
+  return false;
+}
+
+function recordOnChainSuccess(): void {
+  consecutiveOnChainReverts = 0;
 }
 
 const SIDES: Record<string, BinarySide> = {
@@ -91,6 +150,15 @@ const SIDES: Record<string, BinarySide> = {
   'NO-BUY': 'BUY_NO',
   'NO-SELL': 'SELL_NO',
 };
+
+const BINARY_ORDER_KIND: Record<BinarySide, number> = {
+  BUY_YES: 0,
+  SELL_YES: 1,
+  BUY_NO: 2,
+  SELL_NO: 3,
+};
+
+const ZERO_ADDRESS = '0x0000000000000000000000000000000000000000' as Address;
 
 /**
  * Snap a human value to whole step units to avoid 18-decimal / 6-decimal floating-point drifts.
@@ -111,7 +179,7 @@ export function quantizeOrder(
   outcome: OutcomeType,
   decimals = SOMNIA_ADDRESSES.decimals,
   tickStep = BigInt(process.env.MM_TICK || 1000),
-  lotStep = BigInt(process.env.MM_LOT || 1),
+  lotStep = BigInt(process.env.MM_LOT || 1000),
 ): {
   rawQuantity: bigint;
   rawPriceOwn: bigint;
@@ -175,49 +243,96 @@ export async function assertFunded(
     );
   }
 
+  // Circuit breaker: if we are in cool-down after repeated reverts, skip preflight quickly to avoid RPC spam
+  if (isOnChainCircuitBroken()) {
+    throw new Error('On-chain circuit breaker active — too many recent reverts, pausing placements to preserve gas.');
+  }
+
   if (!onchain) return;
+
+  const isOperatorTrader = traderAddress.toLowerCase() === operatorAddress.toLowerCase();
 
   if (side === 'SELL') {
     const outcomeId = outcome === 'YES' ? onchain.yesId : onchain.noId;
     try {
       const held = await somniaExchange.client.getOutcomeBalance({
         outcomeToken: onchain.outcomeToken,
-        account: operatorAddress,
+        account: traderAddress,
         id: outcomeId,
       });
-      if (held < rawQuantity && held > 0n) {
+      if (held < rawQuantity) {
         throw new Error(
-          `Insufficient ${outcome} outcome tokens to sell: held ${held} raw, need ${rawQuantity} raw.`,
+          `Insufficient ${outcome} outcome tokens to sell for ${traderAddress}: held ${held} raw, need ${rawQuantity} raw.`,
         );
       }
     } catch (err: any) {
       if (err.message.includes('Insufficient')) throw err;
     }
   } else {
-    // BUY: requires price * quantity collateral
+    // BUY: requires price * quantity collateral from the trader (owner vault for copy-trades)
+    // Vault is drawn first; remaining must be covered by wallet via ERC20 allowance to the pool.
     const need = (rawPriceOwn * rawQuantity) / one;
     try {
-      let [wallet, vault] = await Promise.all([
-        somniaExchange.client.getErc20Balance(onchain.collateral, operatorAddress).catch(() => 0n),
+      let [wallet, vault, allowance] = await Promise.all([
+        somniaExchange.client.getErc20Balance(onchain.collateral, traderAddress).catch(() => 0n),
         somniaExchange.client.getVaultBalance({
           vault: onchain.pool,
-          owner: operatorAddress,
+          owner: traderAddress,
           token: onchain.collateral,
+        }).catch(() => 0n),
+        // Per-pool ERC20 allowance is required when vault does not cover the full need
+        publicClient.readContract({
+          address: onchain.collateral,
+          abi: erc20AllowanceAbi,
+          functionName: 'allowance',
+          args: [traderAddress, onchain.pool],
         }).catch(() => 0n),
       ]);
 
-      if (wallet + vault < need) {
+      if (wallet + vault < need && isOperatorTrader) {
         await ensureOperatorCollateral(need).catch(() => {});
-        wallet = await somniaExchange.client.getErc20Balance(onchain.collateral, operatorAddress).catch(() => 0n);
+        const [wallet2, vault2, allowance2] = await Promise.all([
+          somniaExchange.client.getErc20Balance(onchain.collateral, traderAddress).catch(() => 0n),
+          somniaExchange.client.getVaultBalance({
+            vault: onchain.pool,
+            owner: traderAddress,
+            token: onchain.collateral,
+          }).catch(() => 0n),
+          publicClient.readContract({
+            address: onchain.collateral,
+            abi: erc20AllowanceAbi,
+            functionName: 'allowance',
+            args: [traderAddress, onchain.pool],
+          }).catch(() => 0n),
+        ]);
+        wallet = wallet2;
+        vault = vault2;
+        allowance = allowance2;
       }
 
-      if (wallet + vault < need && wallet + vault > 0n) {
+      if (wallet + vault < need) {
         throw new Error(
-          `Insufficient collateral for ${operatorAddress}: available ${wallet + vault} raw, need ${need} raw for ${outcome} buy.`,
+          `Insufficient collateral for ${traderAddress}: available ${wallet + vault} raw, need ${need} raw for ${outcome} buy.`,
         );
+      }
+
+      // If vault alone covers, no allowance needed; otherwise the uncovered remainder must be allowance-approved to the pool
+      const uncovered = need > vault ? need - vault : 0n;
+      if (uncovered > 0n && allowance < uncovered) {
+        // Distinguish operator (SDK auto-approves) vs delegated copy wallet (must pre-approve)
+        if (isOperatorTrader) {
+          // Operator path relies on SDK autoApprove; log once and allow SDK to handle
+          console.warn(`[OrderService] Operator allowance to ${onchain.pool} is ${allowance} < ${uncovered} — SDK autoApprove will top up`);
+        } else {
+          throw new Error(
+            `Insufficient TestUSDC allowance for ${traderAddress} -> pool ${onchain.pool}: allowance ${allowance} raw, need ${uncovered} raw (vault ${vault} covers ${vault} of ${need}). ` +
+              `User must approve TestUSDC for this pool via frontend "Approve & Deposit" or global allowance. Wallet ${wallet} vault ${vault} allowance ${allowance}.`,
+          );
+        }
       }
     } catch (err: any) {
       if (err.message.includes('Insufficient')) throw err;
+      if (err.message.includes('circuit breaker')) throw err;
     }
   }
 }
@@ -225,6 +340,27 @@ export async function assertFunded(
 export class OrderService {
   private orders: OrderExecution[] = [];
   private orderMap = new Map<string, OrderExecution>();
+  // --- Cumulative PnL fast-path cache ---
+  private lastPnlSyncAt = 0;
+  private pnlSyncInFlight: Promise<void> | null = null;
+  private cachedPnlByKey = new Map<string, { sum: number; timestamp: number }>();
+  private stateChangeListeners: Array<() => void> = [];
+
+  public onStateChange(listener: () => void): () => void {
+    this.stateChangeListeners.push(listener);
+    return () => {
+      this.stateChangeListeners = this.stateChangeListeners.filter((l) => l !== listener);
+    };
+  }
+
+  public notifyStateChange(): void {
+    this.cachedPnlByKey.clear();
+    for (const listener of this.stateChangeListeners) {
+      try {
+        listener();
+      } catch {}
+    }
+  }
 
   constructor() {
     this.initializeFromDb().catch((err) => {
@@ -246,7 +382,7 @@ export class OrderService {
       .from('orders')
       .select('*')
       .order('created_at', { ascending: false })
-      .limit(100);
+      .limit(5000);
 
     if (error || !data || data.length === 0) {
       this.seedInitialOrders();
@@ -285,6 +421,50 @@ export class OrderService {
       this.orderMap.set(order.id, order);
       this.orders.push(order);
     }
+
+    // Hydrate missing market snapshots from DB so old orders (without snapshot) can still settle to accurate PnL even if market evicted from memory
+    void this.hydrateMarketSnapshotsFromDb().catch(() => {});
+  }
+
+  private async hydrateMarketSnapshotsFromDb(): Promise<void> {
+    try {
+      const snapshotMissing = this.orders.filter((o) => !o.marketSnapshot);
+      if (snapshotMissing.length === 0) return;
+      const uniqueMarketIds = [...new Set(snapshotMissing.map((o) => o.marketId))].slice(0, 100);
+      if (uniqueMarketIds.length === 0) return;
+      const { data: markets, error } = await supabase.from('markets').select('id, symbol, strike_price, close_timestamp, settlement_price, winning_outcome, window_duration').in('id', uniqueMarketIds);
+      if (error || !markets) return;
+      const marketMap = new Map(markets.map((m: any) => [m.id, m]));
+      for (const order of snapshotMissing) {
+        const m = marketMap.get(order.marketId);
+        if (m) {
+          order.marketSnapshot = {
+            symbol: m.symbol,
+            strikePrice: Number(m.strike_price),
+            closeTimestamp: m.close_timestamp,
+            settlementPrice: m.settlement_price ? Number(m.settlement_price) : undefined,
+            winningOutcome: m.winning_outcome as OutcomeType | undefined,
+            windowDuration: m.window_duration,
+          };
+        } else if (order.marketId.includes('-')) {
+          const parts = order.marketId.split('-');
+          if (parts.length >= 5) {
+            const rawSymbol = parts[1];
+            const symbol = rawSymbol.startsWith('BTC') ? 'BTC/USD' : rawSymbol.startsWith('ETH') ? 'ETH/USD' : 'SOL/USD';
+            const strikePrice = Number(parts[3]);
+            const closeTimeMs = Number(parts[4]);
+            if (!isNaN(strikePrice) && !isNaN(closeTimeMs)) {
+              order.marketSnapshot = {
+                symbol,
+                strikePrice,
+                closeTimestamp: new Date(closeTimeMs).toISOString(),
+                windowDuration: '5m',
+              };
+            }
+          }
+        }
+      }
+    } catch {}
   }
 
   /**
@@ -384,10 +564,16 @@ export class OrderService {
     let fillsQuantity = quantizedSize;
 
     // Execute real on-chain transaction if on-chain market is trading
-    if (onchain && onchain.status === 1 /* Trading */) {
+    if (onchain && onchain.status === 1 /* Trading */ && !onchain.finalized && !onchain.isResolved && !onchain.isVoided) {
       try {
         const sideKey = `${outcome}-${direction}`;
         const binarySide = SIDES[sideKey];
+        // Per-pool cooldown: if this pool reverted recently, skip it to preserve STT
+        const poolKey = onchain.pool.toLowerCase();
+        const blockedUntil = poolFailureUntil.get(poolKey);
+        if (blockedUntil && Date.now() < blockedUntil) {
+          return null;
+        }
         // Use LIMIT (0) so orders match any crossing book liquidity immediately and rest remaining, avoiding ImmediateOrCancelNoFill reverts
         const orderTypeEnum = ORDER_TYPE.LIMIT;
         const one = 10n ** BigInt(SOMNIA_ADDRESSES.decimals);
@@ -396,52 +582,121 @@ export class OrderService {
         const onchainExpiry = Number(onchain.expiry || 0);
 
         // Skip on-chain transaction submission if market is expiring within 30 seconds or already expired
-        if (onchainExpiry === 0 || onchainExpiry - nowSec > 30) {
+        const hasTimeRemaining = onchainExpiry > 0
+          ? onchainExpiry - nowSec > 30
+          : (market ? (new Date(market.closeTimestamp).getTime() - Date.now()) / 1000 > 30 : false);
+
+        if (hasTimeRemaining) {
           const expiresAtSec = onchainExpiry > 0
             ? Math.min(nowSec + 300, onchainExpiry)
-            : nowSec + 300;
+            : Math.floor(new Date(market!.closeTimestamp).getTime() / 1000);
           const expireTimestampNs = BigInt(expiresAtSec) * 1_000_000_000n;
 
-          const placeRes = await somniaExchange.trader.placeOrder({
-            pool: onchain.pool,
-            side: binarySide,
-            price: priceYes,
-            quantity: rawQuantity,
-            outcomeToken: onchain.outcomeToken,
-            yesId: onchain.yesId,
-            noId: onchain.noId,
-            collateral: onchain.collateral || SOMNIA_ADDRESSES.collateral,
-            orderType: orderTypeEnum,
-            expireTimestampNs,
-            gas: 400_000n,
-          });
+          if (isOperatorMaster) {
+            const placeRes = await somniaExchange.trader.placeOrder({
+              pool: onchain.pool,
+              side: binarySide,
+              price: priceYes,
+              quantity: rawQuantity,
+              outcomeToken: onchain.outcomeToken,
+              yesId: onchain.yesId,
+              noId: onchain.noId,
+              collateral: onchain.collateral || SOMNIA_ADDRESSES.collateral,
+              orderType: orderTypeEnum,
+              expireTimestampNs,
+              gas: 2_500_000n,
+            });
 
-          if (placeRes?.receipt?.status === 'reverted') {
-            throw new Error(`Order placement reverted on-chain (tx: ${placeRes.hash})`);
-          }
+            if (placeRes?.receipt?.status === 'reverted') {
+              throw new Error(`Order placement reverted on-chain (tx: ${placeRes.hash})`);
+            }
 
-          if (placeRes?.hash) {
-            txHash = placeRes.hash.startsWith('0x') ? (placeRes.hash as Hex) : (`0x${placeRes.hash}` as Hex);
-          }
+            if (placeRes?.hash) {
+              txHash = placeRes.hash.startsWith('0x') ? (placeRes.hash as Hex) : (`0x${placeRes.hash}` as Hex);
+              recordOnChainSuccess();
+            }
 
-          const filledRaw = (placeRes?.fills ?? []).reduce((acc, f) => acc + f.quantityFilled, 0n);
-          if (placeRes?.orderId !== undefined && filledRaw < rawQuantity) {
-            orderStatus = filledRaw > 0n ? 'FILLED' : 'PENDING';
-            fillsQuantity = Number(filledRaw) / Number(one);
+            const filledRaw = (placeRes?.fills ?? []).reduce((acc, f) => acc + f.quantityFilled, 0n);
+            if (placeRes?.orderId !== undefined && filledRaw < rawQuantity) {
+              orderStatus = filledRaw > 0n ? 'FILLED' : 'PENDING';
+              fillsQuantity = Number(filledRaw) / Number(one);
+            }
+          } else {
+            const kind = BINARY_ORDER_KIND[binarySide];
+            // Extra pre-flight: double-check allowance for copy wallet to avoid burning gas on 0x3fb0ba2e
+            // (assertFunded already checked, but race between check and send could still revert)
+            const hash = await walletClient.writeContract({
+              address: onchain.pool,
+              abi: BINARY_POOL_WRITE_ABI,
+              functionName: 'placeBinaryOrderFor',
+              args: [
+                targetTrader,
+                kind,
+                priceYes,
+                rawQuantity,
+                expireTimestampNs,
+                orderTypeEnum,
+                0,
+                ZERO_ADDRESS,
+                0n,
+                0n,
+              ],
+              chain: somniaShannonTestnet,
+              account: operatorAccount,
+              gas: 2_500_000n,
+            });
+            // Somnia testnet RPC can be slow; allow 90s and handle timeout as non-revert
+            let receipt: any;
+            try {
+              receipt = await publicClient.waitForTransactionReceipt({ hash, timeout: 90_000 } as any);
+            } catch (waitErr: any) {
+              const waitMsg = waitErr?.message || String(waitErr);
+              if (waitMsg.includes('Timed out while waiting') || waitMsg.includes('timeout')) {
+                console.warn(`[OrderService] Copy-trade receipt timeout for ${targetTrader} on ${onchain?.pool} tx ${hash} — tx is pending or RPC lag, not marking as revert. Check explorer.`);
+                // Do not mark as revert / circuit breaker; return null but do not poison pool
+                // The tx may still confirm; we treat as soft failure so next tick can retry without 10m cooldown
+                return null;
+              }
+              throw waitErr;
+            }
+            if (receipt.status === 'reverted') {
+              // Decode common allowance revert selector 0x3fb0ba2e for actionable logging
+              const revertData = (receipt as any).data || '';
+              throw new Error(`Copy-trade placeBinaryOrderFor reverted on-chain (tx: ${hash})${revertData ? ` data=${revertData}` : ''}`);
+            }
+            txHash = hash;
+            recordOnChainSuccess();
           }
         }
       } catch (err: any) {
-        if (err.message?.includes('ImmediateOrCancelNoFill')) {
-          console.info(`[OrderService] IOC trade skipped: no crossing liquidity on CLOB book at tick ${quantizedPrice}`);
-        } else if (err.message?.includes('ERC20InsufficientBalance') || err.message?.includes('insufficient balance')) {
-          console.warn(`[OrderService] Insufficient ERC20 collateral balance for ${targetTrader}: ${err.message}`);
+        const msg: string = err?.message || String(err);
+        const isAllowanceError = msg.includes('Insufficient TestUSDC allowance') || msg.includes('allowance') || msg.includes('0x3fb0ba2e') || msg.includes('ERC20InsufficientAllowance');
+        const isCollateralError = msg.includes('Insufficient collateral') || msg.includes('ERC20InsufficientBalance') || msg.includes('insufficient balance');
+        const isTimeoutError = msg.includes('Timed out while waiting') || msg.includes('timeout') || msg.includes('waitForTransactionReceipt');
+        const isGasError = msg.includes('gas') || msg.includes('native balance') || msg.includes('Missing or invalid parameters') || msg.includes('account does not exist');
+
+        // Allowance/collateral/timeout are user-fixable or infra-timeout — do NOT burn circuit breaker or per-pool 10m cooldown
+        if (isAllowanceError || isCollateralError) {
+          console.warn(`[OrderService] Copy-trade skipped for ${targetTrader} on ${onchain?.pool}: ${msg.slice(0, 900)} — user must approve TestUSDC allowance to this pool via frontend.`);
+          // Do not poison pool; next tick will retry after user approves
+          return null;
+        }
+        if (isTimeoutError) {
+          console.warn(`[OrderService] Copy-trade receipt timeout for ${targetTrader} on ${onchain?.pool}: ${msg.slice(0, 500)} — not marking pool as failed.`);
+          return null;
+        }
+
+        const shouldLog = recordOnChainRevert();
+        // Per-pool cooldown only for genuine on-chain reverts where gas was burned and retry would waste more
+        if (onchain?.pool) {
+          poolFailureUntil.set(onchain.pool.toLowerCase(), Date.now() + POOL_FAILURE_COOLDOWN_MS);
+        }
+        if (msg.includes('ImmediateOrCancelNoFill')) {
+          if (shouldLog) console.info(`[OrderService] IOC trade skipped: no crossing liquidity on CLOB book at tick ${quantizedPrice}`);
+        } else if (isCollateralError) {
+          if (shouldLog) console.warn(`[OrderService] Insufficient ERC20 collateral balance for ${targetTrader}: ${msg}`);
           if (isOperatorMaster) ensureOperatorCollateral().catch(() => {});
-        } else if (
-          err.message?.includes('gas') ||
-          err.message?.includes('native balance') ||
-          err.message?.includes('Missing or invalid parameters') ||
-          err.message?.includes('account does not exist')
-        ) {
+        } else if (isGasError) {
           const now = Date.now();
           if (now - lastGasWarningTime > GAS_WARN_THROTTLE_MS) {
             lastGasWarningTime = now;
@@ -450,7 +705,7 @@ export class OrderService {
             );
           }
         } else {
-          console.warn(`[OrderService] On-chain placeOrder note for ${targetTrader}:`, err.message);
+          if (shouldLog) console.warn(`[OrderService] On-chain placeOrder note for ${targetTrader} on ${onchain?.pool} market ${decision.targetMarketId.slice(0, 10)}...:`, msg.slice(0, 800));
         }
       }
     }
@@ -462,6 +717,9 @@ export class OrderService {
     const orderId = crypto.randomUUID();
     const now = new Date().toISOString();
 
+    const actualLotSize = fillsQuantity > 0 ? fillsQuantity : quantizedSize;
+    const actualTotalCost = Number((quantizedPrice * actualLotSize).toFixed(4));
+
     const orderExecution: OrderExecution = {
       id: orderId,
       userAddress: session.userAddress,
@@ -472,20 +730,30 @@ export class OrderService {
       direction,
       orderType: decision.action === 'LIMIT_QUOTE' ? 'LIMIT' : 'IOC',
       price: quantizedPrice,
-      lotSize: fillsQuantity > 0 ? fillsQuantity : quantizedSize,
-      totalCost,
+      lotSize: actualLotSize,
+      totalCost: actualTotalCost,
       status: orderStatus,
       txHash,
-      pnl: 0, // Realized PnL starts at 0, updated on redemption
+      pnl: 0, // Realized PnL starts at 0, synchronously resolved upon market expiry via syncResolvedOrdersPnL
       createdAt: now,
       filledAt: orderStatus === 'FILLED' ? now : undefined,
+      marketSnapshot: market
+        ? {
+            symbol: market.symbol,
+            strikePrice: market.strikePrice,
+            closeTimestamp: market.closeTimestamp,
+            settlementPrice: market.settlementPrice,
+            winningOutcome: market.winningOutcome,
+            windowDuration: market.windowDuration,
+          }
+        : undefined,
     };
 
-    // Record spend against session now that order has executed
+    // Record spend against session now that order has executed (use actual filled cost)
     if (registeredSession) {
-      await sessionService.recordTradeSpend(session.id, totalCost);
+      await sessionService.recordTradeSpend(session.id, actualTotalCost);
     } else {
-      session.spentToday = Number((session.spentToday + totalCost).toFixed(4));
+      session.spentToday = Number((session.spentToday + actualTotalCost).toFixed(4));
     }
 
     // Store in-memory
@@ -500,12 +768,15 @@ export class OrderService {
       userAddress: session.userAddress,
       orderId,
       marketId: decision.targetMarketId,
+      agentType: decision.agentType,
       outcome: orderExecution.outcome,
       direction: orderExecution.direction,
       price: quantizedPrice,
       lotSize: orderExecution.lotSize,
       txHash,
     });
+
+    this.notifyStateChange();
 
     // Persist to Supabase asynchronously (skip fake test artifacts)
     if (
@@ -526,7 +797,7 @@ export class OrderService {
           order_type: orderExecution.orderType,
           price: quantizedPrice,
           lot_size: orderExecution.lotSize,
-          total_cost: totalCost,
+          total_cost: orderExecution.totalCost,
           status: orderStatus,
           tx_hash: txHash,
           pnl: 0,
@@ -551,7 +822,7 @@ export class OrderService {
       try {
         if (!isAddress(params.userAddress)) return [];
         const normalized = getAddress(params.userAddress).toLowerCase();
-        result = result.filter((o) => o.userAddress.toLowerCase() === normalized);
+        result = result.filter((o) => o.userAddress && o.userAddress.toLowerCase() === normalized);
       } catch {
         return [];
       }
@@ -569,8 +840,106 @@ export class OrderService {
       result = result.filter((o) => o.status === params.status);
     }
 
-    const limit = params?.limit ?? 50;
-    return result.slice(0, limit);
+    if (params?.outcome) {
+      result = result.filter((o) => o.outcome === params.outcome);
+    }
+
+    if (params?.searchQuery && params.searchQuery.trim()) {
+      const q = params.searchQuery.toLowerCase();
+      result = result.filter(
+        (o) =>
+          o.marketId.toLowerCase().includes(q) ||
+          o.userAddress.toLowerCase().includes(q) ||
+          (o.txHash && o.txHash.toLowerCase().includes(q))
+      );
+    }
+
+    if (params?.offset && params.offset > 0) {
+      result = result.slice(params.offset);
+    }
+
+    if (params?.limit !== undefined && params.limit > 0) {
+      result = result.slice(0, params.limit);
+    }
+
+    return result;
+  }
+
+  /**
+   * Calculates exact statistics (total fills and executed volume) for the given filter parameters.
+   */
+  public getOrderStats(params?: Omit<QueryOrdersParams, 'limit' | 'offset'>): {
+    totalCount: number;
+    totalFills: number;
+    totalVolume: number;
+  } {
+    const all = this.getOrders({ ...params, limit: undefined, offset: undefined });
+    const fills = all.filter((o) => o.status === 'FILLED');
+    const totalVolume = Number(
+      fills.reduce((sum, o) => sum + (o.totalCost || 0), 0).toFixed(4)
+    );
+    return {
+      totalCount: all.length,
+      totalFills: fills.length,
+      totalVolume,
+    };
+  }
+
+  /**
+   * Queries orders with pagination metadata and accurate totals.
+   */
+  public queryOrdersPaginated(params?: {
+    userAddress?: string;
+    agentType?: AgentType;
+    status?: OrderStatus;
+    outcome?: OutcomeType;
+    marketId?: string;
+    searchQuery?: string;
+    limit?: number;
+    page?: number;
+    pageSize?: number;
+  }): {
+    orders: OrderExecution[];
+    total: number;
+    totalFills: number;
+    totalVolume: number;
+    page: number;
+    pageSize: number;
+    totalPages: number;
+  } {
+    const allMatching = this.getOrders({
+      userAddress: params?.userAddress,
+      agentType: params?.agentType,
+      status: params?.status,
+      outcome: params?.outcome,
+      marketId: params?.marketId,
+      searchQuery: params?.searchQuery,
+      limit: undefined,
+      offset: undefined,
+    });
+
+    const total = allMatching.length;
+    const filled = allMatching.filter((o) => o.status === 'FILLED');
+    const totalFills = filled.length;
+    const totalVolume = Number(
+      filled.reduce((sum, o) => sum + (o.totalCost || 0), 0).toFixed(4)
+    );
+
+    const pageSize = params?.pageSize || params?.limit || 50;
+    const page = Math.max(1, params?.page || 1);
+    const totalPages = Math.max(1, Math.ceil(total / pageSize));
+    const startIndex = (page - 1) * pageSize;
+    const paginatedOrders = allMatching.slice(startIndex, startIndex + pageSize);
+
+    return {
+      orders: paginatedOrders,
+      total,
+      totalFills,
+      totalVolume,
+      page,
+      pageSize,
+      totalPages,
+    };
   }
 
   /**
@@ -591,16 +960,13 @@ export class OrderService {
       if (o.status !== 'FILLED' && o.status !== 'PENDING') return false;
       if (marketId && o.marketId.toLowerCase() !== marketId.toLowerCase()) return false;
 
-      // Check if market has finished its resolution window
       const market = marketService.getMarketById(o.marketId);
       if (!market) return false;
-
-      const isFinalized = market.status === 'Finalized';
-      const isPastResolution = market.resolutionTimestamp
-        ? new Date(market.resolutionTimestamp).getTime() <= now
-        : false;
-
-      return !isFinalized && !isPastResolution;
+      if (market.status === 'Finalized') return false;
+      const closeMs = market.closeTimestamp ? new Date(market.closeTimestamp).getTime() : Number.MAX_SAFE_INTEGER;
+      const resolveMs = market.resolutionTimestamp ? new Date(market.resolutionTimestamp).getTime() : closeMs;
+      const expiryMs = Math.min(closeMs, resolveMs);
+      return now < expiryMs;
     });
   }
 
@@ -616,95 +982,256 @@ export class OrderService {
 
       const market = marketService.getMarketById(o.marketId);
       if (!market) return false;
-
-      const isFinalized = market.status === 'Finalized';
-      const isPastResolution = market.resolutionTimestamp
-        ? new Date(market.resolutionTimestamp).getTime() <= now
-        : false;
-
-      return !isFinalized && !isPastResolution;
+      if (market.status === 'Finalized') return false;
+      const closeMs = market.closeTimestamp ? new Date(market.closeTimestamp).getTime() : Number.MAX_SAFE_INTEGER;
+      const resolveMs = market.resolutionTimestamp ? new Date(market.resolutionTimestamp).getTime() : closeMs;
+      const expiryMs = Math.min(closeMs, resolveMs);
+      return now < expiryMs;
     }).length;
   }
 
   /**
-   * Synchronizes and calculates realized PnL for filled orders against finalized / expired markets.
+   * Computes accurate realized PnL per-trade for every filled/pending order whose market has expired.
+   * Optimized: throttled + deduped, skips already-settled pnl!==0, parallel historical fetches.
    */
   public syncResolvedOrdersPnL(): void {
+    void this.syncResolvedOrdersPnLAsync();
+  }
+
+  public async syncResolvedOrdersPnLAsync(): Promise<void> {
     const now = Date.now();
-    for (const order of this.orders) {
-      if (order.status !== 'FILLED' && order.status !== 'PENDING') continue;
-      const market = marketService.getMarketById(order.marketId);
-
-      if (market) {
-        const isFinalized = market.status === 'Finalized';
-        const isPastResolution = market.closeTimestamp
-          ? new Date(market.closeTimestamp).getTime() <= now
-          : false;
-
-        if (isFinalized || isPastResolution) {
-          const spot = market.settlementPrice || marketService.getSpotPrice(market.symbol) || 0;
-          const winningOutcome = market.winningOutcome || (spot >= market.strikePrice ? 'YES' : 'NO');
-
-          const isWin = order.outcome === winningOutcome;
-          order.pnl = isWin
-            ? Number(((1.0 - order.price) * order.lotSize).toFixed(2))
-            : Number((-order.totalCost).toFixed(2));
-
-          if (order.status === 'PENDING') {
-            order.status = 'FILLED';
+    // Throttle: at most once per 1.5s; dedupe concurrent
+    if (this.pnlSyncInFlight) return this.pnlSyncInFlight;
+    if (now - this.lastPnlSyncAt < 1500) return;
+    const doSync = async () => {
+      const updatedOrderPnlEvents: Array<{ orderId: string; marketId: string; pnl: number; outcome: string; winningOutcome: string }> = [];
+      // Only unsettled candidates — already has definitive pnl !==0 can be skipped
+      const candidates = this.orders.filter(
+        (o) => (o.status === 'FILLED' || o.status === 'PENDING') && (o.pnl === 0 || o.pnl === undefined || o.status === 'PENDING'),
+      );
+      if (candidates.length === 0) {
+        this.lastPnlSyncAt = Date.now();
+        return;
+      }
+      // Collect unique historical price keys first so we can fetch in parallel
+      const histKeys = new Set<string>();
+      const candidateMeta = new Map<string, { closeMs: number; symbol: string; key: string }>();
+      for (const order of candidates) {
+        const market = marketService.getMarketById(order.marketId);
+        if (market && market.settlementPrice == null) {
+          const closeMs = market.closeTimestamp ? new Date(market.closeTimestamp).getTime() : NaN;
+          if (!isNaN(closeMs) && now - closeMs < 24 * 3600000 && (market.status === 'Finalized' || Math.min(closeMs, market.resolutionTimestamp ? new Date(market.resolutionTimestamp).getTime() : closeMs) <= now)) {
+            const k = `${market.symbol}-${closeMs}`;
+            histKeys.add(k);
+            candidateMeta.set(order.id, { closeMs, symbol: market.symbol, key: k });
           }
-
-          void supabase
-            .from('orders')
-            .update({ pnl: order.pnl, status: order.status })
-            .eq('id', order.id);
-        }
-      } else if (order.marketId.includes('-')) {
-        // Parse contract metadata (symbol, strike price, and expiry) embedded directly in the market ID
-        const parts = order.marketId.split('-');
-        if (parts.length >= 5) {
-          const rawSymbol = parts[1];
-          const symbol = rawSymbol.startsWith('BTC') ? 'BTC/USD' : rawSymbol.startsWith('ETH') ? 'ETH/USD' : 'SOL/USD';
-          const strikePrice = Number(parts[3]);
-          const closeTimeMs = Number(parts[4]);
-
-          if (!isNaN(strikePrice) && !isNaN(closeTimeMs) && now >= closeTimeMs) {
-            const spot = marketService.getSpotPrice(symbol) || strikePrice;
-            const winningOutcome = spot >= strikePrice ? 'YES' : 'NO';
-            const isWin = order.outcome === winningOutcome;
-            order.pnl = isWin
-              ? Number(((1.0 - order.price) * order.lotSize).toFixed(2))
-              : Number((-order.totalCost).toFixed(2));
-
-            if (order.status === 'PENDING') {
-              order.status = 'FILLED';
+        } else if (!market && order.marketId.includes('-')) {
+          const parts = order.marketId.split('-');
+          if (parts.length >= 5) {
+            const rawSymbol = parts[1];
+            const symbol = rawSymbol.startsWith('BTC') ? 'BTC/USD' : rawSymbol.startsWith('ETH') ? 'ETH/USD' : 'SOL/USD';
+            const closeTimeMs = Number(parts[4]);
+            if (!isNaN(closeTimeMs) && now >= closeTimeMs) {
+              const k = `${symbol}-${closeTimeMs}`;
+              // Only need hist if no snapshot settlement
+              if (!order.marketSnapshot?.settlementPrice && !order.marketSnapshot?.winningOutcome) {
+                histKeys.add(k);
+                candidateMeta.set(order.id, { closeMs: closeTimeMs, symbol, key: k });
+              }
             }
-
-            void supabase
-              .from('orders')
-              .update({ pnl: order.pnl, status: order.status })
-              .eq('id', order.id);
+          }
+        } else if (!market && order.marketSnapshot && order.marketSnapshot.settlementPrice == null && !order.marketSnapshot.winningOutcome) {
+          const snap = order.marketSnapshot;
+          const closeMs = snap.closeTimestamp ? new Date(snap.closeTimestamp).getTime() : NaN;
+          if (!isNaN(closeMs) && now >= closeMs) {
+            const k = `${snap.symbol}-${closeMs}`;
+            histKeys.add(k);
+            candidateMeta.set(order.id, { closeMs, symbol: snap.symbol, key: k });
           }
         }
       }
-    }
+
+      // Parallel fetch with 2s timeout per key, concurrency via Promise.allSettled
+      const histPriceCache = new Map<string, number | null>();
+      if (histKeys.size > 0) {
+        let priceFeedService: any = null;
+        try {
+          const mod = await import('./price-feed-service.js');
+          priceFeedService = mod.priceFeedService;
+        } catch {}
+        if (priceFeedService) {
+          const fetches = Array.from(histKeys).map(async (k) => {
+            const closeMs = Number(k.slice(k.lastIndexOf('-') + 1));
+            const sym = k.slice(0, k.lastIndexOf('-'));
+            try {
+              const p = await Promise.race([
+                priceFeedService.getHistoricalPriceAt(sym, closeMs),
+                new Promise<null>((_, rej) => setTimeout(() => rej(new Error('hist timeout')), 2000)),
+              ]);
+              histPriceCache.set(k, p as number | null);
+            } catch {
+              histPriceCache.set(k, null);
+            }
+          });
+          await Promise.allSettled(fetches);
+        }
+      }
+
+      // Now settle candidates using cached prices
+      for (const order of candidates) {
+        // Double-check still unsettled (could have been settled by concurrent call)
+        if (order.pnl !== 0 && order.pnl !== undefined && order.status === 'FILLED') continue;
+        const market = marketService.getMarketById(order.marketId);
+        let shouldResolve = false;
+        let winningOutcome: OutcomeType | undefined;
+        let settlementPrice: number | undefined;
+        let isVoided = false;
+
+        if (market) {
+          const isFinalized = market.status === 'Finalized';
+          const closeMs = market.closeTimestamp ? new Date(market.closeTimestamp).getTime() : Number.MAX_SAFE_INTEGER;
+          const resolveMs = market.resolutionTimestamp ? new Date(market.resolutionTimestamp).getTime() : closeMs;
+          const expiryMs = Math.min(closeMs, resolveMs);
+          if (isFinalized || expiryMs <= now) {
+            shouldResolve = true;
+            if (market.settlementPrice != null) settlementPrice = market.settlementPrice;
+            else if (!isNaN(closeMs) && histPriceCache.has(`${market.symbol}-${closeMs}`)) settlementPrice = histPriceCache.get(`${market.symbol}-${closeMs}`) ?? marketService.getSpotPrice(market.symbol) ?? 0;
+            else settlementPrice = histPriceCache.get(candidateMeta.get(order.id)?.key ?? '') ?? marketService.getSpotPrice(market.symbol) ?? 0;
+            if (market.winningOutcome === 'VOID') { winningOutcome = 'VOID'; isVoided = true; }
+            else winningOutcome = market.winningOutcome || (settlementPrice >= market.strikePrice ? 'YES' : 'NO');
+          }
+        } else if (order.marketId.includes('-')) {
+          const parts = order.marketId.split('-');
+          if (parts.length >= 5) {
+            const rawSymbol = parts[1];
+            const symbol = rawSymbol.startsWith('BTC') ? 'BTC/USD' : rawSymbol.startsWith('ETH') ? 'ETH/USD' : 'SOL/USD';
+            const strikePrice = Number(parts[3]);
+            const closeTimeMs = Number(parts[4]);
+            if (!isNaN(strikePrice) && !isNaN(closeTimeMs) && now >= closeTimeMs) {
+              shouldResolve = true;
+              const meta = candidateMeta.get(order.id);
+              const hist = meta ? histPriceCache.get(meta.key) : undefined;
+              const spot = hist ?? marketService.getSpotPrice(symbol) ?? strikePrice;
+              settlementPrice = spot;
+              winningOutcome = spot >= strikePrice ? 'YES' : 'NO';
+            }
+          }
+        } else if (order.marketSnapshot) {
+          const snap = order.marketSnapshot;
+          const closeMs = snap.closeTimestamp ? new Date(snap.closeTimestamp).getTime() : NaN;
+          if (!isNaN(closeMs) && now >= closeMs) {
+            shouldResolve = true;
+            if (snap.winningOutcome === 'VOID') { winningOutcome = 'VOID'; isVoided = true; }
+            else if (snap.winningOutcome) winningOutcome = snap.winningOutcome;
+            else if (snap.settlementPrice != null) { settlementPrice = snap.settlementPrice; winningOutcome = settlementPrice >= snap.strikePrice ? 'YES' : 'NO'; }
+            else {
+              const meta = candidateMeta.get(order.id);
+              const hist = meta ? histPriceCache.get(meta.key) : undefined;
+              const spot = hist ?? marketService.getSpotPrice(snap.symbol) ?? snap.strikePrice;
+              settlementPrice = spot;
+              winningOutcome = spot >= snap.strikePrice ? 'YES' : 'NO';
+            }
+          }
+        }
+
+        if (!shouldResolve || !winningOutcome) continue;
+        const prevPnl = order.pnl ?? 0;
+        const isBuy = order.direction === 'BUY';
+        const entryCost = Number((order.price * order.lotSize).toFixed(4));
+        let newPnl: number;
+        if (isVoided || winningOutcome === 'VOID') {
+          const payoutVoid = 0.5 * order.lotSize;
+          newPnl = isBuy ? Number((payoutVoid - entryCost).toFixed(2)) : Number((entryCost - payoutVoid).toFixed(2));
+        } else {
+          const payout = order.outcome === winningOutcome ? order.lotSize * 1.0 : 0;
+          newPnl = isBuy ? Number((payout - entryCost).toFixed(2)) : Number((entryCost - payout).toFixed(2));
+        }
+        if (prevPnl !== newPnl || order.status === 'PENDING') {
+          order.pnl = newPnl;
+          if (order.status === 'PENDING') order.status = 'FILLED';
+          updatedOrderPnlEvents.push({ orderId: order.id, marketId: order.marketId, pnl: order.pnl, outcome: order.outcome, winningOutcome });
+          void supabase.from('orders').update({ pnl: order.pnl, status: order.status }).eq('id', order.id);
+        }
+      }
+
+      if (updatedOrderPnlEvents.length > 0) {
+        try {
+          telemetryWsGateway.broadcastPnlUpdate({ updatedOrders: updatedOrderPnlEvents, timestamp: Date.now() });
+
+          // Invalidate cache immediately so getters calculate fresh sums
+          this.cachedPnlByKey.clear();
+          const voltPnl = this.getTotalRealizedPnl('Volt');
+          const oraclePnl = this.getTotalRealizedPnl('Oracle');
+          const titanPnl = this.getTotalRealizedPnl('Titan');
+
+          telemetryWsGateway.broadcastSwarmPnl({
+            volt: voltPnl,
+            oracle: oraclePnl,
+            titan: titanPnl,
+            sweeper: 0,
+            totalSwarm: Number((voltPnl + oraclePnl + titanPnl).toFixed(2)),
+            timestamp: Date.now(),
+          });
+        } catch {}
+      }
+      this.lastPnlSyncAt = Date.now();
+      this.notifyStateChange();
+    };
+    this.pnlSyncInFlight = doSync().finally(() => { this.pnlSyncInFlight = null; });
+    return this.pnlSyncInFlight;
   }
 
   /**
    * Returns total cumulative realized PnL for an agent type or across the entire portfolio/user.
+   * Fast path: returns cached sum instantly, triggers throttled background sync.
    */
   public getTotalRealizedPnl(agentType?: AgentType, userAddress?: string): number {
-    this.syncResolvedOrdersPnL();
-    return Number(
+    const key = `${agentType ?? 'ALL'}|${userAddress?.toLowerCase() ?? 'ALL'}`;
+    const now = Date.now();
+    const cached = this.cachedPnlByKey.get(key);
+    if (cached && now - cached.timestamp < 2000) {
+      return cached.sum;
+    }
+    // Throttled background sync, don't await
+    if (now - this.lastPnlSyncAt > 1500) void this.syncResolvedOrdersPnLAsync().catch(() => {});
+    const targetAddr = userAddress?.toLowerCase();
+    const targetAgent = agentType?.toLowerCase();
+    const sum = Number(
       this.orders
         .filter((o) => {
-          if (agentType && o.agentType.toLowerCase() !== agentType.toLowerCase()) return false;
-          if (userAddress && (!o.userAddress || o.userAddress.toLowerCase() !== userAddress.toLowerCase())) return false;
+          if (targetAgent && (!o.agentType || o.agentType.toLowerCase() !== targetAgent)) return false;
+          if (targetAddr && (!o.userAddress || o.userAddress.toLowerCase() !== targetAddr)) return false;
           return true;
         })
         .reduce((acc, o) => acc + (o.pnl || 0), 0)
         .toFixed(2),
     );
+    this.cachedPnlByKey.set(key, { sum, timestamp: now });
+    return sum;
+  }
+
+  public async getTotalRealizedPnlAsync(agentType?: AgentType, userAddress?: string): Promise<number> {
+    // Bounded wait: at most 2s, otherwise return cached stale value instantly
+    const syncPromise = this.syncResolvedOrdersPnLAsync();
+    try {
+      await Promise.race([syncPromise, new Promise((_, rej) => setTimeout(() => rej(new Error('pnl sync timeout')), 2000))]);
+    } catch {}
+    const key = `${agentType ?? 'ALL'}|${userAddress?.toLowerCase() ?? 'ALL'}`;
+    const now = Date.now();
+    const targetAddr = userAddress?.toLowerCase();
+    const targetAgent = agentType?.toLowerCase();
+    const sum = Number(
+      this.orders
+        .filter((o) => {
+          if (targetAgent && (!o.agentType || o.agentType.toLowerCase() !== targetAgent)) return false;
+          if (targetAddr && (!o.userAddress || o.userAddress.toLowerCase() !== targetAddr)) return false;
+          return true;
+        })
+        .reduce((acc, o) => acc + (o.pnl || 0), 0)
+        .toFixed(2),
+    );
+    this.cachedPnlByKey.set(key, { sum, timestamp: now });
+    return sum;
   }
 }
 

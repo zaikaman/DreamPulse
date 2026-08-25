@@ -7,7 +7,6 @@ import {
   Brain,
   Cpu,
   Search,
-  Wifi,
   Wallet,
   Zap,
   Volume2,
@@ -27,8 +26,8 @@ interface DashboardHeaderProps {
   collapsed: boolean;
   onToggleCollapse: () => void;
   spotPrices: Record<string, number>;
-  isConnected: boolean;
-  latencyMs: number;
+  isConnected?: boolean;
+  latencyMs?: number;
   onExitToLanding?: () => void;
   searchQuery: string;
   onSearchChange: (q: string) => void;
@@ -47,8 +46,6 @@ export const DashboardHeader: React.FC<DashboardHeaderProps> = ({
   onSelectTab,
   onToggleCollapse,
   spotPrices,
-  isConnected,
-  latencyMs,
   searchQuery,
   onSearchChange,
   wallet,
@@ -178,14 +175,6 @@ export const DashboardHeader: React.FC<DashboardHeaderProps> = ({
         <div className="header-network-pill">
           <span className="live-dot"></span>
           <span>Somnia 50312</span>
-        </div>
-
-        <div className="header-network-pill tabular-num" title="WebSocket Latency">
-          <Wifi
-            size={13}
-            style={{ color: isConnected ? 'var(--trade-yes)' : 'var(--trade-no)' }}
-          />
-          <span>{isConnected ? `${latencyMs}ms` : 'OFFLINE'}</span>
         </div>
 
         {/* Audio FX Mute Toggle */}

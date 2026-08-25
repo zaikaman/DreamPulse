@@ -62,7 +62,9 @@ Explain your execution decision in JSON format with keys "confidence" (float 0.0
 
     const parsed = JSON.parse(rawJson);
     const confidence = typeof parsed.confidence === 'number' ? Math.min(0.99, Math.max(0.60, parsed.confidence)) : 0.94;
-    const thought = parsed.thought || fallbackThought(ctx);
+    const thought = (parsed.thought && !parsed.thought.includes('Evaluated quantitative edge on Somnia Shannon CLOB'))
+      ? parsed.thought
+      : fallbackThought(ctx);
 
     return {
       agent: ctx.agentType,

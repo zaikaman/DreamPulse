@@ -1,6 +1,7 @@
 import type {
   Market,
   OrderBookDepth,
+  OrderExecution,
   SessionGrant,
   SwarmStatusSummary,
   AgentThoughtLog,
@@ -42,12 +43,20 @@ export const apiClient = {
     return fetchJson<{ success: boolean; count: number; data: Market[] }>(endpoint);
   },
 
+  async getHistoricalMarkets(limit: number = 60): Promise<{ success: boolean; count: number; data: Market[] }> {
+    return fetchJson<{ success: boolean; count: number; data: Market[] }>(`/markets/historical?limit=${limit}`);
+  },
+
   async getMarketDepth(marketId: string): Promise<{ success: boolean; marketId: string; depth: OrderBookDepth }> {
     return fetchJson<{ success: boolean; marketId: string; depth: OrderBookDepth }>(`/markets/${encodeURIComponent(marketId)}/depth`);
   },
 
   async getSpotPrices(): Promise<{ success: boolean; data: Record<string, { symbol: string; price: number; change1m: number; change5m: number; high24h: number; low24h: number; volume24h: number; timestamp: number }> }> {
     return fetchJson<{ success: boolean; data: Record<string, { symbol: string; price: number; change1m: number; change5m: number; high24h: number; low24h: number; volume24h: number; timestamp: number }> }>('/markets/spot');
+  },
+
+  async getFuturePools(): Promise<{ success: boolean; count: number; pools: string[]; horizonHours: number }> {
+    return fetchJson<{ success: boolean; count: number; pools: string[]; horizonHours: number }>('/markets/pools/future');
   },
 
   // Sessions
@@ -75,6 +84,18 @@ export const apiClient = {
     });
   },
 
+  async getAllowanceStatus(userAddress: string): Promise<{
+    success: boolean;
+    hasActiveSession: boolean;
+    hasDelegated: boolean;
+    poolsChecked: number;
+    allReady: boolean;
+    checks: Array<{ pool: string; allowanceHuman: number; balanceHuman: number; vaultHuman: number; ready: boolean }>;
+    guidance: string;
+  }> {
+    return fetchJson(`/sessions/${encodeURIComponent(userAddress)}/allowance-status`);
+  },
+
   // Swarm Agents
   async getSwarmStatus(): Promise<{ success: boolean; agents: SwarmStatusSummary }> {
     return fetchJson<{ success: boolean; agents: SwarmStatusSummary }>('/agents/status');
@@ -84,17 +105,23 @@ export const apiClient = {
     return fetchJson<{ success: boolean; agents: Record<string, any>; isRunning: boolean; intervalMs: number }>('/agents/detailed');
   },
 
-  async toggleAgent(agentType: string, enabled: boolean): Promise<{ success: boolean; agentType: string; enabled: boolean; message: string }> {
+  async toggleAgent(agentType: string, enabled: boolean, operatorAddress?: string): Promise<{ success: boolean; agentType: string; enabled: boolean; message: string }> {
+    const headers: Record<string, string> = {};
+    if (operatorAddress) headers['x-operator-address'] = operatorAddress;
     return fetchJson('/agents/toggle', {
       method: 'POST',
-      body: JSON.stringify({ agentType, enabled }),
+      headers,
+      body: JSON.stringify({ agentType, enabled, operatorAddress }),
     });
   },
 
-  async updateAgentConfig(agentType: string, config: Record<string, unknown>): Promise<{ success: boolean; agentType: string; message: string }> {
+  async updateAgentConfig(agentType: string, config: Record<string, unknown>, operatorAddress?: string): Promise<{ success: boolean; agentType: string; message: string }> {
+    const headers: Record<string, string> = {};
+    if (operatorAddress) headers['x-operator-address'] = operatorAddress;
     return fetchJson('/agents/config', {
       method: 'POST',
-      body: JSON.stringify({ agentType, config }),
+      headers,
+      body: JSON.stringify({ agentType, config, operatorAddress }),
     });
   },
 
@@ -108,13 +135,33 @@ export const apiClient = {
     userAddress?: string;
     agentType?: string;
     status?: string;
+    outcome?: string;
+    marketId?: string;
     limit?: number;
-  }): Promise<{ success: boolean; count: number; data: any[] }> {
+    page?: number;
+    pageSize?: number;
+    search?: string;
+  }): Promise<{
+    success: boolean;
+    count: number;
+    total?: number;
+    totalFills?: number;
+    totalVolume?: number;
+    page?: number;
+    pageSize?: number;
+    totalPages?: number;
+    data: OrderExecution[];
+  }> {
     const searchParams = new URLSearchParams();
     if (params?.userAddress) searchParams.append('userAddress', params.userAddress);
     if (params?.agentType && params.agentType !== 'ALL') searchParams.append('agentType', params.agentType);
     if (params?.status && params.status !== 'ALL') searchParams.append('status', params.status);
-    if (params?.limit) searchParams.append('limit', params.limit.toString());
+    if (params?.outcome && params.outcome !== 'ALL') searchParams.append('outcome', params.outcome);
+    if (params?.marketId) searchParams.append('marketId', params.marketId);
+    if (params?.limit !== undefined) searchParams.append('limit', params.limit.toString());
+    if (params?.page !== undefined) searchParams.append('page', params.page.toString());
+    if (params?.pageSize !== undefined) searchParams.append('pageSize', params.pageSize.toString());
+    if (params?.search) searchParams.append('search', params.search);
     const query = searchParams.toString();
     const endpoint = query ? `/orders?${query}` : '/orders';
     return fetchJson(endpoint);

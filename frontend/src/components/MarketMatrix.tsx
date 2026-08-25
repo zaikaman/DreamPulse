@@ -7,6 +7,7 @@ import {
   TrendingUp,
   TrendingDown,
   Loader2,
+  Radio,
 } from 'lucide-react';
 import type { Market } from '../types/index.js';
 import type { MarketTickData } from '../hooks/useTelemetry.js';
@@ -30,8 +31,14 @@ export const MarketMatrix: React.FC<MarketMatrixProps> = ({
   const [selectedWindow, setSelectedWindow] = useState<string>('ALL');
   const [searchQuery, setSearchQuery] = useState<string>('');
 
-  // Filter markets
+  // Filter only active live markets with positive remaining time
   const filteredMarkets = markets.filter((m) => {
+    const tick = liveTicks.get(m.id);
+    const timeLeft = tick?.timeLeftSeconds ?? Math.max(0, Math.floor((new Date(m.closeTimestamp).getTime() - Date.now()) / 1000));
+    
+    // Only live open markets
+    if (m.status !== 'Open' && timeLeft <= 0) return false;
+
     if (selectedSymbol !== 'ALL' && m.symbol !== selectedSymbol) return false;
     if (selectedWindow !== 'ALL' && m.windowDuration !== selectedWindow) return false;
     if (searchQuery) {
@@ -49,10 +56,13 @@ export const MarketMatrix: React.FC<MarketMatrixProps> = ({
     <div className="terminal-panel market-matrix-panel">
       {/* Header & Controls */}
       <div className="terminal-panel-header">
-        <div className="panel-title">
+        <div className="panel-title" style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
           <Layers size={16} />
           <span>Active Prediction Markets</span>
-          <span className="badge badge-cyan">{filteredMarkets.length} LIVE</span>
+          <span className="badge badge-cyan" style={{ display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
+            <Radio size={10} className="animate-pulse" />
+            <span>{filteredMarkets.length} LIVE</span>
+          </span>
         </div>
 
         {/* Filters */}
@@ -110,7 +120,7 @@ export const MarketMatrix: React.FC<MarketMatrixProps> = ({
         {filteredMarkets.length === 0 ? (
           <div className="matrix-empty-state">
             <Loader2 size={24} className="animate-spin" />
-            <p>Scanning Somnia Event Contracts registry...</p>
+            <p>Scanning active prediction market rounds...</p>
           </div>
         ) : (
           filteredMarkets.map((market) => {
@@ -125,12 +135,14 @@ export const MarketMatrix: React.FC<MarketMatrixProps> = ({
             const hasAnomaly = tick?.hasAnomaly ?? Math.abs(edge) >= 0.03;
 
             const strikeDelta = spot - market.strikePrice;
-            const strikeDeltaPct = (strikeDelta / market.strikePrice) * 100;
+            const strikeDeltaPct = market.strikePrice > 0 ? (strikeDelta / market.strikePrice) * 100 : 0;
 
-            const isExpiringSoon = timeLeft < 60;
+            const isExpiringSoon = timeLeft < 60 && timeLeft > 0;
             const minutes = Math.floor(timeLeft / 60);
             const seconds = timeLeft % 60;
-            const formattedTime = `${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
+            const formattedTime = timeLeft > 0
+              ? `${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`
+              : '00:00';
 
             return (
               <div
@@ -147,7 +159,7 @@ export const MarketMatrix: React.FC<MarketMatrixProps> = ({
 
                   <div className={`countdown-badge ${isExpiringSoon ? 'expiring-urgent' : ''}`}>
                     <Clock size={11} />
-                    <span className="tabular-num">{formattedTime}</span>
+                    <span className="tabular-num">{timeLeft > 0 ? formattedTime : 'RESOLVING...'}</span>
                   </div>
                 </div>
 

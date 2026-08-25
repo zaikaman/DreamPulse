@@ -43,18 +43,38 @@ export interface SweepCompleteData {
   timestamp: number;
 }
 
+export interface PnlUpdateData {
+  updatedOrders: Array<{ orderId: string; marketId: string; pnl: number; outcome: string; winningOutcome: string }>;
+  timestamp: number;
+}
+
+export interface SwarmPnlTickData {
+  volt: number;
+  oracle: number;
+  titan: number;
+  sweeper: number;
+  totalSwarm: number;
+  timestamp: number;
+}
+
 export function useTelemetry(userAddress?: string) {
   const [isConnected, setIsConnected] = useState<boolean>(false);
   const [latencyMs, setLatencyMs] = useState<number>(18);
   const [liveTicks, setLiveTicks] = useState<Map<string, MarketTickData>>(new Map());
   const [depthMap, setDepthMap] = useState<Map<string, DepthUpdateData>>(new Map());
   const [agentThoughts, setAgentThoughts] = useState<AgentThoughtLog[]>([]);
+  const [debugThoughts, setDebugThoughts] = useState<AgentThoughtLog[]>([]);
+  const [isDebugEnabled, setIsDebugEnabled] = useState<boolean>(false);
   const [recentOrders, setRecentOrders] = useState<OrderFillData[]>([]);
   const [lastSweep, setLastSweep] = useState<SweepCompleteData | null>(null);
+  const [lastPnlUpdate, setLastPnlUpdate] = useState<PnlUpdateData | null>(null);
+  const [lastSwarmPnlTick, setLastSwarmPnlTick] = useState<SwarmPnlTickData | null>(null);
 
   const wsRef = useRef<WebSocket | null>(null);
   const reconnectTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const pingTimeRef = useRef<number>(0);
+  const isDebugEnabledRef = useRef<boolean>(isDebugEnabled);
+  isDebugEnabledRef.current = isDebugEnabled;
 
   const getWsUrl = useCallback(() => {
     if (import.meta.env.VITE_BACKEND_WS_URL) {
@@ -90,13 +110,23 @@ export function useTelemetry(userAddress?: string) {
         };
         ws.send(JSON.stringify(subMessage));
 
-        // Also subscribe explicitly to agent thoughts
+        // Subscribe to main executed agent thoughts channel
         ws.send(
           JSON.stringify({
             action: 'subscribe',
             channel: 'agent_thoughts',
           }),
         );
+
+        // If debug was active prior to reconnect, subscribe to debug thoughts
+        if (isDebugEnabledRef.current) {
+          ws.send(
+            JSON.stringify({
+              action: 'subscribe',
+              channel: 'debug_thoughts',
+            }),
+          );
+        }
       };
 
       ws.onmessage = (event) => {
@@ -139,27 +169,58 @@ export function useTelemetry(userAddress?: string) {
               }
               break;
 
+            // Main stream: Authentic executed agent decisions and on-chain trades
             case 'agent_thought':
-              const newThought: AgentThoughtLog = {
-                id: `thought-${now}-${Math.random().toString(36).slice(2, 6)}`,
+              const newExecThought: AgentThoughtLog = {
+                id: payload.id || `exec-${now}-${Math.random().toString(36).slice(2, 6)}`,
                 agentType: payload.agent || 'Volt',
                 marketId: payload.marketId,
-                triggerEvent: payload.triggerEvent || 'MARKET_TICK',
-                confidence: payload.confidence ?? 0.92,
-                actionTaken: payload.action || 'EVALUATE',
-                reasoningText: payload.thought || 'Telemetry evaluation complete.',
+                triggerEvent: payload.triggerEvent || 'EXECUTION_CONFIRMED',
+                confidence: payload.confidence ?? 0.94,
+                actionTaken: payload.action || 'EXECUTED',
+                reasoningText: payload.thought || 'Trade executed on Somnia Shannon CLOB.',
+                txHash: payload.txHash,
+                isExecution: payload.isExecution ?? true,
+                price: payload.price,
+                lotSize: payload.lotSize,
+                outcome: payload.outcome,
                 createdAt: new Date(payload.timestamp || now).toISOString(),
               };
 
               setAgentThoughts((prev) => {
-                // Avoid duplicates: drop if identical reasoning text from this agent exists in recent 10 thoughts
                 const isDuplicate = prev.slice(0, 10).some(
-                  (t) => t.agentType === newThought.agentType && t.reasoningText === newThought.reasoningText,
+                  (t) => (t.txHash && t.txHash === newExecThought.txHash) || (t.id === newExecThought.id),
                 );
                 if (isDuplicate) {
                   return prev;
                 }
-                return [newThought, ...prev.slice(0, 79)];
+                return [newExecThought, ...prev.slice(0, 79)];
+              });
+              break;
+
+            // Opt-in debug stream: Internal evaluation traces
+            case 'debug_thought':
+              const newDebugThought: AgentThoughtLog = {
+                id: payload.id || `debug-${now}-${Math.random().toString(36).slice(2, 6)}`,
+                agentType: payload.agent || 'Volt',
+                marketId: payload.marketId,
+                triggerEvent: payload.triggerEvent || 'EVALUATION_TICK',
+                confidence: payload.confidence ?? 0.90,
+                actionTaken: payload.action || 'EVALUATE',
+                reasoningText: payload.thought || 'Continuous depth evaluation.',
+                isExecution: false,
+                metadata: payload.metadata,
+                createdAt: new Date(payload.timestamp || now).toISOString(),
+              };
+
+              setDebugThoughts((prev) => {
+                const isDuplicate = prev.slice(0, 5).some(
+                  (t) => t.agentType === newDebugThought.agentType && t.reasoningText === newDebugThought.reasoningText,
+                );
+                if (isDuplicate) {
+                  return prev;
+                }
+                return [newDebugThought, ...prev.slice(0, 99)];
               });
               break;
 
@@ -189,6 +250,24 @@ export function useTelemetry(userAddress?: string) {
               setLastSweep(sweepData);
               break;
 
+            case 'pnl_update':
+              setLastPnlUpdate({
+                updatedOrders: payload.updatedOrders || [],
+                timestamp: payload.timestamp || now,
+              });
+              break;
+
+            case 'swarm_pnl_tick':
+              setLastSwarmPnlTick({
+                volt: payload.volt ?? 0,
+                oracle: payload.oracle ?? 0,
+                titan: payload.titan ?? 0,
+                sweeper: payload.sweeper ?? 0,
+                totalSwarm: payload.totalSwarm ?? 0,
+                timestamp: payload.timestamp || now,
+              });
+              break;
+
             default:
               break;
           }
@@ -213,6 +292,20 @@ export function useTelemetry(userAddress?: string) {
     }
   }, [getWsUrl, userAddress]);
 
+  const toggleDebugThoughts = useCallback((enable?: boolean) => {
+    setIsDebugEnabled((prev) => {
+      const nextVal = enable !== undefined ? enable : !prev;
+      if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
+        if (nextVal) {
+          wsRef.current.send(JSON.stringify({ action: 'subscribe', channel: 'debug_thoughts' }));
+        } else {
+          wsRef.current.send(JSON.stringify({ action: 'unsubscribe', channel: 'debug_thoughts' }));
+        }
+      }
+      return nextVal;
+    });
+  }, []);
+
   useEffect(() => {
     connect();
 
@@ -232,7 +325,12 @@ export function useTelemetry(userAddress?: string) {
     liveTicks,
     depthMap,
     agentThoughts,
+    debugThoughts,
+    isDebugEnabled,
+    toggleDebugThoughts,
     recentOrders,
     lastSweep,
+    lastPnlUpdate,
+    lastSwarmPnlTick,
   };
 }

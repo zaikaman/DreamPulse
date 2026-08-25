@@ -142,7 +142,8 @@ export const AgentSwarmCockpit: React.FC<AgentSwarmCockpitProps> = ({
     lastActionTimestamp: Date.now(),
   };
 
-  const numericTotalPnl = (voltData.pnlAmount || 0) + (oracleData.pnlAmount || 0) + (titanData.pnlAmount || 0) + (sweeperData.pnlAmount || 0);
+  // Sweeper gross claimed is not net profit — exclude from total swarm PnL to avoid double counting (trade PnL already includes gross payout profit)
+  const numericTotalPnl = (voltData.pnlAmount || 0) + (oracleData.pnlAmount || 0) + (titanData.pnlAmount || 0);
   const totalPnl = numericTotalPnl.toFixed(2);
   const activeCount = [voltData, oracleData, titanData, sweeperData].filter((a) => a.isEnabled).length;
 
@@ -248,7 +249,7 @@ export const AgentSwarmCockpit: React.FC<AgentSwarmCockpitProps> = ({
                     SOMNIA SHANNON TESTNET (CHAIN 50312)
                   </span>
                   <span style={{ fontSize: '11px', color: 'var(--muted-foreground)' }}>•</span>
-                  <span style={{ fontSize: '11px', color: 'var(--muted-foreground)' }}>100ms Evaluation Cycle</span>
+                  <span style={{ fontSize: '11px', color: 'var(--muted-foreground)' }}>1000ms Evaluation Cycle</span>
                 </div>
               </div>
             </div>
@@ -408,7 +409,7 @@ export const AgentSwarmCockpit: React.FC<AgentSwarmCockpitProps> = ({
                 </div>
               </div>
               <div style={{ background: 'rgba(255, 255, 255, 0.02)', padding: '8px', borderRadius: '6px', border: '1px solid var(--border)' }}>
-                <div style={{ fontSize: '10px', color: 'var(--muted-foreground)' }}>Trades Today</div>
+                <div style={{ fontSize: '10px', color: 'var(--muted-foreground)' }}>FILLS</div>
                 <div style={{ fontSize: '13px', fontWeight: 700, color: 'var(--foreground)', fontFamily: 'var(--font-mono)' }}>
                   {voltData.tradesToday} fills
                 </div>
@@ -628,7 +629,7 @@ export const AgentSwarmCockpit: React.FC<AgentSwarmCockpitProps> = ({
                 </div>
               </div>
               <div style={{ background: 'rgba(255, 255, 255, 0.02)', padding: '8px', borderRadius: '6px', border: '1px solid var(--border)' }}>
-                <div style={{ fontSize: '10px', color: 'var(--muted-foreground)' }}>Trades Today</div>
+                <div style={{ fontSize: '10px', color: 'var(--muted-foreground)' }}>FILLS</div>
                 <div style={{ fontSize: '13px', fontWeight: 700, color: 'var(--foreground)', fontFamily: 'var(--font-mono)' }}>
                   {oracleData.tradesToday} fills
                 </div>

@@ -4,7 +4,7 @@ import { OracleArbAgent } from '../src/agents/oracle-arb.js';
 import { TitanMMAgent } from '../src/agents/titan-mm.js';
 import { OrderService, quantizeOrder, assertFunded, toSteps } from '../src/services/order-service.js';
 import { MultiAgentSwarmRunner } from '../src/agents/swarm-runner.js';
-import { somniaExchange } from '../src/config/somnia.js';
+import { somniaExchange, operatorAccount } from '../src/config/somnia.js';
 import type { IAgentContext } from '../src/agents/base-agent.js';
 import type { Market, SessionGrant } from '../src/types/index.js';
 import type { Address, Hex } from 'viem';
@@ -407,7 +407,10 @@ describe('Phase 5 Swarm Strategy & Agent Unit Tests', () => {
         rationale: 'Test execution',
       };
 
-      const order = await orderService.executeAgentDecision(decision, validSession);
+      const order = await orderService.executeAgentDecision(decision, {
+        ...validSession,
+        userAddress: operatorAccount.address,
+      });
       expect(order).not.toBeNull();
       expect(order?.agentType).toBe('Volt');
       expect(order?.outcome).toBe('YES');

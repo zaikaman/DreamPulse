@@ -87,4 +87,18 @@ describe('Express REST API Endpoints', () => {
     expect(res.body.txHash).toMatch(/^0x[a-f0-9]{64}$/i);
     expect(res.body.claimedMarketsCount).toBeGreaterThanOrEqual(1);
   });
+
+  it('GET /api/v1/orders returns paginated orders with total fills and executed volume', async () => {
+    const res = await request(app).get('/api/v1/orders?page=1&pageSize=10');
+    expect(res.status).toBe(200);
+    expect(res.body.success).toBe(true);
+    expect(res.body).toHaveProperty('total');
+    expect(res.body).toHaveProperty('totalFills');
+    expect(res.body).toHaveProperty('totalVolume');
+    expect(res.body).toHaveProperty('page', 1);
+    expect(res.body).toHaveProperty('pageSize', 10);
+    expect(res.body).toHaveProperty('totalPages');
+    expect(Array.isArray(res.body.data)).toBe(true);
+    expect(typeof res.body.totalVolume).toBe('number');
+  });
 });

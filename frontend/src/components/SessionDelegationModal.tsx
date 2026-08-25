@@ -30,8 +30,10 @@ interface SessionDelegationModalProps {
   isSigning: boolean;
   isLoading: boolean;
   isFauceting?: boolean;
+  isFixingAllowance?: boolean;
   stepState?: 'idle' | 'authorizing_onchain' | 'depositing_vault' | 'signing_eip712' | 'registering_backend';
   error: string | null;
+  allowanceStatus?: { allReady: boolean; checks: Array<{ pool: string; allowanceHuman: number; balanceHuman: number; vaultHuman: number; ready: boolean }>; guidance: string } | null;
   onConnectWallet: () => Promise<void>;
   onDisconnectWallet?: () => void;
   onSwitchNetwork: () => Promise<void>;
@@ -44,6 +46,8 @@ interface SessionDelegationModalProps {
     targetPool?: `0x${string}`;
   }) => Promise<SessionGrant>;
   onRevokeSession: (options?: { onChain?: boolean }) => Promise<void>;
+  onEnsureAllowances?: () => Promise<void>;
+  onRefreshAllowance?: () => Promise<void>;
   onClearError: () => void;
 }
 
@@ -55,14 +59,18 @@ export const SessionDelegationModal: React.FC<SessionDelegationModalProps> = ({
   isSigning,
   isLoading,
   isFauceting = false,
+  isFixingAllowance = false,
   stepState = 'idle',
   error,
+  allowanceStatus,
   onConnectWallet,
   onDisconnectWallet,
   onSwitchNetwork,
   onClaimFaucet,
   onCreateSession,
   onRevokeSession,
+  onEnsureAllowances,
+  onRefreshAllowance,
   onClearError,
 }) => {
   const [maxTradeSize, setMaxTradeSize] = useState<number>(10);
@@ -363,6 +371,102 @@ export const SessionDelegationModal: React.FC<SessionDelegationModalProps> = ({
                   </button>
                 </div>
               )}
+            </div>
+          )}
+
+          {/* Allowance Diagnostic Banner — surfaces 0x3fb0ba2e root cause */}
+          {activeSession?.isActive && allowanceStatus && !allowanceStatus.allReady && (
+            <div
+              className="collateral-clarity-banner"
+              style={{
+                padding: '12px 14px',
+                marginBottom: '14px',
+                borderRadius: '8px',
+                background: 'rgba(239, 68, 68, 0.08)',
+                border: '1px solid rgba(239, 68, 68, 0.35)',
+              }}
+            >
+              <div style={{ display: 'flex', alignItems: 'flex-start', gap: '10px' }}>
+                <AlertTriangle size={16} style={{ color: '#ef4444', flexShrink: 0, marginTop: '2px' }} />
+                <div style={{ flex: 1 }}>
+                  <div style={{ fontWeight: 700, fontSize: '12px', color: '#ef4444', marginBottom: '4px' }}>
+                    Copy-Trading Paused: Insufficient Pool Allowance
+                  </div>
+                  <div style={{ fontSize: '11px', color: 'var(--muted-foreground)', lineHeight: 1.4, marginBottom: '8px' }}>
+                    Your wallet approved the operator globally, but {allowanceStatus.checks.filter((c) => !c.ready).length} active pool(s) have
+                    TestUSDC allowance &lt; 1000 USDC (vault &lt; 10). On-chain <code>placeBinaryOrderFor</code> reverts with <code>0x3fb0ba2e</code>.
+                    Approve MAX for those pools to resume copy-trades. No withdrawal permission is granted.
+                  </div>
+                  <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', marginBottom: '8px' }}>
+                    {allowanceStatus.checks.slice(0, 4).map((c) => (
+                      <code
+                        key={c.pool}
+                        title={`${c.pool} — allowance ${c.allowanceHuman.toFixed(2)} / vault ${c.vaultHuman.toFixed(2)}`}
+                        style={{
+                          fontSize: '10px',
+                          padding: '3px 6px',
+                          background: c.ready ? 'rgba(16,185,129,0.12)' : 'rgba(239,68,68,0.12)',
+                          border: `1px solid ${c.ready ? 'rgba(16,185,129,0.3)' : 'rgba(239,68,68,0.3)'}`,
+                          borderRadius: '4px',
+                          color: c.ready ? 'var(--color-yes)' : '#ef4444',
+                        }}
+                      >
+                        {c.pool.slice(0, 6)}…{c.pool.slice(-4)} {c.ready ? '✓' : `${c.allowanceHuman.toFixed(0)} USDC`}
+                      </code>
+                    ))}
+                    {allowanceStatus.checks.length > 4 && (
+                      <span style={{ fontSize: '10px', color: 'var(--muted-foreground)', alignSelf: 'center' }}>
+                        +{allowanceStatus.checks.length - 4} more pools
+                      </span>
+                    )}
+                  </div>
+                  <div style={{ display: 'flex', gap: '8px' }}>
+                    <button
+                      type="button"
+                      onClick={async () => {
+                        onClearError();
+                        try {
+                          await onEnsureAllowances?.();
+                        } catch {}
+                      }}
+                      disabled={isFixingAllowance || isSigning}
+                      style={{
+                        background: '#ef4444',
+                        color: '#fff',
+                        fontWeight: 700,
+                        fontSize: '11px',
+                        padding: '7px 14px',
+                        borderRadius: '6px',
+                        border: 'none',
+                        cursor: 'pointer',
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        gap: '6px',
+                      }}
+                    >
+                      {isFixingAllowance ? <Loader2 size={12} className="spin" /> : <ShieldCheck size={12} />}
+                      <span>Approve All Active Pools (MAX)</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => onRefreshAllowance?.()}
+                      disabled={isFixingAllowance}
+                      style={{
+                        background: 'transparent',
+                        color: 'var(--muted-foreground)',
+                        fontWeight: 600,
+                        fontSize: '11px',
+                        padding: '7px 10px',
+                        borderRadius: '6px',
+                        border: '1px solid rgba(255,255,255,0.1)',
+                        cursor: 'pointer',
+                      }}
+                    >
+                      Refresh
+                    </button>
+                  </div>
+                </div>
+              </div>
             </div>
           )}
 

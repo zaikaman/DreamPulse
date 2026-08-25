@@ -325,6 +325,42 @@ export class PriceFeedService extends EventEmitter {
     return result;
   }
 
+  /**
+   * Fetches historical close price for a symbol at a specific timestamp (used for accurate post-expiry settlement).
+   * Falls back to current spot if fetch fails.
+   */
+  public async getHistoricalPriceAt(symbol: string, targetTimestampMs: number): Promise<number | null> {
+    try {
+      const binanceSymbol = REVERSE_SYMBOL_MAPPINGS[symbol] || symbol.replace('/', '');
+      // Binance klines are inclusive; fetch 1m candle containing target time
+      const startMs = targetTimestampMs - 60000;
+      const endMs = targetTimestampMs + 60000;
+      const url = `https://api.binance.com/api/v3/klines?symbol=${binanceSymbol}&interval=1m&startTime=${startMs}&endTime=${endMs}&limit=5`;
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), 3500);
+      const res = await fetch(url, { signal: controller.signal });
+      clearTimeout(timeout);
+      if (!res.ok) return null;
+      const klines = (await res.json()) as Array<Array<string | number>>;
+      if (!Array.isArray(klines) || klines.length === 0) return null;
+      // Find candle whose closeTime is closest to target
+      let closest: number | null = null;
+      let minDiff = Number.MAX_SAFE_INTEGER;
+      for (const k of klines) {
+        const closeTime = Number(k[6]);
+        const closePrice = parseFloat(String(k[4]));
+        const diff = Math.abs(closeTime - targetTimestampMs);
+        if (diff < minDiff && !isNaN(closePrice)) {
+          minDiff = diff;
+          closest = closePrice;
+        }
+      }
+      return closest;
+    } catch {
+      return null;
+    }
+  }
+
   public stop(): void {
     this.isRunning = false;
     if (this.reconnectTimeout) {

@@ -158,18 +158,26 @@ export class TelemetryWebSocketServer {
   }
 
   /**
-   * Broadcasts live AI agent thought and reasoning logs.
+   * Broadcasts live executed AI agent trade log on main feed.
    */
   public broadcastAgentThought(thought: {
+    id?: string;
     agent: string;
     marketId?: string;
     confidence: number;
     action: string;
     thought: string;
+    txHash?: string;
+    price?: number;
+    lotSize?: number;
+    outcome?: string;
+    isExecution?: boolean;
+    timestamp?: number;
   }): void {
     const payload = {
       event: 'agent_thought',
-      timestamp: Date.now(),
+      timestamp: thought.timestamp || Date.now(),
+      isExecution: thought.isExecution ?? true,
       ...thought,
     };
 
@@ -185,12 +193,46 @@ export class TelemetryWebSocketServer {
   }
 
   /**
+   * Broadcasts raw evaluation trace thoughts exclusively to opt-in debug channel subscribers.
+   */
+  public broadcastDebugThought(thought: {
+    id?: string;
+    agent: string;
+    marketId?: string;
+    confidence: number;
+    action: string;
+    thought: string;
+    triggerEvent?: string;
+    metadata?: Record<string, unknown>;
+    isExecution?: boolean;
+    timestamp?: number;
+  }): void {
+    const payload = {
+      event: 'debug_thought',
+      timestamp: thought.timestamp || Date.now(),
+      isExecution: false,
+      ...thought,
+    };
+
+    for (const [, sub] of this.clients) {
+      if (
+        sub.ws.readyState === WebSocket.OPEN &&
+        sub.channels.has('debug_thoughts') &&
+        (sub.agentTypes.size === 0 || sub.agentTypes.has(thought.agent))
+      ) {
+        sub.ws.send(JSON.stringify(payload));
+      }
+    }
+  }
+
+  /**
    * Broadcasts order fill confirmation to user portfolio subscribers.
    */
   public broadcastOrderFilled(order: {
     userAddress: string;
     orderId: string;
     marketId: string;
+    agentType?: string;
     outcome: string;
     direction: string;
     price: number;
@@ -233,6 +275,49 @@ export class TelemetryWebSocketServer {
         sub.ws.readyState === WebSocket.OPEN &&
         (sub.channels.has('user_portfolio') || sub.userAddresses.has(sweep.userAddress.toLowerCase()))
       ) {
+        sub.ws.send(JSON.stringify(payload));
+      }
+    }
+  }
+
+  /**
+   * Broadcasts realtime PnL settlement updates (per-trade resolved PnL) to all clients.
+   * This ensures swarm and portfolio PnL reflect true trade-by-trade results instantly without polling delay.
+   */
+  public broadcastPnlUpdate(data: {
+    updatedOrders: Array<{ orderId: string; marketId: string; pnl: number; outcome: string; winningOutcome: string }>;
+    timestamp: number;
+  }): void {
+    const payload = {
+      event: 'pnl_update',
+      timestamp: data.timestamp,
+      updatedOrders: data.updatedOrders,
+    };
+    for (const [, sub] of this.clients) {
+      if (sub.ws.readyState === WebSocket.OPEN) {
+        // Broadcast to all connected clients; frontends filter by user if needed
+        sub.ws.send(JSON.stringify(payload));
+      }
+    }
+  }
+
+  /**
+   * Broadcasts aggregated swarm PnL telementry tick (for header KPI streaming).
+   */
+  public broadcastSwarmPnl(telemetry: {
+    volt: number;
+    oracle: number;
+    titan: number;
+    sweeper: number;
+    totalSwarm: number;
+    timestamp: number;
+  }): void {
+    const payload = {
+      event: 'swarm_pnl_tick',
+      ...telemetry,
+    };
+    for (const [, sub] of this.clients) {
+      if (sub.ws.readyState === WebSocket.OPEN) {
         sub.ws.send(JSON.stringify(payload));
       }
     }

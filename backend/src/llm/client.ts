@@ -149,34 +149,39 @@ export function setGroqKeyIndex(index: number): void {
 export async function generateStructuredReasoning(
   request: StructuredReasoningRequest,
 ): Promise<string> {
-  const groqKeys = env.GROQ_KEYS || [];
+  const groqKeys = (env.GROQ_KEYS || []).filter((k) => !k.startsWith('gsk_mock'));
   const maxGroqAttempts = Math.min(3, groqKeys.length);
 
-  // 1. Try Groq Pool in Round-Robin order
-  for (let attempt = 0; attempt < maxGroqAttempts; attempt++) {
-    const apiKey = getNextGroqKey();
-    if (!apiKey) break;
+  // 1. Try Groq Pool in Round-Robin order — skip entirely if only mock keys are configured (avoids 401 spam)
+  if (maxGroqAttempts > 0) {
+    for (let attempt = 0; attempt < maxGroqAttempts; attempt++) {
+      const apiKey = getNextGroqKey();
+      if (!apiKey || apiKey.startsWith('gsk_mock')) break;
 
-    try {
-      const groq = getGroqClient(apiKey);
-      const response = await groq.chat.completions.create({
-        model: env.GROQ_MODEL,
-        messages: [
-          { role: 'system', content: request.systemPrompt },
-          { role: 'user', content: request.userPrompt },
-        ],
-        temperature: request.temperature ?? 0.2,
-        max_tokens: request.maxTokens ?? 1000,
-      });
+      try {
+        const groq = getGroqClient(apiKey);
+        const response = await groq.chat.completions.create({
+          model: env.GROQ_MODEL,
+          messages: [
+            { role: 'system', content: request.systemPrompt },
+            { role: 'user', content: request.userPrompt },
+          ],
+          temperature: request.temperature ?? 0.2,
+          max_tokens: request.maxTokens ?? 1000,
+        });
 
-      const rawContent = response.choices[0]?.message?.content || '';
-      const extractedJson = extractJsonFromText(rawContent);
-      if (extractedJson) {
-        return extractedJson;
+        const rawContent = response.choices[0]?.message?.content || '';
+        const extractedJson = extractJsonFromText(rawContent);
+        if (extractedJson) {
+          return extractedJson;
+        }
+      } catch (groqErr) {
+        const errMsg = groqErr instanceof Error ? groqErr.message : String(groqErr);
+        // Suppress noisy 401 logs when running offline with placeholder keys
+        if (!errMsg.includes('401')) {
+          console.warn(`[LLM Groq Rotation] Key failed (attempt ${attempt + 1}/${maxGroqAttempts}): ${errMsg}`);
+        }
       }
-    } catch (groqErr) {
-      const errMsg = groqErr instanceof Error ? groqErr.message : String(groqErr);
-      console.warn(`[LLM Groq Rotation] Key failed (attempt ${attempt + 1}/${maxGroqAttempts}): ${errMsg}`);
     }
   }
 

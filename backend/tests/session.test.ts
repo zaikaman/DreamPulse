@@ -9,7 +9,7 @@ import {
   OPERATOR_SELECTORS,
 } from '../src/config/permissions-abi.js';
 import { SessionService } from '../src/services/session-service.js';
-import { SOMNIA_ADDRESSES } from '../src/config/somnia.js';
+import { SOMNIA_ADDRESSES, operatorAccount as liveOperator } from '../src/config/somnia.js';
 
 describe('Task T037 & T040: Non-Custodial Session Permissions & EIP-712 Signatures', () => {
   const testAccount = privateKeyToAccount(generatePrivateKey());
@@ -19,6 +19,7 @@ describe('Task T037 & T040: Non-Custodial Session Permissions & EIP-712 Signatur
     expect(SESSION_EIP712_DOMAIN.chainId).toBe(50312);
     expect(SESSION_EIP712_DOMAIN.verifyingContract).toBe(SOMNIA_ADDRESSES.operatorPermissionsRegistry);
     expect(OPERATOR_SELECTORS.placeOrderFor).toBe('0x80054449');
+    expect(OPERATOR_SELECTORS.placeBinaryOrderFor).toBe('0x5d97c566');
     expect(OPERATOR_SELECTORS.cancelOrderFor).toBe('0xe37b444b');
   });
 
@@ -301,6 +302,52 @@ describe('Task T038 & T040: Session Management Service & Risk Guardrails', () =>
     expect(activeSession?.onChainTxHash).toBe(mockTxHash);
     expect(activeSession?.vaultDepositAmount).toBe(25);
     expect(activeSession?.targetPoolAddress?.toLowerCase()).toBe(mockPool.toLowerCase());
+  });
+
+  it('excludes unauthorized, dummy, and mismatched-operator sessions from copy-trade targets', async () => {
+    const unauthorized = privateKeyToAccount(generatePrivateKey());
+    const authorized = privateKeyToAccount(generatePrivateKey());
+    const wrongOperator = privateKeyToAccount(generatePrivateKey());
+
+    await sessionService.registerSession({
+      userAddress: unauthorized.address,
+      operatorAddress: liveOperator.address,
+      maxTradeSize: 10,
+      dailyVolumeCap: 50,
+    });
+
+    await sessionService.registerSession({
+      userAddress: authorized.address,
+      operatorAddress: liveOperator.address,
+      maxTradeSize: 10,
+      dailyVolumeCap: 50,
+      onChainTxHash: '0x1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef',
+      onChainAuthorized: true,
+    });
+
+    await sessionService.registerSession({
+      userAddress: '0x1234567890123456789012345678901234567890',
+      operatorAddress: liveOperator.address,
+      maxTradeSize: 10,
+      dailyVolumeCap: 50,
+      onChainAuthorized: true,
+      onChainTxHash: '0x1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef',
+    });
+
+    await sessionService.registerSession({
+      userAddress: wrongOperator.address,
+      operatorAddress: SOMNIA_ADDRESSES.operatorPermissionsRegistry,
+      maxTradeSize: 10,
+      dailyVolumeCap: 50,
+      onChainAuthorized: true,
+      onChainTxHash: '0x1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef',
+    });
+
+    const targets = sessionService.getDelegatedCopyTradeSessions(liveOperator.address);
+    expect(targets.some((s) => s.userAddress.toLowerCase() === authorized.address.toLowerCase())).toBe(true);
+    expect(targets.some((s) => s.userAddress.toLowerCase() === unauthorized.address.toLowerCase())).toBe(false);
+    expect(targets.some((s) => s.userAddress.toLowerCase() === '0x1234567890123456789012345678901234567890')).toBe(false);
+    expect(targets.some((s) => s.userAddress.toLowerCase() === wrongOperator.address.toLowerCase())).toBe(false);
   });
 });
 

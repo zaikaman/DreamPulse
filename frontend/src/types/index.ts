@@ -88,6 +88,14 @@ export interface OrderExecution {
   pnl?: number;
   createdAt: string;
   filledAt?: string;
+  marketSnapshot?: {
+    symbol: string;
+    strikePrice: number;
+    closeTimestamp: string;
+    settlementPrice?: number;
+    winningOutcome?: OutcomeType;
+    windowDuration?: string;
+  };
 }
 
 export interface SettlementSweep {
@@ -132,6 +140,11 @@ export interface AgentThoughtLog {
   confidence: number;
   actionTaken: string;
   reasoningText: string;
+  txHash?: string;
+  isExecution?: boolean;
+  price?: number;
+  lotSize?: number;
+  outcome?: string;
   metadata?: Record<string, unknown>;
   createdAt: string;
 }

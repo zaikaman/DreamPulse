@@ -19,11 +19,9 @@ export const SwarmCockpitView: React.FC<SwarmCockpitViewProps> = ({
 }) => {
   const {
     detailed,
-    orders,
-    isLoading,
     toggleAgent,
     updateConfig,
-  } = useAgentSwarm();
+  } = useAgentSwarm(wallet.address || undefined);
 
   const { isOperator } = useUserRole(wallet);
 
@@ -46,10 +44,8 @@ export const SwarmCockpitView: React.FC<SwarmCockpitViewProps> = ({
         onForkToStudio={onForkToStudio}
       />
 
-      {/* 2. Real-Time Order History & Fills (Public Swarm vs My Orders) */}
+      {/* 2. Real-Time Order History & Fills — server-side paginated: only current page is fetched on demand */}
       <OrderHistoryTable
-        orders={orders}
-        isLoading={isLoading}
         userAddress={wallet.address || undefined}
         onConnectWallet={onConnectWallet}
       />

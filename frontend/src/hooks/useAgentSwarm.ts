@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { apiClient } from '../services/api.js';
 import type { AgentType, OrderExecution, SwarmStatusSummary } from '../types/index.js';
 
@@ -26,7 +26,7 @@ export interface UseAgentSwarmReturn {
   refreshStatus: () => Promise<void>;
 }
 
-export const useAgentSwarm = (): UseAgentSwarmReturn => {
+export const useAgentSwarm = (operatorAddress?: string): UseAgentSwarmReturn => {
   const [summary, setSummary] = useState<SwarmStatusSummary>({
     volt: { status: 'ACTIVE', evalLatencyMs: 0, tradesToday: 0, pnl: '+0.00 tUSDC' },
     oracle: { status: 'ACTIVE', evalLatencyMs: 0, tradesToday: 0, pnl: '+0.00 tUSDC' },
@@ -81,11 +81,23 @@ export const useAgentSwarm = (): UseAgentSwarmReturn => {
     },
   });
 
-  const [orders, setOrders] = useState<OrderExecution[]>([]);
-  const [isLoading, setIsLoading] = useState<boolean>(true);
+  // Orders are now server-paginated inside OrderHistoryTable — this hook keeps a
+  // deprecated empty array for backwards compat but no longer bulk-loads trades.
+  const [orders] = useState<OrderExecution[]>([]);
+  const [isLoading] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
 
+  // Throttle + dedupe to prevent ERR_INSUFFICIENT_RESOURCES storm
+  const lastFetchAtRef = useRef<number>(0);
+  const inFlightRef = useRef<boolean>(false);
+  const wsDebounceRef = useRef<number | null>(null);
+
   const fetchSwarmStatus = useCallback(async () => {
+    const now = Date.now();
+    if (inFlightRef.current) return;
+    if (now - lastFetchAtRef.current < 2500) return;
+    lastFetchAtRef.current = now;
+    inFlightRef.current = true;
     try {
       const [statusRes, detailedRes] = await Promise.all([
         apiClient.getSwarmStatus().catch(() => null),
@@ -101,40 +113,161 @@ export const useAgentSwarm = (): UseAgentSwarmReturn => {
       setError(null);
     } catch (err: any) {
       setError(err.message || 'Failed to fetch swarm status');
+    } finally {
+      inFlightRef.current = false;
     }
   }, []);
 
-  const fetchOrders = useCallback(async () => {
-    try {
-      const res = await apiClient.getOrders({ limit: 50 });
-      if (res?.data) {
-        setOrders(res.data);
-      }
-    } catch (err: any) {
-      console.warn('[useAgentSwarm] Error fetching orders:', err);
-    } finally {
-      setIsLoading(false);
-    }
-  }, []);
+  // Deprecated no-op: OrderHistoryTable now fetches its own paginated page on demand.
+  // Kept to preserve hook API for legacy callers.
+  const fetchOrders = useCallback(async () => {}, []);
 
   useEffect(() => {
     fetchSwarmStatus();
-    fetchOrders();
 
     const interval = setInterval(() => {
       fetchSwarmStatus();
-      fetchOrders();
-    }, 3000);
+    }, 8000);
 
-    return () => clearInterval(interval);
-  }, [fetchSwarmStatus, fetchOrders]);
+    // Realtime status refresh with instant WebSocket state updates
+    let ws: WebSocket | null = null;
+    let reconnectTimer: number | null = null;
+    const connectRealtime = () => {
+      try {
+        const wsUrl = (import.meta as any).env?.VITE_BACKEND_WS_URL
+          ? (import.meta as any).env.VITE_BACKEND_WS_URL
+          : (() => {
+              const loc = window.location;
+              const protocol = loc.protocol === 'https:' ? 'wss:' : 'ws:';
+              const host = loc.hostname;
+              const port = loc.port === '5173' ? '5000' : loc.port || '5000';
+              return `${protocol}//${host}:${port}/ws/telemetry`;
+            })();
+        ws = new WebSocket(wsUrl);
+        ws.onopen = () => {
+          try { ws?.send(JSON.stringify({ action: 'subscribe', channel: 'markets' })); } catch {}
+          try { ws?.send(JSON.stringify({ action: 'subscribe', channel: 'user_portfolio' })); } catch {}
+          try { ws?.send(JSON.stringify({ action: 'subscribe', channel: 'agent_thoughts' })); } catch {}
+        };
+        ws.onmessage = (event) => {
+          try {
+            const payload = JSON.parse((event as MessageEvent).data);
+            if (!payload || !payload.event) return;
+
+            // 1. Direct 0ms Real-Time PnL Stream Update
+            if (payload.event === 'swarm_pnl_tick') {
+              const voltPnl = typeof payload.volt === 'number' ? payload.volt : undefined;
+              const oraclePnl = typeof payload.oracle === 'number' ? payload.oracle : undefined;
+              const titanPnl = typeof payload.titan === 'number' ? payload.titan : undefined;
+              const sweeperPnl = typeof payload.sweeper === 'number' ? payload.sweeper : undefined;
+
+              setDetailed((prev) => ({
+                ...prev,
+                volt: { ...prev.volt, pnlAmount: voltPnl !== undefined ? voltPnl : prev.volt.pnlAmount },
+                oracle: { ...prev.oracle, pnlAmount: oraclePnl !== undefined ? oraclePnl : prev.oracle.pnlAmount },
+                titan: { ...prev.titan, pnlAmount: titanPnl !== undefined ? titanPnl : prev.titan.pnlAmount },
+                sweeper: { ...prev.sweeper, pnlAmount: sweeperPnl !== undefined ? sweeperPnl : prev.sweeper.pnlAmount },
+              }));
+
+              setSummary((prev) => ({
+                ...prev,
+                volt: {
+                  ...prev.volt,
+                  pnl: voltPnl !== undefined ? `${voltPnl >= 0 ? '+' : ''}${voltPnl.toFixed(2)} tUSDC` : prev.volt.pnl,
+                },
+                oracle: {
+                  ...prev.oracle,
+                  pnl: oraclePnl !== undefined ? `${oraclePnl >= 0 ? '+' : ''}${oraclePnl.toFixed(2)} tUSDC` : prev.oracle.pnl,
+                },
+                titan: {
+                  ...prev.titan,
+                  spreadCaptured: titanPnl !== undefined ? `${titanPnl >= 0 ? '+' : ''}${titanPnl.toFixed(2)} tUSDC` : prev.titan.spreadCaptured,
+                },
+                sweeper: {
+                  ...prev.sweeper,
+                  totalClaimed: sweeperPnl !== undefined ? `+${sweeperPnl.toFixed(2)} tUSDC` : prev.sweeper.totalClaimed,
+                },
+              }));
+            }
+
+            // 2. Direct Trade Fill Increment
+            if (payload.event === 'order_filled') {
+              const rawAgent = payload.agentType || payload.agent || '';
+              const agentKey = rawAgent.toLowerCase();
+              if (agentKey && (agentKey === 'volt' || agentKey === 'oracle' || agentKey === 'titan')) {
+                setDetailed((prev) => ({
+                  ...prev,
+                  [agentKey]: {
+                    ...prev[agentKey],
+                    tradesToday: (prev[agentKey]?.tradesToday ?? 0) + 1,
+                    lastAction: `TAKER_BUY_${payload.outcome || 'YES'}`,
+                    lastActionTimestamp: Date.now(),
+                  },
+                }));
+                if (agentKey === 'volt') {
+                  setSummary((prev) => ({
+                    ...prev,
+                    volt: { ...prev.volt, tradesToday: prev.volt.tradesToday + 1 },
+                  }));
+                } else if (agentKey === 'oracle') {
+                  setSummary((prev) => ({
+                    ...prev,
+                    oracle: { ...prev.oracle, tradesToday: prev.oracle.tradesToday + 1 },
+                  }));
+                }
+              }
+            }
+
+            // 3. Direct Sweep Completion Update
+            if (payload.event === 'sweep_completed') {
+              const claimed = parseFloat(payload.claimedAmount || '0') || 0;
+              setDetailed((prev) => ({
+                ...prev,
+                sweeper: {
+                  ...prev.sweeper,
+                  tradesToday: (prev.sweeper?.tradesToday ?? 0) + 1,
+                  pnlAmount: (prev.sweeper?.pnlAmount ?? 0) + claimed,
+                  lastAction: 'BATCH_SWEEP_CLAIM',
+                  lastActionTimestamp: Date.now(),
+                },
+              }));
+            }
+
+            // 4. Background reconciliation on PnL resolution or fills
+            if (payload.event === 'pnl_update' || payload.event === 'sweep_completed') {
+              if (wsDebounceRef.current) window.clearTimeout(wsDebounceRef.current);
+              wsDebounceRef.current = window.setTimeout(() => {
+                wsDebounceRef.current = null;
+                fetchSwarmStatus();
+              }, 500);
+            }
+          } catch {}
+        };
+        ws.onclose = () => {
+          reconnectTimer = window.setTimeout(connectRealtime, 3000);
+        };
+        ws.onerror = () => {
+          try { ws?.close(); } catch {}
+        };
+      } catch {
+        reconnectTimer = window.setTimeout(connectRealtime, 3000);
+      }
+    };
+    connectRealtime();
+
+    return () => {
+      clearInterval(interval);
+      if (reconnectTimer) clearTimeout(reconnectTimer);
+      if (wsDebounceRef.current) window.clearTimeout(wsDebounceRef.current);
+      try { ws?.close(); } catch {}
+    };
+  }, [fetchSwarmStatus]);
 
   const toggleAgent = useCallback(
     async (agentType: AgentType, enabled: boolean): Promise<boolean> => {
       try {
-        const res = await apiClient.toggleAgent(agentType, enabled);
+        const res = await apiClient.toggleAgent(agentType, enabled, operatorAddress);
         if (res.success) {
-          // Optimistic local state update
           const key = agentType.toLowerCase();
           setDetailed((prev) => ({
             ...prev,
@@ -159,13 +292,13 @@ export const useAgentSwarm = (): UseAgentSwarmReturn => {
         return false;
       }
     },
-    [],
+    [operatorAddress],
   );
 
   const updateConfig = useCallback(
     async (agentType: AgentType, config: Record<string, any>): Promise<boolean> => {
       try {
-        const res = await apiClient.updateAgentConfig(agentType, config);
+        const res = await apiClient.updateAgentConfig(agentType, config, operatorAddress);
         if (res.success) {
           const key = agentType.toLowerCase();
           setDetailed((prev) => ({
@@ -186,7 +319,7 @@ export const useAgentSwarm = (): UseAgentSwarmReturn => {
         return false;
       }
     },
-    [],
+    [operatorAddress],
   );
 
   return {

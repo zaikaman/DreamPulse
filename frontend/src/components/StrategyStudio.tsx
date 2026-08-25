@@ -113,8 +113,10 @@ export const StrategyStudio: React.FC<StrategyStudioProps> = ({
   // Chart View Tab (Equity Curve vs Underwater Drawdown)
   const [chartView, setChartView] = useState<'equity' | 'drawdown'>('equity');
 
-  // Trade Execution Table Filter
+  // Trade Execution Table Filter + Pagination (fixes lag with 3k+ trades)
   const [tradeFilter, setTradeFilter] = useState<'ALL' | 'WINS' | 'LOSSES'>('ALL');
+  const [tradePage, setTradePage] = useState<number>(1);
+  const [tradePageSize, setTradePageSize] = useState<number>(50);
 
   // Swarm Deployment state
   const [isDeploying, setIsDeploying] = useState<boolean>(false);
@@ -254,7 +256,7 @@ export const StrategyStudio: React.FC<StrategyStudioProps> = ({
     document.body.removeChild(link);
   };
 
-  // Filtered trades memo
+  // Filtered trades memo + pagination (optimizes 3k+ row lag)
   const filteredTrades = useMemo(() => {
     if (!currentResult?.trades) return [];
     if (tradeFilter === 'WINS') return currentResult.trades.filter((t) => t.pnl > 0);
@@ -262,24 +264,60 @@ export const StrategyStudio: React.FC<StrategyStudioProps> = ({
     return currentResult.trades;
   }, [currentResult, tradeFilter]);
 
-  // SVG Equity & Drawdown curve rendering math
+  // Memoized counts to avoid inline filter on every render
+  const winsCount = useMemo(() => currentResult?.trades.filter((t) => t.pnl > 0).length ?? 0, [currentResult]);
+  const lossesCount = useMemo(() => currentResult ? currentResult.trades.length - winsCount : 0, [currentResult, winsCount]);
+
+  // Reset page when filter or result changes
+  useEffect(() => {
+    setTradePage(1);
+  }, [tradeFilter, currentResult?.id]);
+
+  // Clamp page when filtered length shrinks
+  useEffect(() => {
+    const totalPages = Math.max(1, Math.ceil(filteredTrades.length / tradePageSize));
+    if (tradePage > totalPages) setTradePage(totalPages);
+  }, [filteredTrades.length, tradePageSize, tradePage]);
+
+  const totalTradePages = useMemo(() => Math.max(1, Math.ceil(filteredTrades.length / tradePageSize)), [filteredTrades.length, tradePageSize]);
+
+  const paginatedTrades = useMemo(() => {
+    const reversed = filteredTrades.slice().reverse();
+    const start = (tradePage - 1) * tradePageSize;
+    return reversed.slice(start, start + tradePageSize);
+  }, [filteredTrades, tradePage, tradePageSize]);
+
+  // Downsample equity/underwater curves for large periods (30d 1m = 43k points -> 800 max) to keep SVG fast
+  const downsampleCurve = useCallback(<T,>(points: T[], maxPoints = 800): T[] => {
+    if (points.length <= maxPoints) return points;
+    const step = Math.ceil(points.length / maxPoints);
+    const sampled: T[] = [];
+    for (let i = 0; i < points.length; i += step) sampled.push(points[i]!);
+    // Always include last point
+    if (sampled[sampled.length - 1] !== points[points.length - 1]) sampled.push(points[points.length - 1]!);
+    return sampled;
+  }, []);
+
+  // SVG Equity & Drawdown curve rendering math (memoized + downsampled)
   const svgWidth = 840;
   const svgHeight = 240;
   const padding = 24;
 
-  const equityPoints = currentResult?.equityCurve || [];
-  const underwaterPoints = currentResult?.underwaterCurve || [];
+  const rawEquityPoints = currentResult?.equityCurve || [];
+  const rawUnderwaterPoints = currentResult?.underwaterCurve || [];
+  const equityPoints = useMemo(() => downsampleCurve(rawEquityPoints, 800), [rawEquityPoints, downsampleCurve]);
+  const underwaterPoints = useMemo(() => downsampleCurve(rawUnderwaterPoints, 800), [rawUnderwaterPoints, downsampleCurve]);
 
   // Equity curve scale
-  const minEquity = equityPoints.length > 0 ? Math.min(...equityPoints.map((p) => p.equity)) * 0.98 : 950;
-  const maxEquity = equityPoints.length > 0 ? Math.max(...equityPoints.map((p) => p.equity)) * 1.02 : 1400;
+  const minEquity = useMemo(() => equityPoints.length > 0 ? Math.min(...equityPoints.map((p) => p.equity)) * 0.98 : 950, [equityPoints]);
+  const maxEquity = useMemo(() => equityPoints.length > 0 ? Math.max(...equityPoints.map((p) => p.equity)) * 1.02 : 1400, [equityPoints]);
   const rangeEquity = maxEquity - minEquity || 1;
 
-  const equityPathPoints = equityPoints.map((p, i) => {
+  const equityPathPoints = useMemo(() => equityPoints.map((p, i) => {
     const x = padding + (i / (equityPoints.length - 1 || 1)) * (svgWidth - padding * 2);
     const y = svgHeight - padding - ((p.equity - minEquity) / rangeEquity) * (svgHeight - padding * 2);
     return `${x},${y}`;
-  });
+  }), [equityPoints, minEquity, rangeEquity]);
 
   const equityLinePath = equityPathPoints.length > 0 ? `M ${equityPathPoints.join(' L ')}` : '';
   const equityAreaPath =
@@ -288,12 +326,12 @@ export const StrategyStudio: React.FC<StrategyStudioProps> = ({
       : '';
 
   // Underwater curve scale
-  const maxDrawdownPct = underwaterPoints.length > 0 ? Math.max(5, Math.max(...underwaterPoints.map((p) => p.drawdownPct)) * 1.15) : 10;
-  const drawdownPathPoints = underwaterPoints.map((p, i) => {
+  const maxDrawdownPct = useMemo(() => underwaterPoints.length > 0 ? Math.max(5, Math.max(...underwaterPoints.map((p) => p.drawdownPct)) * 1.15) : 10, [underwaterPoints]);
+  const drawdownPathPoints = useMemo(() => underwaterPoints.map((p, i) => {
     const x = padding + (i / (underwaterPoints.length - 1 || 1)) * (svgWidth - padding * 2);
     const y = padding + (p.drawdownPct / maxDrawdownPct) * (svgHeight - padding * 2);
     return `${x},${y}`;
-  });
+  }), [underwaterPoints, maxDrawdownPct]);
 
   const drawdownLinePath = drawdownPathPoints.length > 0 ? `M ${drawdownPathPoints.join(' L ')}` : '';
   const drawdownAreaPath =
@@ -1267,7 +1305,7 @@ export const StrategyStudio: React.FC<StrategyStudioProps> = ({
                     cursor: 'pointer',
                   }}
                 >
-                  Wins Only ({currentResult.trades.filter((t) => t.pnl > 0).length})
+                  Wins Only ({winsCount})
                 </button>
 
                 <button
@@ -1284,7 +1322,7 @@ export const StrategyStudio: React.FC<StrategyStudioProps> = ({
                     cursor: 'pointer',
                   }}
                 >
-                  Losses Only ({currentResult.trades.filter((t) => t.pnl <= 0).length})
+                  Losses Only ({lossesCount})
                 </button>
               </div>
             </div>
@@ -1323,7 +1361,7 @@ export const StrategyStudio: React.FC<StrategyStudioProps> = ({
                   </tr>
                 </thead>
                 <tbody>
-                  {filteredTrades.slice().reverse().map((t) => (
+                  {paginatedTrades.map((t) => (
                     <tr key={t.id} style={{ borderBottom: '1px solid rgba(255, 255, 255, 0.04)' }}>
                       <td style={{ padding: '10px 16px', fontSize: '11px', color: 'var(--muted-foreground)', fontFamily: 'var(--font-mono)' }}>
                         {new Date(t.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })}
@@ -1367,6 +1405,102 @@ export const StrategyStudio: React.FC<StrategyStudioProps> = ({
                   ))}
                 </tbody>
               </table>
+            </div>
+
+            {/* Pagination Controls - prevents DOM lag with 3k+ trades */}
+            <div
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+                flexWrap: 'wrap',
+                gap: '12px',
+                padding: '10px 16px',
+                borderTop: '1px solid var(--border)',
+                background: 'rgba(0,0,0,0.25)',
+              }}
+            >
+              <span style={{ fontSize: '11px', color: 'var(--muted-foreground)', fontFamily: 'var(--font-mono)' }}>
+                Showing {filteredTrades.length === 0 ? 0 : (tradePage - 1) * tradePageSize + 1}–{Math.min(tradePage * tradePageSize, filteredTrades.length)} of {filteredTrades.length}
+                {tradeFilter !== 'ALL' ? ` • ${currentResult.trades.length} total` : ''} • {totalTradePages} page{totalTradePages !== 1 ? 's' : ''}
+              </span>
+
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '11px', color: 'var(--muted-foreground)' }}>
+                  <span>Rows:</span>
+                  <select
+                    value={tradePageSize}
+                    onChange={(e) => {
+                      setTradePageSize(Number(e.target.value));
+                      setTradePage(1);
+                    }}
+                    style={{
+                      padding: '4px 6px',
+                      borderRadius: '4px',
+                      border: '1px solid var(--border)',
+                      background: 'rgba(255,255,255,0.04)',
+                      color: 'var(--foreground)',
+                      fontSize: '11px',
+                      cursor: 'pointer',
+                    }}
+                  >
+                    <option value={25}>25</option>
+                    <option value={50}>50</option>
+                    <option value={100}>100</option>
+                  </select>
+                </div>
+
+                <div style={{ display: 'flex', gap: '4px' }}>
+                  <button
+                    type="button"
+                    onClick={() => setTradePage((p) => Math.max(1, p - 1))}
+                    disabled={tradePage <= 1}
+                    style={{
+                      padding: '5px 10px',
+                      borderRadius: '4px',
+                      border: '1px solid var(--border)',
+                      background: tradePage <= 1 ? 'rgba(255,255,255,0.03)' : 'rgba(255,255,255,0.06)',
+                      color: tradePage <= 1 ? 'var(--muted-foreground)' : 'var(--foreground)',
+                      fontSize: '11px',
+                      fontWeight: 600,
+                      cursor: tradePage <= 1 ? 'not-allowed' : 'pointer',
+                      opacity: tradePage <= 1 ? 0.5 : 1,
+                    }}
+                  >
+                    Prev
+                  </button>
+                  <span
+                    style={{
+                      padding: '5px 10px',
+                      fontSize: '11px',
+                      color: 'var(--muted-foreground)',
+                      fontFamily: 'var(--font-mono)',
+                      minWidth: '70px',
+                      textAlign: 'center',
+                    }}
+                  >
+                    {tradePage} / {totalTradePages}
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => setTradePage((p) => Math.min(totalTradePages, p + 1))}
+                    disabled={tradePage >= totalTradePages}
+                    style={{
+                      padding: '5px 10px',
+                      borderRadius: '4px',
+                      border: '1px solid var(--border)',
+                      background: tradePage >= totalTradePages ? 'rgba(255,255,255,0.03)' : 'rgba(0,240,255,0.12)',
+                      color: tradePage >= totalTradePages ? 'var(--muted-foreground)' : 'var(--brand-cyan)',
+                      fontSize: '11px',
+                      fontWeight: 600,
+                      cursor: tradePage >= totalTradePages ? 'not-allowed' : 'pointer',
+                      opacity: tradePage >= totalTradePages ? 0.5 : 1,
+                    }}
+                  >
+                    Next
+                  </button>
+                </div>
+              </div>
             </div>
           </div>
         </>

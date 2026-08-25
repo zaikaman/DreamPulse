@@ -1,8 +1,9 @@
-import { describe, it, expect, beforeEach, vi } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { SweeperAgent } from '../src/agents/sweeper.js';
 import { SettlementService } from '../src/services/settlement-service.js';
 import { CompounderService } from '../src/services/compounder-service.js';
 import { somniaExchange } from '../src/config/somnia.js';
+import { orderService } from '../src/services/order-service.js';
 import type { IAgentContext } from '../src/agents/base-agent.js';
 import type { Market, SessionGrant } from '../src/types/index.js';
 import type { Address, Hex } from 'viem';
@@ -99,6 +100,10 @@ describe('Phase 6 Settlement Sweeper & Collateral Compounder Tests', () => {
   });
 
   describe('SettlementService & CompounderService', () => {
+    afterEach(() => {
+      vi.restoreAllMocks();
+    });
+
     it('executes batch settlement claim, updates user balance, and generates valid tx hash', async () => {
       const settlementService = new SettlementService();
       const userAddress = '0x15C7e8CE38F021c5b45d098AaD788f63090bF20A';
@@ -138,12 +143,104 @@ describe('Phase 6 Settlement Sweeper & Collateral Compounder Tests', () => {
       const settlementService = new SettlementService();
       const userAddress = '0x15C7e8CE38F021c5b45d098AaD788f63090bF20A';
 
+      vi.spyOn(somniaExchange.client, 'getClaimable').mockResolvedValue([]);
+      vi.spyOn(somniaExchange.client, 'listBinaryMarkets').mockResolvedValue([]);
+      vi.spyOn(somniaExchange.client, 'listPastBinaryMarkets').mockResolvedValue([]);
+      vi.spyOn(somniaExchange.client, 'getMarketOnchain').mockResolvedValue(null as any);
+      vi.spyOn(orderService, 'getOrders').mockReturnValue([]);
+
       const summary = await settlementService.getSweeperSummary(userAddress);
       expect(summary).toBeDefined();
       expect(typeof summary.unclaimedAmount).toBe('number');
       expect(typeof summary.totalClaimedAllTime).toBe('number');
       expect(Array.isArray(summary.unclaimedPositions)).toBe(true);
       expect(summary.compoundedStats).toBeDefined();
+    });
+
+    it('includes indexer getClaimable positions even when the resolved-market list is full of unrelated rows', async () => {
+      const settlementService = new SettlementService();
+      const userAddress = '0x15C7e8CE38F021c5b45d098AaD788f63090bF20A';
+      const heldMarketId = (`0x${'ab'.repeat(32)}`) as Hex;
+
+      vi.spyOn(somniaExchange.client, 'getClaimable').mockResolvedValue([
+        {
+          marketId: heldMarketId,
+          pool: '0x1111111111111111111111111111111111111111',
+          outcomeIdx: 0,
+          amount: 10_000_000n,
+          estPayout: 9_900_000n,
+          status: 'Finalized',
+        },
+      ] as any);
+      vi.spyOn(somniaExchange.client, 'listBinaryMarkets').mockResolvedValue(
+        Array.from({ length: 50 }, (_, i) => ({
+          marketId: (`0x${i.toString(16).padStart(64, '0')}`),
+          asset: 'ETH',
+          status: 'Resolved',
+        })) as any,
+      );
+      vi.spyOn(somniaExchange.client, 'listPastBinaryMarkets').mockResolvedValue([]);
+      vi.spyOn(somniaExchange.client, 'getMarketOnchain').mockResolvedValue(null as any);
+      vi.spyOn(orderService, 'getOrders').mockReturnValue([]);
+
+      const found = await settlementService.scanUnclaimedSettlements(userAddress);
+      expect(found.length).toBeGreaterThan(0);
+      expect(found.some((p) => p.marketId.toLowerCase() === heldMarketId.toLowerCase())).toBe(true);
+      const held = found.find((p) => p.marketId.toLowerCase() === heldMarketId.toLowerCase())!;
+      expect(held.claimableAmount).toBeCloseTo(9.9, 3);
+      expect(held.winningOutcome).toBe('YES');
+      expect(held.status).toBe('Finalized');
+    });
+
+    it('discovers on-chain winning balances for this wallet\'s traded markets when getClaimable is empty', async () => {
+      const settlementService = new SettlementService();
+      const userAddress = '0x15C7e8CE38F021c5b45d098AaD788f63090bF20A';
+      const tradedMarketId = (`0x${'cd'.repeat(32)}`) as Hex;
+
+      vi.spyOn(orderService, 'getOrders').mockReturnValue([
+        {
+          id: 'ord-1',
+          userAddress,
+          marketId: tradedMarketId,
+          agentType: 'Volt',
+          outcome: 'YES',
+          direction: 'BUY',
+          orderType: 'LIMIT',
+          price: 0.4,
+          lotSize: 10,
+          totalCost: 4,
+          status: 'FILLED',
+          pnl: 6,
+          createdAt: new Date().toISOString(),
+        },
+      ] as any);
+
+      vi.spyOn(somniaExchange.client, 'getClaimable').mockResolvedValue([]);
+      vi.spyOn(somniaExchange.client, 'listBinaryMarkets').mockResolvedValue([]);
+      vi.spyOn(somniaExchange.client, 'listPastBinaryMarkets').mockResolvedValue([]);
+      vi.spyOn(somniaExchange.client, 'getMarketOnchain').mockImplementation(async (id: Hex) => {
+        if (id.toLowerCase() !== tradedMarketId.toLowerCase()) return null as any;
+        return {
+          pool: '0x1111111111111111111111111111111111111111' as Address,
+          status: 4,
+          finalized: true,
+          isResolved: true,
+          isVoided: false,
+          outcomeToken: '0x2222222222222222222222222222222222222222' as Address,
+          winningOutcome: 0,
+          yesId: 1n,
+          noId: 2n,
+        } as any;
+      });
+      vi.spyOn(somniaExchange.client, 'getOutcomeBalance').mockImplementation(async (p: { id: bigint }) => {
+        return p.id === 1n ? 10_000_000n : 0n;
+      });
+
+      const found = await settlementService.scanUnclaimedSettlements(userAddress);
+      expect(found.some((p) => p.marketId.toLowerCase() === tradedMarketId.toLowerCase())).toBe(true);
+      const held = found.find((p) => p.marketId.toLowerCase() === tradedMarketId.toLowerCase())!;
+      expect(held.claimableAmount).toBeCloseTo(10, 3);
+      expect(held.winningOutcome).toBe('YES');
     });
 
     it('compounds claimed proceeds into active user allocation using 100% compounding', async () => {

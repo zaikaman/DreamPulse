@@ -209,9 +209,38 @@ export const ERC20_ABI = [
  */
 export const OPERATOR_SELECTORS = {
   placeOrderFor: '0x80054449' as Hex,
+  placeBinaryOrderFor: '0x5d97c566' as Hex,
   cancelOrderFor: '0xe37b444b' as Hex,
   reduceOrderFor: '0x364c2587' as Hex,
 } as const;
+
+/**
+ * BinaryPool write surface for delegated copy-trades.
+ * Generic `placeOrderFor` reverts `UseBinaryPlacement` on event-contract pools.
+ */
+export const BINARY_POOL_WRITE_ABI = [
+  {
+    type: 'function',
+    name: 'placeBinaryOrderFor',
+    stateMutability: 'payable',
+    inputs: [
+      { name: 'owner', type: 'address' },
+      { name: 'kind', type: 'uint8' },
+      { name: 'price', type: 'uint256' },
+      { name: 'quantity', type: 'uint256' },
+      { name: 'expireTimestampNs', type: 'uint64' },
+      { name: 'orderType', type: 'uint8' },
+      { name: 'selfMatchingOption', type: 'uint8' },
+      { name: 'builder', type: 'address' },
+      { name: 'builderFeeBpsTimes1k', type: 'uint96' },
+      { name: 'userData', type: 'uint64' },
+    ],
+    outputs: [
+      { name: 'success', type: 'bool' },
+      { name: 'id', type: 'uint128' },
+    ],
+  },
+] as const;
 
 /**
  * Prohibited operations to preserve the strict Zero-Custody Invariant.
@@ -333,6 +362,84 @@ export function validateZeroCustodyInvariants(requestedActions: string[]): {
   };
 }
 
+const PLACE_SELECTORS: Hex[] = [
+  OPERATOR_SELECTORS.placeOrderFor,
+  OPERATOR_SELECTORS.placeBinaryOrderFor,
+];
+
+/**
+ * Probe on-chain operator authorization.
+ * Returns true/false when the chain answered, or null when RPC/read failed
+ * so callers can keep the previous in-memory flag instead of treating an
+ * outage as "not authorized".
+ */
+export async function probeOnChainOperatorAuthorization(
+  owner: Address,
+  operator: Address,
+  pool?: Address,
+  selector: Hex = OPERATOR_SELECTORS.placeOrderFor,
+): Promise<boolean | null> {
+  const selectors = selector === OPERATOR_SELECTORS.placeOrderFor
+    ? PLACE_SELECTORS
+    : [selector, ...PLACE_SELECTORS.filter((s) => s !== selector)];
+
+  let probed = false;
+
+  const mark = (value: boolean): boolean => {
+    probed = true;
+    return value;
+  };
+
+  try {
+    if (pool && pool.startsWith('0x') && pool !== SOMNIA_ADDRESSES.binaryModule) {
+      for (const sel of selectors) {
+        try {
+          const authorizedOnPool = await publicClient.readContract({
+            address: SOMNIA_ADDRESSES.operatorPermissionsRegistry,
+            abi: OPERATOR_PERMISSIONS_REGISTRY_ABI,
+            functionName: 'isApprovedForPool',
+            args: [pool, owner, operator, sel as `0x${string}`],
+          });
+          if (mark(Boolean(authorizedOnPool))) return true;
+        } catch {
+          // try next selector / fallback
+        }
+
+        try {
+          const authorizedOnPoolContract = await publicClient.readContract({
+            address: pool,
+            abi: SPOT_POOL_ABI,
+            functionName: 'isOperatorAuthorized',
+            args: [owner, operator, sel as `0x${string}`],
+          });
+          if (mark(Boolean(authorizedOnPoolContract))) return true;
+        } catch {
+          // Binary pools may not expose this view; fall through to global grant
+        }
+      }
+    }
+
+    for (const sel of selectors) {
+      try {
+        const authorizedOnRegistry = await publicClient.readContract({
+          address: SOMNIA_ADDRESSES.operatorPermissionsRegistry,
+          abi: OPERATOR_PERMISSIONS_REGISTRY_ABI,
+          functionName: 'isGloballyApproved',
+          args: [owner, operator, sel as `0x${string}`],
+        });
+        if (mark(Boolean(authorizedOnRegistry))) return true;
+      } catch {
+        // try next selector
+      }
+    }
+
+    return probed ? false : null;
+  } catch (err: any) {
+    console.warn(`[checkOnChainOperatorAuthorization] Check notice:`, err.message);
+    return probed ? false : null;
+  }
+}
+
 /**
  * Query on-chain OperatorPermissionsRegistry or SpotPool to verify if operator is authorized for owner.
  */
@@ -342,33 +449,7 @@ export async function checkOnChainOperatorAuthorization(
   pool?: Address,
   selector: Hex = OPERATOR_SELECTORS.placeOrderFor,
 ): Promise<boolean> {
-  try {
-    if (pool && pool.startsWith('0x') && pool !== SOMNIA_ADDRESSES.binaryModule) {
-      try {
-        const authorizedOnPool = await publicClient.readContract({
-          address: SOMNIA_ADDRESSES.operatorPermissionsRegistry,
-          abi: OPERATOR_PERMISSIONS_REGISTRY_ABI,
-          functionName: 'isApprovedForPool',
-          args: [pool, owner, operator, selector as `0x${string}`],
-        });
-        if (authorizedOnPool) return true;
-      } catch {
-        // fallback
-      }
-    }
-
-    const authorizedOnRegistry = await publicClient.readContract({
-      address: SOMNIA_ADDRESSES.operatorPermissionsRegistry,
-      abi: OPERATOR_PERMISSIONS_REGISTRY_ABI,
-      functionName: 'isGloballyApproved',
-      args: [owner, operator, selector as `0x${string}`],
-    });
-
-    return Boolean(authorizedOnRegistry);
-  } catch (err: any) {
-    console.warn(`[checkOnChainOperatorAuthorization] Check notice:`, err.message);
-    return false;
-  }
+  return (await probeOnChainOperatorAuthorization(owner, operator, pool, selector)) === true;
 }
 
 /**

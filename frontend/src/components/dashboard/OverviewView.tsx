@@ -382,7 +382,7 @@ export const OverviewView: React.FC<OverviewViewProps> = ({
           <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
             {distinctThoughts.length === 0 ? (
               <div style={{ padding: '24px', textAlign: 'center', color: 'var(--muted-foreground)', fontSize: '12px' }}>
-                AI Swarm initializing autonomous thought stream...
+                Swarm actively evaluating 12 Shannon CLOB markets. Executed trades will appear here.
               </div>
             ) : (
               distinctThoughts.map((t, idx) => {
@@ -409,7 +409,7 @@ export const OverviewView: React.FC<OverviewViewProps> = ({
                       transition: 'border-color 0.15s ease',
                     }}
                   >
-                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '4px' }}>
                       <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
                         <div
                           style={{
@@ -436,6 +436,24 @@ export const OverviewView: React.FC<OverviewViewProps> = ({
                         >
                           {t.actionTaken || t.triggerEvent}
                         </span>
+                        {t.txHash && (
+                          <a
+                            href={`https://shannon-explorer.somnia.network/tx/${t.txHash}`}
+                            target="_blank"
+                            rel="noreferrer"
+                            style={{
+                              fontSize: '9px',
+                              color: '#00ffcc',
+                              textDecoration: 'none',
+                              fontFamily: 'var(--font-mono)',
+                              background: 'rgba(0, 255, 204, 0.1)',
+                              padding: '1px 5px',
+                              borderRadius: '3px',
+                            }}
+                          >
+                            Tx: {t.txHash.slice(0, 6)}...
+                          </a>
+                        )}
                       </div>
 
                       <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>

@@ -100,7 +100,16 @@ export const App: React.FC = () => {
 
   // Live data hooks
   const { markets, selectedMarket, selectedMarketId, setSelectedMarketId } = useMarkets();
-  const { isConnected, latencyMs, liveTicks, depthMap, agentThoughts } = useTelemetry();
+  const {
+    isConnected,
+    latencyMs,
+    liveTicks,
+    depthMap,
+    agentThoughts,
+    debugThoughts,
+    isDebugEnabled,
+    toggleDebugThoughts,
+  } = useTelemetry();
 
   // Session delegation and Web3 wallet hooks
   const {
@@ -109,14 +118,18 @@ export const App: React.FC = () => {
     isLoading: isSessionLoading,
     isSigning: isSessionSigning,
     isFauceting: isSessionFauceting,
+    isFixingAllowance,
     stepState: sessionStepState,
     error: sessionError,
+    allowanceStatus,
     connectWallet,
     disconnectWallet,
     switchNetwork,
     claimCollateralFaucet,
     createSession,
     revokeSession,
+    ensureAllowances,
+    refreshAllowanceStatus,
     clearError: clearSessionError,
   } = useSessionKey();
 
@@ -542,6 +555,9 @@ export const App: React.FC = () => {
           ) : activeNav === 'AI Swarm Feed' ? (
             <SwarmFeedView
               agentThoughts={agentThoughts}
+              debugThoughts={debugThoughts}
+              isDebugEnabled={isDebugEnabled}
+              onToggleDebug={toggleDebugThoughts}
               isConnected={isConnected}
             />
           ) : activeNav === 'Swarm Cockpit' ? (
@@ -597,14 +613,18 @@ export const App: React.FC = () => {
         isSigning={isSessionSigning}
         isLoading={isSessionLoading}
         isFauceting={isSessionFauceting}
+        isFixingAllowance={isFixingAllowance}
         stepState={sessionStepState}
         error={sessionError}
+        allowanceStatus={allowanceStatus}
         onConnectWallet={connectWallet}
         onDisconnectWallet={disconnectWallet}
         onSwitchNetwork={switchNetwork}
         onClaimFaucet={claimCollateralFaucet}
         onCreateSession={createSession}
         onRevokeSession={revokeSession}
+        onEnsureAllowances={ensureAllowances}
+        onRefreshAllowance={refreshAllowanceStatus}
         onClearError={clearSessionError}
       />
     </div>

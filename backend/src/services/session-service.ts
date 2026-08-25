@@ -1,12 +1,26 @@
 import { isAddress, getAddress, type Address, type Hex } from 'viem';
 import { supabase } from '../config/supabase.js';
-import { SOMNIA_ADDRESSES } from '../config/somnia.js';
+import { SOMNIA_ADDRESSES, operatorAccount } from '../config/somnia.js';
 import {
   verifySessionDelegationSignature,
   validateZeroCustodyInvariants,
   checkOnChainOperatorAuthorization,
+  probeOnChainOperatorAuthorization,
   OPERATOR_SELECTORS,
 } from '../config/permissions-abi.js';
+
+const BLOCKED_COPY_TRADE_USERS = new Set([
+  '0x1234567890123456789012345678901234567890',
+  '0x15c7e8ce38f021c5b45d098aad788f63090bf20a',
+]);
+
+function isSessionPersistenceEnabled(): boolean {
+  if (process.env.VITEST === 'true' || process.env.NODE_ENV === 'test') {
+    return false;
+  }
+  const url = process.env.SUPABASE_URL || '';
+  return url.length > 0 && !url.includes('mock-project');
+}
 
 export interface SessionRecord {
   id: string;
@@ -48,20 +62,32 @@ export class SessionService {
   private sessions = new Map<string, SessionRecord>();
   private userToActiveSessionId = new Map<string, string>();
 
+  private lastAuthRefreshAt = 0;
+  private authRefreshInFlight: Promise<void> | null = null;
+  private static readonly AUTH_REFRESH_MS = 60_000;
+
   constructor() {
-    this.loadActiveSessionsFromDb().catch((err) => {
-      console.warn('[SessionService] Initial DB load warning (using in-memory cache):', err.message);
-    });
+    this.loadActiveSessionsFromDb()
+      .then(() => this.refreshOnChainAuthorizations())
+      .catch((err) => {
+        console.warn('[SessionService] Initial DB load warning (using in-memory cache):', err.message);
+      });
   }
 
   /**
    * Loads existing active sessions from Supabase on startup.
+   * Missing on_chain_authorized is treated as false — never default leftover rows to authorized.
    */
   private async loadActiveSessionsFromDb(): Promise<void> {
+    if (!isSessionPersistenceEnabled()) {
+      return;
+    }
+
     const { data, error } = await supabase
       .from('sessions')
       .select('*')
-      .eq('is_active', true);
+      .eq('is_active', true)
+      .order('created_at', { ascending: false });
 
     if (error || !data) {
       return;
@@ -96,7 +122,7 @@ export class SessionService {
         onChainTxHash: (row.on_chain_tx_hash as Hex) || undefined,
         vaultDepositAmount: row.vault_deposit_amount ? Number(row.vault_deposit_amount) : undefined,
         targetPoolAddress: row.target_pool_address ? (getAddress(row.target_pool_address) as Address) : undefined,
-        onChainAuthorized: row.on_chain_authorized ?? true,
+        onChainAuthorized: row.on_chain_authorized === true,
         createdAt: row.created_at,
         updatedAt: row.updated_at,
       };
@@ -198,14 +224,16 @@ export class SessionService {
         existing.isActive = false;
         existing.updatedAt = new Date().toISOString();
       }
-      try {
-        await supabase
-          .from('sessions')
-          .update({ is_active: false, updated_at: new Date().toISOString() })
-          .eq('user_address', normalizedUser)
-          .eq('is_active', true);
-      } catch (err) {
-        console.warn('[SessionService] Could not deactivate old sessions in DB:', err);
+      if (isSessionPersistenceEnabled()) {
+        try {
+          await supabase
+            .from('sessions')
+            .update({ is_active: false, updated_at: new Date().toISOString() })
+            .eq('user_address', normalizedUser)
+            .eq('is_active', true);
+        } catch (err) {
+          console.warn('[SessionService] Could not deactivate old sessions in DB:', err);
+        }
       }
     }
 
@@ -246,21 +274,26 @@ export class SessionService {
       this.userToActiveSessionId.delete(userKey);
     }
 
-    // Persist to Supabase
-    try {
-      await supabase.from('sessions').insert({
-        id: sessionId,
-        user_address: normalizedUser,
-        operator_address: normalizedOperator,
-        permissions,
-        max_trade_size: maxTradeSize,
-        daily_volume_cap: dailyVolumeCap,
-        spent_today: 0,
-        expires_at: expiresAt,
-        is_active: isActive,
-      });
-    } catch (err) {
-      console.warn('[SessionService] Supabase insert fallback (session held in memory):', err);
+    if (isSessionPersistenceEnabled()) {
+      try {
+        await supabase.from('sessions').insert({
+          id: sessionId,
+          user_address: normalizedUser,
+          operator_address: normalizedOperator,
+          permissions,
+          max_trade_size: maxTradeSize,
+          daily_volume_cap: dailyVolumeCap,
+          spent_today: 0,
+          expires_at: expiresAt,
+          is_active: isActive,
+          on_chain_tx_hash: onChainTxHash || null,
+          on_chain_authorized: onChainAuthorized,
+          vault_deposit_amount: params.vaultDepositAmount ?? null,
+          target_pool_address: targetPoolAddress || null,
+        });
+      } catch (err) {
+        console.warn('[SessionService] Supabase insert fallback (session held in memory):', err);
+      }
     }
 
     return sessionRecord;
@@ -293,13 +326,15 @@ export class SessionService {
       session.isActive = false;
       session.updatedAt = new Date(now).toISOString();
       this.userToActiveSessionId.delete(userKey);
-      try {
-        await supabase
-          .from('sessions')
-          .update({ is_active: false })
-          .eq('id', session.id);
-      } catch {
-        // ignore
+      if (isSessionPersistenceEnabled()) {
+        try {
+          await supabase
+            .from('sessions')
+            .update({ is_active: false })
+            .eq('id', session.id);
+        } catch {
+          // ignore
+        }
       }
       return null;
     }
@@ -340,6 +375,86 @@ export class SessionService {
       }
     }
     return result;
+  }
+
+  /**
+   * Sessions the swarm may copy-trade: live operator match, on-chain grant, not a dummy/test wallet.
+   */
+  public getDelegatedCopyTradeSessions(operatorAddress?: string): SessionRecord[] {
+    const operator = (operatorAddress || operatorAccount.address).toLowerCase();
+    const now = Date.now();
+    return this.getActiveSessions().filter((session) => {
+      const user = session.userAddress.toLowerCase();
+      if (user === operator) return false;
+      if (BLOCKED_COPY_TRADE_USERS.has(user)) return false;
+      if (session.operatorAddress.toLowerCase() !== operator) return false;
+      if (session.onChainAuthorized !== true) return false;
+      if (!session.isActive) return false;
+      if (new Date(session.expiresAt).getTime() <= now) return false;
+      return true;
+    });
+  }
+
+  /**
+   * Re-checks OperatorPermissionsRegistry for active sessions. Throttled so the 100ms
+   * swarm loop does not hammer RPC. RPC failures leave the previous flag in place.
+   */
+  public async refreshOnChainAuthorizations(operatorAddress?: string): Promise<void> {
+    const now = Date.now();
+    if (this.authRefreshInFlight) {
+      return this.authRefreshInFlight;
+    }
+    if (now - this.lastAuthRefreshAt < SessionService.AUTH_REFRESH_MS && this.lastAuthRefreshAt > 0) {
+      return;
+    }
+
+    const task = (async () => {
+      const operator = (operatorAddress || operatorAccount.address) as Address;
+      const candidates = this.getActiveSessions().filter((session) => {
+        const user = session.userAddress.toLowerCase();
+        return (
+          user !== operator.toLowerCase() &&
+          !BLOCKED_COPY_TRADE_USERS.has(user) &&
+          session.operatorAddress.toLowerCase() === operator.toLowerCase()
+        );
+      });
+
+      for (const session of candidates) {
+        const probed = await probeOnChainOperatorAuthorization(
+          session.userAddress,
+          operator,
+          session.targetPoolAddress,
+          OPERATOR_SELECTORS.placeOrderFor,
+        );
+        if (probed === null) {
+          continue;
+        }
+        if (session.onChainAuthorized === probed) {
+          continue;
+        }
+        session.onChainAuthorized = probed;
+        session.updatedAt = new Date().toISOString();
+        if (isSessionPersistenceEnabled()) {
+          try {
+            await supabase
+              .from('sessions')
+              .update({ on_chain_authorized: probed, updated_at: session.updatedAt })
+              .eq('id', session.id);
+          } catch {
+            // column may not exist until migration 003 is applied
+          }
+        }
+      }
+
+      this.lastAuthRefreshAt = Date.now();
+    })();
+
+    this.authRefreshInFlight = task;
+    try {
+      await task;
+    } finally {
+      this.authRefreshInFlight = null;
+    }
   }
 
   /**
@@ -390,10 +505,12 @@ export class SessionService {
       session.spentToday = 0;
       session.lastSpendResetTimestamp = now;
       session.updatedAt = new Date().toISOString();
-      void supabase
-        .from('sessions')
-        .update({ spent_today: 0, updated_at: session.updatedAt })
-        .eq('id', session.id);
+      if (isSessionPersistenceEnabled()) {
+        void supabase
+          .from('sessions')
+          .update({ spent_today: 0, updated_at: session.updatedAt })
+          .eq('id', session.id);
+      }
     }
 
     // Daily volume cap guardrail
@@ -418,13 +535,15 @@ export class SessionService {
     session.spentToday = Number((session.spentToday + tradeCost).toFixed(4));
     session.updatedAt = new Date().toISOString();
 
-    try {
-      await supabase
-        .from('sessions')
-        .update({ spent_today: session.spentToday, updated_at: session.updatedAt })
-        .eq('id', session.id);
-    } catch {
-      // ignore
+    if (isSessionPersistenceEnabled()) {
+      try {
+        await supabase
+          .from('sessions')
+          .update({ spent_today: session.spentToday, updated_at: session.updatedAt })
+          .eq('id', session.id);
+      } catch {
+        // ignore
+      }
     }
 
     return true;
@@ -440,10 +559,12 @@ export class SessionService {
     session.spentToday = Number(Math.max(0, amount).toFixed(4));
     session.updatedAt = new Date().toISOString();
 
-    void supabase
-      .from('sessions')
-      .update({ spent_today: session.spentToday, updated_at: session.updatedAt })
-      .eq('id', session.id);
+    if (isSessionPersistenceEnabled()) {
+      void supabase
+        .from('sessions')
+        .update({ spent_today: session.spentToday, updated_at: session.updatedAt })
+        .eq('id', session.id);
+    }
 
     return true;
   }
@@ -454,7 +575,7 @@ export class SessionService {
   public async revokeSession(sessionId: string): Promise<boolean> {
     const session = this.sessions.get(sessionId);
     if (!session) {
-      // If not in memory, try updating database directly
+      if (!isSessionPersistenceEnabled()) return false;
       try {
         await supabase
           .from('sessions')
@@ -474,13 +595,15 @@ export class SessionService {
       this.userToActiveSessionId.delete(userKey);
     }
 
-    try {
-      await supabase
-        .from('sessions')
-        .update({ is_active: false, updated_at: session.updatedAt })
-        .eq('id', session.id);
-    } catch (err) {
-      console.warn('[SessionService] Could not persist revocation to DB:', err);
+    if (isSessionPersistenceEnabled()) {
+      try {
+        await supabase
+          .from('sessions')
+          .update({ is_active: false, updated_at: session.updatedAt })
+          .eq('id', session.id);
+      } catch (err) {
+        console.warn('[SessionService] Could not persist revocation to DB:', err);
+      }
     }
 
     return true;

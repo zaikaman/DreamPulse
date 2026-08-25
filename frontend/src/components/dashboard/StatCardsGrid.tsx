@@ -85,21 +85,26 @@ export const StatCardsGrid: React.FC<StatCardsGridProps> = ({
     }
   }
 
-  const activeCount = markets.filter((m) => m.status === 'Open').length || markets.length;
+  const activeCount = markets.filter((m) => {
+    const tick = liveTicks.get(m.id);
+    const timeLeft = tick?.timeLeftSeconds ?? Math.max(0, Math.floor((new Date(m.closeTimestamp).getTime() - Date.now()) / 1000));
+    return m.status === 'Open' || timeLeft > 0;
+  }).length;
 
-  // Calculate dynamic swarm PnL and trade fills (Operator Swarm)
+  // Calculate dynamic swarm PnL and trade fills (Operator Swarm) — accurate realtime net PnL (payout - cost per trade, handles BUY/SELL/VOID)
   const voltPnl = swarmDetailed?.volt?.pnlAmount ?? 0;
   const oraclePnl = swarmDetailed?.oracle?.pnlAmount ?? 0;
   const titanPnl = swarmDetailed?.titan?.pnlAmount ?? 0;
-  const sweeperPnl = swarmDetailed?.sweeper?.pnlAmount ?? 0;
-  const totalSwarmPnl = voltPnl + oraclePnl + titanPnl + sweeperPnl;
+  // Sweeper gross claimed tracked separately; excluded from net swarm PnL to avoid double counting (void sweeperPnl unused in total)
+  void (swarmDetailed?.sweeper?.pnlAmount);
+  const totalSwarmPnl = voltPnl + oraclePnl + titanPnl;
 
+  // Total all-time trade order fills across swarm (Volt, Oracle & Titan execution agents)
   const agentFills =
     (swarmDetailed?.volt?.tradesToday ?? 0) +
     (swarmDetailed?.oracle?.tradesToday ?? 0) +
-    (swarmDetailed?.titan?.tradesToday ?? 0) +
-    (swarmDetailed?.sweeper?.tradesToday ?? 0);
-  const totalSwarmFills = ordersCount !== undefined ? Math.max(ordersCount, agentFills) : agentFills;
+    (swarmDetailed?.titan?.tradesToday ?? 0);
+  const totalSwarmFills = ordersCount !== undefined && ordersCount > 0 ? Math.max(ordersCount, agentFills) : agentFills;
   const isSwarmProfitable = totalSwarmPnl >= 0;
 
   // Personal Portfolio calculations
@@ -290,7 +295,7 @@ export const StatCardsGrid: React.FC<StatCardsGridProps> = ({
               <div className="stat-card-footer">
                 <span className={`stat-pill-tag ${userOrdersToday > 0 ? 'tag-green' : 'tag-cyan'}`}>
                   <TrendingUp size={11} />
-                  <span>{userOrdersToday > 0 ? `${userOrdersToday} FILLS TODAY` : 'READY TO TRADE'}</span>
+                  <span>{userOrdersToday > 0 ? `${userOrdersToday} FILLS` : 'READY TO TRADE'}</span>
                 </span>
                 <span>
                   Realized: {(portfolio?.realizedPnl ?? 0).toFixed(2)} • Claimable: {(portfolio?.unclaimedPnl ?? 0).toFixed(2)}
@@ -404,9 +409,9 @@ export const StatCardsGrid: React.FC<StatCardsGridProps> = ({
               <div className="stat-card-footer">
                 <span className={`stat-pill-tag ${totalSwarmFills > 0 ? 'tag-green' : 'tag-cyan'}`}>
                   <TrendingUp size={11} />
-                  <span>{totalSwarmFills > 0 ? `${totalSwarmFills} FILLS TODAY` : 'READY TO TRADE'}</span>
+                  <span>{totalSwarmFills > 0 ? `${totalSwarmFills} FILLS` : 'READY TO TRADE'}</span>
                 </span>
-                <span>Volt, Oracle & Titan trading</span>
+                <span>Volt, Oracle & Titan net PnL (excl. sweeper gross)</span>
               </div>
             </div>
 

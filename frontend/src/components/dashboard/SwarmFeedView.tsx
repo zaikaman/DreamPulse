@@ -6,11 +6,17 @@ import { useAgentSwarm } from '../../hooks/useAgentSwarm.js';
 
 interface SwarmFeedViewProps {
   agentThoughts: AgentThoughtLog[];
+  debugThoughts?: AgentThoughtLog[];
+  isDebugEnabled?: boolean;
+  onToggleDebug?: (enable?: boolean) => void;
   isConnected: boolean;
 }
 
 export const SwarmFeedView: React.FC<SwarmFeedViewProps> = ({
   agentThoughts,
+  debugThoughts = [],
+  isDebugEnabled = false,
+  onToggleDebug,
   isConnected,
 }) => {
   const { summary } = useAgentSwarm();
@@ -96,7 +102,13 @@ export const SwarmFeedView: React.FC<SwarmFeedViewProps> = ({
 
       {/* Full-Page Live Streaming AI Thought Stream (Fills 100% of remaining space) */}
       <div style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column' }}>
-        <AgentThoughtFeed thoughts={agentThoughts} isConnected={isConnected} />
+        <AgentThoughtFeed
+          thoughts={agentThoughts}
+          debugThoughts={debugThoughts}
+          isDebugEnabled={isDebugEnabled}
+          onToggleDebug={onToggleDebug}
+          isConnected={isConnected}
+        />
       </div>
     </div>
   );

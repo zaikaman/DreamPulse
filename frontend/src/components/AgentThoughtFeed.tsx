@@ -12,15 +12,28 @@ import {
   TrendingUp,
   Activity,
   Filter,
+  ExternalLink,
+  CheckCircle2,
+  Radio,
+  Flame,
 } from 'lucide-react';
 import type { AgentThoughtLog } from '../types/index.js';
 
 interface AgentThoughtFeedProps {
   thoughts: AgentThoughtLog[];
+  debugThoughts?: AgentThoughtLog[];
+  isDebugEnabled?: boolean;
+  onToggleDebug?: (enable?: boolean) => void;
   isConnected: boolean;
 }
 
-export const AgentThoughtFeed: React.FC<AgentThoughtFeedProps> = ({ thoughts, isConnected }) => {
+export const AgentThoughtFeed: React.FC<AgentThoughtFeedProps> = ({
+  thoughts,
+  debugThoughts = [],
+  isDebugEnabled = false,
+  onToggleDebug,
+  isConnected,
+}) => {
   const [selectedFilter, setSelectedFilter] = useState<string>('ALL');
   const [searchQuery, setSearchQuery] = useState<string>('');
   const [isPausedManual, setIsPausedManual] = useState<boolean>(false);
@@ -38,30 +51,41 @@ export const AgentThoughtFeed: React.FC<AgentThoughtFeedProps> = ({ thoughts, is
 
   const isPaused = isPausedManual || isHovered;
 
+  // Active pool of thoughts to display
+  const activeSourceList = useMemo(() => {
+    if (selectedFilter === 'DEBUG_TRACE') {
+      return debugThoughts;
+    }
+    if (isDebugEnabled && selectedFilter === 'ALL') {
+      const combined = [...thoughts, ...debugThoughts];
+      return combined.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+    }
+    return thoughts;
+  }, [thoughts, debugThoughts, isDebugEnabled, selectedFilter]);
+
   // Snapshot of latest distinct thought per agent for Executive Digest
   const latestByAgent = useMemo(() => {
     const map = new Map<string, AgentThoughtLog>();
-    for (const t of thoughts) {
+    const pool = [...thoughts, ...debugThoughts];
+    for (const t of pool) {
       const type = t.agentType.toUpperCase();
       if (!map.has(type)) {
         map.set(type, t);
       }
     }
     return map;
-  }, [thoughts]);
+  }, [thoughts, debugThoughts]);
 
   // Filtered and deduplicated thoughts according to selected tab and search query
   const filteredThoughts = useMemo(() => {
-    const rawFiltered = thoughts.filter((t) => {
+    const rawFiltered = activeSourceList.filter((t) => {
       // 1. Tab filter
-      if (selectedFilter === 'TRADES') {
-        const isTrade =
-          t.actionTaken.includes('BUY') ||
-          t.actionTaken.includes('SELL') ||
-          t.actionTaken.includes('SWEEP');
-        if (!isTrade) return false;
+      if (selectedFilter === 'EXECUTIONS') {
+        if (!t.isExecution && !t.txHash) return false;
       } else if (selectedFilter === 'HIGH_CONVICTION') {
         if (t.confidence < 0.8) return false;
+      } else if (selectedFilter === 'DEBUG_TRACE') {
+        if (t.isExecution) return false;
       } else if (selectedFilter !== 'ALL') {
         if (t.agentType.toLowerCase() !== selectedFilter.toLowerCase()) return false;
       }
@@ -73,7 +97,8 @@ export const AgentThoughtFeed: React.FC<AgentThoughtFeedProps> = ({ thoughts, is
         const matchesAgent = t.agentType.toLowerCase().includes(q);
         const matchesAction = t.actionTaken.toLowerCase().includes(q);
         const matchesMarket = (t.marketId || '').toLowerCase().includes(q);
-        if (!matchesText && !matchesAgent && !matchesAction && !matchesMarket) {
+        const matchesTx = (t.txHash || '').toLowerCase().includes(q);
+        if (!matchesText && !matchesAgent && !matchesAction && !matchesMarket && !matchesTx) {
           return false;
         }
       }
@@ -87,7 +112,8 @@ export const AgentThoughtFeed: React.FC<AgentThoughtFeedProps> = ({ thoughts, is
       if (
         deduped.length > 0 &&
         deduped[deduped.length - 1].agentType === t.agentType &&
-        deduped[deduped.length - 1].reasoningText === t.reasoningText
+        deduped[deduped.length - 1].reasoningText === t.reasoningText &&
+        !t.txHash
       ) {
         deduped[deduped.length - 1].repeatCount = (deduped[deduped.length - 1].repeatCount || 1) + 1;
       } else {
@@ -95,7 +121,7 @@ export const AgentThoughtFeed: React.FC<AgentThoughtFeedProps> = ({ thoughts, is
       }
     }
     return deduped;
-  }, [thoughts, selectedFilter, searchQuery]);
+  }, [activeSourceList, selectedFilter, searchQuery]);
 
   const getAgentTheme = (agent: string) => {
     switch (agent.toLowerCase()) {
@@ -157,7 +183,7 @@ export const AgentThoughtFeed: React.FC<AgentThoughtFeedProps> = ({ thoughts, is
     if (action.includes('LIMIT_QUOTE') || action.includes('QUOTE')) {
       return { background: 'rgba(59, 130, 246, 0.15)', color: '#60a5fa', border: '1px solid rgba(59, 130, 246, 0.3)' };
     }
-    if (action.includes('SWEEP')) {
+    if (action.includes('SWEEP') || action.includes('CLAIM')) {
       return { background: 'rgba(168, 85, 247, 0.15)', color: '#c084fc', border: '1px solid rgba(168, 85, 247, 0.3)' };
     }
     return { background: '#27272a', color: '#a1a1aa', border: '1px solid #3f3f46' };
@@ -184,7 +210,7 @@ export const AgentThoughtFeed: React.FC<AgentThoughtFeedProps> = ({ thoughts, is
           </span>
           <span className={`badge ${isConnected ? 'badge-yes' : 'badge-no'}`} style={{ fontSize: '10px', padding: '2px 8px' }}>
             <span className="live-dot"></span>
-            {isConnected ? 'LIVE TELEMETRY' : 'DISCONNECTED'}
+            {isConnected ? 'PROD STREAM' : 'DISCONNECTED'}
           </span>
           <span
             style={{
@@ -206,13 +232,41 @@ export const AgentThoughtFeed: React.FC<AgentThoughtFeedProps> = ({ thoughts, is
         </div>
 
         {/* Action Controls & Search */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginLeft: 'auto' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginLeft: 'auto', flexWrap: 'wrap' }}>
+          {/* Debug Mode Opt-In Toggle */}
+          {onToggleDebug && (
+            <button
+              type="button"
+              onClick={() => onToggleDebug()}
+              title={isDebugEnabled ? 'Disable Evaluation Debug Stream' : 'Enable Raw Evaluation Trace Stream'}
+              style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '6px',
+                padding: '4px 10px',
+                borderRadius: '6px',
+                fontSize: '11px',
+                fontWeight: 600,
+                fontFamily: 'var(--font-mono)',
+                cursor: 'pointer',
+                background: isDebugEnabled ? 'rgba(0, 240, 255, 0.15)' : 'rgba(255, 255, 255, 0.04)',
+                border: isDebugEnabled ? '1px solid rgba(0, 240, 255, 0.4)' : '1px solid var(--border)',
+                color: isDebugEnabled ? '#00ffcc' : 'var(--muted-foreground)',
+                transition: 'all 0.15s ease',
+              }}
+            >
+              <Cpu size={12} style={{ color: isDebugEnabled ? '#00ffcc' : 'var(--muted-foreground)' }} />
+              <span>DEBUG TRACE: {isDebugEnabled ? 'ON' : 'OFF'}</span>
+              {isDebugEnabled && <span style={{ width: '6px', height: '6px', borderRadius: '50%', background: '#00ffcc' }}></span>}
+            </button>
+          )}
+
           {/* Keyword Search */}
           <div style={{ position: 'relative', display: 'flex', alignItems: 'center' }}>
             <Search size={13} style={{ position: 'absolute', left: '8px', color: 'var(--muted-foreground)' }} />
             <input
               type="text"
-              placeholder="Search thoughts, tickers..."
+              placeholder="Search trades, tx, tickers..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               style={{
@@ -264,30 +318,38 @@ export const AgentThoughtFeed: React.FC<AgentThoughtFeedProps> = ({ thoughts, is
       >
         <Filter size={13} style={{ color: 'var(--muted-foreground)', marginRight: '4px', flexShrink: 0 }} />
         {[
-          { id: 'ALL', label: `All (${thoughts.length})` },
-          { id: 'TRADES', label: '⚡ Real Trades' },
-          { id: 'HIGH_CONVICTION', label: '🔥 High Conviction (≥80%)' },
-          { id: 'Volt', label: 'Volt (Sniper)' },
-          { id: 'Oracle', label: 'Oracle (Arb)' },
-          { id: 'Titan', label: 'Titan (MM)' },
-          { id: 'Sweeper', label: 'Sweeper' },
-        ].map((tab) => (
-          <button
-            key={tab.id}
-            type="button"
-            className={`thought-filter-btn ${selectedFilter === tab.id ? 'active' : ''}`}
-            onClick={() => setSelectedFilter(tab.id)}
-            style={{
-              fontSize: '11px',
-              padding: '4px 10px',
-              whiteSpace: 'nowrap',
-              borderRadius: '6px',
-              fontWeight: selectedFilter === tab.id ? 700 : 500,
-            }}
-          >
-            {tab.label}
-          </button>
-        ))}
+          { id: 'ALL', label: `Executions (${thoughts.length})`, Icon: Zap },
+          { id: 'HIGH_CONVICTION', label: 'High Conviction (≥80%)', Icon: Flame },
+          ...(isDebugEnabled ? [{ id: 'DEBUG_TRACE', label: `Eval Traces (${debugThoughts.length})`, Icon: Cpu }] : []),
+          { id: 'Volt', label: 'Volt (Sniper)', Icon: Zap },
+          { id: 'Oracle', label: 'Oracle (Arb)', Icon: Brain },
+          { id: 'Titan', label: 'Titan (MM)', Icon: Shield },
+          { id: 'Sweeper', label: 'Sweeper', Icon: Sparkles },
+        ].map((tab) => {
+          const TabIcon = tab.Icon;
+          const isActive = selectedFilter === tab.id;
+          return (
+            <button
+              key={tab.id}
+              type="button"
+              className={`thought-filter-btn ${isActive ? 'active' : ''}`}
+              onClick={() => setSelectedFilter(tab.id)}
+              style={{
+                fontSize: '11px',
+                padding: '4px 10px',
+                whiteSpace: 'nowrap',
+                borderRadius: '6px',
+                fontWeight: isActive ? 700 : 500,
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '5px',
+              }}
+            >
+              <TabIcon size={12} />
+              <span>{tab.label}</span>
+            </button>
+          );
+        })}
       </div>
 
       {/* 3. Executive Swarm Consensus Digest Strip */}
@@ -341,7 +403,7 @@ export const AgentThoughtFeed: React.FC<AgentThoughtFeedProps> = ({ thoughts, is
                   overflow: 'hidden',
                 }}
               >
-                {latestThought ? latestThought.reasoningText : 'Scanning continuous multi-asset depth...'}
+                {latestThought ? latestThought.reasoningText : 'Actively monitoring CLOB depth & risk invariants...'}
               </p>
             </div>
           );
@@ -378,10 +440,18 @@ export const AgentThoughtFeed: React.FC<AgentThoughtFeedProps> = ({ thoughts, is
             <Activity size={28} style={{ color: '#00ffcc', opacity: 0.6 }} />
             <div>
               <p style={{ fontWeight: 600, fontSize: '13px', margin: '0 0 4px 0', color: '#f4f4f5' }}>
-                {searchQuery ? `No thoughts match "${searchQuery}"` : 'Awaiting real-time swarm intelligence...'}
+                {searchQuery
+                  ? `No events match "${searchQuery}"`
+                  : selectedFilter === 'DEBUG_TRACE'
+                  ? 'Awaiting new evaluation cycles...'
+                  : 'Awaiting high-conviction on-chain trade executions...'}
               </p>
               <p style={{ fontSize: '12px', margin: 0 }}>
-                {searchQuery ? 'Try clearing your search query or selecting a different filter tab.' : 'Autonomous agents are actively evaluating live order books and spot drift.'}
+                {searchQuery
+                  ? 'Try clearing your search query or selecting a different filter tab.'
+                  : selectedFilter === 'DEBUG_TRACE'
+                  ? 'Evaluations are throttled to 30s intervals with quantitative edge filtering.'
+                  : 'The swarm is continuously evaluating 12 Shannon CLOB markets. Trades will stream here upon verified on-chain execution.'}
               </p>
             </div>
           </div>
@@ -393,14 +463,15 @@ export const AgentThoughtFeed: React.FC<AgentThoughtFeedProps> = ({ thoughts, is
             const timeString = new Date(thought.createdAt).toLocaleTimeString();
             const relTime = getRelativeTime(thought.createdAt);
             const confidencePct = Math.round(thought.confidence * 100);
+            const isExec = thought.isExecution || Boolean(thought.txHash);
 
             return (
               <div
                 key={thought.id}
                 className="thought-card"
                 style={{
-                  background: '#131316',
-                  border: '1px solid var(--border)',
+                  background: isExec ? '#131316' : 'rgba(18, 18, 22, 0.7)',
+                  border: isExec ? `1px solid ${theme.border}` : '1px dashed var(--border)',
                   borderLeft: `3px solid ${theme.color}`,
                   borderRadius: '8px',
                   padding: '12px 14px',
@@ -412,7 +483,7 @@ export const AgentThoughtFeed: React.FC<AgentThoughtFeedProps> = ({ thoughts, is
               >
                 {/* Header Row */}
                 <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '6px' }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
                     {/* Agent Pill */}
                     <div
                       style={{
@@ -433,6 +504,45 @@ export const AgentThoughtFeed: React.FC<AgentThoughtFeedProps> = ({ thoughts, is
                       <span>{thought.agentType.toUpperCase()}</span>
                     </div>
 
+                    {/* Execution / Debug Status Badge */}
+                    {isExec ? (
+                      <span
+                        style={{
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          gap: '4px',
+                          fontSize: '10px',
+                          fontWeight: 700,
+                          padding: '2px 6px',
+                          borderRadius: '4px',
+                          background: 'rgba(16, 185, 129, 0.2)',
+                          color: '#34d399',
+                          border: '1px solid rgba(16, 185, 129, 0.4)',
+                        }}
+                      >
+                        <CheckCircle2 size={11} />
+                        <span>EXECUTED</span>
+                      </span>
+                    ) : (
+                      <span
+                        style={{
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          gap: '4px',
+                          fontSize: '9.5px',
+                          fontFamily: 'var(--font-mono)',
+                          padding: '2px 6px',
+                          borderRadius: '4px',
+                          background: 'rgba(0, 240, 255, 0.08)',
+                          color: 'var(--brand-cyan)',
+                          border: '1px solid rgba(0, 240, 255, 0.25)',
+                        }}
+                      >
+                        <Radio size={10} />
+                        <span>EVAL TRACE</span>
+                      </span>
+                    )}
+
                     {/* Action Pill */}
                     <span
                       style={{
@@ -446,6 +556,22 @@ export const AgentThoughtFeed: React.FC<AgentThoughtFeedProps> = ({ thoughts, is
                     >
                       {thought.actionTaken}
                     </span>
+
+                    {/* Price / Outcome / Size Tags if available */}
+                    {thought.price !== undefined && (
+                      <span
+                        style={{
+                          fontSize: '10.5px',
+                          fontFamily: 'var(--font-mono)',
+                          background: 'rgba(255, 255, 255, 0.06)',
+                          padding: '2px 6px',
+                          borderRadius: '4px',
+                          color: '#e4e4e7',
+                        }}
+                      >
+                        @ {thought.price.toFixed(2)} {thought.outcome || ''}
+                      </span>
+                    )}
 
                     {/* Trigger Event Badge */}
                     {thought.triggerEvent && (
@@ -482,8 +608,33 @@ export const AgentThoughtFeed: React.FC<AgentThoughtFeedProps> = ({ thoughts, is
                     )}
                   </div>
 
-                  {/* Right: Confidence & Timestamps */}
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                  {/* Right: Confidence, Explorer Tx & Timestamps */}
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+                    {/* Explorer Tx Link */}
+                    {thought.txHash && thought.txHash !== '0x0000000000000000000000000000000000000000000000000000000000000000' && (
+                      <a
+                        href={`https://shannon-explorer.somnia.network/tx/${thought.txHash}`}
+                        target="_blank"
+                        rel="noreferrer"
+                        style={{
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          gap: '4px',
+                          fontSize: '10.5px',
+                          fontFamily: 'var(--font-mono)',
+                          color: '#00ffcc',
+                          textDecoration: 'none',
+                          background: 'rgba(0, 255, 204, 0.1)',
+                          border: '1px solid rgba(0, 255, 204, 0.3)',
+                          padding: '2px 6px',
+                          borderRadius: '4px',
+                        }}
+                      >
+                        <span>Tx: {thought.txHash.slice(0, 6)}...{thought.txHash.slice(-4)}</span>
+                        <ExternalLink size={10} />
+                      </a>
+                    )}
+
                     <div
                       style={{
                         display: 'inline-flex',

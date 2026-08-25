@@ -157,16 +157,29 @@ export class BacktestService {
       return this.candleCache.get(cacheKey)!;
     }
 
+    const intervalMsMap: Record<string, number> = {
+      '1m': 60 * 1000,
+      '5m': 5 * 60 * 1000,
+      '15m': 15 * 60 * 1000,
+      '1h': 60 * 60 * 1000,
+    };
+    const intervalMs = intervalMsMap[interval] ?? 5 * 60 * 1000;
+
     const candles: HistoricalCandle[] = [];
     const binancePair = BINANCE_PAIR_MAPPINGS[symbol];
 
-    // 1. Ingest from Binance REST Klines API if available for liquid spot pairs
+    // 1. Ingest from Binance REST Klines API with pagination (Binance caps at 1000 per request)
     if (binancePair) {
       try {
-        const url = `https://api.binance.com/api/v3/klines?symbol=${binancePair}&interval=${interval}&startTime=${startMs}&endTime=${endMs}&limit=1000`;
-        const res = await fetch(url, { signal: AbortSignal.timeout(4000) });
-        if (res.ok) {
+        let cursor = startMs;
+        let pages = 0;
+        const maxPages = 50; // safety cap: 50*1000 = 50000 candles (covers 30d 1m = 43200)
+        while (cursor < endMs && pages < maxPages) {
+          const url = `https://api.binance.com/api/v3/klines?symbol=${binancePair}&interval=${interval}&startTime=${cursor}&endTime=${endMs}&limit=1000`;
+          const res = await fetch(url, { signal: AbortSignal.timeout(4000) });
+          if (!res.ok) break;
           const raw = (await res.json()) as Array<[number, string, string, string, string, string, ...unknown[]]>;
+          if (!Array.isArray(raw) || raw.length === 0) break;
           for (const bar of raw) {
             candles.push({
               timestamp: bar[0],
@@ -177,35 +190,63 @@ export class BacktestService {
               volume: parseFloat(bar[5]),
             });
           }
-        }
-      } catch {
-        // Fall back to DreamDEX / deterministic generator
-      }
-    }
-
-    // 2. Ingest from DreamDEX Indexer REST API if Binance returned empty
-    if (candles.length === 0) {
-      try {
-        const restBase = (process.env.REST_API_URL || 'https://stg.api.dreamdex.io/v0').replace(/\/$/, '');
-        const url = `${restBase}/markets/${encodeURIComponent(symbol)}/candles?interval=${interval}&limit=1000`;
-        const res = await fetch(url, { signal: AbortSignal.timeout(3000) });
-        if (res.ok) {
-          const body = (await res.json()) as { candles?: Array<{ timestamp: number; open: string; high: string; low: string; close: string; volume: string }> };
-          if (body.candles && body.candles.length > 0) {
-            for (const bar of body.candles) {
-              candles.push({
-                timestamp: bar.timestamp,
-                open: parseFloat(bar.open),
-                high: parseFloat(bar.high),
-                low: parseFloat(bar.low),
-                close: parseFloat(bar.close),
-                volume: parseFloat(bar.volume),
-              });
-            }
+          if (raw.length < 1000) break; // reached end of available data
+          const lastTs = raw[raw.length - 1][0];
+          const nextCursor = lastTs + intervalMs;
+          if (nextCursor <= cursor) break; // prevent infinite loop if api returns same window
+          cursor = nextCursor;
+          pages++;
+          // Avoid hammering Binance: slight yield
+          if (cursor < endMs && raw.length === 1000) {
+            // continue to next page
           }
         }
       } catch {
+        // Fall back to DreamDEX / deterministic generator - clear partial binance data on error so fallback can trigger
+        if (candles.length < 10) {
+          candles.length = 0;
+        }
+      }
+    }
+
+    // 2. Ingest from DreamDEX Indexer REST API if Binance returned insufficient data
+    //    DreamDEX candles endpoint is paginated similarly; include startTime/endTime when available
+    if (candles.length === 0) {
+      try {
+        const restBase = (process.env.REST_API_URL || 'https://stg.api.dreamdex.io/v0').replace(/\/$/, '');
+        let cursor = startMs;
+        let pages = 0;
+        const maxPages = 50;
+        while (cursor < endMs && pages < maxPages) {
+          const url = `${restBase}/markets/${encodeURIComponent(symbol)}/candles?interval=${interval}&limit=1000&startTime=${cursor}&endTime=${endMs}`;
+          const res = await fetch(url, { signal: AbortSignal.timeout(3000) });
+          if (!res.ok) break;
+          const body = (await res.json()) as {
+            candles?: Array<{ timestamp: number; open: string; high: string; low: string; close: string; volume: string }>;
+            data?: Array<{ timestamp: number; open: string; high: string; low: string; close: string; volume: string }>;
+          };
+          const rawCandles = body.candles ?? body.data ?? [];
+          if (!Array.isArray(rawCandles) || rawCandles.length === 0) break;
+          for (const bar of rawCandles) {
+            candles.push({
+              timestamp: Number(bar.timestamp),
+              open: parseFloat(bar.open as string),
+              high: parseFloat(bar.high as string),
+              low: parseFloat(bar.low as string),
+              close: parseFloat(bar.close as string),
+              volume: parseFloat(bar.volume as string),
+            });
+          }
+          if (rawCandles.length < 1000) break;
+          const lastTs = Number(rawCandles[rawCandles.length - 1].timestamp);
+          const nextCursor = lastTs + intervalMs;
+          if (nextCursor <= cursor) break;
+          cursor = nextCursor;
+          pages++;
+        }
+      } catch {
         // Fall back to deterministic seed data
+        if (candles.length < 10) candles.length = 0;
       }
     }
 
@@ -217,7 +258,7 @@ export class BacktestService {
       else if (interval === '15m') stepMs = 15 * 60 * 1000;
       else if (interval === '1h') stepMs = 60 * 60 * 1000;
 
-      const totalSteps = Math.min(300, Math.max(60, Math.floor((endMs - startMs) / stepMs)));
+      const totalSteps = Math.min(50000, Math.max(60, Math.floor((endMs - startMs) / stepMs)));
 
       let prevClose = basePrice;
       for (let i = 0; i < totalSteps; i++) {
@@ -247,9 +288,29 @@ export class BacktestService {
       }
     }
 
-    candles.sort((a, b) => a.timestamp - b.timestamp);
-    this.candleCache.set(cacheKey, candles);
-    return candles;
+    // Deduplicate, filter to requested window, and sort chronologically
+    const deduped = new Map<number, HistoricalCandle>();
+    for (const c of candles) {
+      // Binance timestamps are in ms; some DreamDEX endpoints return seconds - normalize to ms if needed
+      let ts = c.timestamp;
+      if (ts < 1e12) ts = ts * 1000; // seconds -> ms
+      if (ts < startMs || ts > endMs) continue;
+      if (!deduped.has(ts)) {
+        deduped.set(ts, { ...c, timestamp: ts });
+      }
+    }
+    // If filter removed everything (e.g., DreamDEX returned unsynced timestamps), fall back to dedup without window filter
+    const finalCandles = deduped.size > 0 ? Array.from(deduped.values()) : (() => {
+      const m = new Map<number, HistoricalCandle>();
+      for (const c of candles) {
+        let ts = c.timestamp < 1e12 ? c.timestamp * 1000 : c.timestamp;
+        if (!m.has(ts)) m.set(ts, { ...c, timestamp: ts });
+      }
+      return Array.from(m.values());
+    })();
+    finalCandles.sort((a, b) => a.timestamp - b.timestamp);
+    this.candleCache.set(cacheKey, finalCandles);
+    return finalCandles;
   }
 
   /**
@@ -267,10 +328,11 @@ export class BacktestService {
     const targetSpread = req.strategyConfig?.targetSpread ?? 0.04;
     const inventoryAversion = req.strategyConfig?.inventoryAversion ?? 0.015;
 
-    // Execution & market microstructure friction config
-    const slippageBps = req.frictionConfig?.slippageBps ?? 4.0; // 4 bps default
-    const feeBps = req.frictionConfig?.feeBps ?? 2.5;           // 2.5 bps default
-    const latencyMs = req.frictionConfig?.latencyMs ?? 25.0;     // 25ms default
+    // Execution & market microstructure friction config - realistic Somnia CLOB defaults
+    // Previous defaults (4bps/2.5bps/25ms) were unrealistically low and inflated win-rate/PnL
+    const slippageBps = req.frictionConfig?.slippageBps ?? 10.0; // 10 bps realistic taker slippage (1 tick ≈ 100-200bps at 0.50)
+    const feeBps = req.frictionConfig?.feeBps ?? 8.0;           // 8 bps taker fee (maker ~3.2bps after rebate)
+    const latencyMs = req.frictionConfig?.latencyMs ?? 80.0;     // 80ms realistic cross-region latency
 
     const now = Date.now();
     let durationMs = 3 * 86400000;
@@ -378,13 +440,21 @@ export class BacktestService {
             const windowDrift = (currentSpot - startCandle.open) / (startCandle.open || 1);
             const spotDrift = Math.abs(barDrift) >= Math.abs(windowDrift) ? barDrift : windowDrift;
 
-            // Network latency edge decay penalty
-            const latencyEdgePenalty = (latencyMs / 1000) * 0.04;
+            // Network latency edge decay penalty - realistic: 80ms ≈ 1.2% decay, 150ms ≈ 2.25%
+            const latencyEdgePenalty = (latencyMs / 1000) * 0.15;
 
             if (Math.abs(spotDrift) >= driftThreshold) {
-              if (spotDrift > 0) {
-                // Spot surged -> resting YES ask on CLOB is lagging prior spot
-                const lagAskYes = quantizePrice(Math.min(0.99, Math.max(0.01, lagFairYes + halfSpread)));
+              // Realistic: require BOTH bar and window drift to confirm momentum (not just one)
+              const barDriftAbs = Math.abs(barDrift);
+              const windowDriftAbs = Math.abs(windowDrift);
+              const driftConfirmed = barDriftAbs >= driftThreshold && windowDriftAbs >= driftThreshold * 0.7 && Math.sign(barDrift) === Math.sign(windowDrift);
+              if (!driftConfirmed) {
+                // skip unconfirmed drift - noise
+              } else if (spotDrift > 0) {
+                // Spot surged -> resting YES ask is mostly updated (80% priced in), only 20% edge remains
+                const priceDiscovery = 0.80;
+                const partialLagYes = lagFairYes + (fairYes - lagFairYes) * priceDiscovery;
+                const lagAskYes = quantizePrice(Math.min(0.99, Math.max(0.01, partialLagYes + halfSpread)));
                 const edge = (fairYes - lagAskYes) - latencyEdgePenalty;
                 if (edge >= minEdge && lagAskYes <= 0.95 && lagAskYes >= 0.05) {
                   tradeExecuted = true;
@@ -393,8 +463,9 @@ export class BacktestService {
                   tradePrice = lagAskYes;
                 }
               } else {
-                // Spot dumped -> resting NO ask on CLOB is lagging prior spot
-                const lagAskNo = quantizePrice(Math.min(0.99, Math.max(0.01, lagFairNo + halfSpread)));
+                const priceDiscovery = 0.80;
+                const partialLagNo = lagFairNo + (fairNo - lagFairNo) * priceDiscovery;
+                const lagAskNo = quantizePrice(Math.min(0.99, Math.max(0.01, partialLagNo + halfSpread)));
                 const edge = (fairNo - lagAskNo) - latencyEdgePenalty;
                 if (edge >= minEdge && lagAskNo <= 0.95 && lagAskNo >= 0.05) {
                   tradeExecuted = true;
@@ -442,14 +513,18 @@ export class BacktestService {
           const barReturn = (currentCandle.close - currentCandle.open) / (currentCandle.open || 1);
           const absReturn = Math.abs(barReturn);
 
-          // Range-bound window with balanced two-sided retail flow -> captures continuous spread
+          // Range-bound window with balanced two-sided retail flow -> attempts to capture spread
+          // Realistic: spread capture is NOT risk-free; maker still has directional expiry risk
           if (absReturn < 0.0018 && windowExecutedTrades === 0) {
             tradeExecuted = true;
             tradeAction = 'MM_SPREAD_CAPTURE';
             tradeOutcome = fairYes >= 0.5 ? 'YES' : 'NO';
             tradePrice = fairYes >= 0.5 ? mmBidYes : mmAskYes;
+            // Small inventory tick for spread capture, mean-reverting: decay existing inventory 5% per window
+            netInventory *= 0.95;
+            netInventory += tradeOutcome === 'YES' ? lotSize * 0.2 : -lotSize * 0.2;
           } else if (absReturn >= 0.0022 && Math.abs(netInventory) < 15) {
-            // Sudden trend breakout -> takers aggress against shaded quote
+            // Sudden trend breakout -> takers aggress against shaded quote (adverse selection)
             tradeExecuted = true;
             tradeAction = 'MM_INVENTORY_FILL';
             if (barReturn > 0) {
@@ -469,26 +544,33 @@ export class BacktestService {
           windowExecutedTrades++;
           const isWin = tradeOutcome === winningOutcome;
 
-          // Market makers providing resting liquidity pay 0 fee (maker rebate tier), while takers incur slippage and fee
+          // Execution friction: takers pay full slippage + fee, makers get reduced slippage/fees but still pay
+          // Realistic: maker rebate is ~30% of taker, slippage is half, but adverse selection remains
           const isMaker = tradeAction === 'MM_SPREAD_CAPTURE';
           const effectivePrice = isMaker
-            ? tradePrice
+            ? quantizePrice(Math.min(0.99, Math.max(0.01, tradePrice + (slippageBps * 0.00005)))) // makers slip half
             : quantizePrice(Math.min(0.99, Math.max(0.01, tradePrice + (slippageBps * 0.0001))));
 
+          const makerFeeBps = Math.max(1.0, feeBps * 0.4); // maker rebate ~60%
           const tradeFee = isMaker
-            ? 0
+            ? Number((effectivePrice * lotSize * (makerFeeBps * 0.0001)).toFixed(3))
             : Number((effectivePrice * lotSize * (feeBps * 0.0001)).toFixed(3));
 
-          let grossPnl = 0;
-          if (tradeAction === 'MM_SPREAD_CAPTURE') {
-            // Market maker captures spread scaled by candle turnover liquidity
-            const liquidityTurnover = Math.min(3.0, Math.max(1.0, currentCandle.volume / 120.0));
-            grossPnl = Number((targetSpread * lotSize * liquidityTurnover).toFixed(2));
-          } else {
-            // Binary contract payoff: Win payout ($1.00 per lot) minus entry cost, or 0 payout minus entry cost
-            grossPnl = isWin
-              ? Number(((1.0 - effectivePrice) * lotSize).toFixed(2))
-              : Number((-effectivePrice * lotSize).toFixed(2));
+          // Realistic PnL: ALL trades settle as binary contracts (win $1 - cost or lose cost)
+          // Market-maker still has directional expiry risk; no guaranteed spread profit
+          let grossPnl = isWin
+            ? Number(((1.0 - effectivePrice) * lotSize).toFixed(2))
+            : Number((-effectivePrice * lotSize).toFixed(2));
+
+          if (isMaker) {
+            // Maker fill probability ~90% and small inventory skew cost; haircut only on wins to reflect adverse selection
+            if (isWin) {
+              grossPnl = Number((grossPnl * 0.96 - Math.abs(netInventory) * 0.002).toFixed(2));
+            } else {
+              // Losers slightly worse due to adverse selection (being picked off)
+              grossPnl = Number((grossPnl * 1.04).toFixed(2));
+            }
+            grossPnl = Math.max(-5 * lotSize, Math.min(5 * lotSize, grossPnl));
           }
 
           const netPnlPerTrade = Number((grossPnl - tradeFee).toFixed(2));
@@ -565,13 +647,18 @@ export class BacktestService {
       const variance = tradeReturns.reduce((a, b) => a + (b - mean) ** 2, 0) / (tradeReturns.length - 1);
       const std = Math.sqrt(variance);
 
-      // Annualize factor based on trade frequency
-      const annualizeFactor = Math.sqrt(Math.min(5000, tradeReturns.length * 52));
+      // Annualize factor - realistic: use sqrt(365) for crypto 24/7 daily returns, not tradeCount*52 which inflated Sharpe to 4.8+
+      // Trade returns are per-trade, not per-day; annualize by sqrt(number of periods per year) based on timeframe
+      const periodsPerYearMap: Record<string, number> = { '1m': 525600, '5m': 105120, '15m': 35040, '1h': 8760 };
+      const periodsPerYear = periodsPerYearMap[timeframe] ?? 105120;
+      const avgTradesPerPeriod = trades.length / Math.max(1, candles.length);
+      const tradesPerYear = periodsPerYear * avgTradesPerPeriod;
+      const annualizeFactor = Math.sqrt(Math.max(1, Math.min(365, tradesPerYear)));
 
       if (std > 0.0001) {
         sharpeRatio = Number(Math.max(-4.0, Math.min(4.8, (mean / std) * annualizeFactor)).toFixed(2));
       } else if (mean > 0) {
-        sharpeRatio = 3.25;
+        sharpeRatio = Math.min(2.2, Number((mean * 100).toFixed(2)));
       }
 
       // Sortino Ratio calculates downside semivariance
@@ -581,7 +668,7 @@ export class BacktestService {
       if (downsideStd > 0.0001) {
         sortinoRatio = Number(Math.max(-4.0, Math.min(6.5, (mean / downsideStd) * annualizeFactor)).toFixed(2));
       } else if (mean > 0) {
-        sortinoRatio = 4.5;
+        sortinoRatio = Math.min(3.0, Number((mean * 140).toFixed(2)));
       }
     }
 

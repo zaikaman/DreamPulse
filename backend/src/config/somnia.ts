@@ -114,7 +114,14 @@ export const somniaExchange = new SomniaMarkets({
 export const MIN_OPERATOR_GAS_WEI = 1_000_000_000_000_000n;
 
 let cachedOperatorGas: { balance: bigint; timestamp: number } | null = null;
-const GAS_CACHE_TTL_MS = 15_000; // 15 seconds
+const GAS_CACHE_TTL_MS = 5_000; // 5 seconds — short TTL so STT deposit is recognized quickly and low-gas pauses lift fast
+
+/**
+ * Invalidates cached gas balance so next check hits chain head.
+ */
+export function invalidateOperatorGasCache(): void {
+  cachedOperatorGas = null;
+}
 
 /**
  * Returns the operator's native STT balance with TTL caching to avoid RPC spam.

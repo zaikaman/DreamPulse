@@ -22,6 +22,8 @@ export interface UseSessionKeyReturn {
   isFauceting: boolean;
   stepState: 'idle' | 'authorizing_onchain' | 'depositing_vault' | 'signing_eip712' | 'registering_backend';
   error: string | null;
+  allowanceStatus: { allReady: boolean; checks: Array<{ pool: string; allowanceHuman: number; balanceHuman: number; vaultHuman: number; ready: boolean }>; guidance: string } | null;
+  isFixingAllowance: boolean;
   connectWallet: () => Promise<void>;
   disconnectWallet: () => void;
   switchNetwork: () => Promise<void>;
@@ -35,6 +37,8 @@ export interface UseSessionKeyReturn {
   }) => Promise<SessionGrant>;
   revokeSession: (options?: { onChain?: boolean }) => Promise<void>;
   refreshSession: () => Promise<void>;
+  ensureAllowances: () => Promise<void>;
+  refreshAllowanceStatus: () => Promise<void>;
   clearError: () => void;
 }
 
@@ -69,10 +73,16 @@ export function useSessionKey(): UseSessionKeyReturn {
   const [isLoading, setIsLoading] = useState<boolean>(false);
   const [isSigning, setIsSigning] = useState<boolean>(false);
   const [isFauceting, setIsFauceting] = useState<boolean>(false);
+  const [isFixingAllowance, setIsFixingAllowance] = useState<boolean>(false);
   const [stepState, setStepState] = useState<
     'idle' | 'authorizing_onchain' | 'depositing_vault' | 'signing_eip712' | 'registering_backend'
   >('idle');
   const [error, setError] = useState<string | null>(null);
+  const [allowanceStatus, setAllowanceStatus] = useState<{
+    allReady: boolean;
+    checks: Array<{ pool: string; allowanceHuman: number; balanceHuman: number; vaultHuman: number; ready: boolean }>;
+    guidance: string;
+  } | null>(null);
 
   const clearError = useCallback(() => setError(null), []);
 
@@ -119,6 +129,50 @@ export function useSessionKey(): UseSessionKeyReturn {
   }, []);
 
   /**
+   * Fetches allowance status for active copy-trade pools (to surface 0x3fb0ba2e fix).
+   */
+  const refreshAllowanceStatus = useCallback(async () => {
+    if (!wallet.address) return;
+    try {
+      const res = await apiClient.getAllowanceStatus(wallet.address);
+      if (res.success) {
+        setAllowanceStatus({ allReady: res.allReady, checks: res.checks as any, guidance: res.guidance });
+      }
+    } catch (err) {
+      console.warn('[useSessionKey] Allowance status fetch error:', err);
+    }
+  }, [wallet.address]);
+
+  const ensureAllowances = useCallback(async () => {
+    if (!wallet.address) throw new Error('Wallet not connected');
+    setIsFixingAllowance(true);
+    setError(null);
+    try {
+      // Prefer 24h future pool set (Listed + FreePools) so next windows are already approved
+      let pools: Address[] = [];
+      try {
+        const futureRes = await apiClient.getFuturePools();
+        if (futureRes?.pools?.length) pools = futureRes.pools.slice(0, 80) as Address[];
+      } catch {}
+      if (pools.length === 0) {
+        const marketsRes = await apiClient.getMarkets({ status: 'Open' });
+        pools = [...new Set((marketsRes.data || []).map((m: any) => m.poolAddress).filter(Boolean))] as Address[];
+        pools = pools.slice(0, 15) as Address[];
+      }
+      if (pools.length === 0) throw new Error('No pools discovered for 24h horizon');
+      // Batch via EIP-5792 (1 popup for N pools)
+      await web3Service.ensureAllowancesForPools({ userAddress: wallet.address, pools });
+      await refreshAllowanceStatus();
+      await refreshBalances(wallet.address);
+    } catch (err: any) {
+      setError(err.message || 'Failed to fix allowances');
+      throw err;
+    } finally {
+      setIsFixingAllowance(false);
+    }
+  }, [wallet.address, refreshAllowanceStatus]);
+
+  /**
    * Fetches active session from backend API and Supabase.
    */
   const fetchActiveSession = useCallback(async (address: Address) => {
@@ -141,7 +195,7 @@ export function useSessionKey(): UseSessionKeyReturn {
             onChainTxHash: s.onChainTxHash,
             vaultDepositAmount: s.vaultDepositAmount,
             targetPoolAddress: s.targetPoolAddress,
-            onChainAuthorized: s.onChainAuthorized ?? true,
+            onChainAuthorized: s.onChainAuthorized === true,
           };
 
           if (new Date(sessionGrant.expiresAt).getTime() > Date.now() && sessionGrant.isActive) {
@@ -181,7 +235,7 @@ export function useSessionKey(): UseSessionKeyReturn {
             onChainTxHash: row.on_chain_tx_hash,
             vaultDepositAmount: row.vault_deposit_amount,
             targetPoolAddress: row.target_pool_address,
-            onChainAuthorized: row.on_chain_authorized ?? true,
+            onChainAuthorized: row.on_chain_authorized === true,
           };
           setActiveSession(sessionGrant);
           localStorage.setItem(LOCAL_SESSION_KEY, JSON.stringify(sessionGrant));
@@ -219,12 +273,14 @@ export function useSessionKey(): UseSessionKeyReturn {
 
       await refreshBalances(address);
       await fetchActiveSession(address);
+      // Probe per-pool allowance so UI can surface 0x3fb0ba2e fix banner
+      try { await refreshAllowanceStatus(); } catch {}
     } catch (err: any) {
       setError(err.message || 'Failed to connect wallet');
     } finally {
       setIsLoading(false);
     }
-  }, [refreshBalances, fetchActiveSession]);
+  }, [refreshBalances, fetchActiveSession, refreshAllowanceStatus]);
 
   /**
    * Disconnects current wallet.
@@ -241,6 +297,7 @@ export function useSessionKey(): UseSessionKeyReturn {
       isCorrectNetwork: false,
     });
     setActiveSession(null);
+    setAllowanceStatus(null);
   }, []);
 
   /**
@@ -284,27 +341,88 @@ export function useSessionKey(): UseSessionKeyReturn {
       let onChainTxHash: `0x${string}` | undefined;
 
       try {
-        // Step 1: On-Chain Operator Authorization
+        // Step 1+2b (batched): On-chain operator approval + TestUSDC allowances to ALL future pools (24h horizon) in ONE wallet popup (EIP-5792)
+        // Covers Listed + FreePools so next 5m windows don't need another click
         setStepState('authorizing_onchain');
-        if (params.targetPool) {
-          const res = await web3Service.grantOperatorForPool({
-            userAddress: wallet.address,
-            pool: params.targetPool,
-            operator: SOMNIA_ADDRESSES.operatorAccount,
-            approved: true,
-          });
-          onChainTxHash = res.hash;
+        let poolsForBatch: Address[] = [];
+        if (!params.targetPool) {
+          try {
+            const futureRes = await apiClient.getFuturePools().catch(() => null);
+            if (futureRes?.pools?.length) {
+              poolsForBatch = futureRes.pools.slice(0, 80) as Address[];
+            } else {
+              const marketsRes = await apiClient.getMarkets({ status: 'Open' });
+              poolsForBatch = [...new Set(
+                (marketsRes.data || [])
+                  .map((m: any) => m.poolAddress)
+                  .filter((p: string | undefined) => p && p.startsWith('0x') && p !== SOMNIA_ADDRESSES.binaryModule)
+              )] as Address[];
+              poolsForBatch = poolsForBatch.slice(0, 15);
+            }
+          } catch {}
         } else {
-          const res = await web3Service.grantOperatorGlobal({
-            userAddress: wallet.address,
-            operator: SOMNIA_ADDRESSES.operatorAccount,
-            approved: true,
-          });
-          onChainTxHash = res.hash;
+          poolsForBatch = [params.targetPool as Address];
         }
 
-        // Step 2: (Optional) Collateral Deposit & Vault Mode Setup
-        if (params.depositAmount && params.depositAmount > 0) {
+        // Try single batch for operator + all pool approvals (1 click)
+        if (poolsForBatch.length > 0 || !params.targetPool) {
+          try {
+            const batchRes = await web3Service.batchAuthorizeAndApprovePools({
+              userAddress: wallet.address,
+              pools: poolsForBatch,
+            });
+            onChainTxHash = batchRes.operatorHash || batchRes.allowanceHashes[0];
+            // If operator was already approved and no pool needed approval, batch returns empty — fallback to check
+            if (!onChainTxHash) {
+              // No on-chain write needed (already approved) — keep undefined, backend will verify via isGloballyApproved
+              onChainTxHash = undefined;
+            }
+          } catch (batchErr: any) {
+            // Batch already handles fallback; only rethrow user rejection
+            if (String(batchErr?.message || '').includes('User rejected') || String(batchErr?.message || '').includes('rejected')) throw batchErr;
+            console.warn('[useSessionKey] Batch authorize notice, trying fallback:', batchErr.message);
+            // Fallback: sequential (should already have been tried inside batch method, but ensure)
+            if (params.targetPool) {
+              const res = await web3Service.grantOperatorForPool({
+                userAddress: wallet.address,
+                pool: params.targetPool,
+                operator: SOMNIA_ADDRESSES.operatorAccount,
+                approved: true,
+              });
+              onChainTxHash = res.hash;
+              await web3Service.ensureAllowancesForPools({ userAddress: wallet.address, pools: poolsForBatch });
+            } else {
+              const res = await web3Service.grantOperatorGlobal({
+                userAddress: wallet.address,
+                operator: SOMNIA_ADDRESSES.operatorAccount,
+                approved: true,
+              });
+              onChainTxHash = res.hash;
+              if (poolsForBatch.length > 0) await web3Service.ensureAllowancesForPools({ userAddress: wallet.address, pools: poolsForBatch });
+            }
+          }
+        } else {
+          // No pools to approve — just operator
+          if (params.targetPool) {
+            const res = await web3Service.grantOperatorForPool({
+              userAddress: wallet.address,
+              pool: params.targetPool,
+              operator: SOMNIA_ADDRESSES.operatorAccount,
+              approved: true,
+            });
+            onChainTxHash = res.hash;
+          } else {
+            const res = await web3Service.grantOperatorGlobal({
+              userAddress: wallet.address,
+              operator: SOMNIA_ADDRESSES.operatorAccount,
+              approved: true,
+            });
+            onChainTxHash = res.hash;
+          }
+        }
+
+        // Step 2: (Optional) Collateral vault deposit — only for SpotPools, BinaryPools use allowance only
+        if (params.depositAmount && params.depositAmount > 0 && params.targetPool) {
           setStepState('depositing_vault');
           await web3Service.setupPoolVault({
             userAddress: wallet.address,
@@ -411,8 +529,9 @@ export function useSessionKey(): UseSessionKeyReturn {
     if (wallet.address) {
       await refreshBalances(wallet.address);
       await fetchActiveSession(wallet.address);
+      await refreshAllowanceStatus().catch(() => {});
     }
-  }, [wallet.address, refreshBalances, fetchActiveSession]);
+  }, [wallet.address, refreshBalances, fetchActiveSession, refreshAllowanceStatus]);
 
   // Auto-reconnect on mount if previously connected in localStorage
   useEffect(() => {
@@ -438,6 +557,7 @@ export function useSessionKey(): UseSessionKeyReturn {
 
         await refreshBalances(auth.address);
         await fetchActiveSession(auth.address);
+        await refreshAllowanceStatus().catch(() => {});
       } catch (err) {
         console.warn('[useSessionKey] Auto-reconnect notice:', err);
       }
@@ -448,7 +568,7 @@ export function useSessionKey(): UseSessionKeyReturn {
     return () => {
       isMounted = false;
     };
-  }, [refreshBalances, fetchActiveSession]);
+  }, [refreshBalances, fetchActiveSession, refreshAllowanceStatus]);
 
   // Wallet event subscriptions
   useEffect(() => {
@@ -465,6 +585,7 @@ export function useSessionKey(): UseSessionKeyReturn {
           }));
           refreshBalances(newAddress);
           fetchActiveSession(newAddress);
+          refreshAllowanceStatus().catch(() => {});
         }
       },
       onChainChanged: (chainIdHex) => {
@@ -528,14 +649,24 @@ export function useSessionKey(): UseSessionKeyReturn {
     };
   }, [wallet.address]);
 
+  // Keep allowance status fresh while wallet is connected
+  useEffect(() => {
+    if (!wallet.isConnected || !wallet.address || !wallet.isCorrectNetwork) return;
+    refreshAllowanceStatus().catch(() => {});
+    const id = setInterval(() => refreshAllowanceStatus().catch(() => {}), 30000);
+    return () => clearInterval(id);
+  }, [wallet.isConnected, wallet.address, wallet.isCorrectNetwork, refreshAllowanceStatus]);
+
   return {
     wallet,
     activeSession,
     isLoading,
     isSigning,
     isFauceting,
+    isFixingAllowance,
     stepState,
     error,
+    allowanceStatus,
     connectWallet,
     disconnectWallet,
     switchNetwork,
@@ -543,6 +674,8 @@ export function useSessionKey(): UseSessionKeyReturn {
     createSession,
     revokeSession,
     refreshSession,
+    ensureAllowances,
+    refreshAllowanceStatus,
     clearError,
   };
 }
