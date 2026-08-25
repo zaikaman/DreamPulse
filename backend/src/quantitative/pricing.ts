@@ -1,4 +1,5 @@
 import { calculateBinaryYesProbability, calculateZScore } from './cdf.js';
+import { quantizeLotSize } from './quantizer.js';
 
 export const DEFAULT_ANNUAL_VOLATILITY: Record<string, number> = {
   'BTC/USD': 0.52,
@@ -47,10 +48,218 @@ export function calculateSpotDrift(currentSpot: number, referenceSpot: number): 
   return (currentSpot - referenceSpot) / referenceSpot;
 }
 
+/**
+ * Calculates rolling annualized realized volatility from high-frequency tick/price history.
+ * Uses sample variance of log returns scaled to annual fractional factor.
+ * 
+ * @param priceHistory Historical timestamp and price observations
+ * @param symbol Fallback asset symbol for baseline prior
+ * @param windowSeconds Window length in seconds (defaults to 300s / 5m)
+ * @returns Annualized volatility bounded between [0.15, 2.50] (15% to 250%)
+ */
+export function calculateRealizedVolatility(
+  priceHistory?: Array<{ timestamp: number; price: number }>,
+  symbol: string = 'BTC/USD',
+  windowSeconds: number = 300,
+): number {
+  const fallback = DEFAULT_ANNUAL_VOLATILITY[symbol] ?? DEFAULT_ANNUAL_VOLATILITY.DEFAULT;
+  if (!priceHistory || priceHistory.length < 5) {
+    return fallback;
+  }
+
+  const now = priceHistory[priceHistory.length - 1].timestamp;
+  const cutoff = now - windowSeconds * 1000;
+  const windowPrices = priceHistory.filter((p) => p.timestamp >= cutoff && p.price > 0);
+
+  if (windowPrices.length < 4) {
+    return fallback;
+  }
+
+  // Calculate log returns between consecutive observations
+  const logReturns: number[] = [];
+  const timeDeltas: number[] = [];
+  for (let i = 1; i < windowPrices.length; i++) {
+    const pPrev = windowPrices[i - 1].price;
+    const pCurr = windowPrices[i].price;
+    const dt = (windowPrices[i].timestamp - windowPrices[i - 1].timestamp) / 1000; // in seconds
+    if (pPrev > 0 && pCurr > 0 && dt > 0) {
+      logReturns.push(Math.log(pCurr / pPrev));
+      timeDeltas.push(dt);
+    }
+  }
+
+  if (logReturns.length < 3) {
+    return fallback;
+  }
+
+  // Mean return
+  const mean = logReturns.reduce((sum, r) => sum + r, 0) / logReturns.length;
+
+  // Total elapsed time in window
+  const totalDtSeconds = timeDeltas.reduce((sum, dt) => sum + dt, 0);
+  if (totalDtSeconds <= 0) return fallback;
+
+  // Sample variance of log returns
+  const variance = logReturns.reduce((sum, r) => sum + Math.pow(r - mean, 2), 0) / (logReturns.length - 1);
+  const avgDtSeconds = totalDtSeconds / logReturns.length;
+
+  // Annualize variance: Var_annual = (Var_dt / avgDt) * SECONDS_PER_YEAR
+  const annualizedVariance = (variance / avgDtSeconds) * SECONDS_PER_YEAR;
+  const rawVol = Math.sqrt(Math.max(0, annualizedVariance));
+
+  // Blend with baseline prior based on sample size confidence (Bayesian shrinkage)
+  const confidenceWeight = Math.min(1.0, logReturns.length / 30);
+  const blendedVol = confidenceWeight * rawVol + (1 - confidenceWeight) * fallback;
+
+  // Clamp to realistic asset boundaries [15%, 250%]
+  return Number(Math.min(2.50, Math.max(0.15, blendedVol)).toFixed(4));
+}
+
+/**
+ * Calculates exponentially weighted moving average (EWMA) realized volatility from tick history.
+ * Standard RiskMetrics decay factor lambda = 0.94 provides smooth, responsive volatility estimates.
+ */
+export function calculateEWMARealizedVolatility(
+  priceHistory?: Array<{ timestamp: number; price: number }>,
+  symbol: string = 'BTC/USD',
+  lambda: number = 0.94,
+  windowSeconds: number = 300,
+): number {
+  const fallback = DEFAULT_ANNUAL_VOLATILITY[symbol] ?? DEFAULT_ANNUAL_VOLATILITY.DEFAULT;
+  if (!priceHistory || priceHistory.length < 5) {
+    return fallback;
+  }
+
+  const now = priceHistory[priceHistory.length - 1].timestamp;
+  const cutoff = now - windowSeconds * 1000;
+  const windowPrices = priceHistory.filter((p) => p.timestamp >= cutoff && p.price > 0);
+
+  if (windowPrices.length < 4) {
+    return fallback;
+  }
+
+  const logReturns: number[] = [];
+  const timeDeltas: number[] = [];
+  for (let i = 1; i < windowPrices.length; i++) {
+    const pPrev = windowPrices[i - 1].price;
+    const pCurr = windowPrices[i].price;
+    const dt = (windowPrices[i].timestamp - windowPrices[i - 1].timestamp) / 1000;
+    if (pPrev > 0 && pCurr > 0 && dt > 0) {
+      logReturns.push(Math.log(pCurr / pPrev));
+      timeDeltas.push(dt);
+    }
+  }
+
+  if (logReturns.length < 3) {
+    return fallback;
+  }
+
+  const avgDtSeconds = timeDeltas.reduce((sum, dt) => sum + dt, 0) / timeDeltas.length;
+  if (avgDtSeconds <= 0) return fallback;
+
+  // Compute EWMA variance with reverse exponential weighting
+  let weightedVariance = 0;
+  let weightSum = 0;
+  let currentWeight = 1.0;
+
+  for (let i = logReturns.length - 1; i >= 0; i--) {
+    const r = logReturns[i];
+    weightedVariance += currentWeight * Math.pow(r, 2);
+    weightSum += currentWeight;
+    currentWeight *= lambda;
+  }
+
+  const ewmaVariance = weightSum > 0 ? weightedVariance / weightSum : 0;
+  const annualizedVariance = (ewmaVariance / avgDtSeconds) * SECONDS_PER_YEAR;
+  const rawVol = Math.sqrt(Math.max(0, annualizedVariance));
+
+  // Bayesian prior blending with asset baseline
+  const sampleConfidence = Math.min(1.0, logReturns.length / 25);
+  const blendedVol = sampleConfidence * rawVol + (1.0 - sampleConfidence) * fallback;
+
+  return Number(Math.min(2.50, Math.max(0.15, blendedVol)).toFixed(4));
+}
+
+export interface DepthVWAPResult {
+  vwapPrice: number;
+  topPrice: number;
+  availableLots: number;
+  filledLots: number;
+  fullyFilled: boolean;
+  slippageVsTop: number;
+  effectiveTotalCost: number;
+}
+
+/**
+ * Walks the order book depth ladder to calculate the volume-weighted average price (VWAP)
+ * and assess market impact / liquidity depth for a requested lot size.
+ */
+export function calculateDepthVWAP(
+  levels: Array<{ price: number; quantity: number }> | undefined,
+  requestedLots: number,
+): DepthVWAPResult {
+  if (!levels || levels.length === 0 || requestedLots <= 0) {
+    return {
+      vwapPrice: 0,
+      topPrice: 0,
+      availableLots: 0,
+      filledLots: 0,
+      fullyFilled: false,
+      slippageVsTop: 0,
+      effectiveTotalCost: 0,
+    };
+  }
+
+  const topPrice = levels[0].price;
+  let remainingLots = requestedLots;
+  let totalCost = 0;
+  let filledLots = 0;
+  let totalAvailable = 0;
+
+  for (const level of levels) {
+    totalAvailable += level.quantity;
+    if (remainingLots > 0 && level.quantity > 0) {
+      const takeQty = Math.min(remainingLots, level.quantity);
+      totalCost += takeQty * level.price;
+      filledLots += takeQty;
+      remainingLots -= takeQty;
+    }
+  }
+
+  const vwapPrice = filledLots > 0 ? Number((totalCost / filledLots).toFixed(4)) : topPrice;
+  const slippageVsTop = topPrice > 0 ? Number((Math.abs(vwapPrice - topPrice) / topPrice).toFixed(4)) : 0;
+
+  return {
+    vwapPrice,
+    topPrice,
+    availableLots: totalAvailable,
+    filledLots,
+    fullyFilled: remainingLots <= 0.0001,
+    slippageVsTop,
+    effectiveTotalCost: Number(totalCost.toFixed(4)),
+  };
+}
+
+/**
+ * Calculates net executable edge after accounting for exchange taker fees and gas friction.
+ */
+export function calculateNetExecutableEdge(
+  fairValue: number,
+  executionPrice: number,
+  takerFeeRate: number = 0.003, // 0.30% taker fee
+  gasHurdle: number = 0.004,    // 0.40% equivalent gas hurdle
+): number {
+  if (executionPrice <= 0 || fairValue <= 0) return -1;
+  const rawEdge = fairValue - executionPrice;
+  const totalCostFriction = executionPrice * takerFeeRate + gasHurdle;
+  return Number((rawEdge - totalCostFriction).toFixed(4));
+}
+
 export interface FairValueResult {
   fairValueYes: number;
   fairValueNo: number;
   zScore: number;
+  volatilityUsed: number;
   timeRemainingSeconds: number;
 }
 
@@ -63,8 +272,16 @@ export function calculateFairValue(
   timeRemainingSeconds: number,
   symbol: string = 'BTC/USD',
   customVolatility?: number,
+  priceHistory?: Array<{ timestamp: number; price: number }>,
 ): FairValueResult {
-  const vol = customVolatility ?? DEFAULT_ANNUAL_VOLATILITY[symbol] ?? DEFAULT_ANNUAL_VOLATILITY.DEFAULT;
+  let vol: number;
+  if (customVolatility !== undefined && customVolatility > 0) {
+    vol = customVolatility;
+  } else if (priceHistory && priceHistory.length >= 5) {
+    vol = calculateEWMARealizedVolatility(priceHistory, symbol);
+  } else {
+    vol = DEFAULT_ANNUAL_VOLATILITY[symbol] ?? DEFAULT_ANNUAL_VOLATILITY.DEFAULT;
+  }
   const timeYears = secondsToYears(Math.max(1, timeRemainingSeconds));
 
   const z = calculateZScore(spot, strike, vol, timeYears);
@@ -75,6 +292,7 @@ export function calculateFairValue(
     fairValueYes: Number(fairYes.toFixed(4)),
     fairValueNo: fairNo,
     zScore: Number(z.toFixed(4)),
+    volatilityUsed: Number(vol.toFixed(4)),
     timeRemainingSeconds: Math.max(0, Math.floor(timeRemainingSeconds)),
   };
 }
@@ -143,3 +361,53 @@ export function calculateEdge(
     actionRecommendation: action,
   };
 }
+
+/**
+ * Calculates a dynamic volatility-normalized drift threshold:
+ * threshold = kSigma * sigma_annual * sqrt(intervalSeconds / SECONDS_PER_YEAR)
+ * Clamped to safe institutional bounds [0.0010, 0.0080] (0.10% to 0.80%).
+ */
+export function calculateVolatilityNormalizedDriftThreshold(
+  volatility: number,
+  kSigma: number = 2.5,
+  intervalSeconds: number = 60,
+  minBound: number = 0.0010,
+  maxBound: number = 0.0080,
+): number {
+  const safeVol = Math.max(0.10, Math.min(3.0, volatility));
+  const dtFraction = Math.max(1, intervalSeconds) / SECONDS_PER_YEAR;
+  const sigmaInterval = safeVol * Math.sqrt(dtFraction);
+  const rawThreshold = kSigma * sigmaInterval;
+  return Number(Math.max(minBound, Math.min(maxBound, rawThreshold)).toFixed(4));
+}
+
+/**
+ * Calculates edge-proportional (Fractional Kelly) lot size allocation.
+ * Scales base lots up on high-conviction mathematical edges and down on marginal edges,
+ * strictly bounded by the risk capital limit (maxTradeSizeUsd).
+ */
+export function calculateEdgeProportionalLots(
+  baseLots: number,
+  netEdge: number,
+  minEdge: number,
+  maxTradeSizeUsd: number,
+  executionPrice: number,
+  lotStep: number = 1.0,
+  minLotSize: number = 1.0,
+): number {
+  if (executionPrice <= 0 || baseLots <= 0) return 0;
+  const safeMinEdge = Math.max(0.005, minEdge);
+
+  // Edge scale ratio: 1.0 at minEdge, scales up to 2.5x at 3x minEdge, floors at 0.5x
+  const edgeRatio = netEdge / safeMinEdge;
+  const scaleMultiplier = Math.max(0.5, Math.min(2.5, 1.0 + (edgeRatio - 1.0) * 0.75));
+  const targetLots = baseLots * scaleMultiplier;
+
+  const maxAffordableLots = maxTradeSizeUsd > 0
+    ? Math.floor(maxTradeSizeUsd / executionPrice)
+    : targetLots;
+
+  const finalLots = Math.max(minLotSize, Math.min(targetLots, maxAffordableLots));
+  return quantizeLotSize(finalLots, lotStep, minLotSize);
+}
+

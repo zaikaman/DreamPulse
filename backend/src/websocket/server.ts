@@ -7,6 +7,7 @@ export interface ClientSubscription {
   symbols: Set<string>;
   agentTypes: Set<string>;
   userAddresses: Set<string>;
+  isAlive: boolean;
 }
 
 export class TelemetryWebSocketServer {
@@ -27,9 +28,17 @@ export class TelemetryWebSocketServer {
         symbols: new Set(['BTC/USD', 'ETH/USD']),
         agentTypes: new Set(['Volt', 'Oracle', 'Titan', 'Sweeper']),
         userAddresses: new Set(),
+        isAlive: true,
       };
 
       this.clients.set(ws, subscription);
+
+      ws.on('pong', () => {
+        const sub = this.clients.get(ws);
+        if (sub) {
+          sub.isAlive = true;
+        }
+      });
 
       ws.on('message', (data: Buffer | string) => {
         try {
@@ -56,12 +65,20 @@ export class TelemetryWebSocketServer {
       });
     });
 
-    // Heartbeat to keep connections alive
+    // Heartbeat to keep connections alive and terminate dead zombie sockets
     this.pingInterval = setInterval(() => {
       if (!this.wss) return;
-      for (const [ws] of this.clients) {
+      for (const [ws, sub] of this.clients) {
         if (ws.readyState === WebSocket.OPEN) {
+          if (sub.isAlive === false) {
+            this.clients.delete(ws);
+            ws.terminate();
+            continue;
+          }
+          sub.isAlive = false;
           ws.ping();
+        } else {
+          this.clients.delete(ws);
         }
       }
     }, 30000);

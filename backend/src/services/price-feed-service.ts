@@ -1,5 +1,6 @@
 import { EventEmitter } from 'events';
 import WebSocket from 'ws';
+import { calculateRealizedVolatility } from '../quantitative/pricing.js';
 
 export interface SpotTicker {
   symbol: string;
@@ -313,6 +314,11 @@ export class PriceFeedService extends EventEmitter {
     this.recordPriceUpdate(symbol, newPrice, ticker.high24h, ticker.low24h, ticker.volume24h);
   }
 
+  public getRealizedVolatility(symbol: string, windowSeconds?: number): number {
+    const ticker = this.spotPrices.get(symbol);
+    return calculateRealizedVolatility(ticker?.priceHistory, symbol, windowSeconds);
+  }
+
   public getSpotTicker(symbol: string): SpotTicker | undefined {
     return this.spotPrices.get(symbol);
   }
@@ -373,6 +379,10 @@ export class PriceFeedService extends EventEmitter {
         }
       }
       if (closest != null) {
+        if (this.historicalPriceCache.size > 2000) {
+          const firstKey = this.historicalPriceCache.keys().next().value;
+          if (firstKey) this.historicalPriceCache.delete(firstKey);
+        }
         this.historicalPriceCache.set(cacheKey, closest);
       }
       return closest;

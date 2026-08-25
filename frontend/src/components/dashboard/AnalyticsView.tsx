@@ -23,6 +23,7 @@ import {
   RefreshCw,
   LineChart,
   Gauge,
+  Flame,
 } from 'lucide-react';
 import { useAnalytics, type AnalyticsRange, type EquityPoint, type DailyBar } from '../../hooks/useAnalytics.js';
 import type { WalletState } from '../../hooks/useSessionKey.js';
@@ -520,8 +521,20 @@ export const AnalyticsView: React.FC<AnalyticsViewProps> = ({ wallet, onConnectW
             <span style={{ fontSize: 10, fontWeight: 700, color: 'var(--muted-foreground)', letterSpacing: '0.06em' }}>STREAK & EXTREMES</span>
             <Activity size={14} style={{ color: 'var(--brand-cyan)' }} />
           </div>
-          <div style={{ fontSize: 14, fontWeight: 800, fontFamily: 'var(--font-mono)', color: (summary?.currentStreak ?? 0) >= 0 ? 'var(--trade-yes)' : 'var(--trade-no)' }}>
-            {(summary?.currentStreak ?? 0) > 0 ? `🔥 +${summary?.currentStreak} win streak` : (summary?.currentStreak ?? 0) < 0 ? `❄ ${summary?.currentStreak} loss streak` : '— Even'}
+          <div style={{ fontSize: 14, fontWeight: 800, fontFamily: 'var(--font-mono)', color: (summary?.currentStreak ?? 0) >= 0 ? 'var(--trade-yes)' : 'var(--trade-no)', display: 'flex', alignItems: 'center', gap: 6 }}>
+            {(summary?.currentStreak ?? 0) > 0 ? (
+              <>
+                <Flame size={14} style={{ color: 'var(--trade-yes)' }} />
+                <span>+{summary?.currentStreak} win streak</span>
+              </>
+            ) : (summary?.currentStreak ?? 0) < 0 ? (
+              <>
+                <TrendingDown size={14} style={{ color: 'var(--trade-no)' }} />
+                <span>{summary?.currentStreak} loss streak</span>
+              </>
+            ) : (
+              <span>— Even</span>
+            )}
           </div>
           <div style={{ fontSize: 11, color: 'var(--muted-foreground)', fontFamily: 'var(--font-mono)' }}>
             Best +{(summary?.bestDay ?? 0).toFixed(2)} • Worst {(summary?.worstDay ?? 0).toFixed(2)}

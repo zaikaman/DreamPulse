@@ -454,20 +454,16 @@ apiRouter.get('/agents/detailed', async (_req: Request, res: Response) => {
 function isOperatorAuthorized(req: Request): boolean {
   const operatorSecret = process.env.OPERATOR_ADMIN_SECRET;
   const authHeader = req.headers['x-operator-auth'] || req.headers['authorization'];
-  const headerOp = (req.headers['x-operator-address'] as string) || (req.headers['x-operator-auth-address'] as string);
-  const userAddress = req.body.operatorAddress || req.body.userAddress || headerOp;
 
-  if (operatorSecret && authHeader === `Bearer ${operatorSecret}`) {
-    return true;
+  if (operatorSecret) {
+    return authHeader === `Bearer ${operatorSecret}` || authHeader === operatorSecret;
   }
-  if (userAddress && typeof userAddress === 'string' && userAddress.toLowerCase() === operatorAccount.address.toLowerCase()) {
-    return true;
-  }
-  if (!operatorSecret) {
-    // If no secret env set, allow if no address provided (legacy) or if it matches operator
-    return !userAddress || userAddress.toLowerCase() === operatorAccount.address.toLowerCase();
-  }
-  return false;
+
+  // In development / test environment without OPERATOR_ADMIN_SECRET configured:
+  const headerOp = (req.headers['x-operator-address'] as string) || (req.headers['x-operator-auth-address'] as string);
+  const userAddress = req.body?.operatorAddress || req.body?.userAddress || headerOp;
+
+  return !userAddress || (typeof userAddress === 'string' && userAddress.toLowerCase() === operatorAccount.address.toLowerCase());
 }
 
 apiRouter.post('/agents/toggle', (req: Request, res: Response) => {

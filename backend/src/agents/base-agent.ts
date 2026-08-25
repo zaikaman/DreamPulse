@@ -10,6 +10,8 @@ export interface OrderBookLevel {
 export interface OrderBookDepth {
   yesBids: OrderBookLevel[];
   yesAsks: OrderBookLevel[];
+  noBids?: OrderBookLevel[];
+  noAsks?: OrderBookLevel[];
 }
 
 export interface IAgentContext {
@@ -19,6 +21,7 @@ export interface IAgentContext {
     change1m: number;
     change5m: number;
     timestamp: number;
+    priceHistory?: Array<{ timestamp: number; price: number }>;
   };
   market: Market;
   depth: OrderBookDepth;

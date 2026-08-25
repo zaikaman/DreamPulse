@@ -5,7 +5,7 @@ import {
   type AgentRiskConfig,
 } from './base-agent.js';
 import type { AgentType, SessionGrant, OrderExecution, SettlementSweep } from '../types/index.js';
-import { calculateFairValue } from '../quantitative/pricing.js';
+import { calculateFairValue, calculateVolatilityNormalizedDriftThreshold } from '../quantitative/pricing.js';
 import { quantizePrice, quantizeLotSize } from '../quantitative/quantizer.js';
 import { orderService } from '../services/order-service.js';
 
@@ -43,7 +43,83 @@ export class TitanMMAgent extends BaseAgent {
   }
 
   /**
-   * Evaluates order book state and quotes two-sided liquidity centered on theoretical fair value Φ(z) with inventory skew.
+   * Calculates two-sided reservation prices centered on theoretical fair value Φ(z)
+   * with super-linear inventory aversion and order book depth imbalance scaling.
+   */
+  public calculateReservationQuotes(context: IAgentContext): {
+    snappedBid: number;
+    snappedAsk: number;
+    effectiveSpread: number;
+    fairValueYes: number;
+    realizedVol: number;
+    netInventory: number;
+  } {
+    const { spotTicker, market, depth } = context;
+    const closeTime = new Date(market.closeTimestamp).getTime();
+    const now = Date.now();
+    const timeLeftSeconds = Math.max(1, Math.floor((closeTime - now) / 1000));
+
+    const fair = calculateFairValue(
+      spotTicker.price,
+      market.strikePrice,
+      timeLeftSeconds,
+      market.symbol,
+      undefined,
+      spotTicker.priceHistory,
+    );
+    const netInventory = this.inventoryMap.get(market.id) || 0;
+
+    // 1. Order book depth imbalance factor
+    let depthImbalance = 0;
+    const totalBidQty = (depth.yesBids || []).reduce((sum, b) => sum + b.quantity, 0);
+    const totalAskQty = (depth.yesAsks || []).reduce((sum, a) => sum + a.quantity, 0);
+    if (totalBidQty + totalAskQty > 0) {
+      depthImbalance = Math.abs((totalBidQty - totalAskQty) / (totalBidQty + totalAskQty));
+    }
+
+    // 2. Volatility and drift adaptive dynamic spread
+    const volRatio = (fair.volatilityUsed - 0.50) / 0.50;
+    const driftTerm = Math.abs(spotTicker.change1m) * 2.5;
+    const imbalanceTerm = depthImbalance * 0.4;
+    const spreadMultiplier = Math.max(0.7, 1.0 + 0.6 * volRatio + driftTerm + imbalanceTerm);
+    const effectiveSpread = Math.max(0.025, Math.min(0.080, Number((this.titanConfig.targetSpread * spreadMultiplier).toFixed(4))));
+    const halfSpread = effectiveSpread / 2.0;
+
+    // 3. Super-Linear Inventory Skew: Gamma aversion scales non-linearly with position size
+    const sign = netInventory >= 0 ? 1 : -1;
+    const absInv = Math.abs(netInventory);
+    const inventorySkew = Number((sign * this.titanConfig.inventoryAversion * Math.pow(absInv, 1.25)).toFixed(4));
+
+    // 4. Calculate reservation prices
+    const rawBid = Math.max(0.05, fair.fairValueYes - halfSpread - inventorySkew);
+    const rawAsk = Math.min(0.95, fair.fairValueYes + halfSpread - inventorySkew);
+
+    let snappedBid = quantizePrice(rawBid);
+    let snappedAsk = quantizePrice(rawAsk);
+
+    // Invariant: Bid must strictly be less than Ask
+    if (snappedBid >= snappedAsk) {
+      snappedBid = Math.max(0.05, quantizePrice(snappedAsk - 0.02));
+    }
+
+    return {
+      snappedBid,
+      snappedAsk,
+      effectiveSpread,
+      fairValueYes: fair.fairValueYes,
+      realizedVol: fair.volatilityUsed,
+      netInventory,
+    };
+  }
+
+  /**
+   * Evaluates order book state and quotes liquidity centered on theoretical fair value Φ(z) with inventory skew.
+   *
+   * Features:
+   * 1. Toxic Flow Circuit Breaker: Auto-pulls quotes when spot price velocity spikes (|1m drift| >= 0.22%).
+   * 2. Volatility & Imbalance-Adaptive Spread: Expands quoting spread during turbulent volatility regimes or depth imbalances.
+   * 3. Super-Linear Inventory Skew: Aggressively shades quotes as inventory builds up to avoid position traps.
+   * 4. Expiry De-Risking: Pulls quotes in final 30s; asymmetrically offloads heavy inventory when T < 90s.
    */
   public async evaluate(context: IAgentContext): Promise<IAgentDecision> {
     if (!this.isEnabled) {
@@ -61,49 +137,63 @@ export class TitanMMAgent extends BaseAgent {
     const now = Date.now();
     const timeLeftSeconds = Math.max(1, Math.floor((closeTime - now) / 1000));
 
-    // Do not quote in the last 15 seconds before expiry to avoid settlement lock latency
-    if (timeLeftSeconds < 15) {
+    // 1. Expiry Horizon Protection
+    if (timeLeftSeconds < 30) {
       return {
         agentType: 'Titan',
         action: 'HOLD',
         targetMarketId: market.id,
         confidence: 0.5,
-        rationale: 'Market is in final 15s expiration window. Pulling quotes to avoid settlement risk.',
+        rationale: `Market is in final 30s expiration window (${timeLeftSeconds}s remaining). Pulling quotes to eliminate settlement pin-risk.`,
       };
     }
 
-    // Theoretical Black-Scholes fair value Φ(z)
-    const fair = calculateFairValue(spotTicker.price, market.strikePrice, timeLeftSeconds, market.symbol);
-    const netInventory = this.inventoryMap.get(market.id) || 0;
+    // 2. Compute two-sided reservation quotes
+    const quotes = this.calculateReservationQuotes(context);
+    const { snappedBid, snappedAsk, effectiveSpread, fairValueYes, realizedVol, netInventory } = quotes;
 
-    // Calculate spread and inventory skew:
-    // Bid = Φ(z) - Spread/2 - gamma * Inventory
-    // Ask = Φ(z) + Spread/2 - gamma * Inventory
-    const halfSpread = this.titanConfig.targetSpread / 2.0;
-    const inventorySkew = netInventory * this.titanConfig.inventoryAversion;
-
-    const rawBid = Math.max(0.05, fair.fairValueYes - halfSpread - inventorySkew);
-    const rawAsk = Math.min(0.95, fair.fairValueYes + halfSpread - inventorySkew);
-
-    let snappedBid = quantizePrice(rawBid);
-    let snappedAsk = quantizePrice(rawAsk);
-
-    // Invariant: Bid must strictly be less than Ask
-    if (snappedBid >= snappedAsk) {
-      snappedBid = Math.max(0.05, quantizePrice(snappedAsk - 0.02));
+    // 3. Toxic Flow Protection: Auto-pull quotes during dynamic volatility-normalized spot velocity spikes (3.0 sigma of 1m move)
+    const toxicDriftThreshold = calculateVolatilityNormalizedDriftThreshold(realizedVol, 3.0, 60, 0.0015, 0.0080);
+    if (Math.abs(spotTicker.change1m) >= toxicDriftThreshold) {
+      return {
+        agentType: 'Titan',
+        action: 'HOLD',
+        targetMarketId: market.id,
+        confidence: 0.5,
+        rationale: `Spot velocity surge detected (${(spotTicker.change1m * 100).toFixed(2)}% in 1m vs dynamic threshold ±${(toxicDriftThreshold * 100).toFixed(2)}%, σ=${(realizedVol * 100).toFixed(1)}%). Pulling quotes to eliminate toxic taker adverse selection.`,
+      };
     }
 
     const lotSize = quantizeLotSize(this.titanConfig.lotSize);
     const confidence = 0.88;
 
-    const rationale = `[MM QUOTE] Providing two-sided liquidity around Φ(z) = ${(fair.fairValueYes * 100).toFixed(1)}%. Quoting Bid: ${snappedBid.toFixed(2)} / Ask: ${snappedAsk.toFixed(2)} with net inventory skew (${netInventory >= 0 ? '+' : ''}${netInventory.toFixed(1)} lots).`;
+    // 4. Asymmetric Quote Side Selection based on inventory & time-to-expiry
+    let quotePrice = snappedBid;
+    let quoteSide: 'YES' | 'NO' = 'YES';
+
+    if (timeLeftSeconds < 90) {
+      if (netInventory > 1.0) {
+        // Heavy long YES -> Quote Ask to liquidate before expiry
+        quotePrice = snappedAsk;
+      } else if (netInventory < -1.0) {
+        // Heavy short YES -> Quote Bid to cover
+        quotePrice = snappedBid;
+      } else {
+        quotePrice = netInventory > 0 ? snappedAsk : snappedBid;
+      }
+    } else {
+      // General regime: quote the side that reduces net inventory skew
+      quotePrice = netInventory >= 1.0 ? snappedAsk : snappedBid;
+    }
+
+    const rationale = `[MM QUOTE] Providing liquidity around Φ(z) = ${(fairValueYes * 100).toFixed(1)}% (Spread: ${(effectiveSpread * 100).toFixed(1)}%, EWMA σ=${(realizedVol * 100).toFixed(1)}%). Quoting Bid: ${snappedBid.toFixed(2)} / Ask: ${snappedAsk.toFixed(2)} with net inventory skew (${netInventory >= 0 ? '+' : ''}${netInventory.toFixed(1)} lots).`;
 
     const decision: IAgentDecision = {
       agentType: 'Titan',
       action: 'LIMIT_QUOTE',
       targetMarketId: market.id,
-      targetOutcome: 'YES',
-      price: snappedBid,
+      targetOutcome: quoteSide,
+      price: quotePrice,
       lotSize,
       confidence,
       rationale,
@@ -129,9 +219,11 @@ export class TitanMMAgent extends BaseAgent {
         metadata: {
           spot: spotTicker.price,
           strike: market.strikePrice,
-          fairValue: fair.fairValueYes,
+          fairValue: fairValueYes,
           bid: snappedBid,
           ask: snappedAsk,
+          effectiveSpread,
+          realizedVol,
           netInventory,
         },
         createdAt: new Date().toISOString(),

@@ -18,7 +18,7 @@ import {
 } from '../config/somnia.js';
 import { ORDER_TYPE, type BinarySide, type MarketOnchain } from '@somnia-chain/markets-sdk';
 import { BINARY_POOL_WRITE_ABI, OPERATOR_PERMISSIONS_REGISTRY_ABI, OPERATOR_SELECTORS, ERC20_ABI } from '../config/permissions-abi.js';
-import type { IAgentDecision } from '../agents/base-agent.js';
+import type { IAgentDecision, OrderBookDepth, OrderBookLevel } from '../agents/base-agent.js';
 import type {
   OrderExecution,
   SessionGrant,
@@ -28,6 +28,18 @@ import type {
   OrderType,
   OrderStatus,
 } from '../types/index.js';
+
+export interface RestingMakerQuote {
+  orderId: string;
+  marketId: string;
+  userAddress: string;
+  agentType: AgentType;
+  outcome: OutcomeType;
+  direction: OrderDirection;
+  price: number;
+  lotSize: number;
+  createdAt: number;
+}
 
 export interface QueryOrdersParams {
   userAddress?: string;
@@ -327,11 +339,110 @@ export async function assertFunded(
 export class OrderService {
   private orders: OrderExecution[] = [];
   private orderMap = new Map<string, OrderExecution>();
+  private restingMakerQuotes = new Map<string, RestingMakerQuote>();
   // --- Cumulative PnL fast-path cache ---
   private lastPnlSyncAt = 0;
   private pnlSyncInFlight: Promise<void> | null = null;
   private cachedPnlByKey = new Map<string, { sum: number; timestamp: number }>();
   private stateChangeListeners: Array<() => void> = [];
+
+  /**
+   * Registers an active resting limit maker quote placed by an agent (e.g. Titan).
+   */
+  public registerRestingMakerQuote(quote: RestingMakerQuote): void {
+    this.restingMakerQuotes.set(quote.orderId, quote);
+  }
+
+  /**
+   * Removes a resting limit maker quote by order ID.
+   */
+  public removeRestingMakerQuote(orderId: string): void {
+    this.restingMakerQuotes.delete(orderId);
+  }
+
+  /**
+   * Returns all active resting maker quotes, optionally filtered by marketId and/or userAddress.
+   */
+  public getRestingMakerQuotes(marketId?: string, userAddress?: string): RestingMakerQuote[] {
+    const targetMarket = marketId?.toLowerCase();
+    const targetAddr = userAddress?.toLowerCase();
+    const now = Date.now();
+
+    const results: RestingMakerQuote[] = [];
+    for (const [id, quote] of this.restingMakerQuotes.entries()) {
+      // Auto-prune quotes on finalized/expired markets
+      const market = marketService.getMarketById(quote.marketId);
+      if (market) {
+        const closeMs = market.closeTimestamp ? new Date(market.closeTimestamp).getTime() : Number.MAX_SAFE_INTEGER;
+        if (market.status === 'Finalized' || now >= closeMs) {
+          this.restingMakerQuotes.delete(id);
+          continue;
+        }
+      }
+
+      if (targetMarket && quote.marketId.toLowerCase() !== targetMarket) continue;
+      if (targetAddr && quote.userAddress.toLowerCase() !== targetAddr) continue;
+      results.push(quote);
+    }
+    return results;
+  }
+
+  /**
+   * Cleanses order book depth by subtracting the swarm's own resting maker lot sizes.
+   * This prevents taker snipers (Volt / Oracle) from crossing orders against Titan's resting
+   * quotes from the same operator wallet, eliminating self-trade fees and internal liquidity cannibalization.
+   */
+  public sanitizeDepthForSelfTrade(
+    depth: OrderBookDepth,
+    marketId: string,
+    operatorAddress?: string,
+  ): OrderBookDepth {
+    if (!depth) {
+      return { yesBids: [], yesAsks: [] };
+    }
+
+    const activeQuotes = this.getRestingMakerQuotes(marketId, operatorAddress);
+    if (activeQuotes.length === 0) {
+      return depth;
+    }
+
+    const sanitizeLadder = (
+      levels: OrderBookLevel[] | undefined,
+      outcome: 'YES' | 'NO',
+      isAsk: boolean,
+    ): OrderBookLevel[] => {
+      if (!levels || levels.length === 0) return [];
+      const matchingQuotes = activeQuotes.filter(
+        (q) => q.outcome === outcome && (isAsk ? q.direction === 'SELL' : q.direction === 'BUY'),
+      );
+      if (matchingQuotes.length === 0) return [...levels];
+
+      const sanitized: OrderBookLevel[] = [];
+      for (const lvl of levels) {
+        // Find total swarm-owned resting lot size at this tick
+        const ownQty = matchingQuotes
+          .filter((q) => Math.abs(q.price - lvl.price) < 0.005)
+          .reduce((sum, q) => sum + q.lotSize, 0);
+
+        const externalQty = Math.max(0, Number((lvl.quantity - ownQty).toFixed(4)));
+        if (externalQty > 0.0001) {
+          sanitized.push({
+            price: lvl.price,
+            quantity: externalQty,
+            total: Number((lvl.price * externalQty).toFixed(4)),
+          });
+        }
+      }
+      return sanitized;
+    };
+
+    return {
+      yesBids: sanitizeLadder(depth.yesBids, 'YES', false),
+      yesAsks: sanitizeLadder(depth.yesAsks, 'YES', true),
+      noBids: sanitizeLadder(depth.noBids, 'NO', false),
+      noAsks: sanitizeLadder(depth.noAsks, 'NO', true),
+    };
+  }
 
   public onStateChange(listener: () => void): () => void {
     this.stateChangeListeners.push(listener);
@@ -844,11 +955,30 @@ export class OrderService {
       session.spentToday = Number((session.spentToday + actualTotalCost).toFixed(4));
     }
 
-    // Store in-memory
+    // Store in-memory with bounded capacity (evict oldest from both array and map)
     this.orderMap.set(orderId, orderExecution);
     this.orders.unshift(orderExecution);
-    if (this.orders.length > 500) {
-      this.orders.pop();
+    if (this.orders.length > 5000) {
+      const evicted = this.orders.pop();
+      if (evicted) {
+        this.orderMap.delete(evicted.id);
+        this.restingMakerQuotes.delete(evicted.id);
+      }
+    }
+
+    // Register resting limit quote for swarm cross-agent self-trade protection
+    if (orderExecution.orderType === 'LIMIT' || decision.action === 'LIMIT_QUOTE') {
+      this.registerRestingMakerQuote({
+        orderId,
+        marketId: decision.targetMarketId,
+        userAddress: session.userAddress.toLowerCase(),
+        agentType: decision.agentType,
+        outcome,
+        direction,
+        price: quantizedPrice,
+        lotSize: actualLotSize,
+        createdAt: Date.now(),
+      });
     }
 
     // Broadcast order fill event over WebSocket telemetry stream
@@ -945,8 +1075,8 @@ export class OrderService {
       const q = params.searchQuery.toLowerCase();
       result = result.filter(
         (o) =>
-          o.marketId.toLowerCase().includes(q) ||
-          o.userAddress.toLowerCase().includes(q) ||
+          (o.marketId && o.marketId.toLowerCase().includes(q)) ||
+          (o.userAddress && o.userAddress.toLowerCase().includes(q)) ||
           (o.txHash && o.txHash.toLowerCase().includes(q))
       );
     }
@@ -1474,6 +1604,7 @@ export class OrderService {
         order.pnl = newPnl;
         order.isSettled = true;
         order.settledAt = new Date().toISOString();
+        this.restingMakerQuotes.delete(order.id);
         if (order.status === 'PENDING') order.status = 'FILLED';
         updatedOrderPnlEvents.push({ orderId: order.id, marketId: order.marketId, pnl: order.pnl, outcome: order.outcome, winningOutcome });
         void (async () => {

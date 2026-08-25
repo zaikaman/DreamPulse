@@ -356,8 +356,8 @@ export class AnalyticsService {
 
       // Fetch orders for user and swarm
       const allOrders = orderService.getOrders({ limit: undefined } as any); // get all in memory (no limit)
-      const userOrders = normalizedUser ? allOrders.filter((o) => o.userAddress.toLowerCase() === normalizedUser) : [];
-      const operatorOrders = allOrders.filter((o) => o.userAddress.toLowerCase() === operatorAccount.address.toLowerCase());
+      const userOrders = normalizedUser ? allOrders.filter((o) => o.userAddress && o.userAddress.toLowerCase() === normalizedUser) : [];
+      const operatorOrders = allOrders.filter((o) => o.userAddress && o.userAddress.toLowerCase() === operatorAccount.address.toLowerCase());
 
       const primaryOrders = normalizedUser ? userOrders : operatorOrders;
 

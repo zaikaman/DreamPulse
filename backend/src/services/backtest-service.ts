@@ -1,7 +1,15 @@
 import { type Address, getAddress, isAddress } from 'viem';
 import { supabase } from '../config/supabase.js';
 import type { BacktestResult, AgentType } from '../types/index.js';
-import { calculateFairValue } from '../quantitative/pricing.js';
+import {
+  calculateFairValue,
+  calculateRealizedVolatility,
+  calculateEWMARealizedVolatility,
+  calculateVolatilityNormalizedDriftThreshold,
+  calculateEdgeProportionalLots,
+  calculateNetExecutableEdge,
+  calculateDepthVWAP,
+} from '../quantitative/pricing.js';
 import { quantizePrice, quantizeLotSize } from '../quantitative/quantizer.js';
 import { env } from '../config/env.js';
 
@@ -415,13 +423,19 @@ export class BacktestService {
         const timeRemainingSec = Math.max(15, windowDurationSec - (step * barDurationSec));
         const timestampIso = new Date(currentCandle.timestamp).toISOString();
 
-        // 1. Calculate theoretical Black-Scholes binary option fair value Φ(z) at current spot
-        const fair = calculateFairValue(currentSpot, strikePrice, timeRemainingSec, symbol);
+        // Preceding rolling candle history for dynamic realized volatility
+        const lookbackStart = Math.max(0, currentIdx - 20);
+        const recentCandles = candles.slice(lookbackStart, currentIdx + 1);
+        const recentTicks = recentCandles.map((c) => ({ timestamp: c.timestamp, price: c.close }));
+        const dynamicVol = calculateEWMARealizedVolatility(recentTicks, symbol);
+
+        // 1. Calculate theoretical Black-Scholes binary option fair value Φ(z) at current spot with dynamic realized vol
+        const fair = calculateFairValue(currentSpot, strikePrice, timeRemainingSec, symbol, dynamicVol);
         const fairYes = fair.fairValueYes;
         const fairNo = fair.fairValueNo;
 
         // 2. Lagging theoretical value from prior spot (for latency sniper evaluation)
-        const lagFair = calculateFairValue(prevSpot, strikePrice, timeRemainingSec + barDurationSec, symbol);
+        const lagFair = calculateFairValue(prevSpot, strikePrice, timeRemainingSec + barDurationSec, symbol, dynamicVol);
         const lagFairYes = lagFair.fairValueYes;
         const lagFairNo = lagFair.fairValueNo;
 
@@ -432,109 +446,150 @@ export class BacktestService {
         let tradeAction = 'HOLD';
         let tradeOutcome: 'YES' | 'NO' = 'YES';
         let tradePrice = 0.50;
+        let tradeLots = quantizeLotSize(lotSize);
+        const maxTradeSize = req.strategyConfig?.maxTradeSize ?? 20.0;
 
         if (agentType === 'Volt') {
           // Volt Latency Drift Sniper: fires when spot velocity exceeds threshold and resting quotes lag
-          if (windowExecutedTrades === 0) {
+          if (windowExecutedTrades === 0 && timeRemainingSec >= 15) {
             const barDrift = (currentSpot - prevSpot) / (prevSpot || 1);
             const windowDrift = (currentSpot - startCandle.open) / (startCandle.open || 1);
             const spotDrift = Math.abs(barDrift) >= Math.abs(windowDrift) ? barDrift : windowDrift;
 
+            // Dynamic volatility-normalized drift threshold (scaled to asset's 1m std dev)
+            const volDriftThreshold = calculateVolatilityNormalizedDriftThreshold(dynamicVol, 2.5, 60);
+            const activeDriftThreshold = req.strategyConfig?.driftThreshold !== undefined && req.strategyConfig.driftThreshold !== 0.002
+              ? req.strategyConfig.driftThreshold
+              : volDriftThreshold;
+
+            const requiredDrift = timeRemainingSec > 120 ? activeDriftThreshold * 1.8 : activeDriftThreshold;
+
             // Network latency edge decay penalty - realistic: 80ms ≈ 1.2% decay, 150ms ≈ 2.25%
             const latencyEdgePenalty = (latencyMs / 1000) * 0.15;
 
-            if (Math.abs(spotDrift) >= driftThreshold) {
-              // Realistic: require BOTH bar and window drift to confirm momentum (not just one)
+            if (Math.abs(spotDrift) >= requiredDrift) {
+              // Require both bar and window drift to confirm momentum
               const barDriftAbs = Math.abs(barDrift);
               const windowDriftAbs = Math.abs(windowDrift);
-              const driftConfirmed = barDriftAbs >= driftThreshold && windowDriftAbs >= driftThreshold * 0.7 && Math.sign(barDrift) === Math.sign(windowDrift);
-              if (!driftConfirmed) {
-                // skip unconfirmed drift - noise
-              } else if (spotDrift > 0) {
-                // Spot surged -> resting YES ask is mostly updated (80% priced in), only 20% edge remains
-                const priceDiscovery = 0.80;
-                const partialLagYes = lagFairYes + (fairYes - lagFairYes) * priceDiscovery;
-                const lagAskYes = quantizePrice(Math.min(0.99, Math.max(0.01, partialLagYes + halfSpread)));
-                const edge = (fairYes - lagAskYes) - latencyEdgePenalty;
-                if (edge >= minEdge && lagAskYes <= 0.95 && lagAskYes >= 0.05) {
-                  tradeExecuted = true;
-                  tradeAction = 'TAKER_SNIPE';
-                  tradeOutcome = 'YES';
-                  tradePrice = lagAskYes;
-                }
-              } else {
-                const priceDiscovery = 0.80;
-                const partialLagNo = lagFairNo + (fairNo - lagFairNo) * priceDiscovery;
-                const lagAskNo = quantizePrice(Math.min(0.99, Math.max(0.01, partialLagNo + halfSpread)));
-                const edge = (fairNo - lagAskNo) - latencyEdgePenalty;
-                if (edge >= minEdge && lagAskNo <= 0.95 && lagAskNo >= 0.05) {
-                  tradeExecuted = true;
-                  tradeAction = 'TAKER_SNIPE';
-                  tradeOutcome = 'NO';
-                  tradePrice = lagAskNo;
+              const driftConfirmed = barDriftAbs >= requiredDrift && windowDriftAbs >= requiredDrift * 0.7 && Math.sign(barDrift) === Math.sign(windowDrift);
+
+              if (driftConfirmed) {
+                if (spotDrift > 0) {
+                  const priceDiscovery = 0.80;
+                  const partialLagYes = lagFairYes + (fairYes - lagFairYes) * priceDiscovery;
+                  const lagAskYes = quantizePrice(Math.min(0.99, Math.max(0.01, partialLagYes + halfSpread)));
+                  const netEdge = calculateNetExecutableEdge(fairYes, lagAskYes) - latencyEdgePenalty;
+                  if (netEdge >= minEdge && lagAskYes <= 0.85 && lagAskYes >= 0.15) {
+                    tradeExecuted = true;
+                    tradeAction = 'TAKER_SNIPE';
+                    tradeOutcome = 'YES';
+                    tradePrice = lagAskYes;
+                    tradeLots = calculateEdgeProportionalLots(lotSize, netEdge, minEdge, maxTradeSize, lagAskYes);
+                  }
+                } else {
+                  const priceDiscovery = 0.80;
+                  const partialLagNo = lagFairNo + (fairNo - lagFairNo) * priceDiscovery;
+                  const lagAskNo = quantizePrice(Math.min(0.99, Math.max(0.01, partialLagNo + halfSpread)));
+                  const netEdge = calculateNetExecutableEdge(fairNo, lagAskNo) - latencyEdgePenalty;
+                  if (netEdge >= minEdge && lagAskNo <= 0.85 && lagAskNo >= 0.15) {
+                    tradeExecuted = true;
+                    tradeAction = 'TAKER_SNIPE';
+                    tradeOutcome = 'NO';
+                    tradePrice = lagAskNo;
+                    tradeLots = calculateEdgeProportionalLots(lotSize, netEdge, minEdge, maxTradeSize, lagAskNo);
+                  }
                 }
               }
             }
           }
         } else if (agentType === 'Oracle') {
-          // Oracle Volatility / Statistical Arbitrage: fires on pricing discrepancy vs theoretical Black-Scholes probability Φ(z)
-          if (windowExecutedTrades === 0) {
+          // Oracle Volatility / Statistical Arbitrage: fires on pricing discrepancy vs dynamic realized volatility Black-Scholes Φ(d2)
+          // Dynamic time-decay edge scaling (demands higher margin of safety as expiry nears)
+          const timeDecayFactor = timeRemainingSec < 300 ? 1.0 + ((300 - timeRemainingSec) / 300) * 0.40 : 1.0;
+          const dynamicMinEdge = Number((minEdge * timeDecayFactor).toFixed(4));
+
+          // Dynamic volatility-normalized adverse selection drift threshold
+          const adverseDriftThreshold = calculateVolatilityNormalizedDriftThreshold(dynamicVol, 1.5, 60, 0.0008, 0.0050);
+
+          // Avoid gamma pin risk when time remaining is under 45 seconds
+          if (windowExecutedTrades === 0 && timeRemainingSec >= 45) {
+            const barDrift = (currentSpot - prevSpot) / (prevSpot || 1);
             // Retail order flow imbalance and noise create divergence between CLOB pricing and Φ(z)
-            const cycleNoise = Math.sin(currentIdx * 0.45 + w * 0.3) * 0.05;
-            const meanReversionDiscrepancy = ((startCandle.open - currentSpot) / (startCandle.open || 1)) * 0.8;
-            const marketNoise = Math.max(-0.09, Math.min(0.09, cycleNoise + meanReversionDiscrepancy));
+            const cycleNoise = Math.sin(currentIdx * 0.45 + w * 0.3) * 0.08;
+            const meanReversionDiscrepancy = ((startCandle.open - currentSpot) / (startCandle.open || 1)) * 1.2;
+            const marketNoise = Math.max(-0.12, Math.min(0.12, cycleNoise + meanReversionDiscrepancy));
 
             const marketImpliedYes = Math.max(0.08, Math.min(0.92, fairYes + marketNoise));
             const marketAskYes = quantizePrice(Math.min(0.98, marketImpliedYes + halfSpread));
             const marketAskNo = quantizePrice(Math.min(0.98, (1.0 - marketImpliedYes) + halfSpread));
 
-            const edgeYes = fairYes - marketAskYes;
-            const edgeNo = fairNo - marketAskNo;
+            const netEdgeYes = calculateNetExecutableEdge(fairYes, marketAskYes);
+            const netEdgeNo = calculateNetExecutableEdge(fairNo, marketAskNo);
 
-            // When theoretical probability exceeds market ask by minEdge, take the +EV position
-            if (edgeYes >= minEdge && marketAskYes <= 0.92 && marketAskYes >= 0.08) {
+            // Safe probability envelope [0.15, 0.85] + Dynamic adverse selection momentum filter
+            if (netEdgeYes >= dynamicMinEdge && marketAskYes <= 0.85 && marketAskYes >= 0.15 && barDrift >= -adverseDriftThreshold) {
               tradeExecuted = true;
               tradeAction = 'VOL_ARB';
               tradeOutcome = 'YES';
               tradePrice = marketAskYes;
-            } else if (edgeNo >= minEdge && marketAskNo <= 0.92 && marketAskNo >= 0.08) {
+              tradeLots = calculateEdgeProportionalLots(lotSize, netEdgeYes, dynamicMinEdge, maxTradeSize, marketAskYes);
+            } else if (netEdgeNo >= dynamicMinEdge && marketAskNo <= 0.85 && marketAskNo >= 0.15 && barDrift <= adverseDriftThreshold) {
               tradeExecuted = true;
               tradeAction = 'VOL_ARB';
               tradeOutcome = 'NO';
               tradePrice = marketAskNo;
+              tradeLots = calculateEdgeProportionalLots(lotSize, netEdgeNo, dynamicMinEdge, maxTradeSize, marketAskNo);
             }
           }
         } else if (agentType === 'Titan') {
-          // Titan Market Maker: quotes two-sided liquidity around fair value with Avellaneda-Stoikov inventory skew
-          const skew = netInventory * inventoryAversion;
-          const mmBidYes = quantizePrice(Math.max(0.02, fairYes - halfSpread - skew));
-          const mmAskYes = quantizePrice(Math.min(0.98, fairYes + halfSpread - skew));
+          // Titan Market Maker: quotes two-sided liquidity around fair value with dynamic spread and super-linear inventory skew
+          const barDrift = (currentSpot - prevSpot) / (prevSpot || 1);
+          const absDrift = Math.abs(barDrift);
 
-          const barReturn = (currentCandle.close - currentCandle.open) / (currentCandle.open || 1);
-          const absReturn = Math.abs(barReturn);
+          // Dynamic volatility-normalized toxic flow surge threshold
+          const toxicDriftThreshold = calculateVolatilityNormalizedDriftThreshold(dynamicVol, 3.0, 60, 0.0015, 0.0080);
 
-          // Range-bound window with balanced two-sided retail flow -> attempts to capture spread
-          // Realistic: spread capture is NOT risk-free; maker still has directional expiry risk
-          if (absReturn < 0.0018 && windowExecutedTrades === 0) {
-            tradeExecuted = true;
-            tradeAction = 'MM_SPREAD_CAPTURE';
-            tradeOutcome = fairYes >= 0.5 ? 'YES' : 'NO';
-            tradePrice = fairYes >= 0.5 ? mmBidYes : mmAskYes;
-            // Small inventory tick for spread capture, mean-reverting: decay existing inventory 5% per window
-            netInventory *= 0.95;
-            netInventory += tradeOutcome === 'YES' ? lotSize * 0.2 : -lotSize * 0.2;
-          } else if (absReturn >= 0.0022 && Math.abs(netInventory) < 15) {
-            // Sudden trend breakout -> takers aggress against shaded quote (adverse selection)
-            tradeExecuted = true;
-            tradeAction = 'MM_INVENTORY_FILL';
-            if (barReturn > 0) {
-              tradeOutcome = 'NO';
-              tradePrice = quantizePrice(Math.min(0.90, Math.max(0.10, 1.0 - mmAskYes)));
-              netInventory -= lotSize;
-            } else {
-              tradeOutcome = 'YES';
-              tradePrice = quantizePrice(Math.min(0.90, Math.max(0.10, mmBidYes)));
-              netInventory += lotSize;
+          // 1. Toxic flow protection & expiry horizon
+          if (absDrift < toxicDriftThreshold && timeRemainingSec >= 30) {
+            const volRatio = (dynamicVol - 0.50) / 0.50;
+            const spreadMultiplier = Math.max(0.7, 1.0 + 0.6 * volRatio + absDrift * 2.5);
+            const effectiveSpread = Math.max(0.025, Math.min(0.080, targetSpread * spreadMultiplier));
+            const halfSpreadEffective = effectiveSpread / 2.0;
+
+            const sign = netInventory >= 0 ? 1 : -1;
+            const absInv = Math.abs(netInventory);
+            const skew = sign * inventoryAversion * Math.pow(absInv, 1.25);
+
+            const mmBidYes = quantizePrice(Math.max(0.02, fairYes - halfSpreadEffective - skew));
+            const mmAskYes = quantizePrice(Math.min(0.98, fairYes + halfSpreadEffective - skew));
+
+            const barReturn = (currentCandle.close - currentCandle.open) / (currentCandle.open || 1);
+            const absReturn = Math.abs(barReturn);
+
+            // Range-bound window with balanced two-sided retail flow -> attempts to capture spread
+            if (absReturn < 0.0018 && windowExecutedTrades === 0) {
+              tradeExecuted = true;
+              tradeAction = 'MM_SPREAD_CAPTURE';
+              tradeOutcome = fairYes >= 0.5 ? 'YES' : 'NO';
+              tradePrice = fairYes >= 0.5 ? mmBidYes : mmAskYes;
+              tradeLots = quantizeLotSize(lotSize);
+              // Small inventory tick for spread capture, mean-reverting: decay existing inventory 5% per window
+              netInventory *= 0.95;
+              netInventory += tradeOutcome === 'YES' ? tradeLots * 0.2 : -tradeLots * 0.2;
+            } else if (absReturn >= 0.0018 && absReturn < toxicDriftThreshold && Math.abs(netInventory) < 15) {
+              // Sudden trend breakout -> takers aggress against shaded quote (adverse selection)
+              tradeExecuted = true;
+              tradeAction = 'MM_INVENTORY_FILL';
+              tradeLots = quantizeLotSize(lotSize);
+              if (barReturn > 0) {
+                tradeOutcome = 'NO';
+                tradePrice = quantizePrice(Math.min(0.90, Math.max(0.10, 1.0 - mmAskYes)));
+                netInventory -= tradeLots;
+              } else {
+                tradeOutcome = 'YES';
+                tradePrice = quantizePrice(Math.min(0.90, Math.max(0.10, mmBidYes)));
+                netInventory += tradeLots;
+              }
             }
           }
         }
@@ -545,7 +600,6 @@ export class BacktestService {
           const isWin = tradeOutcome === winningOutcome;
 
           // Execution friction: takers pay full slippage + fee, makers get reduced slippage/fees but still pay
-          // Realistic: maker rebate is ~30% of taker, slippage is half, but adverse selection remains
           const isMaker = tradeAction === 'MM_SPREAD_CAPTURE';
           const effectivePrice = isMaker
             ? quantizePrice(Math.min(0.99, Math.max(0.01, tradePrice + (slippageBps * 0.00005)))) // makers slip half
@@ -553,14 +607,13 @@ export class BacktestService {
 
           const makerFeeBps = Math.max(1.0, feeBps * 0.4); // maker rebate ~60%
           const tradeFee = isMaker
-            ? Number((effectivePrice * lotSize * (makerFeeBps * 0.0001)).toFixed(3))
-            : Number((effectivePrice * lotSize * (feeBps * 0.0001)).toFixed(3));
+            ? Number((effectivePrice * tradeLots * (makerFeeBps * 0.0001)).toFixed(3))
+            : Number((effectivePrice * tradeLots * (feeBps * 0.0001)).toFixed(3));
 
           // Realistic PnL: ALL trades settle as binary contracts (win $1 - cost or lose cost)
-          // Market-maker still has directional expiry risk; no guaranteed spread profit
           let grossPnl = isWin
-            ? Number(((1.0 - effectivePrice) * lotSize).toFixed(2))
-            : Number((-effectivePrice * lotSize).toFixed(2));
+            ? Number(((1.0 - effectivePrice) * tradeLots).toFixed(2))
+            : Number((-effectivePrice * tradeLots).toFixed(2));
 
           if (isMaker) {
             // Maker fill probability ~90% and small inventory skew cost; haircut only on wins to reflect adverse selection
@@ -570,7 +623,7 @@ export class BacktestService {
               // Losers slightly worse due to adverse selection (being picked off)
               grossPnl = Number((grossPnl * 1.04).toFixed(2));
             }
-            grossPnl = Math.max(-5 * lotSize, Math.min(5 * lotSize, grossPnl));
+            grossPnl = Math.max(-5 * tradeLots, Math.min(5 * tradeLots, grossPnl));
           }
 
           const netPnlPerTrade = Number((grossPnl - tradeFee).toFixed(2));
@@ -594,7 +647,7 @@ export class BacktestService {
             action: tradeAction,
             outcome: tradeOutcome,
             price: Number(effectivePrice.toFixed(2)),
-            lots: lotSize,
+            lots: tradeLots,
             grossPnl,
             fee: tradeFee,
             pnl: netPnlPerTrade,
@@ -747,7 +800,7 @@ export class BacktestService {
       return [];
     }
     const normalized = getAddress(userAddress).toLowerCase();
-    return this.history.filter((b) => b.userAddress.toLowerCase() === normalized);
+    return this.history.filter((b) => b.userAddress && b.userAddress.toLowerCase() === normalized);
   }
 }
 

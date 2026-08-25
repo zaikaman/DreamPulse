@@ -77,7 +77,7 @@ export class MarketService extends EventEmitter {
       if (market.symbol === ticker.symbol && market.status === 'Open') {
         const closeTime = new Date(market.closeTimestamp).getTime();
         const timeLeftSeconds = Math.max(1, Math.floor((closeTime - now) / 1000));
-        const fair = calculateFairValue(ticker.price, market.strikePrice, timeLeftSeconds, market.symbol);
+        const fair = calculateFairValue(ticker.price, market.strikePrice, timeLeftSeconds, market.symbol, undefined, ticker.priceHistory);
         const edge = calculateEdge(fair.fairValueYes, market.bestBidYes, market.bestAskYes);
 
         market.fairValueYes = fair.fairValueYes;
@@ -86,6 +86,14 @@ export class MarketService extends EventEmitter {
       }
     }
     this.emit('spot_updated', ticker);
+  }
+
+  private archiveHistoricalMarket(market: Market): void {
+    this.historicalMarkets.set(market.id, { ...market });
+    if (this.historicalMarkets.size > 1000) {
+      const firstKey = this.historicalMarkets.keys().next().value;
+      if (firstKey) this.historicalMarkets.delete(firstKey);
+    }
   }
 
   /**
@@ -277,7 +285,8 @@ export class MarketService extends EventEmitter {
         }
 
         // Calculate quantitative fair value and edge
-        const fair = calculateFairValue(spot, strike, Math.max(1, timeLeftSeconds), symbol);
+        const ticker = this.spotPrices.get(symbol);
+        const fair = calculateFairValue(spot, strike, Math.max(1, timeLeftSeconds), symbol, undefined, ticker?.priceHistory);
         const edge = calculateEdge(fair.fairValueYes, bestBidYes, bestAskYes);
 
         const marketObj: Market = {
@@ -321,7 +330,7 @@ export class MarketService extends EventEmitter {
           this.markets.set(marketId, marketObj);
           this.buildDepthBookFromClob(marketObj, depthLevels);
         } else {
-          this.historicalMarkets.set(marketId, marketObj);
+          this.archiveHistoricalMarket(marketObj);
           this.markets.delete(marketId);
           this.depthBooks.delete(marketId);
         }
@@ -344,7 +353,7 @@ export class MarketService extends EventEmitter {
                   void mod.orderService.settleOrdersForMarket(stale.id, stale.winningOutcome!, stale.settlementPrice);
                 }).catch(() => {});
               }
-              this.historicalMarkets.set(id, { ...stale });
+              this.archiveHistoricalMarket(stale);
               this.markets.delete(id);
               this.depthBooks.delete(id);
             }
@@ -590,7 +599,7 @@ export class MarketService extends EventEmitter {
         const spot = this.spotPrices.get(market.symbol)?.price || market.strikePrice;
         market.settlementPrice = spot;
         market.winningOutcome = spot >= market.strikePrice ? 'YES' : 'NO';
-        this.historicalMarkets.set(market.id, { ...market });
+        this.archiveHistoricalMarket(market);
         this.markets.delete(id);
         this.depthBooks.delete(id);
         expiredCount++;
@@ -601,8 +610,9 @@ export class MarketService extends EventEmitter {
           void mod.orderService.settleOrdersForMarket(market.id, market.winningOutcome!, market.settlementPrice);
         }).catch(() => {});
       } else if (market.status === 'Open') {
-        const spot = this.spotPrices.get(market.symbol)?.price || market.strikePrice;
-        const fair = calculateFairValue(spot, market.strikePrice, timeLeftSeconds, market.symbol);
+        const ticker = this.spotPrices.get(market.symbol);
+        const spot = ticker?.price || market.strikePrice;
+        const fair = calculateFairValue(spot, market.strikePrice, timeLeftSeconds, market.symbol, undefined, ticker?.priceHistory);
         const edge = calculateEdge(fair.fairValueYes, market.bestBidYes, market.bestAskYes);
 
         market.fairValueYes = fair.fairValueYes;
@@ -781,12 +791,13 @@ export class MarketService extends EventEmitter {
     market.bestBidNo = Number((1.0 - bestAskYes).toFixed(2));
     market.bestAskNo = Number((1.0 - bestBidYes).toFixed(2));
 
-    const spot = this.spotPrices.get(market.symbol)?.price || market.strikePrice;
+    const ticker = this.spotPrices.get(market.symbol);
+    const spot = ticker?.price || market.strikePrice;
     const now = Date.now();
     const closeTime = new Date(market.closeTimestamp).getTime();
     const timeLeft = Math.max(1, Math.floor((closeTime - now) / 1000));
 
-    const fair = calculateFairValue(spot, market.strikePrice, timeLeft, market.symbol);
+    const fair = calculateFairValue(spot, market.strikePrice, timeLeft, market.symbol, undefined, ticker?.priceHistory);
     const edge = calculateEdge(fair.fairValueYes, market.bestBidYes, market.bestAskYes);
 
     market.fairValueYes = fair.fairValueYes;

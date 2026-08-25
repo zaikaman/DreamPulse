@@ -1,10 +1,27 @@
 import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
 import path from 'path';
+import fs from 'fs';
 
 // https://vitejs.dev/config/
 export default defineConfig({
-  plugins: [react()],
+  plugins: [
+    react(),
+    {
+      name: 'resolve-js-to-ts',
+      resolveId(source, importer) {
+        if (source.endsWith('.js') && importer && !source.includes('node_modules')) {
+          const basePath = source.slice(0, -3);
+          const dir = path.dirname(importer);
+          const candidateTs = path.resolve(dir, `${basePath}.ts`);
+          const candidateTsx = path.resolve(dir, `${basePath}.tsx`);
+          if (fs.existsSync(candidateTs)) return candidateTs;
+          if (fs.existsSync(candidateTsx)) return candidateTsx;
+        }
+        return null;
+      },
+    },
+  ],
   resolve: {
     alias: {
       '@': path.resolve(__dirname, './src'),

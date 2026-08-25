@@ -43,7 +43,11 @@ const envSchema = z.object({
   SOMNIA_CHAIN_ID: z.string().default('50312').transform((val) => parseInt(val, 10)),
   OPERATOR_PRIVATE_KEY: z.string().default('0x0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef'),
 
-  // Protocol addresses (Somnia Shannon Testnet)
+  // Security & Admin
+  OPERATOR_ADMIN_SECRET: z.string().optional(),
+
+  // Protocol addresses & APIs (Somnia Shannon Testnet)
+  REST_API_URL: z.string().default('https://stg.api.dreamdex.io/v0'),
   DREAMDEX_REGISTRY_ADDRESS: z.string().default('0x3ecC694Cef705358864a646142ac17A90E29e388'),
   OPERATOR_PERMISSIONS_REGISTRY_ADDRESS: z.string().default('0x15C7e8CE38F021c5b45d098AaD788f63090bF20A'),
   DREAMDEX_VENUE_ID: z.string().default('0x679795a0195a1b76cdebb7c51d74e058aee92919b8c3389af86ef24535e8a28c'),

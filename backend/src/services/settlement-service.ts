@@ -605,6 +605,10 @@ export class SettlementService {
 
         this.sweepsMap.set(sweepId, sweep);
         this.sweeps.unshift(sweep);
+        if (this.sweeps.length > 5000) {
+          const evicted = this.sweeps.pop();
+          if (evicted) this.sweepsMap.delete(evicted.id);
+        }
         claimedSweeps.push(sweep);
         totalClaimed += pos.claimableAmount;
 
@@ -635,13 +639,14 @@ export class SettlementService {
           }
         }
 
-        void import('./order-service.js').then((mod) => {
-          void mod.orderService.settleOrdersForMarket(pos.marketId, pos.winningOutcome);
-        }).catch(() => {});
+        void orderService.settleOrdersForMarket(pos.marketId, pos.winningOutcome).catch(() => {});
       }
     }
 
     const resolvedTxHash: Hex = lastTxHash || ('0x0000000000000000000000000000000000000000000000000000000000000000' as Hex);
+
+    // Invalidate cached summaries so subsequent reads reflect post-sweep state immediately
+    this.invalidateCache(normalizedUser);
 
     // Broadcast WebSocket event
     if (claimedSweeps.length > 0) {
@@ -781,6 +786,10 @@ export class SettlementService {
     if (amount > 0) {
       this.sweepsMap.set(sweepId, sweep);
       this.sweeps.unshift(sweep);
+      if (this.sweeps.length > 5000) {
+        const evicted = this.sweeps.pop();
+        if (evicted) this.sweepsMap.delete(evicted.id);
+      }
 
       if (autoCompound) {
         await compounderService.compoundProceeds(normalizedUser, amount, market?.poolAddress as Address);
@@ -818,9 +827,7 @@ export class SettlementService {
         }
       }
 
-      void import('./order-service.js').then((mod) => {
-        void mod.orderService.settleOrdersForMarket(marketId, sweep.winningOutcome);
-      }).catch(() => {});
+      void orderService.settleOrdersForMarket(marketId, sweep.winningOutcome).catch(() => {});
     }
 
     telemetryWsGateway.broadcastSweepCompleted({

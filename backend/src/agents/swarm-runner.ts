@@ -157,12 +157,24 @@ export class MultiAgentSwarmRunner {
     console.log('[SwarmRunner] Swarm loop stopped');
   }
 
+  private pruneStaleState(): void {
+    if (this.lastOpportunityKeys.size > 500) {
+      const now = Date.now();
+      for (const [key, timestamp] of this.lastOpportunityKeys.entries()) {
+        if (now - timestamp > 600000) {
+          this.lastOpportunityKeys.delete(key);
+        }
+      }
+    }
+  }
+
   /**
    * Executes a single evaluation tick across all active markets for all agents.
    * Includes gas & circuit-breaker preflight so depositing STT doesn't instantly
    * unleash a storm of reverting orders that burns the fresh gas.
    */
   private async evaluateCycle(): Promise<void> {
+    this.pruneStaleState();
     orderService.syncResolvedOrdersPnL();
     // Global circuit breaker: if recent orders reverted repeatedly, pause the whole swarm to preserve gas
     if (isOnChainCircuitBroken()) {
@@ -203,6 +215,19 @@ export class MultiAgentSwarmRunner {
 
         // Evaluate each active market
         for (const market of openMarkets) {
+          if (type === 'Titan') {
+            const operatorAddr = operatorAccount.address;
+            // Cross-agent swarm portfolio delta tracking: aggregate open unsettled fills across Volt, Oracle, and Titan
+            const activeSwarmOrders = orderService
+              .getOrders({ marketId: market.id, userAddress: operatorAddr, status: 'FILLED' })
+              .filter((o) => !o.isSettled);
+            const netSwarmDelta = activeSwarmOrders.reduce(
+              (acc, o) => acc + (o.outcome === 'YES' ? o.lotSize : -o.lotSize),
+              0,
+            );
+            titanMMAgent.setInventory(market.id, netSwarmDelta);
+          }
+
           const spot = spotTickers[market.symbol] || {
             symbol: market.symbol,
             price: market.strikePrice,
@@ -211,10 +236,15 @@ export class MultiAgentSwarmRunner {
             timestamp: Date.now(),
           };
 
-          const depth = marketService.getMarketDepth(market.id) || {
+          const rawDepth = marketService.getMarketDepth(market.id) || {
             yesBids: [{ price: market.bestBidYes || 0.49, quantity: 200, total: 98 }],
             yesAsks: [{ price: market.bestAskYes || 0.51, quantity: 200, total: 102 }],
           };
+
+          // Sanitize order book depth for taker agents (Volt, Oracle) to prevent self-crossing against Titan's resting maker orders
+          const depth = (type === 'Volt' || type === 'Oracle')
+            ? orderService.sanitizeDepthForSelfTrade(rawDepth, market.id, operatorAccount.address)
+            : rawDepth;
 
           const context: IAgentContext = {
             spotTicker: spot,

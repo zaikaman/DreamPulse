@@ -2,7 +2,7 @@ import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { VoltSniperAgent } from '../src/agents/volt-sniper.js';
 import { OracleArbAgent } from '../src/agents/oracle-arb.js';
 import { TitanMMAgent } from '../src/agents/titan-mm.js';
-import { OrderService, quantizeOrder, assertFunded, toSteps } from '../src/services/order-service.js';
+import { OrderService, orderService, quantizeOrder, assertFunded, toSteps } from '../src/services/order-service.js';
 import { MultiAgentSwarmRunner } from '../src/agents/swarm-runner.js';
 import { somniaExchange, operatorAccount } from '../src/config/somnia.js';
 import type { IAgentContext } from '../src/agents/base-agent.js';
@@ -131,8 +131,34 @@ describe('Phase 5 Swarm Strategy & Agent Unit Tests', () => {
       expect(decision.action).toBe('TAKER_BUY');
       expect(decision.targetOutcome).toBe('NO');
       expect(decision.price).toBe(0.45);
-      expect(decision.confidence).toBeGreaterThan(0.75);
+      expect(decision.confidence).toBeGreaterThan(0.85);
       expect(decision.rationale).toContain('SPOT DUMP');
+    });
+
+    it('rejects spot jump when conflicting with 5m macro downtrend', async () => {
+      const context: IAgentContext = {
+        spotTicker: {
+          symbol: 'BTC/USD',
+          price: 96800.0,
+          change1m: 0.0045, // +0.45% jump (clears >120s window drift threshold)
+          change5m: -0.0045, // -0.45% macro downtrend
+          timestamp: Date.now(),
+        },
+        market: {
+          ...baseMarket,
+          bestAskYes: 0.48,
+          bestBidYes: 0.46,
+        },
+        depth: {
+          yesBids: [{ price: 0.46, quantity: 100, total: 46 }],
+          yesAsks: [{ price: 0.48, quantity: 100, total: 48 }],
+        },
+        activeSessions: [validSession],
+      };
+
+      const decision = await volt.evaluate(context);
+      expect(decision.action).toBe('HOLD');
+      expect(decision.rationale).toContain('conflicts with 5m macro downtrend');
     });
   });
 
@@ -290,7 +316,7 @@ describe('Phase 5 Swarm Strategy & Agent Unit Tests', () => {
       expect(decision.rationale).toContain('+10.0 lots');
     });
 
-    it('pulls quotes in the final 15 seconds to avoid expiration execution risk', async () => {
+    it('pulls quotes in the final 30 seconds to avoid expiration execution risk', async () => {
       const expiringMarket: Market = {
         ...baseMarket,
         closeTimestamp: new Date(Date.now() + 10000).toISOString(), // 10s remaining
@@ -312,6 +338,25 @@ describe('Phase 5 Swarm Strategy & Agent Unit Tests', () => {
       const decision = await titan.evaluate(context);
       expect(decision.action).toBe('HOLD');
       expect(decision.rationale).toContain('expiration window');
+    });
+
+    it('pulls quotes during violent spot velocity surges (toxic flow protection)', async () => {
+      const context: IAgentContext = {
+        spotTicker: {
+          symbol: 'BTC/USD',
+          price: 96500.0,
+          change1m: 0.0035, // +0.35% violent surge
+          change5m: 0.0050,
+          timestamp: Date.now(),
+        },
+        market: baseMarket,
+        depth: { yesBids: [], yesAsks: [] },
+        activeSessions: [validSession],
+      };
+
+      const decision = await titan.evaluate(context);
+      expect(decision.action).toBe('HOLD');
+      expect(decision.rationale).toContain('Spot velocity surge');
     });
   });
 
@@ -451,5 +496,62 @@ describe('Phase 5 Swarm Strategy & Agent Unit Tests', () => {
       const configUpdated = swarmRunner.updateAgentConfig('Volt', { minEdge: 0.05, lotSize: 10 });
       expect(configUpdated).toBe(true);
     });
+
+    it('sanitizes order book depth to prevent cross-agent self-trade fills against Titan maker quotes', async () => {
+      const testMarketId = '0x1111222233334444555566667777888899990000';
+      const operatorAddr = operatorAccount.address.toLowerCase();
+
+      // 1. Titan places a resting LIMIT quote: SELL YES at 0.48 for 100 lots
+      orderService.registerRestingMakerQuote({
+        orderId: 'titan-maker-quote-001',
+        marketId: testMarketId,
+        userAddress: operatorAddr,
+        agentType: 'Titan',
+        outcome: 'YES',
+        direction: 'SELL',
+        price: 0.48,
+        lotSize: 100.0,
+        createdAt: Date.now(),
+      });
+
+      const rawDepth = {
+        yesBids: [{ price: 0.46, quantity: 50, total: 23 }],
+        yesAsks: [
+          { price: 0.48, quantity: 100, total: 48 }, // 100% Titan's quote
+          { price: 0.52, quantity: 80, total: 41.6 }, // External counterparty
+        ],
+      };
+
+      // 2. Sanitize depth for operator wallet
+      const sanitized = orderService.sanitizeDepthForSelfTrade(rawDepth, testMarketId, operatorAddr);
+
+      // Top ask at 0.48 (which was 100% Titan) must be completely stripped
+      expect(sanitized.yesAsks.length).toBe(1);
+      expect(sanitized.yesAsks[0].price).toBe(0.52);
+      expect(sanitized.yesAsks[0].quantity).toBe(80);
+
+      // 3. Partial self-trade: Titan owns 30 of 100 lots at 0.48
+      orderService.registerRestingMakerQuote({
+        orderId: 'titan-maker-quote-002',
+        marketId: testMarketId,
+        userAddress: operatorAddr,
+        agentType: 'Titan',
+        outcome: 'YES',
+        direction: 'SELL',
+        price: 0.48,
+        lotSize: 30.0,
+        createdAt: Date.now(),
+      });
+      orderService.removeRestingMakerQuote('titan-maker-quote-001');
+
+      const partialSanitized = orderService.sanitizeDepthForSelfTrade(rawDepth, testMarketId, operatorAddr);
+      expect(partialSanitized.yesAsks.length).toBe(2);
+      expect(partialSanitized.yesAsks[0].price).toBe(0.48);
+      expect(partialSanitized.yesAsks[0].quantity).toBe(70.0); // 100 - 30 = 70 external lots
+
+      // Cleanup
+      orderService.removeRestingMakerQuote('titan-maker-quote-002');
+    });
   });
 });
+
