@@ -152,6 +152,11 @@ function Test-FeatureBranch {
     $raw = $Branch
     $Branch = Get-SpecKitEffectiveBranchName $raw
     
+    # Allow main and master branches when working directly on main
+    if ($Branch -eq 'main' -or $Branch -eq 'master') {
+        return $true
+    }
+
     # Accept sequential prefix (3+ digits) but exclude malformed timestamps
     # Malformed: 7-or-8 digit date + 6-digit time with no trailing slug (e.g. "2026031-143022" or "20260319-143022")
     $hasMalformedTimestamp = ($Branch -match '^[0-9]{7}-[0-9]{6}-') -or ($Branch -match '^(?:\d{7}|\d{8})-\d{6}$')

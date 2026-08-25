@@ -1,6 +1,10 @@
 <!-- SPECKIT START -->
-For additional context about technologies to be used, project structure,
-shell commands, and other important information, read the current plan
+Active Implementation Plan: [specs/001-dreampulse-ai/plan.md](file:///d:/DreamPulse/specs/001-dreampulse-ai/plan.md)
+Frontend: React + Vite + TypeScript (Vercel)
+Backend: Node.js + Express.js + WebSocket + TypeScript (Heroku)
+Database: Supabase PostgreSQL (Realtime + RLS)
+LLM: Gemini (OpenAI SDK format via GEMINI_BASE_URL, GEMINI_API_KEY, GEMINI_MODEL)
+Blockchain: Somnia Shannon Testnet (Chain ID 50312), DreamDEX Event Contracts
 <!-- SPECKIT END -->
 
 ## Git Branching Rules
