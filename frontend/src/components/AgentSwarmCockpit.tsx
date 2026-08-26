@@ -958,7 +958,7 @@ export const AgentSwarmCockpit: React.FC<AgentSwarmCockpitProps> = ({
         )}
 
         {/* -------------------------------------------------------------------- */}
-        {/* 4. Sweeper Settlement & Auto-Compounding Card */}
+        {/* 4. Sweeper Settlement & Direct Payout Card */}
         {/* -------------------------------------------------------------------- */}
         {activeTab === 'ALL' && (
           <div className="terminal-panel" style={{ padding: '18px', display: 'flex', flexDirection: 'column', gap: '14px' }}>
@@ -997,7 +997,7 @@ export const AgentSwarmCockpit: React.FC<AgentSwarmCockpitProps> = ({
                     </span>
                   </div>
                   <div style={{ fontSize: '11px', color: 'var(--muted-foreground)' }}>
-                    Batch Settlement & Capital Compounder
+                    Batch Settlement & Wallet Sweeper
                   </div>
                 </div>
               </div>
@@ -1006,7 +1006,7 @@ export const AgentSwarmCockpit: React.FC<AgentSwarmCockpitProps> = ({
             {/* Metrics Row */}
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '8px' }}>
               <div style={{ background: 'rgba(255, 255, 255, 0.02)', padding: '8px', borderRadius: '6px', border: '1px solid var(--border)' }}>
-                <div style={{ fontSize: '10px', color: 'var(--muted-foreground)' }}>Total Claimed</div>
+                <div style={{ fontSize: '10px', color: 'var(--muted-foreground)' }}>Total Paid Out</div>
                 <div style={{ fontSize: '13px', fontWeight: 700, color: sweeperData.pnlAmount >= 0 ? 'var(--trade-buy)' : 'var(--trade-sell)', fontFamily: 'var(--font-mono)' }}>
                   {sweeperData.pnlAmount >= 0 ? `+${sweeperData.pnlAmount.toFixed(2)}` : sweeperData.pnlAmount.toFixed(2)} tUSDC
                 </div>
@@ -1018,15 +1018,15 @@ export const AgentSwarmCockpit: React.FC<AgentSwarmCockpitProps> = ({
                 </div>
               </div>
               <div style={{ background: 'rgba(255, 255, 255, 0.02)', padding: '8px', borderRadius: '6px', border: '1px solid var(--border)' }}>
-                <div style={{ fontSize: '10px', color: 'var(--muted-foreground)' }}>Auto-Compound</div>
+                <div style={{ fontSize: '10px', color: 'var(--muted-foreground)' }}>Payout Mode</div>
                 <div style={{ fontSize: '13px', fontWeight: 700, color: 'var(--brand-cyan)', fontFamily: 'var(--font-mono)' }}>
-                  ENABLED (100%)
+                  100% WALLET
                 </div>
               </div>
             </div>
 
             <div style={{ fontSize: '12px', color: 'var(--muted-foreground)', background: 'rgba(0, 255, 102, 0.04)', border: '1px solid rgba(0, 255, 102, 0.15)', padding: '10px', borderRadius: '6px' }}>
-              Background daemon continuously scans Somnia testnet contracts for finalized markets with positive payouts, automatically claiming and recycling capital back into active trading balances.
+              Background daemon continuously scans Somnia testnet contracts for finalized markets with positive payouts, automatically claiming and transferring 100% of proceeds directly to user wallets.
             </div>
           </div>
         )}

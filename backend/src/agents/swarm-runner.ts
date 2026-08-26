@@ -413,7 +413,7 @@ export class MultiAgentSwarmRunner {
       }
     }
 
-    // 2. Autonomous Settlement Sweeper & Compounding Daemon
+    // 2. Autonomous Settlement Sweeper Daemon
     const sweeperState = this.telemetry['Sweeper'];
     if (!sweeperAgent.isEnabled) {
       sweeperState.status = 'PAUSED';

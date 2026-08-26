@@ -621,7 +621,7 @@ export class SettlementService {
               winning_outcome: pos.winningOutcome,
               claimable_amount: pos.claimableAmount,
               payout_token: 'tUSDC',
-              is_compounded: autoCompound,
+              is_compounded: false,
               tx_hash: txHash,
               status: 'CONFIRMED',
               claimed_at: now,

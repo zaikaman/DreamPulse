@@ -161,7 +161,7 @@ export const AgentThoughtFeed: React.FC<AgentThoughtFeedProps> = ({
           bg: 'rgba(16, 185, 129, 0.12)',
           border: 'rgba(16, 185, 129, 0.35)',
           glow: '0 0 10px rgba(16, 185, 129, 0.25)',
-          role: 'Settlement Compounder',
+          role: 'Settlement Sweeper',
           Icon: Sparkles,
         };
       default:

@@ -51,7 +51,7 @@ export const SwarmFeedView: React.FC<SwarmFeedViewProps> = ({
     },
     {
       name: 'Sweeper',
-      role: 'Settlement & Compounder',
+      role: 'Settlement & Wallet Sweeper',
       Icon: Sparkles,
       color: '#10b981',
       status: 'Monitoring expiries',

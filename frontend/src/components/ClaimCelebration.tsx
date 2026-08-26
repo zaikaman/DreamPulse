@@ -6,7 +6,6 @@ interface ClaimCelebrationProps {
   onClose: () => void;
   claimedAmount: string;
   txHash?: string;
-  isCompounded?: boolean;
 }
 
 export const ClaimCelebration: React.FC<ClaimCelebrationProps> = ({
@@ -14,7 +13,6 @@ export const ClaimCelebration: React.FC<ClaimCelebrationProps> = ({
   onClose,
   claimedAmount,
   txHash,
-  isCompounded = true,
 }) => {
   const [particles, setParticles] = useState<Array<{ id: number; x: number; y: number; color: string; size: number; delay: number }>>([]);
 
@@ -131,9 +129,7 @@ export const ClaimCelebration: React.FC<ClaimCelebrationProps> = ({
         </div>
 
         <p style={{ fontSize: '12px', color: 'var(--muted-foreground)', margin: '0 0 14px 0' }}>
-          {isCompounded
-            ? 'Winning proceeds auto-compounded back into active trading collateral pool.'
-            : 'Payout transferred directly to your Somnia wallet balance.'}
+          Payout transferred directly to your Somnia wallet balance.
         </p>
 
         {txHash && (

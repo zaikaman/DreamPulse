@@ -32,11 +32,6 @@ interface CachedSweeperData {
   unclaimedAmount: number;
   totalClaimedAllTime: number;
   claimableMarketsCount: number;
-  compoundedStats: {
-    totalCompoundedAmount: number;
-    reinvestedCycles: number;
-    lastCompoundedAt?: string;
-  };
 }
 
 export const SweeperControls: React.FC<SweeperControlsProps> = ({
@@ -75,16 +70,6 @@ export const SweeperControls: React.FC<SweeperControlsProps> = ({
   const [totalClaimedAllTime, setTotalClaimedAllTime] = useState<number>(initialCache?.totalClaimedAllTime || 0);
   const [claimableMarketsCount, setClaimableMarketsCount] = useState<number>(initialCache?.claimableMarketsCount || 0);
 
-  const [compoundedStats, setCompoundedStats] = useState<{
-    totalCompoundedAmount: number;
-    reinvestedCycles: number;
-    lastCompoundedAt?: string;
-  }>({
-    totalCompoundedAmount: initialCache?.compoundedStats?.totalCompoundedAmount || 0,
-    reinvestedCycles: initialCache?.compoundedStats?.reinvestedCycles || 0,
-    lastCompoundedAt: initialCache?.compoundedStats?.lastCompoundedAt,
-  });
-
   // Celebration modal state
   const [celebrationState, setCelebrationState] = useState<{
     isOpen: boolean;
@@ -114,16 +99,10 @@ export const SweeperControls: React.FC<SweeperControlsProps> = ({
         const uAmount = summaryRes.data.unclaimedAmount || 0;
         const tClaimed = summaryRes.data.totalClaimedAllTime || 0;
         const cCount = summaryRes.data.claimableMarketsCount || 0;
-        const cStats = {
-          totalCompoundedAmount: summaryRes.data.compoundedStats?.totalCompoundedAmount || 0,
-          reinvestedCycles: summaryRes.data.compoundedStats?.reinvestedCycles || 0,
-          lastCompoundedAt: summaryRes.data.compoundedStats?.lastCompoundedAt,
-        };
 
         setUnclaimedAmount(uAmount);
         setTotalClaimedAllTime(tClaimed);
         setClaimableMarketsCount(cCount);
-        setCompoundedStats(cStats);
 
         try {
           localStorage.setItem(
@@ -132,7 +111,6 @@ export const SweeperControls: React.FC<SweeperControlsProps> = ({
               unclaimedAmount: uAmount,
               totalClaimedAllTime: tClaimed,
               claimableMarketsCount: cCount,
-              compoundedStats: cStats,
             }),
           );
         } catch {}
@@ -168,18 +146,12 @@ export const SweeperControls: React.FC<SweeperControlsProps> = ({
         setUnclaimedAmount(parsed.unclaimedAmount || 0);
         setTotalClaimedAllTime(parsed.totalClaimedAllTime || 0);
         setClaimableMarketsCount(parsed.claimableMarketsCount || 0);
-        setCompoundedStats({
-          totalCompoundedAmount: parsed.compoundedStats?.totalCompoundedAmount || 0,
-          reinvestedCycles: parsed.compoundedStats?.reinvestedCycles || 0,
-          lastCompoundedAt: parsed.compoundedStats?.lastCompoundedAt,
-        });
         setIsLoading(false);
       } else {
         setHistory([]);
         setUnclaimedAmount(0);
         setTotalClaimedAllTime(0);
         setClaimableMarketsCount(0);
-        setCompoundedStats({ totalCompoundedAmount: 0, reinvestedCycles: 0 });
         setIsLoading(true);
       }
       if (rawHistory) {
@@ -383,7 +355,7 @@ export const SweeperControls: React.FC<SweeperControlsProps> = ({
           </div>
         </div>
 
-        {/* 3 Compounding Stats Cards */}
+        {/* 3 Settlement Stats Cards */}
         {isLoading && history.length === 0 ? (
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '12px', marginTop: '16px' }}>
             {[1, 2, 3].map((i) => (
@@ -415,12 +387,12 @@ export const SweeperControls: React.FC<SweeperControlsProps> = ({
               </div>
             </div>
 
-            {/* Card 2: Total Claimed All-Time (100%) */}
+            {/* Card 2: Total Claimed All-Time */}
             <div style={{ background: 'rgba(0, 255, 102, 0.04)', padding: '14px 18px', borderRadius: '8px', border: '1px solid rgba(0, 255, 102, 0.2)' }}>
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '4px' }}>
-                <span style={{ fontSize: '11px', color: 'var(--trade-buy)' }}>Total Compounded (100%)</span>
+                <span style={{ fontSize: '11px', color: 'var(--trade-buy)' }}>Total Paid Out to Wallet</span>
                 <span style={{ fontSize: '9px', background: 'rgba(0, 255, 102, 0.15)', color: 'var(--trade-buy)', padding: '1px 5px', borderRadius: '4px', fontWeight: 700 }}>
-                  TRADING
+                  WALLET
                 </span>
               </div>
               <div style={{ fontSize: '20px', fontWeight: 700, color: 'var(--trade-buy)', fontFamily: 'var(--font-mono)' }}>
@@ -428,16 +400,16 @@ export const SweeperControls: React.FC<SweeperControlsProps> = ({
               </div>
             </div>
 
-            {/* Card 3: Reinvested Trading Capital */}
+            {/* Card 3: Total Successful Settlements */}
             <div style={{ background: 'rgba(0, 240, 255, 0.04)', padding: '14px 18px', borderRadius: '8px', border: '1px solid rgba(0, 240, 255, 0.2)' }}>
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '4px' }}>
-                <span style={{ fontSize: '11px', color: 'var(--brand-cyan)' }}>Reinvested Capital</span>
+                <span style={{ fontSize: '11px', color: 'var(--brand-cyan)' }}>Settlement Claims</span>
                 <span style={{ fontSize: '9px', background: 'rgba(0, 240, 255, 0.15)', color: 'var(--brand-cyan)', padding: '1px 5px', borderRadius: '4px', fontWeight: 700 }}>
-                  {compoundedStats.reinvestedCycles} CYCLES
+                  {history.length} COMPLETED
                 </span>
               </div>
               <div style={{ fontSize: '20px', fontWeight: 700, color: 'var(--brand-cyan)', fontFamily: 'var(--font-mono)' }}>
-                +{(compoundedStats.totalCompoundedAmount || totalClaimedAllTime).toFixed(2)} tUSDC
+                {history.length} Sweeps
               </div>
             </div>
           </div>
@@ -484,7 +456,7 @@ export const SweeperControls: React.FC<SweeperControlsProps> = ({
                   Claimed Payout
                 </th>
                 <th style={{ padding: '10px 16px', textAlign: 'center', fontSize: '10px', color: 'var(--muted-foreground)', textTransform: 'uppercase' }}>
-                  Compounded
+                  Payout Type
                 </th>
                 <th style={{ padding: '10px 16px', textAlign: 'right', fontSize: '10px', color: 'var(--muted-foreground)', textTransform: 'uppercase' }}>
                   Somnia Shannon Tx
@@ -554,16 +526,16 @@ export const SweeperControls: React.FC<SweeperControlsProps> = ({
                             display: 'inline-flex',
                             alignItems: 'center',
                             gap: '4px',
-                            padding: '2px 6px',
+                            padding: '2px 8px',
                             borderRadius: '4px',
-                            background: sweep.isCompounded ? 'rgba(0, 240, 255, 0.1)' : 'rgba(255, 255, 255, 0.05)',
-                            color: sweep.isCompounded ? 'var(--brand-cyan)' : 'var(--muted-foreground)',
+                            background: 'rgba(0, 255, 102, 0.08)',
+                            color: 'var(--trade-buy)',
                             fontSize: '10px',
                             fontWeight: 600,
                           }}
                         >
-                          {sweep.isCompounded ? <ShieldCheck size={11} /> : null}
-                          <span>{sweep.isCompounded ? 'YES' : 'NO'}</span>
+                          <Wallet size={11} />
+                          <span>Direct Payout</span>
                         </span>
                       </td>
                       <td style={{ padding: '12px 16px', textAlign: 'right' }}>
@@ -587,7 +559,7 @@ export const SweeperControls: React.FC<SweeperControlsProps> = ({
                           </a>
                         ) : (
                           <span style={{ fontSize: '11px', color: 'var(--muted-foreground)', fontFamily: 'var(--font-mono)' }}>
-                            {sweep.isCompounded ? 'Compounded' : 'Settled'}
+                            Direct Transfer
                           </span>
                         )}
                       </td>
@@ -606,7 +578,6 @@ export const SweeperControls: React.FC<SweeperControlsProps> = ({
         onClose={() => setCelebrationState((prev) => ({ ...prev, isOpen: false }))}
         claimedAmount={celebrationState.amount}
         txHash={celebrationState.txHash}
-        isCompounded={false}
       />
     </div>
   );
