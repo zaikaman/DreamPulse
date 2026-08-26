@@ -25,7 +25,7 @@ export class SweeperAgent extends BaseAgent {
       maxTradeSize: config?.maxTradeSize ?? 100.0,
       maxDailyVolume: config?.maxDailyVolume ?? 1000.0,
       maxSlippage: config?.maxSlippage ?? 0.0,
-      autoCompound: config?.autoCompound ?? true,
+      autoCompound: config?.autoCompound ?? false,
       minClaimableAmount: config?.minClaimableAmount ?? 0.5,
       sweepIntervalMs: config?.sweepIntervalMs ?? 30000, // 30 seconds
     };

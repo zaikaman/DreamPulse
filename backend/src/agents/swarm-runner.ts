@@ -463,7 +463,7 @@ export class MultiAgentSwarmRunner {
                     marketId: sweepResult.sweeps[0]?.marketId || 'BATCH_CLAIM',
                     confidence: 0.99,
                     action: 'BATCH_CLAIM_PAYOUTS',
-                    thought: `[AUTONOMOUS SWEEPER] Swept ${sweepResult.claimedMarketsCount} resolved market payout(s) (+${sweepResult.totalClaimedAmount}) for ${targetAddress.slice(0, 6)}...${targetAddress.slice(-4)} with 100% auto-compounding to trading capital.`,
+                    thought: `[AUTONOMOUS SWEEPER] Swept ${sweepResult.claimedMarketsCount} resolved market payout(s) (+${sweepResult.totalClaimedAmount}) for ${targetAddress.slice(0, 6)}...${targetAddress.slice(-4)} with 100% direct on-chain payout to user wallet.`,
                     txHash: sweepResult.txHash,
                     outcome: 'YES',
                     isExecution: true,

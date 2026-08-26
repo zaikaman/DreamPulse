@@ -11,7 +11,6 @@ import {
   Eye,
   Bot,
   User,
-  Lock,
 } from 'lucide-react';
 import { apiClient } from '../services/api.js';
 import { SOMNIA_ADDRESSES } from '../services/web3.js';
@@ -69,7 +68,6 @@ export const SweeperControls: React.FC<SweeperControlsProps> = ({
     }
   })();
 
-  const [autoCompound, setAutoCompound] = useState<boolean>(true);
   const [isSweeping, setIsSweeping] = useState<boolean>(false);
   const [isLoading, setIsLoading] = useState<boolean>(!initialCache);
   const [history, setHistory] = useState<SettlementSweep[]>(initialHistory);
@@ -228,7 +226,7 @@ export const SweeperControls: React.FC<SweeperControlsProps> = ({
     if (!activeAddress) return;
     setIsSweeping(true);
     try {
-      const res = await apiClient.triggerSweep(activeAddress, autoCompound);
+      const res = await apiClient.triggerSweep(activeAddress, false);
       if (res.success) {
         setCelebrationState({
           isOpen: true,
@@ -309,16 +307,16 @@ export const SweeperControls: React.FC<SweeperControlsProps> = ({
             <div>
               <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                 <h2 style={{ fontSize: '18px', fontWeight: 700, margin: 0, color: 'var(--foreground)' }}>
-                  {isViewingSelf ? 'My Settlement Sweeper & Auto-Compounder' : 'Autonomous Protocol Sweeper'}
+                  {isViewingSelf ? 'My Settlement Sweeper & Direct Wallet Payouts' : 'Autonomous Protocol Sweeper'}
                 </h2>
                 <span className="stat-pill-tag tag-green">
-                  {autoCompound ? '100% COMPOUNDING' : 'READY'}
+                  100% DIRECT PAYOUT
                 </span>
               </div>
               <p style={{ margin: '2px 0 0 0', fontSize: '12px', color: 'var(--muted-foreground)' }}>
                 {isViewingSelf
-                  ? 'Automatically claims binary contract payouts & reinvests winnings into high-conviction order flow.'
-                  : 'Automated on-chain engine sweeping resolved Somnia event contracts & compound-allocating payouts into CLOB liquidity.'}
+                  ? 'Automatically claims binary contract payouts & transfers 100% of winnings directly to your wallet.'
+                  : 'Automated on-chain engine sweeping resolved Somnia event contracts & executing direct payout settlements.'}
               </p>
             </div>
           </div>
@@ -333,47 +331,24 @@ export const SweeperControls: React.FC<SweeperControlsProps> = ({
               </code>
             </div>
 
-            {/* Auto-Compound State Toggle Button */}
-            {userAddress ? (
-              <button
-                type="button"
-                onClick={() => setAutoCompound((prev) => !prev)}
-                style={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: '6px',
-                  padding: '4px 10px',
-                  borderRadius: '6px',
-                  background: autoCompound ? 'rgba(0, 255, 102, 0.08)' : 'rgba(255, 77, 77, 0.08)',
-                  border: `1px solid ${autoCompound ? 'rgba(0, 255, 102, 0.25)' : 'rgba(255, 77, 77, 0.25)'}`,
-                  fontSize: '11px',
-                  color: autoCompound ? 'var(--trade-buy)' : 'var(--trade-sell)',
-                  fontWeight: 600,
-                  cursor: 'pointer',
-                }}
-              >
-                <ShieldCheck size={13} />
-                <span>{autoCompound ? '100% Auto-Compound ON' : 'Compounding OFF'}</span>
-              </button>
-            ) : (
-              <div
-                style={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: '6px',
-                  padding: '4px 10px',
-                  borderRadius: '6px',
-                  background: 'rgba(0, 255, 102, 0.06)',
-                  border: '1px solid rgba(0, 255, 102, 0.2)',
-                  fontSize: '11px',
-                  color: 'var(--trade-buy)',
-                  fontWeight: 600,
-                }}
-              >
-                <Lock size={12} style={{ opacity: 0.7 }} />
-                <span>100% Auto-Compound ON (Protocol)</span>
-              </div>
-            )}
+            {/* Direct Payout Badge */}
+            <div
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: '6px',
+                padding: '4px 10px',
+                borderRadius: '6px',
+                background: 'rgba(0, 255, 102, 0.08)',
+                border: '1px solid rgba(0, 255, 102, 0.25)',
+                fontSize: '11px',
+                color: 'var(--trade-buy)',
+                fontWeight: 600,
+              }}
+            >
+              <ShieldCheck size={13} />
+              <span>100% Direct Wallet Payout</span>
+            </div>
 
             {/* Sweep Action Button */}
             {userAddress ? (
@@ -631,7 +606,7 @@ export const SweeperControls: React.FC<SweeperControlsProps> = ({
         onClose={() => setCelebrationState((prev) => ({ ...prev, isOpen: false }))}
         claimedAmount={celebrationState.amount}
         txHash={celebrationState.txHash}
-        isCompounded={autoCompound}
+        isCompounded={false}
       />
     </div>
   );

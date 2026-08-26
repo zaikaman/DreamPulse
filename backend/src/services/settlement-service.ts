@@ -552,16 +552,10 @@ export class SettlementService {
           }
         }
 
-        // Only transfer payout to copy-trader if the on-chain redeem actually succeeded or in test mode
-        const canTransferPayout =
-          process.env.NODE_ENV === 'test' ||
-          redeemSucceeded;
+        const isCopyTrader = normalizedUser.toLowerCase() !== operatorAccount.address.toLowerCase();
 
-        if (
-          canTransferPayout &&
-          normalizedUser.toLowerCase() !== operatorAccount.address.toLowerCase() &&
-          pos.rawAmount > 0n
-        ) {
+        // 100% Direct Payout: Transfer the tUSDC payout from operator directly to the copy-trader's wallet
+        if (isCopyTrader && pos.rawAmount > 0n) {
           try {
             const transferHash = await executeOperatorWriteContract({
               address: SOMNIA_ADDRESSES.testUsdc,
@@ -569,25 +563,18 @@ export class SettlementService {
               functionName: 'transfer',
               args: [normalizedUser, pos.rawAmount],
             });
-            await publicClient.waitForTransactionReceipt({ hash: transferHash, timeout: 60_000 });
-            txHash = transferHash;
+            if (transferHash) {
+              await publicClient.waitForTransactionReceipt({ hash: transferHash, timeout: 60_000 }).catch(() => {});
+              txHash = transferHash;
+            }
           } catch (tErr: any) {
             console.warn(`[SettlementService] Payout transfer to ${normalizedUser} failed:`, tErr.message);
           }
         }
 
-        // If not test mode and not operator self-sweep, skip registering a sweep if the redemption did not succeed
-        if (
-          process.env.NODE_ENV !== 'test' &&
-          normalizedUser.toLowerCase() !== operatorAccount.address.toLowerCase() &&
-          !redeemSucceeded &&
-          !txHash
-        ) {
-          continue;
-        }
-
-        if (autoCompound && canTransferPayout) {
-          await compounderService.compoundProceeds(normalizedUser, pos.claimableAmount, pos.poolAddress);
+        // If no new txHash was generated from transfer/redeem, fall back to pos.txHash
+        if (!txHash && pos.txHash) {
+          txHash = pos.txHash;
         }
 
         if (txHash) {
@@ -602,7 +589,7 @@ export class SettlementService {
           winningOutcome: pos.winningOutcome,
           claimableAmount: pos.claimableAmount,
           payoutToken: 'tUSDC',
-          isCompounded: autoCompound,
+          isCompounded: false,
           txHash,
           status: 'CONFIRMED',
           claimedAt: now,
@@ -782,26 +769,42 @@ export class SettlementService {
       winningOutcome: winningOutcome as OutcomeType,
       claimableAmount: amount,
       payoutToken: 'tUSDC',
-      isCompounded: autoCompound,
+      isCompounded: false,
       txHash,
       status: 'CONFIRMED',
       claimedAt: now,
     };
 
     if (amount > 0) {
+      const isCopyTrader = normalizedUser.toLowerCase() !== operatorAccount.address.toLowerCase();
+      if (isCopyTrader) {
+        const decimals = SOMNIA_ADDRESSES.decimals;
+        const one = 10n ** BigInt(decimals);
+        const rawAmount = BigInt(Math.floor(amount * Number(one)));
+        if (rawAmount > 0n) {
+          try {
+            const transferHash = await executeOperatorWriteContract({
+              address: SOMNIA_ADDRESSES.testUsdc,
+              abi: ERC20_ABI,
+              functionName: 'transfer',
+              args: [normalizedUser, rawAmount],
+            });
+            if (transferHash) {
+              await publicClient.waitForTransactionReceipt({ hash: transferHash, timeout: 60_000 }).catch(() => {});
+              txHash = transferHash;
+              sweep.txHash = transferHash;
+            }
+          } catch (tErr: any) {
+            console.warn(`[SettlementService] Single claim transfer failed:`, tErr.message);
+          }
+        }
+      }
+
       this.sweepsMap.set(sweepId, sweep);
       this.sweeps.unshift(sweep);
       if (this.sweeps.length > 5000) {
         const evicted = this.sweeps.pop();
         if (evicted) this.sweepsMap.delete(evicted.id);
-      }
-
-      if (autoCompound) {
-        await compounderService.compoundProceeds(normalizedUser, amount, market?.poolAddress as Address);
-      }
-
-      if (autoCompound && amount > 0) {
-        compounderService.recordHistoricalSweep(normalizedUser, amount, now);
       }
 
       // Persist to Supabase asynchronously (skip fake test artifacts)
@@ -822,7 +825,7 @@ export class SettlementService {
             winning_outcome: sweep.winningOutcome,
             claimable_amount: sweep.claimableAmount,
             payout_token: 'tUSDC',
-            is_compounded: autoCompound,
+            is_compounded: false,
             tx_hash: txHash,
             status: 'CONFIRMED',
             claimed_at: now,
@@ -904,7 +907,7 @@ export class SettlementService {
           isVoided: p.isVoided,
           status: p.status,
         })),
-        autoCompound: true,
+        autoCompound: false,
         compoundedStats: {
           totalCompoundedAmount: compoundedStats.totalCompoundedAmount,
           reinvestedCycles: compoundedStats.reinvestedCycles,

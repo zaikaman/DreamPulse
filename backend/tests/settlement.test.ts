@@ -298,5 +298,43 @@ describe('Phase 6 Settlement Sweeper & Collateral Compounder Tests', () => {
       expect(sweep.status).toBe('CONFIRMED');
       expect(sweep.txHash).toMatch(/^0x[a-f0-9]{64}$/i);
     });
+
+    it('sweeps copy-trader positions even if on-chain outcome tokens were already redeemed by operator', async () => {
+      const settlementService = new SettlementService();
+      const copyTraderAddress = '0x46cC04De981E603958e4612f877D72427c5b6544';
+
+      vi.spyOn(settlementService, 'scanUnclaimedSettlements').mockResolvedValue([
+        {
+          marketId: finalizedMarket.id,
+          symbol: 'BTC/USD',
+          marketIdHex: finalizedMarket.id as Hex,
+          winningOutcome: 'YES',
+          outcomeIdx: 0,
+          rawAmount: 11_000_000n,
+          claimableAmount: 11.0,
+          outcomeToken: '0x2222222222222222222222222222222222222222' as Address,
+          poolAddress: '0x1111111111111111111111111111111111111111' as Address,
+          isVoided: false,
+          status: 'Finalized',
+          txHash: '0xabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcd' as Hex,
+        },
+      ]);
+
+      // Simulate on-chain redeem failing because operator already redeemed the tokens
+      vi.spyOn(somniaExchange.trader, 'redeem').mockRejectedValue(new Error('InsufficientBalance'));
+
+      const result = await settlementService.triggerBatchSweep(copyTraderAddress, true);
+      expect(result.success).toBe(true);
+      expect(result.claimedMarketsCount).toBe(1);
+      expect(result.totalClaimedAmount).toBe('11.00 tUSDC');
+      expect(result.sweeps.length).toBe(1);
+      expect(result.sweeps[0].userAddress.toLowerCase()).toBe(copyTraderAddress.toLowerCase());
+      expect(result.sweeps[0].claimableAmount).toBe(11.0);
+      expect(result.sweeps[0].isCompounded).toBe(false);
+
+      const history = settlementService.getSweepHistory(copyTraderAddress);
+      expect(history.length).toBe(1);
+      expect(history[0].claimableAmount).toBe(11.0);
+    });
   });
 });
