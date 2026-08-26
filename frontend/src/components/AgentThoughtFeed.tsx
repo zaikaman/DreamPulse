@@ -19,6 +19,7 @@ import {
 } from 'lucide-react';
 import type { AgentThoughtLog } from '../types/index.js';
 import { AgentThoughtFeedSkeleton } from './ui/Skeleton.js';
+import { Pagination } from './ui/Pagination.js';
 
 interface AgentThoughtFeedProps {
   thoughts: AgentThoughtLog[];
@@ -39,6 +40,8 @@ export const AgentThoughtFeed: React.FC<AgentThoughtFeedProps> = ({
 }) => {
   const [selectedFilter, setSelectedFilter] = useState<string>('ALL');
   const [searchQuery, setSearchQuery] = useState<string>('');
+  const [currentPage, setCurrentPage] = useState<number>(1);
+  const [pageSize, setPageSize] = useState<number>(25);
   const [isPausedManual, setIsPausedManual] = useState<boolean>(false);
   const [isHovered, setIsHovered] = useState<boolean>(false);
   const [nowTime, setNowTime] = useState<number>(Date.now());
@@ -125,6 +128,25 @@ export const AgentThoughtFeed: React.FC<AgentThoughtFeedProps> = ({
     }
     return deduped;
   }, [activeSourceList, selectedFilter, searchQuery]);
+
+  // Reset to page 1 when filter or search changes
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [selectedFilter, searchQuery]);
+
+  // Clamp current page when filtered thoughts length shrinks
+  const totalPages = Math.max(1, Math.ceil(filteredThoughts.length / pageSize));
+  useEffect(() => {
+    if (currentPage > totalPages) {
+      setCurrentPage(totalPages);
+    }
+  }, [totalPages, currentPage]);
+
+  // Paginated slice
+  const paginatedThoughts = useMemo(() => {
+    const start = (currentPage - 1) * pageSize;
+    return filteredThoughts.slice(start, start + pageSize);
+  }, [filteredThoughts, currentPage, pageSize]);
 
   const getAgentTheme = (agent: string) => {
     switch (agent.toLowerCase()) {
@@ -461,7 +483,7 @@ export const AgentThoughtFeed: React.FC<AgentThoughtFeedProps> = ({
             </div>
           </div>
         ) : (
-          filteredThoughts.map((thought) => {
+          paginatedThoughts.map((thought) => {
             const theme = getAgentTheme(thought.agentType);
             const Icon = theme.Icon;
             const actionStyle = getActionBadgeStyle(thought.actionTaken);
@@ -678,6 +700,20 @@ export const AgentThoughtFeed: React.FC<AgentThoughtFeedProps> = ({
           })
         )}
       </div>
+
+      {/* Pagination Bar */}
+      {filteredThoughts.length > 0 && (
+        <Pagination
+          currentPage={currentPage}
+          totalItems={filteredThoughts.length}
+          pageSize={pageSize}
+          onPageChange={setCurrentPage}
+          onPageSizeChange={setPageSize}
+          pageSizeOptions={[15, 25, 50, 100]}
+          itemLabel="thoughts"
+          isLoading={isLoading}
+        />
+      )}
     </div>
   );
 };

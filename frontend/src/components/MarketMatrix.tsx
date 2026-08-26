@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import {
   Layers,
   Search,
@@ -11,6 +11,7 @@ import {
 import type { Market } from '../types/index.js';
 import type { MarketTickData } from '../hooks/useTelemetry.js';
 import { MarketCardSkeleton } from './ui/Skeleton.js';
+import { Pagination } from './ui/Pagination.js';
 
 interface MarketMatrixProps {
   markets: Market[];
@@ -32,27 +33,50 @@ export const MarketMatrix: React.FC<MarketMatrixProps> = ({
   const [selectedSymbol, setSelectedSymbol] = useState<string>('ALL');
   const [selectedWindow, setSelectedWindow] = useState<string>('ALL');
   const [searchQuery, setSearchQuery] = useState<string>('');
+  const [currentPage, setCurrentPage] = useState<number>(1);
+  const [pageSize, setPageSize] = useState<number>(6);
 
   // Filter only active live markets with positive remaining time
-  const filteredMarkets = markets.filter((m) => {
-    const tick = liveTicks.get(m.id);
-    const timeLeft = tick?.timeLeftSeconds ?? Math.max(0, Math.floor((new Date(m.closeTimestamp).getTime() - Date.now()) / 1000));
-    
-    // Only live open markets
-    if (m.status !== 'Open' && timeLeft <= 0) return false;
+  const filteredMarkets = useMemo(() => {
+    return markets.filter((m) => {
+      const tick = liveTicks.get(m.id);
+      const timeLeft = tick?.timeLeftSeconds ?? Math.max(0, Math.floor((new Date(m.closeTimestamp).getTime() - Date.now()) / 1000));
+      
+      // Only live open markets
+      if (m.status !== 'Open' && timeLeft <= 0) return false;
 
-    if (selectedSymbol !== 'ALL' && m.symbol !== selectedSymbol) return false;
-    if (selectedWindow !== 'ALL' && m.windowDuration !== selectedWindow) return false;
-    if (searchQuery) {
-      const q = searchQuery.toLowerCase();
-      return (
-        m.symbol.toLowerCase().includes(q) ||
-        m.strikePrice.toString().includes(q) ||
-        m.windowDuration.toLowerCase().includes(q)
-      );
+      if (selectedSymbol !== 'ALL' && m.symbol !== selectedSymbol) return false;
+      if (selectedWindow !== 'ALL' && m.windowDuration !== selectedWindow) return false;
+      if (searchQuery.trim()) {
+        const q = searchQuery.toLowerCase().trim();
+        return (
+          m.symbol.toLowerCase().includes(q) ||
+          m.strikePrice.toString().includes(q) ||
+          m.windowDuration.toLowerCase().includes(q)
+        );
+      }
+      return true;
+    });
+  }, [markets, liveTicks, selectedSymbol, selectedWindow, searchQuery]);
+
+  // Reset to page 1 on filter/search change
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [selectedSymbol, selectedWindow, searchQuery]);
+
+  // Clamp current page when filtered markets change
+  const totalPages = Math.max(1, Math.ceil(filteredMarkets.length / pageSize));
+  useEffect(() => {
+    if (currentPage > totalPages) {
+      setCurrentPage(totalPages);
     }
-    return true;
-  });
+  }, [totalPages, currentPage]);
+
+  // Paginated slice of markets
+  const paginatedMarkets = useMemo(() => {
+    const start = (currentPage - 1) * pageSize;
+    return filteredMarkets.slice(start, start + pageSize);
+  }, [filteredMarkets, currentPage, pageSize]);
 
   return (
     <div className="terminal-panel market-matrix-panel">
@@ -142,7 +166,7 @@ export const MarketMatrix: React.FC<MarketMatrixProps> = ({
             )}
           </div>
         ) : (
-          filteredMarkets.map((market) => {
+          paginatedMarkets.map((market) => {
             const tick = liveTicks.get(market.id);
             const isSelected = market.id === selectedMarketId;
 
@@ -260,6 +284,20 @@ export const MarketMatrix: React.FC<MarketMatrixProps> = ({
           })
         )}
       </div>
+
+      {/* Pagination Footer */}
+      {filteredMarkets.length > 0 && (
+        <Pagination
+          currentPage={currentPage}
+          totalItems={filteredMarkets.length}
+          pageSize={pageSize}
+          onPageChange={setCurrentPage}
+          onPageSizeChange={setPageSize}
+          pageSizeOptions={[6, 12, 24, 48]}
+          itemLabel="markets"
+          isLoading={isLoading}
+        />
+      )}
     </div>
   );
 };

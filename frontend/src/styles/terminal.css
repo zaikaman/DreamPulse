@@ -1039,3 +1039,29 @@
   }
 }
 
+/* -------------------------------------------------------------------------- */
+/* DreamPulse Unified Pagination Bar                                          */
+/* -------------------------------------------------------------------------- */
+.dreampulse-pagination-bar {
+  user-select: none;
+}
+
+.dreampulse-pagination-bar button:hover:not(:disabled) {
+  border-color: var(--brand-cyan) !important;
+  color: var(--brand-cyan) !important;
+  box-shadow: 0 0 8px rgba(0, 240, 255, 0.15);
+}
+
+.dreampulse-pagination-bar button:active:not(:disabled) {
+  transform: scale(0.96);
+}
+
+@media (max-width: 640px) {
+  .dreampulse-pagination-bar {
+    flex-direction: column;
+    align-items: flex-start !important;
+    gap: 10px !important;
+  }
+}
+
+

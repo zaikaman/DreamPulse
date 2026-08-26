@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react';
+import React, { useMemo, useState, useEffect } from 'react';
 import {
   TrendingUp,
   TrendingDown,
@@ -29,6 +29,7 @@ import { useAnalytics, type AnalyticsRange, type EquityPoint, type DailyBar } fr
 import type { WalletState } from '../../hooks/useSessionKey.js';
 import { useUserRole } from '../../hooks/useUserRole.js';
 import { Spinner } from '../ui/Spinner.js';
+import { Pagination } from '../ui/Pagination.js';
 
 // ---------- Small SVG Chart Helpers ----------
 
@@ -271,7 +272,7 @@ export const AnalyticsView: React.FC<AnalyticsViewProps> = ({ wallet, onConnectW
   const { data, isLoading, error, range, setRange, refresh } = useAnalytics(wallet, '30d');
   const [showSwarm, setShowSwarm] = useState(true);
   const [ledgerPage, setLedgerPage] = useState(1);
-  const ledgerPageSize = 10;
+  const [ledgerPageSize, setLedgerPageSize] = useState(10);
 
   const rangeOptions: { id: AnalyticsRange; label: string }[] = [
     { id: '24h', label: '24H' },
@@ -290,10 +291,22 @@ export const AnalyticsView: React.FC<AnalyticsViewProps> = ({ wallet, onConnectW
   }, [data?.ledger]);
 
   const totalLedgerPages = Math.max(1, Math.ceil(ledgerRows.length / ledgerPageSize));
+
+  // Reset/clamp ledgerPage on range or pageSize change
+  useEffect(() => {
+    setLedgerPage(1);
+  }, [range]);
+
+  useEffect(() => {
+    if (ledgerPage > totalLedgerPages) {
+      setLedgerPage(totalLedgerPages);
+    }
+  }, [totalLedgerPages, ledgerPage]);
+
   const pagedLedger = useMemo(() => {
     const start = (ledgerPage - 1) * ledgerPageSize;
     return ledgerRows.slice(start, start + ledgerPageSize);
-  }, [ledgerRows, ledgerPage]);
+  }, [ledgerRows, ledgerPage, ledgerPageSize]);
 
   const exportCsv = () => {
     if (!data) return;
@@ -772,15 +785,9 @@ export const AnalyticsView: React.FC<AnalyticsViewProps> = ({ wallet, onConnectW
               <span style={{ fontWeight: 700, fontSize: 13 }}>Daily Balance Ledger</span>
               <span style={{ fontSize: 10, padding: '2px 6px', borderRadius: 999, background: 'rgba(255,255,255,0.06)', border: '1px solid var(--border)', fontFamily: 'var(--font-mono)', color: 'var(--muted-foreground)' }}>{ledgerRows.length} days • verifiable</span>
             </div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-              <span style={{ fontSize: 11, color: 'var(--muted-foreground)', fontFamily: 'var(--font-mono)' }}>
-                Page {ledgerPage} / {totalLedgerPages}
-              </span>
-              <div style={{ display: 'flex', gap: 4 }}>
-                <button type="button" disabled={ledgerPage <= 1} onClick={() => setLedgerPage((p) => Math.max(1, p - 1))} className="btn-secondary" style={{ padding: '4px 8px', fontSize: 11, opacity: ledgerPage <= 1 ? 0.5 : 1 }}>Prev</button>
-                <button type="button" disabled={ledgerPage >= totalLedgerPages} onClick={() => setLedgerPage((p) => Math.min(totalLedgerPages, p + 1))} className="btn-secondary" style={{ padding: '4px 8px', fontSize: 11, opacity: ledgerPage >= totalLedgerPages ? 0.5 : 1 }}>Next</button>
-              </div>
-            </div>
+            <button type="button" className="btn-secondary" onClick={exportCsv} style={{ fontSize: 11, padding: '4px 10px' }}>
+              <Download size={12} /> <span>Export CSV</span>
+            </button>
           </div>
           <div style={{ overflowX: 'auto' }}>
             <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>
@@ -828,12 +835,20 @@ export const AnalyticsView: React.FC<AnalyticsViewProps> = ({ wallet, onConnectW
               </tbody>
             </table>
           </div>
-          <div style={{ padding: '10px 14px', borderTop: '1px solid var(--border)', background: 'rgba(0,0,0,0.2)', display: 'flex', alignItems: 'center', justifyContent: 'space-between', fontSize: 11, color: 'var(--muted-foreground)', flexWrap: 'wrap', gap: 8 }}>
-            <span>Balance = Σ settled (payout − cost) per day • <span style={{ color: 'var(--brand-cyan)' }}>Transparent & verifiable</span> • Pending trades excluded</span>
-            <button type="button" className="btn-secondary" onClick={exportCsv} style={{ fontSize: 10, padding: '4px 8px' }}>
-              <Download size={11} /> Export ledger CSV
-            </button>
-          </div>
+
+          {/* Ledger Pagination Bar */}
+          {ledgerRows.length > 0 && (
+            <Pagination
+              currentPage={ledgerPage}
+              totalItems={ledgerRows.length}
+              pageSize={ledgerPageSize}
+              onPageChange={setLedgerPage}
+              onPageSizeChange={setLedgerPageSize}
+              pageSizeOptions={[10, 25, 50]}
+              itemLabel="days"
+              isLoading={isLoading}
+            />
+          )}
         </div>
 
         <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>

@@ -128,7 +128,17 @@ export class SettlementService {
       return;
     }
 
+    this.sweeps = [];
+    this.sweepsMap.clear();
+    const seenUserMarket = new Set<string>();
+
     for (const row of data) {
+      const userMktKey = `${(row.user_address || '').toLowerCase()}:${(row.market_id || '').toLowerCase()}`;
+      if (seenUserMarket.has(userMktKey)) {
+        continue;
+      }
+      seenUserMarket.add(userMktKey);
+
       const sweep: SettlementSweep = {
         id: row.id,
         userAddress: row.user_address,
@@ -136,7 +146,7 @@ export class SettlementService {
         winningOutcome: row.winning_outcome as OutcomeType,
         claimableAmount: Number(row.claimable_amount),
         payoutToken: row.payout_token || 'tUSDC',
-        isCompounded: row.is_compounded ?? true,
+        isCompounded: row.is_compounded ?? false,
         txHash: (row.tx_hash as Hex) || undefined,
         status: row.status as 'PENDING' | 'CONFIRMED' | 'FAILED',
         claimedAt: row.claimed_at,
@@ -554,8 +564,24 @@ export class SettlementService {
 
         const isCopyTrader = normalizedUser.toLowerCase() !== operatorAccount.address.toLowerCase();
 
-        // 100% Direct Payout: Transfer the tUSDC payout from operator directly to the copy-trader's wallet
-        if (isCopyTrader && pos.rawAmount > 0n) {
+        // If this market was already swept for this user, do not process again
+        const alreadySwept = this.sweeps.some(
+          (s) => s.userAddress.toLowerCase() === normalizedUser.toLowerCase() && s.marketId.toLowerCase() === pos.marketId.toLowerCase(),
+        );
+        if (alreadySwept) {
+          continue;
+        }
+
+        // Only transfer payout to copy-trader if the on-chain redeem actually succeeded or in test mode
+        const canTransferPayout =
+          process.env.NODE_ENV === 'test' ||
+          redeemSucceeded;
+
+        if (
+          canTransferPayout &&
+          isCopyTrader &&
+          pos.rawAmount > 0n
+        ) {
           try {
             const transferHash = await executeOperatorWriteContract({
               address: SOMNIA_ADDRESSES.testUsdc,
@@ -570,6 +596,15 @@ export class SettlementService {
           } catch (tErr: any) {
             console.warn(`[SettlementService] Payout transfer to ${normalizedUser} failed:`, tErr.message);
           }
+        }
+
+        // If not test mode and copy-trader, do not create a sweep record if redemption didn't succeed
+        if (
+          process.env.NODE_ENV !== 'test' &&
+          isCopyTrader &&
+          !redeemSucceeded
+        ) {
+          continue;
         }
 
         // If no new txHash was generated from transfer/redeem, fall back to pos.txHash

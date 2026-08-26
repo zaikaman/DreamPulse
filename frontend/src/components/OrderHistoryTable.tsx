@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   ExternalLink,
   Filter,
@@ -13,10 +13,6 @@ import {
   User,
   Bot,
   Wallet,
-  ChevronLeft,
-  ChevronRight,
-  ChevronsLeft,
-  ChevronsRight,
   RotateCcw,
   Receipt,
 } from 'lucide-react';
@@ -25,6 +21,7 @@ import { apiClient } from '../services/api.js';
 import { telemetryClient } from '../services/telemetry-client.js';
 import { OrderHistoryTableSkeleton } from './ui/Skeleton.js';
 import { Spinner } from './ui/Spinner.js';
+import { Pagination } from './ui/Pagination.js';
 
 interface OrderHistoryTableProps {
   orders?: OrderExecution[];
@@ -228,16 +225,6 @@ export const OrderHistoryTable: React.FC<OrderHistoryTableProps> = ({
 
   useEffect(() => {
     if (currentPage > totalPages) setCurrentPage(totalPages);
-  }, [currentPage, totalPages]);
-
-  const startItemIndex = total === 0 ? 0 : (currentPage - 1) * pageSize + 1;
-  const endItemIndex = Math.min(currentPage * pageSize, total);
-
-  const paginationItems = useMemo(() => {
-    if (totalPages <= 7) return Array.from({ length: totalPages }, (_, i) => i + 1);
-    if (currentPage <= 4) return [1, 2, 3, 4, 5, '...', totalPages];
-    if (currentPage >= totalPages - 3) return [1, '...', totalPages - 4, totalPages - 3, totalPages - 2, totalPages - 1, totalPages];
-    return [1, '...', currentPage - 1, currentPage, currentPage + 1, '...', totalPages];
   }, [currentPage, totalPages]);
 
   const clearFilters = () => {
@@ -502,36 +489,16 @@ export const OrderHistoryTable: React.FC<OrderHistoryTableProps> = ({
       )}
 
       {total > 0 && (
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '14px', padding: '12px 20px', borderTop: '1px solid var(--border)', background: 'rgba(0, 0, 0, 0.25)' }}>
-          <div style={{ fontSize: '12px', color: 'var(--muted-foreground)', fontFamily: 'var(--font-mono)' }}>
-            Showing <strong style={{ color: 'var(--foreground)' }}>{startItemIndex}–{endItemIndex}</strong> of <strong style={{ color: 'var(--brand-cyan)' }}>{total}</strong> fills
-            {isFiltered && scopeTotals.totalFills !== total && <span style={{ opacity: 0.6 }}> ({scopeTotals.totalFills} total in ledger)</span>}
-          </div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '16px', flexWrap: 'wrap' }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '11px', color: 'var(--muted-foreground)' }}>
-              <span>Rows per page:</span>
-              <div style={{ display: 'flex', gap: '2px', background: 'rgba(255, 255, 255, 0.03)', padding: '2px', borderRadius: '4px', border: '1px solid var(--border)' }}>
-                {[15, 25, 50, 100].map((size) => (
-                  <button key={size} id={`btn-page-size-${size}`} type="button" onClick={() => handlePageSize(size)} style={{ padding: '2px 7px', fontSize: '11px', fontFamily: 'var(--font-mono)', background: pageSize === size ? 'rgba(0, 240, 255, 0.15)' : 'transparent', border: pageSize === size ? '1px solid var(--brand-cyan)' : '1px solid transparent', color: pageSize === size ? 'var(--brand-cyan)' : 'var(--muted-foreground)', borderRadius: '3px', cursor: 'pointer', fontWeight: pageSize === size ? 700 : 400, transition: 'all 0.15s ease' }}>{size}</button>
-                ))}
-              </div>
-            </div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
-              <button id="btn-page-first" type="button" disabled={currentPage === 1 || isFetching} onClick={() => setCurrentPage(1)} style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', width: '28px', height: '28px', borderRadius: '5px', background: 'rgba(255, 255, 255, 0.03)', border: '1px solid var(--border)', color: currentPage === 1 ? 'rgba(255, 255, 255, 0.2)' : 'var(--foreground)', cursor: currentPage === 1 || isFetching ? 'not-allowed' : 'pointer', opacity: isFetching ? 0.6 : 1 }} title="First Page"><ChevronsLeft size={14} /></button>
-              <button id="btn-page-prev" type="button" disabled={currentPage === 1 || isFetching} onClick={() => setCurrentPage((p) => Math.max(1, p - 1))} style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', width: '28px', height: '28px', borderRadius: '5px', background: 'rgba(255, 255, 255, 0.03)', border: '1px solid var(--border)', color: currentPage === 1 ? 'rgba(255, 255, 255, 0.2)' : 'var(--foreground)', cursor: currentPage === 1 || isFetching ? 'not-allowed' : 'pointer', opacity: isFetching ? 0.6 : 1 }} title="Previous Page"><ChevronLeft size={14} /></button>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '3px' }}>
-                {paginationItems.map((item, idx) => {
-                  if (item === '...') return <span key={`ellipsis-${idx}`} style={{ padding: '0 4px', fontSize: '11px', color: 'var(--muted-foreground)', fontFamily: 'var(--font-mono)' }}>...</span>;
-                  const pageNum = Number(item);
-                  const isActive = currentPage === pageNum;
-                  return <button key={pageNum} id={`btn-page-${pageNum}`} type="button" disabled={isFetching} onClick={() => setCurrentPage(pageNum)} style={{ minWidth: '28px', height: '28px', padding: '0 6px', borderRadius: '5px', fontSize: '11px', fontFamily: 'var(--font-mono)', fontWeight: isActive ? 700 : 500, background: isActive ? 'rgba(0, 240, 255, 0.15)' : 'rgba(255, 255, 255, 0.02)', border: isActive ? '1px solid var(--brand-cyan)' : '1px solid var(--border)', color: isActive ? 'var(--brand-cyan)' : 'var(--foreground)', cursor: isFetching ? 'not-allowed' : 'pointer', opacity: isFetching ? 0.7 : 1 }}>{pageNum}</button>;
-                })}
-              </div>
-              <button id="btn-page-next" type="button" disabled={currentPage === totalPages || isFetching} onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))} style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', width: '28px', height: '28px', borderRadius: '5px', background: 'rgba(255, 255, 255, 0.03)', border: '1px solid var(--border)', color: currentPage === totalPages ? 'rgba(255, 255, 255, 0.2)' : 'var(--foreground)', cursor: currentPage === totalPages || isFetching ? 'not-allowed' : 'pointer', opacity: isFetching ? 0.6 : 1 }} title="Next Page"><ChevronRight size={14} /></button>
-              <button id="btn-page-last" type="button" disabled={currentPage === totalPages || isFetching} onClick={() => setCurrentPage(totalPages)} style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', width: '28px', height: '28px', borderRadius: '5px', background: 'rgba(255, 255, 255, 0.03)', border: '1px solid var(--border)', color: currentPage === totalPages ? 'rgba(255, 255, 255, 0.2)' : 'var(--foreground)', cursor: currentPage === totalPages || isFetching ? 'not-allowed' : 'pointer', opacity: isFetching ? 0.6 : 1 }} title="Last Page"><ChevronsRight size={14} /></button>
-            </div>
-          </div>
-        </div>
+        <Pagination
+          currentPage={currentPage}
+          totalItems={total}
+          pageSize={pageSize}
+          onPageChange={setCurrentPage}
+          onPageSizeChange={handlePageSize}
+          pageSizeOptions={[15, 25, 50, 100]}
+          itemLabel="fills"
+          isLoading={isFetching}
+        />
       )}
       <style>{`@keyframes spin{from{transform:rotate(0deg)}to{transform:rotate(360deg)}}`}</style>
     </div>

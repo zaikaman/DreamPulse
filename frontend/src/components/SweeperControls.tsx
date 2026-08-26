@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, useRef } from 'react';
+import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import {
   Sparkles,
   RefreshCw,
@@ -11,6 +11,8 @@ import {
   Eye,
   Bot,
   User,
+  Search,
+  X,
 } from 'lucide-react';
 import { apiClient } from '../services/api.js';
 import { SOMNIA_ADDRESSES } from '../services/web3.js';
@@ -18,6 +20,7 @@ import type { SettlementSweep } from '../types/index.js';
 import { telemetryClient, type SweepCompleteData, type PnlUpdateData } from '../services/telemetry-client.js';
 import { ClaimCelebration } from './ClaimCelebration.js';
 import { Spinner } from './ui/Spinner.js';
+import { Pagination } from './ui/Pagination.js';
 
 interface SweeperControlsProps {
   userAddress?: string;
@@ -69,6 +72,52 @@ export const SweeperControls: React.FC<SweeperControlsProps> = ({
   const [unclaimedAmount, setUnclaimedAmount] = useState<number>(initialCache?.unclaimedAmount || 0);
   const [totalClaimedAllTime, setTotalClaimedAllTime] = useState<number>(initialCache?.totalClaimedAllTime || 0);
   const [claimableMarketsCount, setClaimableMarketsCount] = useState<number>(initialCache?.claimableMarketsCount || 0);
+
+  // Table Filter & Pagination States
+  const [selectedOutcome, setSelectedOutcome] = useState<'ALL' | 'YES' | 'NO'>('ALL');
+  const [searchQuery, setSearchQuery] = useState<string>('');
+  const [currentPage, setCurrentPage] = useState<number>(1);
+  const [pageSize, setPageSize] = useState<number>(10);
+
+  // Filtered sweep history
+  const filteredHistory = useMemo(() => {
+    return history.filter((sweep) => {
+      if (selectedOutcome !== 'ALL' && sweep.winningOutcome !== selectedOutcome) {
+        return false;
+      }
+      if (searchQuery.trim()) {
+        const q = searchQuery.trim().toLowerCase();
+        const matchesMarket = (sweep.marketId || '').toLowerCase().includes(q);
+        const matchesTx = (sweep.txHash || '').toLowerCase().includes(q);
+        const matchesToken = (sweep.payoutToken || '').toLowerCase().includes(q);
+        if (!matchesMarket && !matchesTx && !matchesToken) {
+          return false;
+        }
+      }
+      return true;
+    });
+  }, [history, selectedOutcome, searchQuery]);
+
+  // Reset to page 1 whenever filters or address change
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [selectedOutcome, searchQuery, activeAddress]);
+
+  // Clamp current page when filtered history length shrinks
+  const totalPages = Math.max(1, Math.ceil(filteredHistory.length / pageSize));
+  useEffect(() => {
+    if (currentPage > totalPages) {
+      setCurrentPage(totalPages);
+    }
+  }, [totalPages, currentPage]);
+
+  // Paginated slice
+  const paginatedHistory = useMemo(() => {
+    const start = (currentPage - 1) * pageSize;
+    return filteredHistory.slice(start, start + pageSize);
+  }, [filteredHistory, currentPage, pageSize]);
+
+  const isFiltered = selectedOutcome !== 'ALL' || searchQuery.trim().length > 0;
 
   // Celebration modal state
   const [celebrationState, setCelebrationState] = useState<{
@@ -416,7 +465,7 @@ export const SweeperControls: React.FC<SweeperControlsProps> = ({
         )}
       </div>
 
-      {/* 2. Redemption History Table */}
+      {/* 2. Redemption History Table with Search & Pagination */}
       <div className="terminal-panel" style={{ padding: '0', overflow: 'hidden' }}>
         <div
           className="terminal-panel-header"
@@ -426,6 +475,8 @@ export const SweeperControls: React.FC<SweeperControlsProps> = ({
             justifyContent: 'space-between',
             padding: '14px 20px',
             borderBottom: '1px solid var(--border)',
+            flexWrap: 'wrap',
+            gap: '12px',
           }}
         >
           <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
@@ -433,10 +484,126 @@ export const SweeperControls: React.FC<SweeperControlsProps> = ({
             <h3 style={{ fontSize: '14px', fontWeight: 700, margin: 0, color: 'var(--foreground)' }}>
               {isViewingSelf ? 'My Settlement Redemption History' : 'Protocol Settlement Redemption History'}
             </h3>
+            <span
+              style={{
+                fontSize: '11px',
+                color: 'var(--muted-foreground)',
+                fontFamily: 'var(--font-mono)',
+                marginLeft: '4px',
+              }}
+            >
+              ({filteredHistory.length}{isFiltered ? ` of ${history.length}` : ''} confirmed)
+            </span>
           </div>
-          <span style={{ fontSize: '11px', color: 'var(--muted-foreground)', fontFamily: 'var(--font-mono)' }}>
-            {history.length} confirmed redemptions
-          </span>
+
+          {/* Search & Outcome Filter Controls */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
+            {/* Search Input */}
+            <div
+              style={{
+                position: 'relative',
+                display: 'flex',
+                alignItems: 'center',
+                background: 'rgba(255, 255, 255, 0.03)',
+                border: '1px solid var(--border)',
+                borderRadius: '6px',
+                padding: '4px 8px',
+                gap: '6px',
+                width: '200px',
+              }}
+            >
+              <Search size={13} style={{ color: 'var(--muted-foreground)', flexShrink: 0 }} />
+              <input
+                type="text"
+                placeholder="Search market / tx..."
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                style={{
+                  background: 'transparent',
+                  border: 'none',
+                  outline: 'none',
+                  color: 'var(--foreground)',
+                  fontSize: '11px',
+                  width: '100%',
+                  fontFamily: 'var(--font-mono)',
+                }}
+              />
+              {searchQuery && (
+                <button
+                  type="button"
+                  onClick={() => setSearchQuery('')}
+                  style={{
+                    background: 'transparent',
+                    border: 'none',
+                    padding: 0,
+                    cursor: 'pointer',
+                    color: 'var(--muted-foreground)',
+                    display: 'flex',
+                    alignItems: 'center',
+                  }}
+                >
+                  <X size={12} />
+                </button>
+              )}
+            </div>
+
+            {/* Outcome Filter Pills */}
+            <div
+              style={{
+                display: 'flex',
+                gap: '2px',
+                background: 'rgba(255, 255, 255, 0.03)',
+                padding: '2px',
+                borderRadius: '6px',
+                border: '1px solid var(--border)',
+              }}
+            >
+              {(['ALL', 'YES', 'NO'] as const).map((outcome) => {
+                const isActive = selectedOutcome === outcome;
+                return (
+                  <button
+                    key={outcome}
+                    type="button"
+                    onClick={() => setSelectedOutcome(outcome)}
+                    style={{
+                      padding: '3px 8px',
+                      fontSize: '11px',
+                      fontFamily: 'var(--font-mono)',
+                      fontWeight: isActive ? 700 : 500,
+                      background: isActive
+                        ? outcome === 'YES'
+                          ? 'rgba(0, 255, 102, 0.18)'
+                          : outcome === 'NO'
+                          ? 'rgba(255, 51, 102, 0.18)'
+                          : 'rgba(0, 240, 255, 0.15)'
+                        : 'transparent',
+                      border: isActive
+                        ? `1px solid ${
+                            outcome === 'YES'
+                              ? 'var(--trade-buy)'
+                              : outcome === 'NO'
+                              ? 'var(--trade-sell)'
+                              : 'var(--brand-cyan)'
+                          }`
+                        : '1px solid transparent',
+                      color: isActive
+                        ? outcome === 'YES'
+                          ? 'var(--trade-buy)'
+                          : outcome === 'NO'
+                          ? 'var(--trade-sell)'
+                          : 'var(--brand-cyan)'
+                        : 'var(--muted-foreground)',
+                      borderRadius: '4px',
+                      cursor: 'pointer',
+                      transition: 'all 0.15s ease',
+                    }}
+                  >
+                    {outcome}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
         </div>
 
         <div style={{ overflowX: 'auto' }}>
@@ -475,22 +642,39 @@ export const SweeperControls: React.FC<SweeperControlsProps> = ({
                     <td style={{ padding: '12px 16px', textAlign: 'right' }}><span style={{ width: '60px', height: '12px', background: 'rgba(255,255,255,0.06)', borderRadius: '4px', display: 'inline-block', marginLeft: 'auto' }} className="dreampulse-skeleton skeleton-shimmer" /></td>
                   </tr>
                 ))
-              ) : history.length === 0 ? (
+              ) : filteredHistory.length === 0 ? (
                 <tr>
                   <td colSpan={6} style={{ textAlign: 'center', padding: '36px', color: 'var(--muted-foreground)', fontSize: '12px' }}>
-                    {isViewingSelf
-                      ? 'No personal settlement claims recorded yet for this wallet.'
-                      : 'No protocol settlement claims recorded yet.'}
+                    {isFiltered ? (
+                      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '8px' }}>
+                        <span>No settlement claims match the current filter criteria.</span>
+                        <button
+                          type="button"
+                          className="btn-secondary"
+                          style={{ fontSize: '11px', padding: '4px 10px' }}
+                          onClick={() => {
+                            setSelectedOutcome('ALL');
+                            setSearchQuery('');
+                          }}
+                        >
+                          Reset Filters
+                        </button>
+                      </div>
+                    ) : isViewingSelf ? (
+                      'No personal settlement claims recorded yet for this wallet.'
+                    ) : (
+                      'No protocol settlement claims recorded yet.'
+                    )}
                   </td>
                 </tr>
               ) : (
-                history.map((sweep) => {
+                paginatedHistory.map((sweep) => {
                   const timeStr = new Date(sweep.claimedAt).toLocaleString();
                   const shortTx = sweep.txHash ? `${sweep.txHash.slice(0, 6)}...${sweep.txHash.slice(-4)}` : 'N/A';
                   const explorerUrl = sweep.txHash ? `https://shannon-explorer.somnia.network/tx/${sweep.txHash}` : '#';
 
                   return (
-                    <tr key={sweep.id} style={{ borderBottom: '1px solid rgba(255, 255, 255, 0.04)' }}>
+                    <tr key={sweep.id} style={{ borderBottom: '1px solid rgba(255, 255, 255, 0.04)', transition: 'background 0.15s ease' }}>
                       <td style={{ padding: '12px 16px', fontSize: '11px', color: 'var(--muted-foreground)', fontFamily: 'var(--font-mono)' }}>
                         {timeStr}
                       </td>
@@ -570,6 +754,18 @@ export const SweeperControls: React.FC<SweeperControlsProps> = ({
             </tbody>
           </table>
         </div>
+
+        {/* Pagination Bar */}
+        <Pagination
+          currentPage={currentPage}
+          totalItems={filteredHistory.length}
+          pageSize={pageSize}
+          onPageChange={setCurrentPage}
+          onPageSizeChange={setPageSize}
+          pageSizeOptions={[10, 25, 50, 100]}
+          itemLabel="sweeps"
+          isLoading={isLoading}
+        />
       </div>
 
       {/* Confetti Celebration Modal */}
