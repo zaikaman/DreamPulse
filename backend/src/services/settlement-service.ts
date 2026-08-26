@@ -552,11 +552,10 @@ export class SettlementService {
           }
         }
 
-        // Only transfer payout to copy-trader if the on-chain redeem succeeded or was already verified
+        // Only transfer payout to copy-trader if the on-chain redeem actually succeeded or in test mode
         const canTransferPayout =
           process.env.NODE_ENV === 'test' ||
-          redeemSucceeded ||
-          (pos.txHash && pos.txHash.startsWith('0x'));
+          redeemSucceeded;
 
         if (
           canTransferPayout &&
@@ -577,12 +576,18 @@ export class SettlementService {
           }
         }
 
-        if (autoCompound && canTransferPayout) {
-          await compounderService.compoundProceeds(normalizedUser, pos.claimableAmount, pos.poolAddress);
+        // If not test mode and not operator self-sweep, skip registering a sweep if the redemption did not succeed
+        if (
+          process.env.NODE_ENV !== 'test' &&
+          normalizedUser.toLowerCase() !== operatorAccount.address.toLowerCase() &&
+          !redeemSucceeded &&
+          !txHash
+        ) {
+          continue;
         }
 
-        if (!txHash && pos.txHash) {
-          txHash = pos.txHash;
+        if (autoCompound && canTransferPayout) {
+          await compounderService.compoundProceeds(normalizedUser, pos.claimableAmount, pos.poolAddress);
         }
 
         if (txHash) {

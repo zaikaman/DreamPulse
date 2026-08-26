@@ -350,15 +350,20 @@ export class MarketService extends EventEmitter {
             const stale = this.markets.get(id);
             if (stale) {
               const closeMs = new Date(stale.closeTimestamp).getTime();
+              const isHexMarket = stale.id.startsWith('0x') && stale.id.length === 66;
               if (Date.now() >= closeMs && stale.status !== 'Finalized') {
-                const spot = this.spotPrices.get(stale.symbol)?.price || stale.strikePrice;
-                stale.status = 'Finalized';
-                stale.settlementPrice = spot;
-                stale.winningOutcome = spot >= stale.strikePrice ? 'YES' : 'NO';
-                void this.persistFinalizedMarket(stale).catch(() => {});
-                void import('./order-service.js').then((mod) => {
-                  void mod.orderService.settleOrdersForMarket(stale.id, stale.winningOutcome!, stale.settlementPrice);
-                }).catch(() => {});
+                if (!isHexMarket) {
+                  const spot = this.spotPrices.get(stale.symbol)?.price || stale.strikePrice;
+                  stale.status = 'Finalized';
+                  stale.settlementPrice = spot;
+                  stale.winningOutcome = spot >= stale.strikePrice ? 'YES' : 'NO';
+                  void this.persistFinalizedMarket(stale).catch(() => {});
+                  void import('./order-service.js').then((mod) => {
+                    void mod.orderService.settleOrdersForMarket(stale.id, stale.winningOutcome!, stale.settlementPrice);
+                  }).catch(() => {});
+                } else {
+                  stale.status = 'Resolving';
+                }
               }
               this.archiveHistoricalMarket(stale);
               this.markets.delete(id);
@@ -607,20 +612,25 @@ export class MarketService extends EventEmitter {
       const timeLeftSeconds = Math.max(0, Math.floor((closeTime - now) / 1000));
 
       if (timeLeftSeconds <= 0 && market.status === 'Open') {
-        market.status = 'Finalized';
-        const spot = this.spotPrices.get(market.symbol)?.price || market.strikePrice;
-        market.settlementPrice = spot;
-        market.winningOutcome = spot >= market.strikePrice ? 'YES' : 'NO';
-        this.archiveHistoricalMarket(market);
-        this.markets.delete(id);
-        this.depthBooks.delete(id);
-        expiredCount++;
+        const isHexMarket = market.id.startsWith('0x') && market.id.length === 66;
+        if (!isHexMarket) {
+          market.status = 'Finalized';
+          const spot = this.spotPrices.get(market.symbol)?.price || market.strikePrice;
+          market.settlementPrice = spot;
+          market.winningOutcome = spot >= market.strikePrice ? 'YES' : 'NO';
+          this.archiveHistoricalMarket(market);
+          this.markets.delete(id);
+          this.depthBooks.delete(id);
+          expiredCount++;
 
-        // Persist finalized state & settle orders for this market once
-        void this.persistFinalizedMarket(market).catch(() => {});
-        void import('./order-service.js').then((mod) => {
-          void mod.orderService.settleOrdersForMarket(market.id, market.winningOutcome!, market.settlementPrice);
-        }).catch(() => {});
+          // Persist finalized state & settle orders for this market once
+          void this.persistFinalizedMarket(market).catch(() => {});
+          void import('./order-service.js').then((mod) => {
+            void mod.orderService.settleOrdersForMarket(market.id, market.winningOutcome!, market.settlementPrice);
+          }).catch(() => {});
+        } else {
+          market.status = 'Resolving';
+        }
       } else if (market.status === 'Open') {
         const ticker = this.spotPrices.get(market.symbol);
         const spot = ticker?.price || market.strikePrice;

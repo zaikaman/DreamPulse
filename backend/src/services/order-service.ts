@@ -461,6 +461,7 @@ export class OrderService {
   }
 
   public readonly initPromise: Promise<void>;
+  private lastOnChainReconcileTime: number = 0;
 
   constructor() {
     this.initPromise = this.initializeFromDb().catch((err) => {
@@ -1642,6 +1643,12 @@ export class OrderService {
           void import('./analytics-service.js').then((m) => m.analyticsService.invalidateCache()).catch(() => {});
         } catch {}
       }
+
+      if (now - this.lastOnChainReconcileTime > 15000) {
+        this.lastOnChainReconcileTime = now;
+        void this.reconcileSettledOrdersWithOnChain().catch(() => {});
+      }
+
       this.lastPnlSyncAt = Date.now();
       this.notifyStateChange();
     };

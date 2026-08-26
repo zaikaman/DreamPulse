@@ -62,7 +62,17 @@ export class SweeperAgent extends BaseAgent {
     const timeSinceLastSweep = now - this.lastSweepTimestamp;
 
     // Check if we should trigger batch sweep
-    const winningOutcome = market.winningOutcome || 'YES';
+    if (!market.winningOutcome) {
+      return {
+        agentType: 'Sweeper',
+        action: 'HOLD',
+        targetMarketId: market.id,
+        confidence: 0.5,
+        rationale: `Market ${market.symbol} (${market.windowDuration}) is ${market.status} and awaiting winning outcome resolution.`,
+      };
+    }
+
+    const winningOutcome = market.winningOutcome;
     const confidence = 0.98;
     const rationale = `[SETTLEMENT SWEEP] Market ${market.symbol} resolved with winning outcome ${winningOutcome}. Redeeming unclaimed collateral and auto-compounding to trading balance.`;
 
