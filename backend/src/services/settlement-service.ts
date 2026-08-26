@@ -572,16 +572,8 @@ export class SettlementService {
           continue;
         }
 
-        // Only transfer payout to copy-trader if the on-chain redeem actually succeeded or in test mode
-        const canTransferPayout =
-          process.env.NODE_ENV === 'test' ||
-          redeemSucceeded;
-
-        if (
-          canTransferPayout &&
-          isCopyTrader &&
-          pos.rawAmount > 0n
-        ) {
+        // For copy-traders whose orders won on-chain, transfer the tUSDC payout from operator to copy-trader
+        if (isCopyTrader && pos.rawAmount > 0n) {
           try {
             const transferHash = await executeOperatorWriteContract({
               address: SOMNIA_ADDRESSES.testUsdc,
@@ -598,17 +590,27 @@ export class SettlementService {
           }
         }
 
-        // If not test mode and copy-trader, do not create a sweep record if redemption didn't succeed
+        // If not test mode and copy-trader, do not create a sweep record if transfer failed
         if (
           process.env.NODE_ENV !== 'test' &&
           isCopyTrader &&
-          !redeemSucceeded
+          !txHash
         ) {
           continue;
         }
 
-        // If no new txHash was generated from transfer/redeem, fall back to pos.txHash
-        if (!txHash && pos.txHash) {
+        // For operator self-sweep, if neither redeem succeeded nor txHash exists in production, skip
+        if (
+          process.env.NODE_ENV !== 'test' &&
+          !isCopyTrader &&
+          !redeemSucceeded &&
+          !txHash
+        ) {
+          continue;
+        }
+
+        // In test mode, fallback to pos.txHash if no txHash was generated
+        if (!txHash && pos.txHash && process.env.NODE_ENV === 'test') {
           txHash = pos.txHash;
         }
 
