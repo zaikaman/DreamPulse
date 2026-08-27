@@ -7,6 +7,7 @@ import {
   ClockIcon,
   AdjustmentsHorizontalIcon,
   ExclamationTriangleIcon,
+  InformationCircleIcon,
   XMarkIcon,
   CheckCircleIcon,
   ArrowTopRightOnSquareIcon,
@@ -22,6 +23,7 @@ import type { SessionGrant } from '../types/index.js';
 import type { WalletState } from '../hooks/useSessionKey.js';
 import { SOMNIA_ADDRESSES } from '../services/web3.js';
 import { Spinner } from './ui/Spinner.js';
+import { parseWeb3Error } from '../lib/errorUtils.js';
 
 interface SessionDelegationModalProps {
   isOpen: boolean;
@@ -123,16 +125,18 @@ export const SessionDelegationModal: React.FC<SessionDelegationModalProps> = ({
     { label: '7 Days', hours: 168 },
   ];
 
+  const parsedError = error ? parseWeb3Error(error) : null;
+
   const getStepStatusText = () => {
     switch (stepState) {
       case 'authorizing_onchain':
-        return 'Step 1/3: Confirming On-Chain Operator Approval on Somnia...';
+        return 'Step 1/2: Confirming On-Chain Operator Approval in Wallet...';
       case 'depositing_vault':
-        return 'Step 2/3: Approving Working Capital Collateral...';
+        return 'Step 1/2: Approving Collateral Deposit...';
       case 'signing_eip712':
-        return 'Step 3/3: Signing EIP-712 Risk Ceilings in Wallet...';
+        return 'Step 2/2: Signing EIP-712 Risk Ceilings in Wallet...';
       case 'registering_backend':
-        return 'Registering Session with DreamPulse Swarm...';
+        return 'Finalizing: Registering Session with DreamPulse Swarm...';
       default:
         return 'Sign EIP-712 & Submit On-Chain Delegation...';
     }
@@ -428,38 +432,35 @@ export const SessionDelegationModal: React.FC<SessionDelegationModalProps> = ({
             </div>
           )}
 
-          {/* 3-Step Onboarding Architecture Banner */}
+          {/* 2-Step Onboarding Architecture Banner */}
           <div className="safety-guarantees-card" style={{ padding: '12px 14px', marginBottom: '14px' }}>
             <div className="safety-card-title" style={{ marginBottom: '10px' }}>
               <Square3Stack3DIcon className="w-4 h-4 safety-icon-cyan" />
-              <span>3-Step Autonomous Copy-Trading Setup</span>
+              <span>2-Step Cryptographic Delegation Flow</span>
             </div>
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '8px', fontSize: '11px' }}>
-              <div style={{ background: 'hsl(var(--card) / 0.5)', padding: '8px', borderRadius: '6px', border: '1px solid hsl(var(--border) / 0.5)' }}>
-                <strong style={{ display: 'flex', alignItems: 'center', gap: '4px', color: 'hsl(var(--foreground))' }}>
-                  <CurrencyDollarIcon className="w-3 h-3" />
-                  <span>1. Mint Collateral</span>
-                </strong>
-                <p style={{ margin: '4px 0 0 0', color: 'hsl(var(--muted-foreground))', lineHeight: 1.3 }}>
-                  Hold TestUSDC collateral (or deposit working capital) to fund DreamDEX order fills.
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '10px', fontSize: '11px' }}>
+              <div style={{ background: 'hsl(var(--card) / 0.5)', padding: '10px', borderRadius: '6px', border: '1px solid hsl(var(--border) / 0.5)' }}>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '4px' }}>
+                  <strong style={{ display: 'flex', alignItems: 'center', gap: '5px', color: 'hsl(var(--foreground))', fontSize: '11.5px' }}>
+                    <ShieldCheckIcon className="w-3.5 h-3.5" style={{ color: 'var(--brand-cyan)' }} />
+                    <span>Step 1: On-Chain Auth</span>
+                  </strong>
+                  <span style={{ fontSize: '9px', fontFamily: 'var(--font-mono)', padding: '1px 5px', borderRadius: '3px', background: 'hsl(var(--secondary))', color: 'hsl(var(--muted-foreground))' }}>1 TX</span>
+                </div>
+                <p style={{ margin: 0, color: 'hsl(var(--muted-foreground))', lineHeight: 1.35 }}>
+                  Authorizes operator key on <code>OperatorPermissionsRegistry</code> & enables token routing.
                 </p>
               </div>
-              <div style={{ background: 'hsl(var(--card) / 0.5)', padding: '8px', borderRadius: '6px', border: '1px solid hsl(var(--border) / 0.5)' }}>
-                <strong style={{ display: 'flex', alignItems: 'center', gap: '4px', color: 'hsl(var(--foreground))' }}>
-                  <ShieldCheckIcon className="w-3 h-3" />
-                  <span>2. On-Chain Auth</span>
-                </strong>
-                <p style={{ margin: '4px 0 0 0', color: 'hsl(var(--muted-foreground))', lineHeight: 1.3 }}>
-                  Authorizes operator key on <code>OperatorPermissionsRegistry</code> for <code>placeOrderFor</code>.
-                </p>
-              </div>
-              <div style={{ background: 'hsl(var(--card) / 0.5)', padding: '8px', borderRadius: '6px', border: '1px solid hsl(var(--border) / 0.5)' }}>
-                <strong style={{ display: 'flex', alignItems: 'center', gap: '4px', color: 'hsl(var(--foreground))' }}>
-                  <DocumentCheckIcon className="w-3 h-3" />
-                  <span>3. EIP-712 Caps</span>
-                </strong>
-                <p style={{ margin: '4px 0 0 0', color: 'hsl(var(--muted-foreground))', lineHeight: 1.3 }}>
-                  Binds maximum trade size and 24h daily spend ceilings without custody of your wallet.
+              <div style={{ background: 'hsl(var(--card) / 0.5)', padding: '10px', borderRadius: '6px', border: '1px solid hsl(var(--border) / 0.5)' }}>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '4px' }}>
+                  <strong style={{ display: 'flex', alignItems: 'center', gap: '5px', color: 'hsl(var(--foreground))', fontSize: '11.5px' }}>
+                    <DocumentCheckIcon className="w-3.5 h-3.5" style={{ color: 'var(--brand-cyan)' }} />
+                    <span>Step 2: EIP-712 Policy</span>
+                  </strong>
+                  <span style={{ fontSize: '9px', fontFamily: 'var(--font-mono)', padding: '1px 5px', borderRadius: '3px', background: 'rgba(16, 185, 129, 0.15)', color: 'var(--trade-yes)' }}>GASLESS</span>
+                </div>
+                <p style={{ margin: 0, color: 'hsl(var(--muted-foreground))', lineHeight: 1.35 }}>
+                  Cryptographically enforces maximum trade size & 24h spend ceilings without custodial access.
                 </p>
               </div>
             </div>
@@ -655,11 +656,37 @@ export const SessionDelegationModal: React.FC<SessionDelegationModalProps> = ({
             </div>
           </div>
 
-          {/* Error Alert */}
-          {error && (
-            <div className="error-alert-box">
-              <ExclamationTriangleIcon className="w-4 h-4 error-icon" />
-              <span>{error}</span>
+          {/* Error / Rejection Alert */}
+          {parsedError && (
+            <div className={`session-error-card ${parsedError.isUserRejection ? 'session-error-notice' : 'session-error-critical'}`}>
+              <div className="session-error-header">
+                <div className="session-error-title-wrap">
+                  {parsedError.isUserRejection ? (
+                    <InformationCircleIcon className="w-4 h-4 text-amber-400 shrink-0" />
+                  ) : (
+                    <ExclamationTriangleIcon className="w-4 h-4 text-rose-400 shrink-0" />
+                  )}
+                  <span className="session-error-title">{parsedError.title}</span>
+                </div>
+                <button
+                  type="button"
+                  className="session-error-dismiss"
+                  onClick={onClearError}
+                  aria-label="Dismiss error notice"
+                  title="Dismiss notice"
+                >
+                  <XMarkIcon className="w-3.5 h-3.5" />
+                </button>
+              </div>
+              <div className="session-error-body">
+                <p className="session-error-message">{parsedError.message}</p>
+                {parsedError.technicalDetails && !parsedError.isUserRejection && (
+                  <details className="session-error-details">
+                    <summary>Technical Details</summary>
+                    <code>{parsedError.technicalDetails}</code>
+                  </details>
+                )}
+              </div>
             </div>
           )}
         </div>
@@ -722,7 +749,7 @@ export const SessionDelegationModal: React.FC<SessionDelegationModalProps> = ({
                   <span>
                     {activeSession?.isActive
                       ? 'Update Session & On-Chain Permissions'
-                      : 'Authorize On-Chain Session & Deposit'}
+                      : 'Authorize On-Chain Session & Delegation'}
                   </span>
                 </>
               )}

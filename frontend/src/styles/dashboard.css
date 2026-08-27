@@ -1763,16 +1763,121 @@ select.terminal-select option {
   box-shadow: 0 0 0 1px var(--brand-cyan-glow);
 }
 
+.error-alert-box,
+.session-error-card {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  border-radius: var(--radius-md);
+  padding: 12px 14px;
+  font-size: 11.5px;
+  transition: all 0.2s ease;
+  animation: fadeInModal 0.2s ease-out;
+}
+
+.session-error-critical,
 .error-alert-box {
+  background: rgba(244, 63, 94, 0.08);
+  border: 1px solid rgba(244, 63, 94, 0.35);
+  box-shadow: 0 2px 8px rgba(244, 63, 94, 0.06);
+}
+
+.session-error-notice {
+  background: rgba(245, 158, 11, 0.08);
+  border: 1px solid rgba(245, 158, 11, 0.35);
+  box-shadow: 0 2px 8px rgba(245, 158, 11, 0.06);
+}
+
+.session-error-header {
   display: flex;
   align-items: center;
+  justify-content: space-between;
   gap: 8px;
-  background: rgba(244, 63, 94, 0.1);
-  border: 1px solid rgba(244, 63, 94, 0.3);
-  border-radius: var(--radius-sm);
-  padding: 10px 12px;
+}
+
+.session-error-title-wrap {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  font-weight: 600;
+  font-size: 12px;
+  letter-spacing: -0.01em;
+}
+
+.session-error-critical .session-error-title-wrap {
   color: var(--trade-no);
-  font-size: 11px;
+}
+
+.session-error-notice .session-error-title-wrap {
+  color: #fbbf24;
+}
+
+.session-error-title {
+  line-height: 1.2;
+}
+
+.session-error-dismiss {
+  background: transparent;
+  border: none;
+  color: hsl(var(--muted-foreground));
+  cursor: pointer;
+  padding: 2px;
+  border-radius: 4px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.15s ease;
+}
+
+.session-error-dismiss:hover {
+  background: hsl(var(--secondary));
+  color: hsl(var(--foreground));
+}
+
+.session-error-body {
+  margin: 0;
+}
+
+.session-error-message {
+  margin: 0;
+  color: hsl(var(--foreground));
+  line-height: 1.45;
+  font-size: 11.5px;
+  opacity: 0.92;
+}
+
+.session-error-details {
+  margin-top: 8px;
+  padding-top: 6px;
+  border-top: 1px solid hsl(var(--border) / 0.4);
+}
+
+.session-error-details summary {
+  font-size: 10px;
+  font-family: var(--font-mono);
+  color: hsl(var(--muted-foreground));
+  cursor: pointer;
+  user-select: none;
+}
+
+.session-error-details summary:hover {
+  color: hsl(var(--foreground));
+}
+
+.session-error-details code {
+  display: block;
+  margin-top: 6px;
+  padding: 6px 8px;
+  background: hsl(var(--background) / 0.8);
+  border: 1px solid hsl(var(--border) / 0.5);
+  border-radius: 4px;
+  font-size: 10px;
+  font-family: var(--font-mono);
+  color: hsl(var(--muted-foreground));
+  word-break: break-all;
+  white-space: pre-wrap;
+  max-height: 120px;
+  overflow-y: auto;
 }
 
 .error-icon {

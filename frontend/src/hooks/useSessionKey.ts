@@ -5,6 +5,7 @@ import { apiClient } from '../services/api.js';
 import { supabase } from '../services/supabase.js';
 import { web3Service, SOMNIA_ADDRESSES, somniaShannonTestnet } from '../services/web3.js';
 import { telemetryClient, type OrderFillData, type SweepCompleteData } from '../services/telemetry-client.js';
+import { parseWeb3Error } from '../lib/errorUtils.js';
 
 export interface WalletState {
   isConnected: boolean;
@@ -102,7 +103,8 @@ export function useSessionKey(): UseSessionKeyReturn {
       await refreshBalances(wallet.address);
     } catch (err: any) {
       console.error('[useSessionKey] Faucet claim error:', err);
-      setError(err?.message || 'Failed to claim TestUSDC faucet');
+      const parsed = parseWeb3Error(err);
+      setError(parsed.message);
       throw err;
     } finally {
       setIsFauceting(false);
@@ -153,7 +155,8 @@ export function useSessionKey(): UseSessionKeyReturn {
       await refreshAllowanceStatus();
       await refreshBalances(wallet.address);
     } catch (err: any) {
-      setError(err.message || 'Failed to authorize operator');
+      const parsed = parseWeb3Error(err);
+      setError(parsed.message);
       throw err;
     } finally {
       setIsFixingAllowance(false);
@@ -264,7 +267,8 @@ export function useSessionKey(): UseSessionKeyReturn {
       // Probe per-pool allowance so UI can surface 0x3fb0ba2e fix banner
       try { await refreshAllowanceStatus(); } catch {}
     } catch (err: any) {
-      setError(err.message || 'Failed to connect wallet');
+      const parsed = parseWeb3Error(err);
+      setError(parsed.message);
     } finally {
       setIsLoading(false);
     }
@@ -302,7 +306,8 @@ export function useSessionKey(): UseSessionKeyReturn {
         isCorrectNetwork: true,
       }));
     } catch (err: any) {
-      setError(err.message || 'Failed to switch network');
+      const parsed = parseWeb3Error(err);
+      setError(parsed.message);
     } finally {
       setIsLoading(false);
     }
@@ -329,7 +334,7 @@ export function useSessionKey(): UseSessionKeyReturn {
       let onChainTxHash: `0x${string}` | undefined;
 
       try {
-        // 2-click forever: 1 batch for approve(operator,MAX)+global+per-pool(7d) via EIP-5792/7702 + 1 EIP-712
+        // Step 1: 1 batch for approve(operator,MAX)+global+per-pool(7d) via EIP-5792/7702
         setStepState('authorizing_onchain');
         let futurePools: Address[] = [];
         try {
@@ -364,7 +369,6 @@ export function useSessionKey(): UseSessionKeyReturn {
           }
         }
         // Delegate EOA to Batch helper for future per-pool isApprovedForPool without further clicks (EIP-7702, executor:self)
-        // Backend will then call user's delegated EOA to setOperatorApprovalForPool for new pools as they appear — no user popup
         try {
           const code = await (web3Service as any).isDelegatedToBatch?.(wallet.address);
           if (!code) {
@@ -372,7 +376,7 @@ export function useSessionKey(): UseSessionKeyReturn {
           }
         } catch {}
 
-        // Step 2: (Optional) Collateral vault deposit — only for SpotPools, BinaryPools use allowance only
+        // Optional: Collateral vault deposit — only for SpotPools, BinaryPools use allowance only
         if (params.depositAmount && params.depositAmount > 0 && params.targetPool) {
           setStepState('depositing_vault');
           await web3Service.setupPoolVault({
@@ -383,7 +387,7 @@ export function useSessionKey(): UseSessionKeyReturn {
           });
         }
 
-        // Step 3: Sign EIP-712 structured data in user's wallet for risk ceilings
+        // Step 2: Sign EIP-712 structured data in user's wallet for risk ceilings
         setStepState('signing_eip712');
         const now = Date.now();
         const expiresAt = new Date(now + params.durationHours * 3600 * 1000).toISOString();
@@ -399,7 +403,7 @@ export function useSessionKey(): UseSessionKeyReturn {
           deadline,
         });
 
-        // Step 4: Register session on backend
+        // Register session on backend
         setStepState('registering_backend');
         const res = await apiClient.registerSession({
           userAddress: wallet.address,
@@ -436,8 +440,8 @@ export function useSessionKey(): UseSessionKeyReturn {
 
         return createdSession;
       } catch (err: any) {
-        const msg = err.message || 'Failed to create session delegation';
-        setError(msg);
+        const parsed = parseWeb3Error(err);
+        setError(parsed.message);
         throw err;
       } finally {
         setIsSigning(false);
@@ -468,7 +472,8 @@ export function useSessionKey(): UseSessionKeyReturn {
         setActiveSession(null);
         localStorage.removeItem(LOCAL_SESSION_KEY);
       } catch (err: any) {
-        setError(err.message || 'Failed to revoke session');
+        const parsed = parseWeb3Error(err);
+        setError(parsed.message);
       } finally {
         setIsLoading(false);
       }
