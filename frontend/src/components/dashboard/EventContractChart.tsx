@@ -4,6 +4,7 @@ import {
   ArrowTrendingDownIcon,
   SparklesIcon,
   ClockIcon,
+  LockClosedIcon,
 } from '@heroicons/react/24/outline';
 import type { Market, AgentThoughtLog } from '../../types/index.js';
 import type { MarketTickData } from '../../hooks/useTelemetry.js';
@@ -126,7 +127,7 @@ export const EventContractChart: React.FC<EventContractChartProps> = ({
   }, []);
 
   // Real-time dynamic countdown & formatted expiry
-  const { formattedCountdown, formattedExpiry } = useMarketCountdown(market.closeTimestamp, market.windowDuration);
+  const { formattedCountdown, formattedExpiry, isLocked } = useMarketCountdown(market.closeTimestamp, market.windowDuration);
 
   // Scaler functions for SVG chart
   const { width, height } = dimensions;
@@ -538,18 +539,21 @@ export const EventContractChart: React.FC<EventContractChartProps> = ({
 
         {/* Expiry Floating Countdown Badge in Settlement Zone */}
         <div
-          className="absolute z-20 flex flex-col items-center gap-0.5 px-2.5 py-1 rounded-lg bg-background/90 border border-border/70 shadow-lg backdrop-blur-md"
+          className={cn(
+            "absolute z-20 flex flex-col items-center gap-0.5 px-2.5 py-1 rounded-lg border shadow-lg backdrop-blur-md transition-all",
+            isLocked ? "bg-amber-950/40 border-amber-500/50 text-amber-400" : "bg-background/90 border-border/70 text-brand-cyan"
+          )}
           style={{
             left: `${splitX + 14}px`,
             top: '8px',
           }}
         >
-          <div className="flex items-center gap-1.5 text-xs font-mono font-bold text-brand-cyan">
-            <ClockIcon className="w-3.5 h-3.5 animate-pulse text-brand-cyan" />
-            <span>{formattedCountdown}</span>
+          <div className={cn("flex items-center gap-1.5 text-xs font-mono font-bold", isLocked ? "text-amber-400" : "text-brand-cyan")}>
+            {isLocked ? <LockClosedIcon className="w-3.5 h-3.5 animate-pulse text-amber-400" /> : <ClockIcon className="w-3.5 h-3.5 animate-pulse text-brand-cyan" />}
+            <span>{isLocked ? `${formattedCountdown} (LOCKED)` : formattedCountdown}</span>
           </div>
           <div className="text-[8px] font-mono text-muted-foreground tracking-wider uppercase">
-            Time to Settlement
+            {isLocked ? 'Resolving Phase' : 'Time to Settlement'}
           </div>
         </div>
 

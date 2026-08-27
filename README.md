@@ -360,7 +360,7 @@ Auto-triggers on the very first wallet connection per address/device (persisted 
 2. **1-Click Testnet Collateral & Gas Faucet**: Immediately claims 1,000 tUSDC test collateral and verifies STT gas balance with instant acoustic chime feedback.
 3. **Session Key Demystification & Delegation**: Explains non-custodial session keys (enabling sub-100ms algorithmic execution without signing MetaMask popups on every 30s contract) with 1-click authorization and customizable risk caps.
 4. **Choose Your Trading Journey**: Presents 3 role-based pathways that route the user directly to their preferred workflow:
-   * **Autonomous Swarm Vaults (Recommended)**: Routes directly to `Swarm Cockpit` for 1-click copytrading.
+   * **Autonomous Swarm Copytrading (Recommended)**: Routes directly to `Swarm Cockpit` for 1-click zero-deposit copytrading.
    * **AI Alpha Copilot & Trade Terminal**: Routes directly to `Trade Terminal` for manual order execution with AI guidance.
    * **Edge Radar & Quant Studio**: Routes directly to `Edge Radar` for mathematical mispricing arbitrage and formula backtesting.
 

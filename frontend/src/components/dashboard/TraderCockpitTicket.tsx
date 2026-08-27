@@ -5,6 +5,7 @@ import {
   CheckCircleIcon,
   ExclamationTriangleIcon,
   ClockIcon,
+  LockClosedIcon,
   ArrowTrendingUpIcon,
   ArrowTrendingDownIcon,
 } from '@heroicons/react/24/outline';
@@ -56,7 +57,8 @@ export const TraderCockpitTicket: React.FC<TraderCockpitTicketProps> = ({
   onSelectDuration,
 }) => {
   // Real-time dynamic countdown & formatted expiry
-  const { formattedCountdown, formattedExpiry } = useMarketCountdown(market.closeTimestamp, market.windowDuration);
+  const { formattedCountdown, formattedExpiry, isLocked, isExpired } = useMarketCountdown(market.closeTimestamp, market.windowDuration);
+  const isTradingLocked = isLocked || isExpired || market.status !== 'Open';
 
   // Order Configuration State
   const [outcome, setOutcome] = useState<'YES' | 'NO'>('YES');
@@ -224,6 +226,11 @@ export const TraderCockpitTicket: React.FC<TraderCockpitTicketProps> = ({
       return;
     }
 
+    if (isTradingLocked) {
+      setExecutionError('Trading is locked during the final 30 seconds before contract resolution.');
+      return;
+    }
+
     setIsSubmitting(true);
     setExecutionError(null);
 
@@ -313,9 +320,12 @@ export const TraderCockpitTicket: React.FC<TraderCockpitTicketProps> = ({
             </Badge>
           </div>
 
-          <div className="flex items-center gap-1 text-[11px] font-bold text-brand-cyan">
-            <ClockIcon className="w-3.5 h-3.5" />
-            <span>{formattedCountdown}</span>
+          <div className={cn(
+            "flex items-center gap-1 text-[11px] font-bold",
+            isTradingLocked ? "text-amber-400 animate-pulse" : "text-brand-cyan"
+          )}>
+            {isTradingLocked ? <LockClosedIcon className="w-3.5 h-3.5 text-amber-400" /> : <ClockIcon className="w-3.5 h-3.5" />}
+            <span>{isTradingLocked ? `${formattedCountdown} (LOCKED)` : formattedCountdown}</span>
           </div>
         </div>
 
@@ -528,8 +538,14 @@ export const TraderCockpitTicket: React.FC<TraderCockpitTicketProps> = ({
         {/* 1-Click Auto-Align AI Button */}
         <button
           type="button"
+          disabled={isTradingLocked}
           onClick={handleAutoAlignAI}
-          className="w-full py-1.5 px-2.5 rounded-lg bg-purple-500/20 hover:bg-purple-500/30 border border-purple-500/40 text-purple-200 text-xs font-bold flex items-center justify-center gap-1.5 transition-all cursor-pointer shadow-xs"
+          className={cn(
+            "w-full py-1.5 px-2.5 rounded-lg border text-xs font-bold flex items-center justify-center gap-1.5 transition-all shadow-xs",
+            isTradingLocked
+              ? "bg-purple-500/5 text-purple-400/40 border-purple-500/10 cursor-not-allowed"
+              : "bg-purple-500/20 hover:bg-purple-500/30 border-purple-500/40 text-purple-200 cursor-pointer"
+          )}
         >
           <BoltIcon className="w-3.5 h-3.5 text-purple-300" />
           <span>Follow AI Trade ({aiRecommendation.recommendedDirection} • {aiRecommendation.confidence}% Conf)</span>
@@ -621,6 +637,15 @@ export const TraderCockpitTicket: React.FC<TraderCockpitTicketProps> = ({
             className="w-full py-3 rounded-xl bg-brand-cyan text-background font-bold text-xs uppercase tracking-wider hover:opacity-90 transition-opacity cursor-pointer flex items-center justify-center gap-2"
           >
             Connect Wallet
+          </button>
+        ) : isTradingLocked ? (
+          <button
+            type="button"
+            disabled={true}
+            className="w-full py-3 rounded-xl font-bold text-xs uppercase tracking-wider bg-amber-500/10 text-amber-400 border border-amber-500/30 flex items-center justify-center gap-2 cursor-not-allowed opacity-90"
+          >
+            <LockClosedIcon className="w-4 h-4 text-amber-400 animate-pulse" />
+            <span>Trading Locked • Resolving in {formattedCountdown}</span>
           </button>
         ) : (
           <button

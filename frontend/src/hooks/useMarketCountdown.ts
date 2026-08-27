@@ -2,9 +2,10 @@ import { useState, useEffect } from 'react';
 
 export interface MarketCountdownResult {
   formattedCountdown: string; // e.g. "03:12"
-  formattedExpiry: string;    // e.g. "11:40 UTC"
+  formattedExpiry: string;    // e.g. "18:40"
   secondsLeft: number;
   isExpired: boolean;
+  isLocked: boolean;          // Trading lockout phase in final 30s before resolution
 }
 
 export function useMarketCountdown(
@@ -46,5 +47,6 @@ export function useMarketCountdown(
     formattedExpiry,
     secondsLeft: diff,
     isExpired: diff <= 0,
+    isLocked: diff <= 30,
   };
 }

@@ -1173,6 +1173,13 @@ export class OrderService {
       throw new Error(`Market '${params.marketId}' not found.`);
     }
 
+    // Enforce trading lockout window during the final resolution phase
+    const closeTimeMs = new Date(market.closeTimestamp).getTime();
+    const timeLeftSec = Math.floor((closeTimeMs - Date.now()) / 1000);
+    if (market.status !== 'Open' || (!isNaN(timeLeftSec) && timeLeftSec <= 15)) {
+      throw new Error(`Trading is locked for market ${market.symbol} during the final resolution phase (${Math.max(0, timeLeftSec)}s remaining).`);
+    }
+
     // Check risk limits directly
     const registeredSession = sessionService.getSessionById(session.id);
     if (registeredSession) {

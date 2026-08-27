@@ -208,23 +208,29 @@ export class MarketService extends EventEmitter {
         const rawAsset = String(m.asset || 'BTC').toUpperCase();
         const symbol = rawAsset.includes('/') ? rawAsset : `${rawAsset}/USD`;
         const spot = this.spotPrices.get(symbol)?.price || (symbol === 'BTC/USD' ? 77000 : 2400);
+        const marketId = String(m.marketId || m.id || `${SOMNIA_ADDRESSES.binaryModule}-${m.id}`);
+        discoveredIds.add(marketId);
 
-        // Parse strike price accurately from question or strike field
-        let strike = 0;
-        const questionText = String(m.question || '');
-        const match = questionText.match(/at or above ([0-9.]+)/i);
-        if (match && match[1]) {
-          strike = parseFloat(match[1]);
-        } else if (m.strike && Number(m.strike) > 0) {
-          const rawStrike = Number(m.strike);
-          if (rawStrike > 1000000) {
-            strike = rawStrike / 100;
+        const existingMarket = this.markets.get(marketId);
+
+        // Parse strike price accurately from question or strike field, or preserve existing fixed strike
+        let strike = existingMarket?.strikePrice || 0;
+        if (strike <= 0) {
+          const questionText = String(m.question || '');
+          const match = questionText.match(/at or above ([0-9.]+)/i);
+          if (match && match[1]) {
+            strike = parseFloat(match[1]);
+          } else if (m.strike && Number(m.strike) > 0) {
+            const rawStrike = Number(m.strike);
+            if (rawStrike > 1000000) {
+              strike = rawStrike / 100;
+            } else {
+              strike = rawStrike;
+            }
           } else {
-            strike = rawStrike;
+            // ATM market ("closes at or above opening price"): lock in fixed spot at creation time
+            strike = symbol === 'DOGE/USD' ? Number(spot.toFixed(3)) : Math.round(spot);
           }
-        } else {
-          // ATM market ("closes at or above opening price")
-          strike = Math.round(spot);
         }
 
         const intervalSec = Number(m.intervalSec || 300);
@@ -237,9 +243,13 @@ export class MarketService extends EventEmitter {
         else windowDuration = '5m';
 
         const expirySec = Number(m.expiry || 0);
-        const closeTimeMs = expirySec > 0 ? expirySec * 1000 : now + intervalSec * 1000;
+        const closeTimeMs = existingMarket
+          ? new Date(existingMarket.closeTimestamp).getTime()
+          : (expirySec > 0 ? expirySec * 1000 : now + intervalSec * 1000);
         const tradingStartSec = Number(m.tradingStart || 0);
-        const openTimeMs = tradingStartSec > 0 ? tradingStartSec * 1000 : closeTimeMs - intervalSec * 1000;
+        const openTimeMs = existingMarket
+          ? new Date(existingMarket.openTimestamp).getTime()
+          : (tradingStartSec > 0 ? tradingStartSec * 1000 : closeTimeMs - intervalSec * 1000);
         const timeLeftSeconds = Math.max(0, Math.floor((closeTimeMs - now) / 1000));
 
         const rawStatus = String(m.status || '');
@@ -261,9 +271,6 @@ export class MarketService extends EventEmitter {
         } else {
           status = 'Finalized';
         }
-
-        const marketId = String(m.marketId || m.id || `${SOMNIA_ADDRESSES.binaryModule}-${m.id}`);
-        discoveredIds.add(marketId);
 
         // Populate unified representation
         const unifiedMarket: UnifiedMarket = {

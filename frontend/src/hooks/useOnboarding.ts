@@ -146,13 +146,13 @@ export function useOnboarding({
       {
         id: 'delegate_session',
         label: 'Authorize Session Key',
-        description: 'Enable sub-second instant order placement',
+        description: 'Auto-copytrade AI swarms with zero manual deposits',
         isCompleted: isSessionActive,
       },
       {
         id: 'execute_trade',
         label: 'Copytrade or Place Trade',
-        description: 'Deposit into an AI Swarm or execute an Event Contract',
+        description: 'Copytrade the live AI swarm or execute an Event Contract',
         isCompleted: isFirstActionDone,
       },
     ];

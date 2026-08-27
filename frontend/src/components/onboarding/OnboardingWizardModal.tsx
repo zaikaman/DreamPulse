@@ -330,11 +330,12 @@ export const OnboardingWizardModal: React.FC<OnboardingWizardModalProps> = ({
             <div className="space-y-4 animate-in fade-in-50 duration-200">
               <div className="space-y-1.5">
                 <h4 className="text-base font-semibold text-foreground">
-                  Enable Sub-Second Instant Execution
+                  Enable Sub-Second Instant Execution & Copytrading
                 </h4>
                 <p className="text-xs text-muted-foreground leading-relaxed">
-                  Prediction contracts expire quickly (30s to 5m). Non-custodial Session Keys allow AI Swarms and 
-                  1-Click Cockpit trading to execute instantaneously without popping up wallet signatures on every trade.
+                  Prediction contracts expire quickly (30s to 5m). Authorizing a session key automatically connects your 
+                  wallet to the autonomous AI swarm copy-trading engine with <strong>zero pool deposits or fund lockups</strong>. 
+                  Your collateral stays strictly in your own wallet.
                 </p>
               </div>
 
@@ -342,8 +343,8 @@ export const OnboardingWizardModal: React.FC<OnboardingWizardModalProps> = ({
               <div className="grid grid-cols-3 gap-2.5">
                 <div className="p-2.5 rounded-xl border border-border/50 bg-secondary/30 space-y-1">
                   <LockClosedIcon className="w-4 h-4 text-muted-foreground" />
-                  <div className="text-xs font-semibold text-foreground">Non-Custodial</div>
-                  <div className="text-[10px] text-muted-foreground leading-tight">Funds stay strictly in your wallet/vault</div>
+                  <div className="text-xs font-semibold text-foreground">100% Non-Custodial</div>
+                  <div className="text-[10px] text-muted-foreground leading-tight">Funds remain in your wallet; zero lockups</div>
                 </div>
 
                 <div className="p-2.5 rounded-xl border border-border/50 bg-secondary/30 space-y-1">
@@ -363,12 +364,12 @@ export const OnboardingWizardModal: React.FC<OnboardingWizardModalProps> = ({
               <div className="rounded-xl border border-border/60 bg-secondary/20 p-3.5 flex items-center justify-between">
                 <div>
                   <div className="font-semibold text-xs text-foreground">
-                    {isSessionActive ? 'Session Active' : 'Delegate Session Access'}
+                    {isSessionActive ? 'Session Active (Copytrading Enabled)' : 'Authorize Session Key'}
                   </div>
                   <div className="text-[11px] text-muted-foreground">
                     {isSessionActive
-                      ? 'Operator authorized for high-frequency execution'
-                      : 'Set max trade size (e.g. 10 tUSDC) and start automated trading'}
+                      ? 'Swarm copytrading is active within your authorized limits'
+                      : 'Set max trade size (e.g. 10 tUSDC) and start automated copytrading'}
                   </div>
                 </div>
 
@@ -378,7 +379,7 @@ export const OnboardingWizardModal: React.FC<OnboardingWizardModalProps> = ({
                   className="h-8 text-xs px-3 shadow-2xs gap-1.5"
                 >
                   <SparklesIcon className="w-3.5 h-3.5" />
-                  <span>{isSessionActive ? 'Manage Session' : 'Configure Session'}</span>
+                  <span>{isSessionActive ? 'Manage Session' : 'Authorize Session'}</span>
                 </Button>
               </div>
             </div>
@@ -412,14 +413,14 @@ export const OnboardingWizardModal: React.FC<OnboardingWizardModalProps> = ({
                     <div>
                       <div className="flex items-center gap-2">
                         <span className="text-xs font-semibold text-foreground">
-                          Autonomous Swarm Vaults
+                          Autonomous Swarm Copytrading
                         </span>
                         <Badge variant="outline" className="text-[9px] font-mono border-emerald-500/30 text-emerald-400 bg-emerald-950/20">
                           Recommended
                         </Badge>
                       </div>
                       <p className="text-[11px] text-muted-foreground mt-0.5">
-                        Deposit into multi-agent AI swarms trading 24/7 on DreamDEX with automated risk controls.
+                        Instantly copytrade multi-agent AI swarms trading 24/7 on DreamDEX. Zero pool deposits or lockups required.
                       </p>
                     </div>
                   </div>
