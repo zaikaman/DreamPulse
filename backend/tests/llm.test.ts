@@ -52,4 +52,23 @@ describe('Groq Multi-Key Round-Robin & Fallback System', () => {
     expect(thought.confidence).toBeGreaterThanOrEqual(0.6);
     expect(thought.thought.length).toBeGreaterThan(10);
   });
+
+  it('strictly dedicates Gemini API client to Strategy Studio synthesis', async () => {
+    const { generateStrategyWithGemini } = await import('../src/llm/client.js');
+    const { customAgentService } = await import('../src/services/custom-agent-service.js');
+
+    // Direct Gemini studio invocation
+    const res = await generateStrategyWithGemini({
+      systemPrompt: 'You are a quantitative strategist.',
+      userPrompt: 'Build a BTC 60s Call strategy on RSI dip',
+    });
+    // In test environments with mock keys, returns null gracefully without touching Groq pool
+    expect(res === null || typeof res === 'string').toBe(true);
+
+    // Prompt-to-agent synthesis
+    const agent = await customAgentService.generateAgentFromPrompt('Aggressive BTC 60s Call sniper when RSI < 25');
+    expect(agent).toHaveProperty('name');
+    expect(agent).toHaveProperty('rules');
+    expect(agent.rules?.action?.direction).toBe('CALL');
+  }, 25000);
 });

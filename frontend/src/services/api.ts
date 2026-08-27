@@ -9,6 +9,9 @@ import type {
   SettlementSweep,
   SweeperSummary,
   PortfolioSummary,
+  CustomAgentDefinition,
+  CustomSwarmDefinition,
+  CustomAgentRules,
 } from '../types/index.js';
 
 const rawApiUrl = ((import.meta as any).env?.VITE_BACKEND_HTTP_URL || '').trim();
@@ -251,10 +254,15 @@ export const apiClient = {
     userAddress?: string;
     agentType: string;
     symbol: string;
+    period?: string;
+    timeframe?: string;
     startDate?: string;
     endDate?: string;
     initialCapital?: number;
-    strategyConfig?: Record<string, unknown>;
+    strategyConfig?: Record<string, any>;
+    frictionConfig?: Record<string, any>;
+    customRules?: CustomAgentRules;
+    customAgentId?: string;
   }): Promise<{ success: boolean; result: BacktestResult }> {
     return fetchJson('/backtest/run', {
       method: 'POST',
@@ -307,6 +315,101 @@ export const apiClient = {
   },
   async resetPersonalSwarm(userAddress: string): Promise<{ success: boolean; config: import('../types/index.js').PersonalSwarmConfig }> {
     return fetchJson('/swarm/reset', { method: 'POST', body: JSON.stringify({ userAddress }) });
+  },
+
+  // Custom Agent & Swarm Studio
+  async getCustomAgents(userAddress?: string): Promise<{ success: boolean; count: number; data: CustomAgentDefinition[] }> {
+    const q = userAddress ? `?userAddress=${encodeURIComponent(userAddress)}` : '';
+    return fetchJson(`/agents/custom${q}`);
+  },
+
+  async getCustomAgentById(id: string): Promise<{ success: boolean; data: CustomAgentDefinition }> {
+    return fetchJson(`/agents/custom/${encodeURIComponent(id)}`);
+  },
+
+  async createCustomAgent(payload: {
+    userAddress: string;
+    name: string;
+    description?: string;
+    symbol: string;
+    timeframe: string;
+    strategyType: string;
+    rules: CustomAgentRules;
+    color?: string;
+    icon?: string;
+    isActive?: boolean;
+  }): Promise<{ success: boolean; data: CustomAgentDefinition }> {
+    return fetchJson('/agents/custom', {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    });
+  },
+
+  async updateCustomAgent(id: string, payload: Partial<CustomAgentDefinition>): Promise<{ success: boolean; data: CustomAgentDefinition }> {
+    return fetchJson(`/agents/custom/${encodeURIComponent(id)}`, {
+      method: 'PUT',
+      body: JSON.stringify(payload),
+    });
+  },
+
+  async deleteCustomAgent(id: string, userAddress: string): Promise<{ success: boolean }> {
+    return fetchJson(`/agents/custom/${encodeURIComponent(id)}?userAddress=${encodeURIComponent(userAddress)}`, {
+      method: 'DELETE',
+    });
+  },
+
+  async deployCustomAgent(id: string, userAddress: string, allowance?: number): Promise<{ success: boolean; data: CustomAgentDefinition }> {
+    return fetchJson(`/agents/custom/${encodeURIComponent(id)}/deploy`, {
+      method: 'POST',
+      body: JSON.stringify({ userAddress, allowance }),
+    });
+  },
+
+  async pauseCustomAgent(id: string, userAddress: string): Promise<{ success: boolean; data: CustomAgentDefinition }> {
+    return fetchJson(`/agents/custom/${encodeURIComponent(id)}/pause`, {
+      method: 'POST',
+      body: JSON.stringify({ userAddress }),
+    });
+  },
+
+  async setCustomAgentAllowance(id: string, userAddress: string, allowance: number): Promise<{ success: boolean; data: CustomAgentDefinition }> {
+    return fetchJson(`/agents/custom/${encodeURIComponent(id)}/allowance`, {
+      method: 'POST',
+      body: JSON.stringify({ userAddress, allowance }),
+    });
+  },
+
+  async generateAgentFromPrompt(prompt: string): Promise<{ success: boolean; data: Partial<CustomAgentDefinition> }> {
+    return fetchJson('/agents/generate', {
+      method: 'POST',
+      body: JSON.stringify({ prompt }),
+    });
+  },
+
+  async getCustomSwarms(userAddress?: string): Promise<{ success: boolean; count: number; data: CustomSwarmDefinition[] }> {
+    const q = userAddress ? `?userAddress=${encodeURIComponent(userAddress)}` : '';
+    return fetchJson(`/swarms/custom${q}`);
+  },
+
+  async createCustomSwarm(payload: {
+    userAddress: string;
+    name: string;
+    description?: string;
+    agents: Array<{ agentId: string; agentName: string; role: string; weight: number }>;
+    consensusRule: string;
+    confidenceThreshold?: number;
+    isActive?: boolean;
+  }): Promise<{ success: boolean; data: CustomSwarmDefinition }> {
+    return fetchJson('/swarms/custom', {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    });
+  },
+
+  async deleteCustomSwarm(id: string, userAddress: string): Promise<{ success: boolean }> {
+    return fetchJson(`/swarms/custom/${encodeURIComponent(id)}?userAddress=${encodeURIComponent(userAddress)}`, {
+      method: 'DELETE',
+    });
   },
 };
 

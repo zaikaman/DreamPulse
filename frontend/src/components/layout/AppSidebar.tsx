@@ -93,8 +93,15 @@ const AppSidebarComponent: React.FC<AppSidebarProps> = ({
     },
     {
       id: 'Strategy Studio',
-      label: 'Strategy & Bot Studio',
+      label: 'Strategy Studio',
+      Icon: SparklesIcon,
+      badge: 'No-Code',
+    },
+    {
+      id: 'Backtester',
+      label: 'Strategy Backtester',
       Icon: ChartBarIcon,
+      badge: 'Lab',
     },
     {
       id: 'Settlement',

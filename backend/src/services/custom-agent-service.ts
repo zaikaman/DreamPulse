@@ -1,0 +1,727 @@
+import crypto from 'crypto';
+import { supabase } from '../config/supabase.js';
+import { generateStrategyWithGemini } from '../llm/client.js';
+import type {
+  CustomAgentDefinition,
+  CustomSwarmDefinition,
+  CustomAgentRules,
+  ConditionRule,
+} from '../types/index.js';
+
+// Pre-built Starter Templates for Immediate Playability
+export const STARTER_TEMPLATES: CustomAgentDefinition[] = [
+  {
+    id: 'template-rsi-sniper',
+    userAddress: '0x0000000000000000000000000000000000000000',
+    name: 'RSI Oversold Dip Sniper',
+    description: 'Executes rapid CALL orders when RSI (14) drops below 28 and spot touches the lower Bollinger Band.',
+    symbol: 'BTC/USD',
+    timeframe: '1m',
+    strategyType: 'MEAN_REVERSION',
+    color: '#2dd4bf',
+    icon: 'BoltIcon',
+    isActive: true,
+    isDeployed: false,
+    allocatedAllowance: 100,
+    spentAllowance: 0,
+    createdAt: '2026-01-01T00:00:00.000Z',
+    rules: {
+      operator: 'AND',
+      conditions: [
+        {
+          id: 'c-1',
+          indicator: 'RSI',
+          period: 14,
+          operator: 'LESS_THAN',
+          value: 28,
+        },
+        {
+          id: 'c-2',
+          indicator: 'BOLLINGER_LOWER',
+          period: 20,
+          stdDev: 2.0,
+          operator: 'LESS_THAN',
+          value: 0,
+        },
+      ],
+      action: {
+        direction: 'CALL',
+        durationSec: 60,
+        stakeType: 'FIXED',
+        stakeAmount: 10,
+      },
+      risk: {
+        maxConsecutiveLosses: 2,
+        cooldownMinutes: 3,
+        minPoolPayoutPct: 78,
+      },
+    },
+  },
+  {
+    id: 'template-bollinger-fade',
+    userAddress: '0x0000000000000000000000000000000000000000',
+    name: 'Bollinger Band Exhaustion Fade',
+    description: 'Fades overextended spikes at the upper Bollinger ceiling with short-duration PUT contracts.',
+    symbol: 'ETH/USD',
+    timeframe: '5m',
+    strategyType: 'MEAN_REVERSION',
+    color: '#f59e0b',
+    icon: 'AdjustmentsHorizontalIcon',
+    isActive: true,
+    isDeployed: false,
+    allocatedAllowance: 150,
+    spentAllowance: 0,
+    createdAt: '2026-01-01T00:00:00.000Z',
+    rules: {
+      operator: 'AND',
+      conditions: [
+        {
+          id: 'c-1',
+          indicator: 'BOLLINGER_UPPER',
+          period: 20,
+          stdDev: 2.2,
+          operator: 'GREATER_THAN',
+          value: 0,
+        },
+        {
+          id: 'c-2',
+          indicator: 'RSI',
+          period: 14,
+          operator: 'GREATER_THAN',
+          value: 72,
+        },
+      ],
+      action: {
+        direction: 'PUT',
+        durationSec: 300,
+        stakeType: 'FIXED',
+        stakeAmount: 15,
+      },
+      risk: {
+        maxConsecutiveLosses: 3,
+        cooldownMinutes: 5,
+        minPoolPayoutPct: 75,
+      },
+    },
+  },
+  {
+    id: 'template-ema-cross',
+    userAddress: '0x0000000000000000000000000000000000000000',
+    name: 'Fast EMA Momentum Rider',
+    description: 'Surfs trend velocity on 9/21 EMA golden crosses during expanding directional volume.',
+    symbol: 'SOL/USD',
+    timeframe: '5m',
+    strategyType: 'MOMENTUM',
+    color: '#a78bfa',
+    icon: 'SparklesIcon',
+    isActive: true,
+    isDeployed: false,
+    allocatedAllowance: 200,
+    spentAllowance: 0,
+    createdAt: '2026-01-01T00:00:00.000Z',
+    rules: {
+      operator: 'AND',
+      conditions: [
+        {
+          id: 'c-1',
+          indicator: 'EMA',
+          period: 9,
+          secondaryPeriod: 21,
+          operator: 'CROSS_ABOVE',
+          value: 0,
+        },
+        {
+          id: 'c-2',
+          indicator: 'PRICE_DRIFT',
+          period: 5,
+          operator: 'GREATER_THAN',
+          value: 0.0015,
+        },
+      ],
+      action: {
+        direction: 'CALL',
+        durationSec: 300,
+        stakeType: 'FIXED',
+        stakeAmount: 20,
+      },
+      risk: {
+        maxConsecutiveLosses: 2,
+        cooldownMinutes: 4,
+        minPoolPayoutPct: 80,
+      },
+    },
+  },
+];
+
+export class CustomAgentService {
+  private inMemoryAgents: Map<string, CustomAgentDefinition> = new Map();
+  private inMemorySwarms: Map<string, CustomSwarmDefinition> = new Map();
+
+  constructor() {
+    // Seed templates into memory
+    for (const t of STARTER_TEMPLATES) {
+      this.inMemoryAgents.set(t.id, t);
+    }
+  }
+
+  /**
+   * Retrieves all agents: Starter templates + user-specific created agents.
+   */
+  public async getCustomAgents(userAddress?: string): Promise<CustomAgentDefinition[]> {
+    const list: CustomAgentDefinition[] = [...STARTER_TEMPLATES];
+
+    // Read from DB if available
+    try {
+      let query = supabase.from('custom_agents').select('*').order('created_at', { ascending: false });
+      if (userAddress) {
+        query = query.or(`user_address.eq.${userAddress.toLowerCase()},user_address.eq.0x0000000000000000000000000000000000000000`);
+      }
+      const { data, error } = await query;
+      if (!error && Array.isArray(data)) {
+        const dbAgents = data.map((row: any) => ({
+          id: row.id,
+          userAddress: row.user_address,
+          name: row.name,
+          description: row.description || '',
+          symbol: row.symbol,
+          timeframe: row.timeframe,
+          strategyType: row.strategy_type,
+          rules: row.rules,
+          color: row.color,
+          icon: row.icon,
+          isActive: row.is_active,
+          isDeployed: Boolean(row.is_deployed),
+          allocatedAllowance: row.allocated_allowance !== undefined && row.allocated_allowance !== null ? Number(row.allocated_allowance) : 100,
+          spentAllowance: row.spent_allowance !== undefined && row.spent_allowance !== null ? Number(row.spent_allowance) : 0,
+          createdAt: row.created_at,
+          updatedAt: row.updated_at,
+        }));
+        // Merge without duplicating templates
+        const existingIds = new Set(list.map((a) => a.id));
+        for (const a of dbAgents) {
+          if (!existingIds.has(a.id)) {
+            list.push(a);
+            existingIds.add(a.id);
+          }
+        }
+      }
+    } catch (_err) {
+      // Fall back to memory
+    }
+
+    // Merge non-template in-memory agents
+    for (const [id, agent] of this.inMemoryAgents.entries()) {
+      if (!list.some((a) => a.id === id)) {
+        if (!userAddress || agent.userAddress.toLowerCase() === userAddress.toLowerCase()) {
+          list.push(agent);
+        }
+      }
+    }
+
+    return list;
+  }
+
+  public async getCustomAgentById(id: string): Promise<CustomAgentDefinition | null> {
+    const inMem = this.inMemoryAgents.get(id);
+    if (inMem) return inMem;
+
+    try {
+      const { data, error } = await supabase.from('custom_agents').select('*').eq('id', id).single();
+      if (!error && data) {
+        return {
+          id: data.id,
+          userAddress: data.user_address,
+          name: data.name,
+          description: data.description || '',
+          symbol: data.symbol,
+          timeframe: data.timeframe,
+          strategyType: data.strategy_type,
+          rules: data.rules,
+          color: data.color,
+          icon: data.icon,
+          isActive: data.is_active,
+          isDeployed: Boolean(data.is_deployed),
+          allocatedAllowance: data.allocated_allowance !== undefined && data.allocated_allowance !== null ? Number(data.allocated_allowance) : 100,
+          spentAllowance: data.spent_allowance !== undefined && data.spent_allowance !== null ? Number(data.spent_allowance) : 0,
+          createdAt: data.created_at,
+          updatedAt: data.updated_at,
+        };
+      }
+    } catch {
+      // ignore
+    }
+    return null;
+  }
+
+  public async createCustomAgent(
+    payload: Omit<CustomAgentDefinition, 'id' | 'createdAt'>
+  ): Promise<CustomAgentDefinition> {
+    const id = crypto.randomUUID();
+    const now = new Date().toISOString();
+    const agent: CustomAgentDefinition = {
+      id,
+      userAddress: payload.userAddress.toLowerCase(),
+      name: payload.name.trim() || 'Custom Agent',
+      description: payload.description || '',
+      symbol: payload.symbol || 'BTC/USD',
+      timeframe: payload.timeframe || '5m',
+      strategyType: payload.strategyType || 'CUSTOM',
+      rules: payload.rules,
+      color: payload.color || '#2dd4bf',
+      icon: payload.icon || 'BoltIcon',
+      isActive: payload.isActive !== false,
+      isDeployed: payload.isDeployed === true,
+      allocatedAllowance: payload.allocatedAllowance ?? 100,
+      spentAllowance: payload.spentAllowance ?? 0,
+      createdAt: now,
+      updatedAt: now,
+    };
+
+    // Store in-memory
+    this.inMemoryAgents.set(id, agent);
+
+    // Persist to Supabase
+    try {
+      await supabase.from('custom_agents').insert({
+        id: agent.id,
+        user_address: agent.userAddress,
+        name: agent.name,
+        description: agent.description,
+        symbol: agent.symbol,
+        timeframe: agent.timeframe,
+        strategy_type: agent.strategyType,
+        rules: agent.rules,
+        color: agent.color,
+        icon: agent.icon,
+        is_active: agent.isActive,
+        is_deployed: agent.isDeployed,
+        allocated_allowance: agent.allocatedAllowance,
+        spent_allowance: agent.spentAllowance,
+        created_at: agent.createdAt,
+        updated_at: agent.updatedAt,
+      });
+    } catch (err: any) {
+      console.warn('[CustomAgentService] Could not persist agent to DB:', err.message);
+    }
+
+    return agent;
+  }
+
+  public async updateCustomAgent(
+    id: string,
+    updates: Partial<CustomAgentDefinition>
+  ): Promise<CustomAgentDefinition | null> {
+    const existing = await this.getCustomAgentById(id);
+    if (!existing) return null;
+
+    const updated: CustomAgentDefinition = {
+      ...existing,
+      ...updates,
+      updatedAt: new Date().toISOString(),
+    };
+
+    this.inMemoryAgents.set(id, updated);
+
+    try {
+      await supabase
+        .from('custom_agents')
+        .update({
+          name: updated.name,
+          description: updated.description,
+          symbol: updated.symbol,
+          timeframe: updated.timeframe,
+          strategy_type: updated.strategyType,
+          rules: updated.rules,
+          color: updated.color,
+          icon: updated.icon,
+          is_active: updated.isActive,
+          is_deployed: updated.isDeployed,
+          allocated_allowance: updated.allocatedAllowance,
+          spent_allowance: updated.spentAllowance,
+          updated_at: updated.updatedAt,
+        })
+        .eq('id', id);
+    } catch (err: any) {
+      console.warn('[CustomAgentService] Could not update agent in DB:', err.message);
+    }
+
+    return updated;
+  }
+
+  public async deployAgent(
+    id: string,
+    _userAddress: string,
+    allowance?: number
+  ): Promise<CustomAgentDefinition | null> {
+    const existing = await this.getCustomAgentById(id);
+    if (!existing) return null;
+
+    const updates: Partial<CustomAgentDefinition> = {
+      isDeployed: true,
+      isActive: true,
+      ...(allowance !== undefined ? { allocatedAllowance: Math.max(0, allowance) } : {}),
+    };
+    return this.updateCustomAgent(id, updates);
+  }
+
+  public async pauseAgent(
+    id: string,
+    _userAddress: string
+  ): Promise<CustomAgentDefinition | null> {
+    const existing = await this.getCustomAgentById(id);
+    if (!existing) return null;
+
+    const updates: Partial<CustomAgentDefinition> = {
+      isDeployed: false,
+    };
+    return this.updateCustomAgent(id, updates);
+  }
+
+  public async setAgentAllowance(
+    id: string,
+    _userAddress: string,
+    allowance: number
+  ): Promise<CustomAgentDefinition | null> {
+    const existing = await this.getCustomAgentById(id);
+    if (!existing) return null;
+
+    const updates: Partial<CustomAgentDefinition> = {
+      allocatedAllowance: Math.max(0, allowance),
+    };
+    return this.updateCustomAgent(id, updates);
+  }
+
+  public async deleteCustomAgent(id: string, userAddress: string): Promise<boolean> {
+    this.inMemoryAgents.delete(id);
+    try {
+      await supabase
+        .from('custom_agents')
+        .delete()
+        .eq('id', id)
+        .eq('user_address', userAddress.toLowerCase());
+      return true;
+    } catch {
+      return true;
+    }
+  }
+
+  // ----------------------------------------------------------------------------
+  // Custom Swarms
+  // ----------------------------------------------------------------------------
+  public async getCustomSwarms(userAddress?: string): Promise<CustomSwarmDefinition[]> {
+    const list: CustomSwarmDefinition[] = [];
+
+    try {
+      let query = supabase.from('custom_swarms').select('*').order('created_at', { ascending: false });
+      if (userAddress) {
+        query = query.eq('user_address', userAddress.toLowerCase());
+      }
+      const { data, error } = await query;
+      if (!error && Array.isArray(data)) {
+        for (const row of data) {
+          list.push({
+            id: row.id,
+            userAddress: row.user_address,
+            name: row.name,
+            description: row.description || '',
+            agents: Array.isArray(row.agent_ids) ? row.agent_ids : [],
+            consensusRule: row.consensus_rule,
+            confidenceThreshold: Number(row.confidence_threshold) || 0.6,
+            isActive: row.is_active,
+            createdAt: row.created_at,
+            updatedAt: row.updated_at,
+          });
+        }
+      }
+    } catch {
+      // ignore
+    }
+
+    for (const [id, swarm] of this.inMemorySwarms.entries()) {
+      if (!list.some((s) => s.id === id)) {
+        if (!userAddress || swarm.userAddress.toLowerCase() === userAddress.toLowerCase()) {
+          list.push(swarm);
+        }
+      }
+    }
+
+    return list;
+  }
+
+  public async createCustomSwarm(
+    payload: Omit<CustomSwarmDefinition, 'id' | 'createdAt'>
+  ): Promise<CustomSwarmDefinition> {
+    const id = crypto.randomUUID();
+    const now = new Date().toISOString();
+    const swarm: CustomSwarmDefinition = {
+      id,
+      userAddress: payload.userAddress.toLowerCase(),
+      name: payload.name.trim() || 'Custom Swarm',
+      description: payload.description || '',
+      agents: payload.agents || [],
+      consensusRule: payload.consensusRule || 'MAJORITY',
+      confidenceThreshold: payload.confidenceThreshold ?? 0.6,
+      isActive: payload.isActive !== false,
+      createdAt: now,
+      updatedAt: now,
+    };
+
+    this.inMemorySwarms.set(id, swarm);
+
+    try {
+      await supabase.from('custom_swarms').insert({
+        id: swarm.id,
+        user_address: swarm.userAddress,
+        name: swarm.name,
+        description: swarm.description,
+        agent_ids: swarm.agents,
+        consensus_rule: swarm.consensusRule,
+        confidence_threshold: swarm.confidenceThreshold,
+        is_active: swarm.isActive,
+        created_at: swarm.createdAt,
+        updated_at: swarm.updatedAt,
+      });
+    } catch (err: any) {
+      console.warn('[CustomAgentService] Could not persist swarm to DB:', err.message);
+    }
+
+    return swarm;
+  }
+
+  public async deleteCustomSwarm(id: string, userAddress: string): Promise<boolean> {
+    this.inMemorySwarms.delete(id);
+    try {
+      await supabase
+        .from('custom_swarms')
+        .delete()
+        .eq('id', id)
+        .eq('user_address', userAddress.toLowerCase());
+      return true;
+    } catch {
+      return true;
+    }
+  }
+
+  // ----------------------------------------------------------------------------
+  // AI Prompt-to-Agent Generator
+  // ----------------------------------------------------------------------------
+  public async generateAgentFromPrompt(prompt: string): Promise<Partial<CustomAgentDefinition>> {
+    const systemPrompt = `You are the DreamPulse AI Quant Architect. You design autonomous binary options trading strategies for the Somnia blockchain.
+Given a trader's natural language concept, generate a structured strategy specification matching this JSON format exactly:
+{
+  "name": "Strategy Title",
+  "description": "Short 1-sentence summary",
+  "symbol": "BTC/USD" | "ETH/USD" | "SOL/USD" | "BNB/USD" | "DOGE/USD",
+  "timeframe": "1m" | "5m" | "15m" | "1h",
+  "strategyType": "MOMENTUM" | "MEAN_REVERSION" | "BREAKOUT" | "VOLATILITY" | "CUSTOM",
+  "color": "#2dd4bf" | "#f59e0b" | "#a78bfa",
+  "icon": "BoltIcon" | "SparklesIcon" | "AdjustmentsHorizontalIcon",
+  "rules": {
+    "operator": "AND" | "OR",
+    "conditions": [
+      {
+        "id": "c-1",
+        "indicator": "RSI" | "SMA" | "EMA" | "BOLLINGER_UPPER" | "BOLLINGER_LOWER" | "PRICE_DRIFT",
+        "period": 9,
+        "secondaryPeriod": 21,
+        "stdDev": 2.0,
+        "operator": "LESS_THAN" | "GREATER_THAN" | "CROSS_ABOVE" | "CROSS_BELOW",
+        "value": 0
+      }
+    ],
+    "action": {
+      "direction": "CALL" | "PUT",
+      "durationSec": 60 | 300 | 900,
+      "stakeType": "FIXED",
+      "stakeAmount": 10
+    },
+    "risk": {
+      "maxConsecutiveLosses": 2,
+      "cooldownMinutes": 3,
+      "minPoolPayoutPct": 75
+    }
+  }
+}
+If the user mentions moving averages or crosses (e.g. 9/21 EMA), set indicator="EMA", period=9, secondaryPeriod=21, operator="CROSS_ABOVE" or "CROSS_BELOW".
+If the user mentions velocity or drift, add a condition with indicator="PRICE_DRIFT", operator="GREATER_THAN" or "LESS_THAN", value=0.0015.
+Respond ONLY with valid JSON. No markdown codeblocks, no explanations.`;
+
+    try {
+      const rawResponse = await generateStrategyWithGemini({
+        systemPrompt,
+        userPrompt: `Trader Strategy Request: "${prompt}"`,
+        temperature: 0.2,
+      });
+
+      if (rawResponse) {
+        // Extract JSON if wrapped in markdown
+        const cleaned = rawResponse.replace(/```json/gi, '').replace(/```/g, '').trim();
+        const parsed = JSON.parse(cleaned);
+
+        const name = parsed.name || parsed.strategy_name || parsed.title;
+        const rules = parsed.rules || parsed.strategy_rules;
+
+        if (name && rules && Array.isArray(rules.conditions) && rules.conditions.length > 0) {
+          // Normalize symbol
+          let symbol = parsed.symbol || 'BTC/USD';
+          if (symbol.includes('SOL')) symbol = 'SOL/USD';
+          else if (symbol.includes('ETH')) symbol = 'ETH/USD';
+          else if (symbol.includes('BNB')) symbol = 'BNB/USD';
+          else if (symbol.includes('DOGE')) symbol = 'DOGE/USD';
+          else if (symbol.includes('BTC')) symbol = 'BTC/USD';
+
+          // Normalize timeframe
+          let timeframe = parsed.timeframe || '5m';
+          if (!['1m', '5m', '15m', '1h'].includes(timeframe)) timeframe = '5m';
+
+          return {
+            name,
+            description: parsed.description || `AI strategy for ${symbol}`,
+            symbol,
+            timeframe,
+            strategyType: parsed.strategyType || (rules.action?.direction === 'CALL' ? 'MOMENTUM' : 'MEAN_REVERSION'),
+            color: parsed.color || (rules.action?.direction === 'CALL' ? '#2dd4bf' : '#f59e0b'),
+            icon: parsed.icon || (rules.action?.direction === 'CALL' ? 'BoltIcon' : 'AdjustmentsHorizontalIcon'),
+            rules: {
+              operator: rules.operator === 'OR' ? 'OR' : 'AND',
+              conditions: rules.conditions.map((c: any, idx: number) => ({
+                id: c.id || `c-${idx + 1}-${Date.now()}`,
+                indicator: c.indicator || 'RSI',
+                period: c.period || 14,
+                secondaryPeriod: c.secondaryPeriod,
+                stdDev: c.stdDev || 2.0,
+                operator: c.operator || 'LESS_THAN',
+                value: c.value ?? 0,
+              })),
+              action: {
+                direction: rules.action?.direction === 'PUT' ? 'PUT' : 'CALL',
+                durationSec: rules.action?.durationSec || (timeframe === '1m' ? 60 : 300),
+                stakeType: 'FIXED',
+                stakeAmount: rules.action?.stakeAmount || 10,
+              },
+              risk: {
+                maxConsecutiveLosses: rules.risk?.maxConsecutiveLosses || 2,
+                cooldownMinutes: rules.risk?.cooldownMinutes || 3,
+                minPoolPayoutPct: rules.risk?.minPoolPayoutPct || 75,
+              },
+            },
+          };
+        }
+      }
+    } catch (err: any) {
+      console.warn('[CustomAgentService] Gemini generator failed, falling back to rule heuristic:', err.message);
+    }
+
+    // Intelligent Deterministic Keyword Fallback
+    const p = prompt.toLowerCase();
+    const isCall = p.includes('call') || p.includes('buy') || p.includes('long') || p.includes('bounce') || p.includes('dip') || p.includes('golden') || p.includes('above');
+    const isEth = p.includes('eth');
+    const isSol = p.includes('sol');
+    const isBnb = p.includes('bnb');
+    const isDoge = p.includes('doge');
+    const symbol = isEth ? 'ETH/USD' : isSol ? 'SOL/USD' : isBnb ? 'BNB/USD' : isDoge ? 'DOGE/USD' : 'BTC/USD';
+    const is60s = p.includes('60') || p.includes('1m') || p.includes('turbo');
+    const is15m = p.includes('15m') || p.includes('15 min');
+    const is1h = p.includes('1h') || p.includes('hour');
+    const timeframe = is60s ? '1m' : is15m ? '15m' : is1h ? '1h' : '5m';
+    const durationSec = is60s ? 60 : is15m ? 900 : is1h ? 3600 : 300;
+
+    const fallbackConditions: ConditionRule[] = [];
+
+    // Parse EMA / Moving Average Cross
+    if (p.includes('ema') || p.includes('moving average') || p.includes('cross') || p.includes('golden')) {
+      const fast = p.includes('9') ? 9 : 12;
+      const slow = p.includes('21') ? 21 : 26;
+      fallbackConditions.push({
+        id: 'c-ema',
+        indicator: 'EMA',
+        period: fast,
+        secondaryPeriod: slow,
+        operator: isCall ? 'CROSS_ABOVE' : 'CROSS_BELOW',
+        value: 0,
+      });
+    }
+
+    // Parse Velocity / Price Drift
+    if (p.includes('velocity') || p.includes('drift') || p.includes('momentum') || p.includes('speed') || p.includes('spike')) {
+      fallbackConditions.push({
+        id: 'c-drift',
+        indicator: 'PRICE_DRIFT',
+        period: 1,
+        operator: isCall ? 'GREATER_THAN' : 'LESS_THAN',
+        value: 0.0015,
+      });
+    }
+
+    // Parse RSI
+    if (p.includes('rsi') || p.includes('oversold') || p.includes('overbought')) {
+      fallbackConditions.push({
+        id: 'c-rsi',
+        indicator: 'RSI',
+        period: 14,
+        operator: isCall ? 'LESS_THAN' : 'GREATER_THAN',
+        value: isCall ? (p.includes('25') ? 25 : 30) : (p.includes('75') ? 75 : 70),
+      });
+    }
+
+    // Parse Bollinger
+    if (p.includes('bollinger') || p.includes('band') || p.includes('fade')) {
+      fallbackConditions.push({
+        id: 'c-bb',
+        indicator: isCall ? 'BOLLINGER_LOWER' : 'BOLLINGER_UPPER',
+        period: 20,
+        stdDev: 2.0,
+        operator: isCall ? 'LESS_THAN' : 'GREATER_THAN',
+        value: 0,
+      });
+    }
+
+    // Fallback baseline if no indicators matched
+    if (fallbackConditions.length === 0) {
+      fallbackConditions.push({
+        id: 'c-1',
+        indicator: 'RSI',
+        period: 14,
+        operator: isCall ? 'LESS_THAN' : 'GREATER_THAN',
+        value: isCall ? 30 : 70,
+      });
+      fallbackConditions.push({
+        id: 'c-2',
+        indicator: isCall ? 'BOLLINGER_LOWER' : 'BOLLINGER_UPPER',
+        period: 20,
+        stdDev: 2.0,
+        operator: isCall ? 'LESS_THAN' : 'GREATER_THAN',
+        value: 0,
+      });
+    }
+
+    const titlePrefix = p.includes('ema') ? 'EMA Golden Cross Rider' : isCall ? 'Momentum Dip Hunter' : 'Exhaustion Mean Reverter';
+
+    return {
+      name: `${symbol.split('/')[0]} ${titlePrefix}`,
+      description: `Synthesized from prompt: "${prompt.slice(0, 60)}..."`,
+      symbol,
+      timeframe,
+      strategyType: isCall ? 'MOMENTUM' : 'MEAN_REVERSION',
+      color: isCall ? '#2dd4bf' : '#f59e0b',
+      icon: isCall ? 'BoltIcon' : 'AdjustmentsHorizontalIcon',
+      rules: {
+        operator: 'AND',
+        conditions: fallbackConditions,
+        action: {
+          direction: isCall ? 'CALL' : 'PUT',
+          durationSec,
+          stakeType: 'FIXED',
+          stakeAmount: 10,
+        },
+        risk: {
+          maxConsecutiveLosses: 2,
+          cooldownMinutes: 3,
+          minPoolPayoutPct: 78,
+        },
+      },
+    };
+  }
+}
+
+export const customAgentService = new CustomAgentService();

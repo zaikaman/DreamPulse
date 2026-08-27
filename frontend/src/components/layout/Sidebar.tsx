@@ -5,9 +5,9 @@ import {
   Square3Stack3DIcon,
   CpuChipIcon,
   AdjustmentsHorizontalIcon,
-  CommandLineIcon,
   SparklesIcon,
   ChartPieIcon,
+  ChartBarIcon,
   CheckCircleIcon,
   CurrencyDollarIcon,
   ShieldCheckIcon,
@@ -110,15 +110,23 @@ export const Sidebar: React.FC<SidebarProps> = ({
       description: "Risk Guardrails & Swarm Controls",
       icon: AdjustmentsHorizontalIcon,
     },
+    {
+      id: "Strategy Studio" as DashboardViewType,
+      label: "Strategy Studio",
+      description: "No-Code Agent & Swarm Builder",
+      badge: "No-Code",
+      icon: SparklesIcon,
+    },
   ];
 
   // Category 3: Strategy, Settlement & Performance
   const executionNavItems = [
     {
-      id: "Strategy Studio" as DashboardViewType,
-      label: "Strategy Studio",
-      description: "Quant Backtester & Formula Studio",
-      icon: CommandLineIcon,
+      id: "Backtester" as DashboardViewType,
+      label: "Backtester",
+      description: "Quant Replay & Strategy Simulation",
+      badge: "Lab",
+      icon: ChartBarIcon,
     },
     {
       id: "Settlement" as DashboardViewType,

@@ -1,6 +1,6 @@
 import { type Address, getAddress, isAddress } from 'viem';
 import { supabase } from '../config/supabase.js';
-import type { BacktestResult, AgentType } from '../types/index.js';
+import type { BacktestResult, AgentType, CustomAgentRules } from '../types/index.js';
 import {
   calculateFairValue,
   calculateRealizedVolatility,
@@ -28,7 +28,7 @@ export interface BacktestRunRequest {
   startDate?: string;
   endDate?: string;
   initialCapital?: number;
-  strategyConfig: {
+  strategyConfig?: {
     minEdge?: number;
     driftThreshold?: number;
     targetSpread?: number;
@@ -38,6 +38,8 @@ export interface BacktestRunRequest {
     confidenceThreshold?: number;
   };
   frictionConfig?: FrictionConfig;
+  customRules?: CustomAgentRules;
+  customAgentId?: string;
 }
 
 export interface HistoricalCandle {
@@ -89,6 +91,48 @@ const BINANCE_PAIR_MAPPINGS: Record<string, string> = {
   'BNBUSDT': 'BNBUSDT',
   'DOGEUSDT': 'DOGEUSDT',
 };
+
+function calculateSeriesRSI(candles: HistoricalCandle[], period = 14): number {
+  if (candles.length < period + 1) return 50;
+  let gains = 0;
+  let losses = 0;
+  for (let i = candles.length - period; i < candles.length; i++) {
+    const diff = candles[i].close - candles[i - 1].close;
+    if (diff >= 0) gains += diff;
+    else losses += Math.abs(diff);
+  }
+  if (losses === 0) return 100;
+  const rs = (gains / period) / (losses / period);
+  return 100 - (100 / (1 + rs));
+}
+
+function calculateSeriesEMA(candles: HistoricalCandle[], period = 20): number {
+  if (candles.length === 0) return 0;
+  if (candles.length < period) return candles[candles.length - 1].close;
+  const k = 2 / (period + 1);
+  let ema = candles[0].close;
+  for (let i = 1; i < candles.length; i++) {
+    ema = (candles[i].close * k) + (ema * (1 - k));
+  }
+  return ema;
+}
+
+function calculateSeriesBollinger(candles: HistoricalCandle[], period = 20, stdDev = 2.0): { upper: number; middle: number; lower: number } {
+  if (candles.length < period) {
+    const last = candles[candles.length - 1]?.close || 0;
+    return { upper: last * 1.01, middle: last, lower: last * 0.99 };
+  }
+  const slice = candles.slice(candles.length - period);
+  const sum = slice.reduce((acc, c) => acc + c.close, 0);
+  const mean = sum / period;
+  const variance = slice.reduce((acc, c) => acc + Math.pow(c.close - mean, 2), 0) / period;
+  const sd = Math.sqrt(variance);
+  return {
+    upper: mean + (stdDev * sd),
+    middle: mean,
+    lower: mean - (stdDev * sd),
+  };
+}
 
 export class BacktestService {
   private history: DetailedBacktestResult[] = [];
@@ -624,6 +668,54 @@ export class BacktestService {
               }
             }
           }
+        } else if (agentType === 'CUSTOM' || req.customRules) {
+          const rules = req.customRules;
+          if (rules && rules.conditions && rules.conditions.length > 0 && windowExecutedTrades === 0) {
+            const histSlice = candles.slice(0, currentIdx + 1);
+            let passedCount = 0;
+
+            for (const cond of rules.conditions) {
+              let passed = false;
+              if (cond.indicator === 'RSI') {
+                const rsi = calculateSeriesRSI(histSlice, cond.period || 14);
+                if (cond.operator === 'LESS_THAN') passed = rsi < cond.value;
+                else if (cond.operator === 'GREATER_THAN') passed = rsi > cond.value;
+                else passed = Math.abs(rsi - cond.value) < 3;
+              } else if (cond.indicator === 'BOLLINGER_LOWER') {
+                const bb = calculateSeriesBollinger(histSlice, cond.period || 20, cond.stdDev || 2.0);
+                passed = currentSpot <= bb.lower;
+              } else if (cond.indicator === 'BOLLINGER_UPPER') {
+                const bb = calculateSeriesBollinger(histSlice, cond.period || 20, cond.stdDev || 2.0);
+                passed = currentSpot >= bb.upper;
+              } else if (cond.indicator === 'EMA') {
+                const fastEma = calculateSeriesEMA(histSlice, cond.period || 9);
+                const slowEma = calculateSeriesEMA(histSlice, cond.secondaryPeriod || 21);
+                if (cond.operator === 'CROSS_ABOVE' || cond.operator === 'GREATER_THAN') passed = fastEma > slowEma;
+                else passed = fastEma < slowEma;
+              } else if (cond.indicator === 'PRICE_DRIFT') {
+                const drift = (currentSpot - prevSpot) / (prevSpot || 1);
+                if (cond.operator === 'GREATER_THAN') passed = drift > cond.value;
+                else if (cond.operator === 'LESS_THAN') passed = drift < cond.value;
+                else passed = Math.abs(drift) >= Math.abs(cond.value);
+              } else {
+                passed = true;
+              }
+              if (passed) passedCount++;
+            }
+
+            const ruleSatisfied = rules.operator === 'OR' ? passedCount > 0 : passedCount === rules.conditions.length;
+
+            if (ruleSatisfied && timeRemainingSec >= 15) {
+              tradeExecuted = true;
+              tradeAction = 'CUSTOM_SIGNAL';
+              tradeOutcome = rules.action?.direction === 'PUT' ? 'NO' : 'YES';
+              tradePrice = tradeOutcome === 'YES'
+                ? quantizePrice(Math.min(0.75, Math.max(0.25, fairYes)))
+                : quantizePrice(Math.min(0.75, Math.max(0.25, fairNo)));
+              const customStake = rules.action?.stakeAmount ?? lotSize;
+              tradeLots = quantizeLotSize(customStake);
+            }
+          }
         }
 
         // 4. Contract Expiration & Settlement Payoff with Execution Friction (Slippage & Fees)
@@ -768,7 +860,7 @@ export class BacktestService {
       startDate: req.startDate || new Date(startTime).toISOString(),
       endDate: req.endDate || new Date(endTime).toISOString(),
       initialCapital,
-      strategyConfig: req.strategyConfig,
+      strategyConfig: (req.strategyConfig || {}) as Record<string, unknown>,
       totalTrades,
       winRate,
       netPnl,

@@ -1661,6 +1661,28 @@ export class OrderService {
         });
       } catch {}
       this.notifyStateChange();
+
+      // Autonomously trigger instant settlement sweeps for winning users (Trade Terminal & personal swarms)
+      const winningUserAddresses = new Set<string>();
+      for (const order of targetOrders) {
+        const isWin = isVoid || (order.outcome === winningOutcome) || ((order.pnl ?? 0) > 0);
+        if (isWin && order.userAddress) {
+          winningUserAddresses.add(order.userAddress);
+        }
+      }
+
+      if (winningUserAddresses.size > 0) {
+        void import('./settlement-service.js').then(({ settlementService }) => {
+          void import('./user-swarm-service.js').then(({ userSwarmService }) => {
+            for (const userAddr of winningUserAddresses) {
+              const personalCfg = userSwarmService.getConfig(userAddr);
+              if (personalCfg.sweeperEnabled !== false) {
+                void settlementService.triggerBatchSweep(userAddr, true).catch(() => {});
+              }
+            }
+          }).catch(() => {});
+        }).catch(() => {});
+      }
     }
 
     return updatedEvents.length;
@@ -1991,6 +2013,28 @@ export class OrderService {
 
           void import('./settlement-service.js').then((m) => m.settlementService.invalidateCache()).catch(() => {});
           void import('./analytics-service.js').then((m) => m.analyticsService.invalidateCache()).catch(() => {});
+
+          // Autonomously trigger instant settlement sweeps for winning users (Trade Terminal & personal swarms)
+          const winningUserAddresses = new Set<string>();
+          for (const ev of updatedOrderPnlEvents) {
+            const matched = candidates.find((c) => c.id === ev.orderId);
+            if (matched && matched.userAddress && ((matched.pnl ?? 0) > 0 || ev.pnl > 0)) {
+              winningUserAddresses.add(matched.userAddress);
+            }
+          }
+
+          if (winningUserAddresses.size > 0) {
+            void import('./settlement-service.js').then(({ settlementService }) => {
+              void import('./user-swarm-service.js').then(({ userSwarmService }) => {
+                for (const userAddr of winningUserAddresses) {
+                  const personalCfg = userSwarmService.getConfig(userAddr);
+                  if (personalCfg.sweeperEnabled !== false) {
+                    void settlementService.triggerBatchSweep(userAddr, true).catch(() => {});
+                  }
+                }
+              }).catch(() => {});
+            }).catch(() => {});
+          }
         } catch {}
       }
 

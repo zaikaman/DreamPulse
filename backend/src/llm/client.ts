@@ -141,10 +141,43 @@ export function setGroqKeyIndex(index: number): void {
 }
 
 /**
- * Generates structured JSON reasoning with priority hierarchy:
+ * Exclusively uses Google Gemini API key for Strategy Studio synthesis.
+ * Does not touch Groq or key rotation.
+ */
+export async function generateStrategyWithGemini(
+  request: StructuredReasoningRequest,
+): Promise<string | null> {
+  if (!env.GEMINI_API_KEY || env.GEMINI_API_KEY.includes('mock') || env.GEMINI_API_KEY === 'dummy-key') {
+    return null;
+  }
+
+  try {
+    const gemini = getGeminiClient();
+    const response = await gemini.chat.completions.create({
+      model: env.GEMINI_MODEL,
+      messages: [
+        { role: 'system', content: request.systemPrompt },
+        { role: 'user', content: request.userPrompt },
+      ],
+      temperature: request.temperature ?? 0.2,
+      max_tokens: request.maxTokens ?? 1000,
+    });
+
+    const rawContent = response.choices[0]?.message?.content || '';
+    const extractedJson = extractJsonFromText(rawContent);
+    return extractedJson || rawContent;
+  } catch (err: any) {
+    const errMsg = err instanceof Error ? err.message : String(err);
+    console.warn(`[Gemini Studio] Gemini generation failed: ${errMsg}`);
+    return null;
+  }
+}
+
+/**
+ * Generates structured JSON reasoning for autonomous swarm agents:
  * 1. Groq multi-key pool with round-robin rotation & auto-retry on 429/errors.
- * 2. Gemini fallback endpoint if all Groq keys fail.
- * 3. Local deterministic quantitative generator if all LLMs are unreachable.
+ * 2. Local deterministic quantitative generator if Groq is unreachable.
+ * (Gemini API key is reserved strictly for Strategy Studio).
  */
 export async function generateStructuredReasoning(
   request: StructuredReasoningRequest,
@@ -185,33 +218,7 @@ export async function generateStructuredReasoning(
     }
   }
 
-  // 2. Secondary Fallback: Gemini Client
-  if (env.GEMINI_API_KEY && !env.GEMINI_API_KEY.includes('mock') && env.GEMINI_API_KEY !== 'dummy-key') {
-    try {
-      console.log('[LLM Fallback] Groq pool exhausted or errored. Failing over to Gemini...');
-      const gemini = getGeminiClient();
-      const response = await gemini.chat.completions.create({
-        model: env.GEMINI_MODEL,
-        messages: [
-          { role: 'system', content: request.systemPrompt },
-          { role: 'user', content: request.userPrompt },
-        ],
-        temperature: request.temperature ?? 0.2,
-        max_tokens: request.maxTokens ?? 300,
-      });
-
-      const rawContent = response.choices[0]?.message?.content || '';
-      const extractedJson = extractJsonFromText(rawContent);
-      if (extractedJson) {
-        return extractedJson;
-      }
-    } catch (geminiErr) {
-      const errMsg = geminiErr instanceof Error ? geminiErr.message : String(geminiErr);
-      console.warn(`[LLM Gemini Fallback] Gemini endpoint failed: ${errMsg}`);
-    }
-  }
-
-  // 3. Tertiary Fallback: Local Deterministic Reasoning
+  // 2. Deterministic Reasoning Fallback (Gemini is strictly reserved for Strategy Studio)
   return JSON.stringify({
     confidence: 0.92,
     thought: 'Evaluated quantitative edge on Somnia Shannon CLOB. Executing deterministic rule strategy.',

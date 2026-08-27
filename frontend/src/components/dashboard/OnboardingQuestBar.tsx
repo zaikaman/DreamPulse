@@ -110,8 +110,8 @@ export const OnboardingQuestBar: React.FC<OnboardingQuestBarProps> = ({
         />
       </div>
 
-      {/* 4 Interactive Quest Pills */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2">
+      {/* 5 Interactive Quest Pills */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-2">
         {/* Quest 1: Connect Wallet */}
         <div
           className={`flex items-center justify-between p-2 rounded-lg border text-xs transition-colors ${
@@ -178,7 +178,7 @@ export const OnboardingQuestBar: React.FC<OnboardingQuestBarProps> = ({
               <div className="w-3.5 h-3.5 rounded-full border border-border/80 shrink-0" />
             )}
             <span className={`text-[11px] truncate ${quests[2]?.isCompleted ? 'line-through text-muted-foreground' : 'font-medium'}`}>
-              3. Authorize Session Key
+              3. Authorize Session
             </span>
           </div>
 
@@ -208,7 +208,7 @@ export const OnboardingQuestBar: React.FC<OnboardingQuestBarProps> = ({
               <div className="w-3.5 h-3.5 rounded-full border border-border/80 shrink-0" />
             )}
             <span className={`text-[11px] truncate ${quests[3]?.isCompleted ? 'line-through text-muted-foreground' : 'font-medium'}`}>
-              4. Copytrade / Trade
+              4. Copytrade Swarm
             </span>
           </div>
 
@@ -219,6 +219,36 @@ export const OnboardingQuestBar: React.FC<OnboardingQuestBarProps> = ({
             >
               <CpuChipIcon className="w-2.5 h-2.5" />
               <span>Start</span>
+            </button>
+          )}
+        </div>
+
+        {/* Quest 5: Build Custom Agent in Strategy Studio */}
+        <div
+          className={`flex items-center justify-between p-2 rounded-lg border text-xs transition-colors ${
+            quests[4]?.isCompleted
+              ? 'border-border/40 bg-secondary/20 text-muted-foreground'
+              : 'border-border/80 bg-secondary/40 text-foreground'
+          }`}
+        >
+          <div className="flex items-center gap-2 min-w-0">
+            {quests[4]?.isCompleted ? (
+              <CheckCircleIcon className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
+            ) : (
+              <div className="w-3.5 h-3.5 rounded-full border border-border/80 shrink-0" />
+            )}
+            <span className={`text-[11px] truncate ${quests[4]?.isCompleted ? 'line-through text-muted-foreground' : 'font-medium'}`}>
+              5. Strategy Studio
+            </span>
+          </div>
+
+          {!quests[4]?.isCompleted && (
+            <button
+              onClick={() => onNavigateTab('Strategy Studio')}
+              className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-primary/20 text-primary border border-primary/40 hover:bg-primary/30 transition-colors shrink-0 flex items-center gap-1 cursor-pointer"
+            >
+              <SparklesIcon className="w-2.5 h-2.5" />
+              <span>Build</span>
             </button>
           )}
         </div>

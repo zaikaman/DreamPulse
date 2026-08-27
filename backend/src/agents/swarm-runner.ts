@@ -438,13 +438,7 @@ export class MultiAgentSwarmRunner {
         this.lastTradeTimes.set('Sweeper', now);
         try {
           const startEvalTime = performance.now();
-          const candidateTargets = [
-            operatorAccount.address,
-            ...sessionService
-              .getDelegatedCopyTradeSessions(operatorAccount.address)
-              .filter((s) => s.isActive && s.onChainAuthorized)
-              .map((s) => s.userAddress),
-          ];
+          const candidateTargets = settlementService.getCandidateSweeperTargets();
           const uniqueTargets = Array.from(new Set(candidateTargets.map((a) => a.toLowerCase())));
 
           let totalClaimedAcrossUsers = 0;

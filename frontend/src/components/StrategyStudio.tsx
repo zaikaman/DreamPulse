@@ -20,9 +20,10 @@ import {
   WalletIcon,
   KeyIcon,
 } from '@heroicons/react/24/outline';
-import type { AgentType, SessionGrant } from '../types/index.js';
+import type { AgentType, SessionGrant, CustomAgentDefinition, CustomAgentRules } from '../types/index.js';
 import type { WalletState } from '../hooks/useSessionKey.js';
 import { useBacktest } from '../hooks/useBacktest.js';
+import { useCustomAgents } from '../hooks/useCustomAgents.js';
 import { useUserRole } from '../hooks/useUserRole.js';
 import { StrategyStudioSkeleton } from './ui/Skeleton.js';
 import { Spinner } from './ui/Spinner.js';
@@ -46,7 +47,15 @@ const STRATEGY_THEME: Record<BacktestAgentType, { color: string; bg: string; bor
 };
 
 export interface StrategyStudioProps {
-  initialConfig?: { agentType: AgentType; config: Record<string, any> } | null;
+  initialConfig?: {
+    agentType: AgentType;
+    config?: Record<string, any>;
+    customAgentId?: string;
+    customDraft?: Partial<CustomAgentDefinition>;
+    customRules?: CustomAgentRules;
+    symbol?: string;
+    timeframe?: '1m' | '5m' | '15m' | '1h';
+  } | null;
   wallet?: WalletState;
   activeSession?: SessionGrant | null;
   onOpenSessionModal?: () => void;
@@ -74,7 +83,62 @@ export const StrategyStudio: React.FC<StrategyStudioProps> = ({
     ? initialConfig.agentType
     : 'Volt';
   const [selectedAgent, setSelectedAgent] = useState<BacktestAgentType>(initialAgent);
-  const [symbol, setSymbol] = useState<string>('BTC/USD');
+  const [agentCategory, setAgentCategory] = useState<'PROTOCOL' | 'CUSTOM'>(() => {
+    if (
+      initialConfig?.agentType === 'CUSTOM' ||
+      initialConfig?.customAgentId ||
+      initialConfig?.customDraft ||
+      initialConfig?.customRules
+    ) {
+      return 'CUSTOM';
+    }
+    return 'PROTOCOL';
+  });
+  const { agents: customAgents } = useCustomAgents(wallet.address || undefined);
+  const [selectedCustomAgentId, setSelectedCustomAgentId] = useState<string>(() => {
+    return initialConfig?.customAgentId || '';
+  });
+
+  const activeCustomAgent = useMemo(() => {
+    if (selectedCustomAgentId) {
+      const found = customAgents.find((a) => a.id === selectedCustomAgentId);
+      if (found) return found;
+    }
+    if (initialConfig?.customDraft) {
+      return {
+        id: initialConfig.customAgentId || 'draft-preview',
+        name: initialConfig.customDraft.name || 'Custom Draft Strategy',
+        symbol: initialConfig.customDraft.symbol || 'BTC/USD',
+        timeframe: (initialConfig.customDraft.timeframe as any) || '5m',
+        strategyType: initialConfig.customDraft.strategyType || 'CUSTOM',
+        rules: initialConfig.customRules || initialConfig.customDraft.rules!,
+        description: initialConfig.customDraft.description || 'Active Draft Strategy from Studio',
+        color: initialConfig.customDraft.color || '#2dd4bf',
+        userAddress: wallet.address || '',
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+      } as CustomAgentDefinition;
+    }
+    return customAgents[0] || null;
+  }, [customAgents, selectedCustomAgentId, initialConfig, wallet.address]);
+
+  const displayedCustomAgents = useMemo(() => {
+    const list = [...customAgents];
+    if (
+      activeCustomAgent &&
+      activeCustomAgent.id === 'draft-preview' &&
+      !list.some((a) => a.id === 'draft-preview')
+    ) {
+      return [activeCustomAgent, ...list];
+    }
+    return list;
+  }, [customAgents, activeCustomAgent]);
+
+  const [symbol, setSymbol] = useState<string>(() => {
+    if (initialConfig?.symbol) return initialConfig.symbol;
+    if (initialConfig?.customDraft?.symbol) return initialConfig.customDraft.symbol;
+    return 'BTC/USD';
+  });
   const [isMarketDropdownOpen, setIsMarketDropdownOpen] = useState<boolean>(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
 
@@ -89,7 +153,11 @@ export const StrategyStudio: React.FC<StrategyStudioProps> = ({
   const selectedMarketOption = MARKET_OPTIONS.find((m) => m.symbol === symbol) || MARKET_OPTIONS[0];
 
   const [period, setPeriod] = useState<'24h' | '3d' | '7d' | '14d' | '30d' | 'custom'>('7d');
-  const [timeframe, setTimeframe] = useState<'1m' | '5m' | '15m' | '1h'>('5m');
+  const [timeframe, setTimeframe] = useState<'1m' | '5m' | '15m' | '1h'>(() => {
+    if (initialConfig?.timeframe) return initialConfig.timeframe;
+    if (initialConfig?.customDraft?.timeframe) return initialConfig.customDraft.timeframe as any;
+    return '5m';
+  });
   const [customStartDate, setCustomStartDate] = useState<string>(() => new Date(Date.now() - 7 * 86400000).toISOString().slice(0, 16));
   const [customEndDate, setCustomEndDate] = useState<string>(() => new Date().toISOString().slice(0, 16));
 
@@ -118,22 +186,83 @@ export const StrategyStudio: React.FC<StrategyStudioProps> = ({
 
   const handleRunSimulation = useCallback(async () => {
     setDeployedSuccess(false);
-    await runSimulation({
-      agentType: selectedAgent,
-      symbol,
-      period,
-      timeframe,
-      startDate: period === 'custom' ? new Date(customStartDate).toISOString() : undefined,
-      endDate: period === 'custom' ? new Date(customEndDate).toISOString() : undefined,
-      initialCapital,
-      strategyConfig: { driftThreshold, minEdge, confidenceThreshold, targetSpread, inventoryAversion, lotSize },
-      frictionConfig: { slippageBps, feeBps, latencyMs },
-    });
-  }, [runSimulation, selectedAgent, symbol, period, timeframe, customStartDate, customEndDate, initialCapital, driftThreshold, minEdge, confidenceThreshold, targetSpread, inventoryAversion, lotSize, slippageBps, feeBps, latencyMs]);
+    if (agentCategory === 'CUSTOM' && activeCustomAgent) {
+      await runSimulation({
+        agentType: 'CUSTOM',
+        symbol: activeCustomAgent.symbol || symbol,
+        period,
+        timeframe: (activeCustomAgent.timeframe as any) || timeframe,
+        startDate: period === 'custom' ? new Date(customStartDate).toISOString() : undefined,
+        endDate: period === 'custom' ? new Date(customEndDate).toISOString() : undefined,
+        initialCapital,
+        strategyConfig: { lotSize },
+        frictionConfig: { slippageBps, feeBps, latencyMs },
+        customRules: activeCustomAgent.rules,
+        customAgentId: activeCustomAgent.id,
+      });
+    } else {
+      await runSimulation({
+        agentType: selectedAgent,
+        symbol,
+        period,
+        timeframe,
+        startDate: period === 'custom' ? new Date(customStartDate).toISOString() : undefined,
+        endDate: period === 'custom' ? new Date(customEndDate).toISOString() : undefined,
+        initialCapital,
+        strategyConfig: { driftThreshold, minEdge, confidenceThreshold, targetSpread, inventoryAversion, lotSize },
+        frictionConfig: { slippageBps, feeBps, latencyMs },
+      });
+    }
+  }, [
+    agentCategory,
+    activeCustomAgent,
+    runSimulation,
+    selectedAgent,
+    symbol,
+    period,
+    timeframe,
+    customStartDate,
+    customEndDate,
+    initialCapital,
+    driftThreshold,
+    minEdge,
+    confidenceThreshold,
+    targetSpread,
+    inventoryAversion,
+    lotSize,
+    slippageBps,
+    feeBps,
+    latencyMs,
+  ]);
 
   useEffect(() => {
     if (initialConfig) {
-      if (initialConfig.agentType === 'Volt' || initialConfig.agentType === 'Oracle' || initialConfig.agentType === 'Titan') {
+      if (
+        initialConfig.agentType === 'CUSTOM' ||
+        initialConfig.customAgentId ||
+        initialConfig.customDraft ||
+        initialConfig.customRules
+      ) {
+        setAgentCategory('CUSTOM');
+        if (initialConfig.customAgentId) {
+          setSelectedCustomAgentId(initialConfig.customAgentId);
+        }
+        if (initialConfig.symbol) {
+          setSymbol(initialConfig.symbol);
+        } else if (initialConfig.customDraft?.symbol) {
+          setSymbol(initialConfig.customDraft.symbol);
+        }
+        if (initialConfig.timeframe) {
+          setTimeframe(initialConfig.timeframe);
+        } else if (initialConfig.customDraft?.timeframe) {
+          setTimeframe(initialConfig.customDraft.timeframe as any);
+        }
+      } else if (
+        initialConfig.agentType === 'Volt' ||
+        initialConfig.agentType === 'Oracle' ||
+        initialConfig.agentType === 'Titan'
+      ) {
+        setAgentCategory('PROTOCOL');
         setSelectedAgent(initialConfig.agentType);
       }
       if (initialConfig.config) {
@@ -147,9 +276,33 @@ export const StrategyStudio: React.FC<StrategyStudioProps> = ({
     }
   }, [initialConfig]);
 
+  // When customAgents finish loading, select the requested custom agent if specified
+  useEffect(() => {
+    if (initialConfig?.customAgentId && customAgents.length > 0) {
+      const found = customAgents.find((a) => a.id === initialConfig.customAgentId);
+      if (found) {
+        setSelectedCustomAgentId(found.id);
+        if (found.symbol) setSymbol(found.symbol);
+        if (found.timeframe) setTimeframe(found.timeframe as any);
+      }
+    }
+  }, [initialConfig?.customAgentId, customAgents]);
+
+  // Keep symbol & timeframe in sync with active custom agent
+  useEffect(() => {
+    if (agentCategory === 'CUSTOM' && activeCustomAgent) {
+      if (activeCustomAgent.symbol && activeCustomAgent.symbol !== symbol) {
+        setSymbol(activeCustomAgent.symbol);
+      }
+      if (activeCustomAgent.timeframe && activeCustomAgent.timeframe !== timeframe) {
+        setTimeframe(activeCustomAgent.timeframe as any);
+      }
+    }
+  }, [agentCategory, activeCustomAgent?.id]);
+
   useEffect(() => {
     handleRunSimulation();
-  }, [selectedAgent, symbol, period, timeframe]);
+  }, [agentCategory, selectedAgent, selectedCustomAgentId, symbol, period, timeframe]);
 
   const handleDeploy = async () => {
     if (isGuest) {
@@ -295,8 +448,9 @@ export const StrategyStudio: React.FC<StrategyStudioProps> = ({
   const drawdownLinePath = drawdownPathPoints.length > 0 ? `M ${drawdownPathPoints.join(' L ')}` : '';
   const drawdownAreaPath = drawdownPathPoints.length > 0 ? `M ${padding},${padding} L ${drawdownPathPoints.join(' L ')} L ${svgWidth - padding},${padding} Z` : '';
 
+  const activeColor = agentCategory === 'CUSTOM' ? (activeCustomAgent?.color || '#2dd4bf') : (STRATEGY_THEME[selectedAgent] ?? STRATEGY_THEME.Volt).color;
   const theme = STRATEGY_THEME[selectedAgent] ?? STRATEGY_THEME.Volt;
-  const lotColor = theme.color;
+  const lotColor = activeColor;
 
   return (
     <div className="flex flex-col gap-3.5 pb-8">
@@ -309,8 +463,8 @@ export const StrategyStudio: React.FC<StrategyStudioProps> = ({
               <ChartBarIcon className="w-4 h-4" />
             </div>
             <div className="min-w-0">
-              <h2 className="text-sm font-bold tracking-tight text-foreground leading-none">Strategy Studio & Quantitative Backtest Simulator</h2>
-              <p className="text-[11px] text-muted-foreground mt-1 hidden sm:block">Replay high-frequency event contracts over historical Somnia Shannon ticks with real friction</p>
+              <h2 className="text-sm font-bold tracking-tight text-foreground leading-none">Quantitative Backtester & Strategy Lab</h2>
+              <p className="text-[11px] text-muted-foreground mt-1 hidden sm:block">Replay protocol agents and custom user strategies over historical candlestick data with real market friction</p>
             </div>
           </div>
           <div className="flex items-center gap-2 flex-shrink-0">
@@ -318,48 +472,143 @@ export const StrategyStudio: React.FC<StrategyStudioProps> = ({
               <ArrowDownTrayIcon className="w-3.5 h-3.5" />
               <span>Export CSV</span>
             </button>
-            <button type="button" onClick={handleRunSimulation} disabled={isLoading} className="inline-flex items-center gap-1.5 px-4 py-1.5 rounded-lg border text-xs font-bold transition-all disabled:opacity-60" style={{ background: theme.color, color: '#09090b', borderColor: theme.color, boxShadow: `0 0 12px ${theme.color}28` }}>
+            <button type="button" onClick={handleRunSimulation} disabled={isLoading} className="inline-flex items-center gap-1.5 px-4 py-1.5 rounded-lg border text-xs font-bold transition-all disabled:opacity-60" style={{ background: activeColor, color: '#09090b', borderColor: activeColor, boxShadow: `0 0 12px ${activeColor}28` }}>
               {isLoading ? <Spinner size="xs" variant="amber" /> : <PlayIcon className="w-3.5 h-3.5 fill-current" />}
               <span>{isLoading ? 'Simulating…' : 'Run Backtest Replay'}</span>
             </button>
           </div>
         </div>
 
-        {/* Strategy Selector — 3 accent cards */}
-        <div className="p-3.5 grid grid-cols-1 md:grid-cols-3 gap-3">
-          {(Object.keys(STRATEGY_THEME) as Array<BacktestAgentType>).map((key) => {
-            const th = STRATEGY_THEME[key];
-            const Icon = th.Icon;
-            const isActive = selectedAgent === key;
-            return (
-              <button
-                key={key}
-                type="button"
-                onClick={() => setSelectedAgent(key)}
-                className={cn('relative text-left p-3.5 rounded-xl border flex flex-col gap-2 transition-all overflow-hidden')}
-                style={{
-                  background: isActive ? th.bg : 'hsl(var(--secondary)/0.22)',
-                  borderColor: isActive ? th.border : 'hsl(var(--border)/0.5)',
-                  boxShadow: isActive ? `0 0 0 1px ${th.border}` : 'none',
-                }}
-              >
-                <div className="absolute top-0 left-0 right-0 h-[2.5px]" style={{ background: th.color, opacity: isActive ? 1 : 0.35 }} />
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-2">
-                    <div className="w-7 h-7 rounded-lg grid place-items-center border flex-shrink-0 bg-secondary/30 border-border/50 text-muted-foreground">
-                      <Icon className="w-3.5 h-3.5" />
-                    </div>
-                    <span className="text-xs font-bold tracking-tight text-foreground">{key} {key === 'Volt' ? 'Sniper' : key === 'Oracle' ? 'Vol Arb' : 'Market Maker'}</span>
-                  </div>
-                  <Badge variant="outline" className="text-[9px] font-mono px-1.5 py-0 border font-semibold" style={{ background: th.bg, borderColor: th.border, color: th.color }}>
-                    {th.tag}
-                  </Badge>
-                </div>
-                <p className="text-[11px] leading-relaxed text-muted-foreground line-clamp-2 m-0">{th.desc}</p>
-              </button>
-            );
-          })}
+        {/* Category Switcher: Protocol vs Custom */}
+        <div className="flex items-center justify-between px-3.5 pt-3.5 pb-1 border-b border-border/30 flex-wrap gap-2">
+          <div className="flex items-center gap-1.5 p-1 rounded-xl bg-secondary/30 border border-border/50">
+            <button
+              type="button"
+              onClick={() => setAgentCategory('PROTOCOL')}
+              className={cn(
+                'px-3 py-1 rounded-lg text-xs font-semibold transition-all',
+                agentCategory === 'PROTOCOL' ? 'bg-primary/20 text-primary border border-primary/30 shadow-sm' : 'text-muted-foreground hover:text-foreground'
+              )}
+            >
+              Protocol Swarm Agents ({Object.keys(STRATEGY_THEME).length})
+            </button>
+            <button
+              type="button"
+              onClick={() => setAgentCategory('CUSTOM')}
+              className={cn(
+                'px-3 py-1 rounded-lg text-xs font-semibold transition-all flex items-center gap-1.5',
+                agentCategory === 'CUSTOM' ? 'bg-primary/20 text-primary border border-primary/30 shadow-sm' : 'text-muted-foreground hover:text-foreground'
+              )}
+            >
+              <SparklesIcon className="w-3.5 h-3.5" />
+              Custom User Agents ({customAgents.length})
+            </button>
+          </div>
+          {agentCategory === 'CUSTOM' && (
+            <a
+              href="#studio"
+              className="text-xs text-primary hover:underline font-mono flex items-center gap-1 font-semibold"
+            >
+              <span>+ Build New Agent in Studio</span>
+              <ArrowUpRightIcon className="w-3.5 h-3.5" />
+            </a>
+          )}
         </div>
+
+        {/* Strategy Selector — Cards */}
+        {agentCategory === 'PROTOCOL' ? (
+          <div className="p-3.5 grid grid-cols-1 md:grid-cols-3 gap-3">
+            {(Object.keys(STRATEGY_THEME) as Array<BacktestAgentType>).map((key) => {
+              const th = STRATEGY_THEME[key];
+              const Icon = th.Icon;
+              const isActive = selectedAgent === key;
+              return (
+                <button
+                  key={key}
+                  type="button"
+                  onClick={() => setSelectedAgent(key)}
+                  className={cn('relative text-left p-3.5 rounded-xl border flex flex-col gap-2 transition-all overflow-hidden')}
+                  style={{
+                    background: isActive ? th.bg : 'hsl(var(--secondary)/0.22)',
+                    borderColor: isActive ? th.border : 'hsl(var(--border)/0.5)',
+                    boxShadow: isActive ? `0 0 0 1px ${th.border}` : 'none',
+                  }}
+                >
+                  <div className="absolute top-0 left-0 right-0 h-[2.5px]" style={{ background: th.color, opacity: isActive ? 1 : 0.35 }} />
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <div className="w-7 h-7 rounded-lg grid place-items-center border flex-shrink-0 bg-secondary/30 border-border/50 text-muted-foreground">
+                        <Icon className="w-3.5 h-3.5" />
+                      </div>
+                      <span className="text-xs font-bold tracking-tight text-foreground">{key} {key === 'Volt' ? 'Sniper' : key === 'Oracle' ? 'Vol Arb' : 'Market Maker'}</span>
+                    </div>
+                    <Badge variant="outline" className="text-[9px] font-mono px-1.5 py-0 border font-semibold" style={{ background: th.bg, borderColor: th.border, color: th.color }}>
+                      {th.tag}
+                    </Badge>
+                  </div>
+                  <p className="text-[11px] leading-relaxed text-muted-foreground line-clamp-2 m-0">{th.desc}</p>
+                </button>
+              );
+            })}
+          </div>
+        ) : displayedCustomAgents.length === 0 ? (
+          <div className="p-8 text-center flex flex-col items-center justify-center gap-2 text-muted-foreground">
+            <SparklesIcon className="w-8 h-8 text-primary/60" />
+            <span className="text-xs font-semibold text-foreground">No Custom Strategies Found</span>
+            <p className="text-[11px] max-w-sm">Create your first autonomous trading strategy in the Strategy Studio with Gemini natural language prompts or visual capsules.</p>
+            <a href="#studio" className="mt-2 px-3 py-1.5 rounded-lg bg-primary text-primary-foreground text-xs font-bold">Open Strategy Studio</a>
+          </div>
+        ) : (
+          <div className="p-3.5 grid grid-cols-1 md:grid-cols-3 gap-3">
+            {displayedCustomAgents.map((agent) => {
+              const isActive = activeCustomAgent?.id === agent.id;
+              const agentColor = agent.color || '#2dd4bf';
+              const isDraft = agent.id === 'draft-preview';
+              return (
+                <button
+                  key={agent.id}
+                  type="button"
+                  onClick={() => setSelectedCustomAgentId(agent.id)}
+                  className={cn('relative text-left p-3.5 rounded-xl border flex flex-col gap-2 transition-all overflow-hidden')}
+                  style={{
+                    background: isActive ? `${agentColor}12` : 'hsl(var(--secondary)/0.22)',
+                    borderColor: isActive ? agentColor : 'hsl(var(--border)/0.5)',
+                    boxShadow: isActive ? `0 0 12px ${agentColor}25` : 'none',
+                  }}
+                >
+                  <div className="absolute top-0 left-0 right-0 h-[2.5px]" style={{ background: agentColor, opacity: isActive ? 1 : 0.4 }} />
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2 min-w-0">
+                      <div className="w-7 h-7 rounded-lg grid place-items-center border flex-shrink-0 bg-secondary/30 border-border/50" style={{ color: agentColor }}>
+                        <SparklesIcon className="w-3.5 h-3.5" />
+                      </div>
+                      <span className="text-xs font-bold tracking-tight text-foreground truncate">{agent.name}</span>
+                    </div>
+                    <div className="flex items-center gap-1">
+                      {isDraft && (
+                        <Badge variant="outline" className="text-[9px] font-mono px-1.5 py-0 border font-semibold border-amber-500/50 text-amber-400 bg-amber-500/10">
+                          Active Draft
+                        </Badge>
+                      )}
+                      <Badge variant="outline" className="text-[9px] font-mono px-1.5 py-0 border font-semibold" style={{ borderColor: `${agentColor}50`, color: agentColor }}>
+                        {agent.strategyType}
+                      </Badge>
+                    </div>
+                  </div>
+                  <p className="text-[11px] leading-relaxed text-muted-foreground line-clamp-2 m-0">{agent.description || 'Custom user strategy'}</p>
+                  <div className="flex items-center gap-1.5 flex-wrap pt-1">
+                    <span className="text-[9px] font-mono font-semibold px-1.5 py-0.5 rounded bg-secondary/50 border border-border/50 text-foreground">
+                      {agent.symbol} · {agent.timeframe}
+                    </span>
+                    <span className="text-[9px] font-mono font-semibold px-1.5 py-0.5 rounded bg-secondary/50 border border-border/50 text-foreground">
+                      {agent.rules?.action?.direction || 'CALL'} · {agent.rules?.action?.durationSec || 60}s
+                    </span>
+                  </div>
+                </button>
+              );
+            })}
+          </div>
+        )}
 
         {/* ---------- Controls Bar ---------- */}
         <div className="px-4 py-4 bg-secondary/10 border-t border-border/30 flex flex-col gap-4">
@@ -675,3 +924,5 @@ const MetricCard: React.FC<{ label: string; value: string; sub: string; color: s
     <div className="text-[11px] text-muted-foreground mt-1">{sub}</div>
   </div>
 );
+
+export { StrategyStudio as Backtester };

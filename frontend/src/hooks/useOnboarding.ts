@@ -122,7 +122,38 @@ export function useOnboarding({
     setIsQuestBarDismissed(false);
   }, []);
 
-  // Compute 4 interactive onboarding quests
+  // Track Strategy Studio engagement
+  const [hasBuiltStrategy, setHasBuiltStrategy] = useState<boolean>(() => {
+    try {
+      return (
+        localStorage.getItem('dreampulse_studio_visited_v1') === 'true' ||
+        localStorage.getItem('dreampulse_studio_created_v1') === 'true'
+      );
+    } catch {
+      return false;
+    }
+  });
+
+  useEffect(() => {
+    const checkStudio = () => {
+      try {
+        if (
+          window.location.hash === '#studio' ||
+          localStorage.getItem('dreampulse_studio_visited_v1') === 'true'
+        ) {
+          localStorage.setItem('dreampulse_studio_visited_v1', 'true');
+          setHasBuiltStrategy(true);
+        }
+      } catch {
+        // ignore
+      }
+    };
+    checkStudio();
+    window.addEventListener('hashchange', checkStudio);
+    return () => window.removeEventListener('hashchange', checkStudio);
+  }, []);
+
+  // Compute 5 interactive onboarding quests
   const isWalletConnected = Boolean(wallet?.isConnected);
   const isNetworkCorrect = Boolean(wallet?.isCorrectNetwork);
   const isFaucetClaimed = Boolean(parseFloat(wallet?.balanceCollateral || '0') > 0);
@@ -155,8 +186,14 @@ export function useOnboarding({
         description: 'Copytrade the live AI swarm or execute an Event Contract',
         isCompleted: isFirstActionDone,
       },
+      {
+        id: 'build_strategy',
+        label: 'Build Custom AI Agent',
+        description: 'Design a trading strategy with Gemini prompts or visual capsules',
+        isCompleted: hasBuiltStrategy,
+      },
     ];
-  }, [isWalletConnected, isNetworkCorrect, isFaucetClaimed, isSessionActive, isFirstActionDone]);
+  }, [isWalletConnected, isNetworkCorrect, isFaucetClaimed, isSessionActive, isFirstActionDone, hasBuiltStrategy]);
 
   const completedQuestsCount = quests.filter((q) => q.isCompleted).length;
   const totalQuestsCount = quests.length;

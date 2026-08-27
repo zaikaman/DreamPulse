@@ -13,6 +13,7 @@ import {
   ArrowPathIcon,
   BeakerIcon,
   ExclamationTriangleIcon,
+  ArrowRightIcon,
 } from '@heroicons/react/24/outline';
 import type { AgentType } from '../types/index.js';
 import { usePersonalSwarm } from '../hooks/usePersonalSwarm.js';
@@ -293,7 +294,7 @@ export const PersonalSwarmCockpit: React.FC<PersonalSwarmCockpitProps> = ({
             <div className="min-w-0">
               <div className="text-xs font-semibold text-sky-300">Copy-Trading Mode — Zero configuration required</div>
               <p className="text-[11px] leading-relaxed text-muted-foreground m-0 mt-1">
-                Your wallet automatically mirrors every high-conviction Protocol Swarm signal (Volt / Oracle / Titan) under your session risk caps (<span className="font-mono text-foreground">single-trade & daily caps</span>). Use <strong>Fork to Strategy Studio</strong> in the Protocol Swarm above to backtest, then click <strong>Personalize My Swarm</strong> to deploy your isolated parameters.
+                Your wallet automatically mirrors every high-conviction Protocol Swarm signal (Volt / Oracle / Titan) under your session risk caps (<span className="font-mono text-foreground">single-trade & daily caps</span>). Use <strong>Fork to Backtester</strong> in the Protocol Swarm above to backtest, then click <strong>Personalize My Swarm</strong> to deploy your isolated parameters.
               </p>
             </div>
           </div>
@@ -310,6 +311,36 @@ export const PersonalSwarmCockpit: React.FC<PersonalSwarmCockpitProps> = ({
             </div>
           </div>
         )}
+      </div>
+
+      {/* Flagship Custom Strategy & Independent Agent Deployment Bridge */}
+      <div className="p-3.5 rounded-xl border border-primary/30 bg-primary/5 flex items-center justify-between gap-3 flex-wrap transition-all hover:border-primary/50">
+        <div className="flex items-center gap-3">
+          <div className="w-8 h-8 rounded-lg bg-primary/10 border border-primary/20 grid place-items-center text-primary flex-shrink-0">
+            <SparklesIcon className="w-4 h-4" />
+          </div>
+          <div>
+            <div className="text-xs font-bold text-foreground flex items-center gap-2">
+              <span>Looking for full algorithmic freedom?</span>
+              <Badge variant="outline" className="text-[9px] font-mono border-primary/40 text-primary bg-primary/10">
+                Strategy Studio
+              </Badge>
+            </div>
+            <p className="text-[11px] text-muted-foreground mt-0.5 leading-snug">
+              Build your own custom AI agents with Gemini prompts & visual capsules, and deploy them independently with dedicated tUSDC allowances.
+            </p>
+          </div>
+        </div>
+        <button
+          type="button"
+          onClick={() => {
+            window.location.hash = '#studio';
+          }}
+          className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-primary text-primary-foreground text-xs font-bold hover:bg-primary/90 transition-all cursor-pointer shadow-sm"
+        >
+          <span>Launch Strategy Studio</span>
+          <ArrowRightIcon className="w-3.5 h-3.5" />
+        </button>
       </div>
 
       {/* Agent Cards Grid — personal */}
@@ -339,7 +370,7 @@ export const PersonalSwarmCockpit: React.FC<PersonalSwarmCockpitProps> = ({
               <SliderRow label="Minimum Mispricing Edge" value={`${voltSliders.minEdge.toFixed(1)}%`} color={AGENT_THEME.volt.color}><input type="range" min="1.0" max="10.0" step="0.5" disabled={!isEditable} value={voltSliders.minEdge} onChange={(e) => setVoltSliders({ ...voltSliders, minEdge: parseFloat(e.target.value) })} style={{ width: '100%', accentColor: AGENT_THEME.volt.color, cursor: isEditable ? 'pointer' : 'default' }} /></SliderRow>
               <SliderRow label="Order Lot Size" value={`${voltSliders.lotSize.toFixed(0)} lots`} color={AGENT_THEME.volt.color}><input type="range" min="1" max="20" step="1" disabled={!isEditable} value={voltSliders.lotSize} onChange={(e) => setVoltSliders({ ...voltSliders, lotSize: parseFloat(e.target.value) })} style={{ width: '100%', accentColor: AGENT_THEME.volt.color, cursor: isEditable ? 'pointer' : 'default' }} /></SliderRow>
               <button type="button" onClick={handleSaveVolt} disabled={!isEditable || isSaving} className="w-full inline-flex items-center justify-center gap-1.5 py-2 rounded-lg border text-xs font-semibold transition-all cursor-pointer disabled:opacity-60" style={{ background: saveSuccess.Volt ? 'rgba(52,211,153,0.12)' : AGENT_THEME.volt.color, color: saveSuccess.Volt ? '#6ee7b7' : '#09090b', borderColor: saveSuccess.Volt ? 'rgba(52,211,153,0.22)' : AGENT_THEME.volt.color }}>{saveSuccess.Volt ? <><CheckCircleIcon className="w-3.5 h-3.5" /> Saved to My Swarm</> : <><AdjustmentsHorizontalIcon className="w-3.5 h-3.5" /> {isCopyMode ? 'Save & Activate Personal Mode' : 'Save Personal Volt Config'}</>}</button>
-              <button type="button" onClick={() => onForkToStudio?.('Volt', { driftThreshold: voltSliders.driftThreshold / 100.0, minEdge: voltSliders.minEdge / 100.0, lotSize: voltSliders.lotSize })} className="w-full inline-flex items-center justify-center gap-1.5 py-2 rounded-lg border text-xs font-semibold bg-secondary/30 hover:bg-secondary/50" style={{ color: AGENT_THEME.volt.color, borderColor: `${AGENT_THEME.volt.color}2a` }}><BeakerIcon className="w-3.5 h-3.5" /> Test in Strategy Studio</button>
+              <button type="button" onClick={() => onForkToStudio?.('Volt', { driftThreshold: voltSliders.driftThreshold / 100.0, minEdge: voltSliders.minEdge / 100.0, lotSize: voltSliders.lotSize })} className="w-full inline-flex items-center justify-center gap-1.5 py-2 rounded-lg border text-xs font-semibold bg-secondary/30 hover:bg-secondary/50" style={{ color: AGENT_THEME.volt.color, borderColor: `${AGENT_THEME.volt.color}2a` }}><BeakerIcon className="w-3.5 h-3.5" /> Test in Backtester</button>
             </div>
           </div>
         </div>
@@ -364,7 +395,7 @@ export const PersonalSwarmCockpit: React.FC<PersonalSwarmCockpitProps> = ({
               <SliderRow label="Order Lot Size" value={`${oracleSliders.lotSize.toFixed(0)} lots`} color={AGENT_THEME.oracle.color}><input type="range" min="1" max="25" step="1" disabled={!isEditable} value={oracleSliders.lotSize} onChange={(e) => setOracleSliders({ ...oracleSliders, lotSize: parseFloat(e.target.value) })} style={{ width: '100%', accentColor: AGENT_THEME.oracle.color, cursor: isEditable ? 'pointer' : 'default' }} /></SliderRow>
               <SliderRow label="Max Trade Size (tUSDC)" value={`${oracleSliders.maxTradeSize.toFixed(0)}`} color={AGENT_THEME.oracle.color}><input type="range" min="5" max="50" step="1" disabled={!isEditable} value={oracleSliders.maxTradeSize} onChange={(e) => setOracleSliders({ ...oracleSliders, maxTradeSize: parseFloat(e.target.value) })} style={{ width: '100%', accentColor: AGENT_THEME.oracle.color, cursor: isEditable ? 'pointer' : 'default' }} /></SliderRow>
               <button type="button" onClick={handleSaveOracle} disabled={!isEditable || isSaving} className="w-full inline-flex items-center justify-center gap-1.5 py-2 rounded-lg border text-xs font-semibold transition-all cursor-pointer disabled:opacity-60" style={{ background: saveSuccess.Oracle ? 'rgba(52,211,153,0.12)' : AGENT_THEME.oracle.color, color: saveSuccess.Oracle ? '#6ee7b7' : '#09090b', borderColor: saveSuccess.Oracle ? 'rgba(52,211,153,0.22)' : AGENT_THEME.oracle.color }}>{saveSuccess.Oracle ? <><CheckCircleIcon className="w-3.5 h-3.5" /> Saved to My Swarm</> : <><AdjustmentsHorizontalIcon className="w-3.5 h-3.5" /> {isCopyMode ? 'Save & Activate Personal Mode' : 'Save Personal Oracle Config'}</>}</button>
-              <button type="button" onClick={() => onForkToStudio?.('Oracle', { minEdge: oracleSliders.minEdge / 100.0, lotSize: oracleSliders.lotSize, maxTradeSize: oracleSliders.maxTradeSize })} className="w-full inline-flex items-center justify-center gap-1.5 py-2 rounded-lg border text-xs font-semibold bg-secondary/30 hover:bg-secondary/50" style={{ color: AGENT_THEME.oracle.color, borderColor: `${AGENT_THEME.oracle.color}2a` }}><BeakerIcon className="w-3.5 h-3.5" /> Test in Strategy Studio</button>
+              <button type="button" onClick={() => onForkToStudio?.('Oracle', { minEdge: oracleSliders.minEdge / 100.0, lotSize: oracleSliders.lotSize, maxTradeSize: oracleSliders.maxTradeSize })} className="w-full inline-flex items-center justify-center gap-1.5 py-2 rounded-lg border text-xs font-semibold bg-secondary/30 hover:bg-secondary/50" style={{ color: AGENT_THEME.oracle.color, borderColor: `${AGENT_THEME.oracle.color}2a` }}><BeakerIcon className="w-3.5 h-3.5" /> Test in Backtester</button>
             </div>
           </div>
         </div>
@@ -388,7 +419,7 @@ export const PersonalSwarmCockpit: React.FC<PersonalSwarmCockpitProps> = ({
               <SliderRow label="Target Bid-Ask Spread" value={`${titanSliders.targetSpread.toFixed(1)}%`} color={AGENT_THEME.titan.color}><input type="range" min="2.0" max="8.0" step="0.5" disabled={!isEditable} value={titanSliders.targetSpread} onChange={(e) => setTitanSliders({ ...titanSliders, targetSpread: parseFloat(e.target.value) })} style={{ width: '100%', accentColor: AGENT_THEME.titan.color, cursor: isEditable ? 'pointer' : 'default' }} /></SliderRow>
               <SliderRow label="Inventory Skew Damping (γ)" value={titanSliders.inventoryAversion.toFixed(3)} color={AGENT_THEME.titan.color}><input type="range" min="0.005" max="0.040" step="0.005" disabled={!isEditable} value={titanSliders.inventoryAversion} onChange={(e) => setTitanSliders({ ...titanSliders, inventoryAversion: parseFloat(e.target.value) })} style={{ width: '100%', accentColor: AGENT_THEME.titan.color, cursor: isEditable ? 'pointer' : 'default' }} /></SliderRow>
               <button type="button" onClick={handleSaveTitan} disabled={!isEditable || isSaving} className="w-full inline-flex items-center justify-center gap-1.5 py-2 rounded-lg border text-xs font-semibold transition-all cursor-pointer disabled:opacity-60" style={{ background: saveSuccess.Titan ? 'rgba(52,211,153,0.12)' : AGENT_THEME.titan.color, color: saveSuccess.Titan ? '#6ee7b7' : '#09090b', borderColor: saveSuccess.Titan ? 'rgba(52,211,153,0.22)' : AGENT_THEME.titan.color }}>{saveSuccess.Titan ? <><CheckCircleIcon className="w-3.5 h-3.5" /> Saved to My Swarm</> : <><AdjustmentsHorizontalIcon className="w-3.5 h-3.5" /> {isCopyMode ? 'Save & Activate Personal Mode' : 'Save Personal Titan Config'}</>}</button>
-              <button type="button" onClick={() => onForkToStudio?.('Titan', { targetSpread: titanSliders.targetSpread / 100.0, inventoryAversion: titanSliders.inventoryAversion, lotSize: titanSliders.lotSize })} className="w-full inline-flex items-center justify-center gap-1.5 py-2 rounded-lg border text-xs font-semibold bg-secondary/30 hover:bg-secondary/50" style={{ color: AGENT_THEME.titan.color, borderColor: `${AGENT_THEME.titan.color}2a` }}><BeakerIcon className="w-3.5 h-3.5" /> Test in Strategy Studio</button>
+              <button type="button" onClick={() => onForkToStudio?.('Titan', { targetSpread: titanSliders.targetSpread / 100.0, inventoryAversion: titanSliders.inventoryAversion, lotSize: titanSliders.lotSize })} className="w-full inline-flex items-center justify-center gap-1.5 py-2 rounded-lg border text-xs font-semibold bg-secondary/30 hover:bg-secondary/50" style={{ color: AGENT_THEME.titan.color, borderColor: `${AGENT_THEME.titan.color}2a` }}><BeakerIcon className="w-3.5 h-3.5" /> Test in Backtester</button>
             </div>
           </div>
         </div>

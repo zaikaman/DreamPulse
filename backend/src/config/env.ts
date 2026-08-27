@@ -1,7 +1,16 @@
 import dotenv from 'dotenv';
 import { z } from 'zod';
+import path from 'path';
+import { fileURLToPath } from 'url';
 
 dotenv.config();
+try {
+  const currentDir = path.dirname(fileURLToPath(import.meta.url));
+  dotenv.config({ path: path.resolve(currentDir, '../../.env') });
+  dotenv.config({ path: path.resolve(process.cwd(), 'backend/.env') });
+} catch {
+  // Ignore
+}
 
 // Extract all GROQ_API_KEY* variables from environment
 const rawGroqKeys: string[] = [];
@@ -30,7 +39,7 @@ const envSchema = z.object({
   GROQ_MODEL: z.string().default('qwen/qwen3.6-27b'),
   GROQ_KEYS: z.array(z.string()).default(finalGroqKeys),
 
-  // Gemini LLM (Secondary Fallback)
+  // Gemini LLM (Exclusively for Strategy Studio Builder)
   GEMINI_BASE_URL: z.string().default('https://generativelanguage.googleapis.com/v1beta/openai/'),
   GEMINI_API_KEY: z.string().default('mock-gemini-key'),
   GEMINI_MODEL: z.string().default('gemini-2.5-flash'),

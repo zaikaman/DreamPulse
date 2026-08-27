@@ -9,6 +9,7 @@ import {
   CommandLineIcon,
   CheckCircleIcon,
   ChartPieIcon,
+  ChartBarIcon,
   CurrencyDollarIcon,
   ShieldCheckIcon,
   BoltIcon,
@@ -152,9 +153,16 @@ export const CommandDialog: React.FC<CommandDialogProps> = ({
       {
         id: "Strategy Studio",
         label: "Strategy Studio",
-        desc: "Quant Backtester & Custom Alpha Formulas",
-        icon: CommandLineIcon,
-        keywords: "strategy studio quant backtester formulas custom alpha code python backtest model",
+        desc: "No-Code Autonomous Agent & Swarm Builder",
+        icon: SparklesIcon,
+        keywords: "strategy studio no code drag drop builder blocks sentence agent custom swarm ai prompt",
+      },
+      {
+        id: "Backtester",
+        label: "Backtester",
+        desc: "Quant Replay & Historical Simulation Lab",
+        icon: ChartBarIcon,
+        keywords: "backtest backtester simulation replay historical quant formulas sharpe winrate drawdown",
       },
       {
         id: "Settlement",
@@ -227,6 +235,36 @@ export const CommandDialog: React.FC<CommandDialogProps> = ({
         },
       });
     }
+
+    // Build Custom Strategy Agent Action
+    actions.push({
+      id: "action-build-strategy",
+      type: "action",
+      title: "Build Custom AI Strategy Agent",
+      subtitle: "Synthesize trading rules with Gemini natural language prompts or visual capsules",
+      badge: "Strategy Studio",
+      icon: SparklesIcon,
+      keywords: "strategy studio build create custom agent gemini prompt no code blocks swarm rules",
+      onSelect: () => {
+        onNavigateView("Strategy Studio");
+        onClose();
+      },
+    });
+
+    // Run Quantitative Backtest Action
+    actions.push({
+      id: "action-run-backtest",
+      type: "action",
+      title: "Run Quantitative Backtest",
+      subtitle: "Replay custom or protocol agents against historical market candles with Sortino & Sharpe",
+      badge: "Backtester",
+      icon: ChartBarIcon,
+      keywords: "backtest backtester simulate simulation replay historical quant sharpe sortino pnl winrate",
+      onSelect: () => {
+        onNavigateView("Backtester");
+        onClose();
+      },
+    });
 
     // Session Key Delegation Action
     if (onOpenSessionModal) {

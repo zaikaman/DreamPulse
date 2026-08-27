@@ -6,12 +6,12 @@ import {
   BoltIcon,
   CpuChipIcon,
   AdjustmentsHorizontalIcon,
-  ViewfinderCircleIcon,
   ArrowRightIcon,
   ArrowLeftIcon,
   CheckCircleIcon,
   XMarkIcon,
   LockClosedIcon,
+  ChartBarIcon,
 } from '@heroicons/react/24/outline';
 import { Dialog, DialogContent } from '../ui/dialog.js';
 import { Button } from '../ui/button.js';
@@ -72,6 +72,7 @@ export const OnboardingWizardModal: React.FC<OnboardingWizardModalProps> = ({
     { title: 'Welcome & Network', label: 'Network' },
     { title: 'Testnet Collateral', label: 'Faucet' },
     { title: 'Session Key', label: 'Session' },
+    { title: 'No-Code AI Swarm Studio', label: 'Studio' },
     { title: 'Choose Your Journey', label: 'Launch' },
   ];
 
@@ -386,10 +387,88 @@ export const OnboardingWizardModal: React.FC<OnboardingWizardModalProps> = ({
           )}
 
           {/* ------------------------------------------------------------- */}
-          {/* STEP 4: CHOOSE YOUR TRADING JOURNEY */}
+          {/* STEP 4: NO-CODE STRATEGY STUDIO & SWARM BUILDER */}
           {/* ------------------------------------------------------------- */}
           {currentStep === 3 && (
             <div className="space-y-3.5 animate-in fade-in-50 duration-200">
+              <div className="space-y-1">
+                <div className="flex items-center gap-2">
+                  <h4 className="text-base font-semibold text-foreground">
+                    Build Custom AI Agents & Swarms
+                  </h4>
+                  <Badge variant="outline" className="text-[9px] font-mono border-primary/40 text-primary bg-primary/10">
+                    Flagship
+                  </Badge>
+                </div>
+                <p className="text-xs text-muted-foreground leading-relaxed">
+                  Beyond our 3 hardcoded agents (Volt, Oracle, Titan), DreamPulse introduces a <strong>revolutionary No-Code Strategy Studio</strong>.
+                  Build your own trading agents using Gemini AI natural language prompts or interactive sequential capsules.
+                </p>
+              </div>
+
+              {/* Interactive Capsule Preview Box */}
+              <div className="rounded-xl border border-border/60 bg-secondary/20 p-3 space-y-2">
+                <div className="flex items-center justify-between text-[11px] font-mono text-muted-foreground">
+                  <span className="flex items-center gap-1.5 text-foreground font-semibold">
+                    <SparklesIcon className="w-3.5 h-3.5 text-primary" />
+                    How Algorithmic Sentences Work
+                  </span>
+                  <span className="text-[10px] text-muted-foreground">Zero Code • Instant AST Logic</span>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-1.5 text-xs font-mono">
+                  {/* WHEN */}
+                  <div className="p-2 rounded-lg bg-background/80 border border-border/50 flex items-center gap-1.5 text-foreground">
+                    <span className="text-[10px] font-bold text-muted-foreground">[ WHEN ]</span>
+                    <span className="text-primary font-bold">SOL/USD</span>
+                    <span className="text-muted-foreground text-[11px]">on 5m Candles</span>
+                  </div>
+
+                  {/* IF */}
+                  <div className="p-2 rounded-lg bg-background/80 border border-border/50 flex items-center gap-1.5 text-foreground flex-wrap">
+                    <span className="text-[10px] font-bold text-muted-foreground">[ IF ]</span>
+                    <span className="text-foreground font-bold">EMA 9/21</span>
+                    <span className="text-emerald-400 font-bold text-[11px]">↑ Crosses Above</span>
+                  </div>
+
+                  {/* THEN */}
+                  <div className="p-2 rounded-lg bg-background/80 border border-border/50 flex items-center gap-1.5 text-foreground">
+                    <span className="text-[10px] font-bold text-muted-foreground">[ THEN ]</span>
+                    <span className="px-1.5 py-0.5 rounded bg-emerald-500/10 text-emerald-400 font-bold text-[10px] border border-emerald-500/20">CALL (UP)</span>
+                    <span className="text-muted-foreground text-[11px]">Expiry: 5m</span>
+                  </div>
+
+                  {/* RISK */}
+                  <div className="p-2 rounded-lg bg-background/80 border border-border/50 flex items-center gap-1.5 text-[11px] text-muted-foreground">
+                    <span className="text-[10px] font-bold text-muted-foreground">[ RISK ]</span>
+                    <span>Max 2 Loss • 3m Rest</span>
+                  </div>
+                </div>
+              </div>
+
+              {/* 3 Core Highlights */}
+              <div className="grid grid-cols-3 gap-2 text-center">
+                <div className="p-2 rounded-lg border border-border/40 bg-secondary/15">
+                  <div className="text-[11px] font-semibold text-foreground">Gemini Prompt-to-Agent</div>
+                  <div className="text-[10px] text-muted-foreground mt-0.5">Describe in English, auto-synthesizes rules</div>
+                </div>
+                <div className="p-2 rounded-lg border border-border/40 bg-secondary/15">
+                  <div className="text-[11px] font-semibold text-foreground">Independent Agent Allowance</div>
+                  <div className="text-[10px] text-muted-foreground mt-0.5">Deploy separately with dedicated tUSDC bankroll</div>
+                </div>
+                <div className="p-2 rounded-lg border border-border/40 bg-secondary/15">
+                  <div className="text-[11px] font-semibold text-foreground">Historical Backtester</div>
+                  <div className="text-[10px] text-muted-foreground mt-0.5">Replay against real Binance & Somnia feeds</div>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* ------------------------------------------------------------- */}
+          {/* STEP 5: CHOOSE YOUR TRADING JOURNEY */}
+          {/* ------------------------------------------------------------- */}
+          {currentStep === 4 && (
+            <div className="space-y-3 animate-in fade-in-50 duration-200">
               <div className="space-y-1">
                 <h4 className="text-base font-semibold text-foreground">
                   Choose Your Starting Mode
@@ -399,84 +478,122 @@ export const OnboardingWizardModal: React.FC<OnboardingWizardModalProps> = ({
                 </p>
               </div>
 
-              {/* 3 Interactive Pathway Cards */}
-              <div className="grid grid-cols-1 gap-2.5">
+              {/* 4 Interactive Pathway Cards */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                 {/* Option A: Autonomous Swarm */}
                 <button
                   onClick={() => handleFinish('Swarm Cockpit')}
-                  className="w-full rounded-xl border border-border/70 hover:border-foreground/40 bg-secondary/30 hover:bg-secondary/60 p-3 text-left transition-all group flex items-start justify-between cursor-pointer"
+                  className="rounded-xl border border-border/70 hover:border-foreground/40 bg-secondary/30 hover:bg-secondary/60 p-3 text-left transition-all group flex flex-col justify-between cursor-pointer"
                 >
-                  <div className="flex items-start gap-3">
-                    <div className="p-2 rounded-lg bg-primary/10 text-foreground group-hover:scale-105 transition-transform mt-0.5">
+                  <div className="flex items-start gap-2.5">
+                    <div className="p-1.5 rounded-lg bg-primary/10 text-foreground group-hover:scale-105 transition-transform mt-0.5">
                       <CpuChipIcon className="w-4 h-4" />
                     </div>
                     <div>
-                      <div className="flex items-center gap-2">
+                      <div className="flex items-center gap-1.5 flex-wrap">
                         <span className="text-xs font-semibold text-foreground">
-                          Autonomous Swarm Copytrading
+                          Autonomous Swarm
                         </span>
-                        <Badge variant="outline" className="text-[9px] font-mono border-emerald-500/30 text-emerald-400 bg-emerald-950/20">
+                        <Badge variant="outline" className="text-[8px] font-mono border-emerald-500/30 text-emerald-400 bg-emerald-950/20 px-1 py-0">
                           Recommended
                         </Badge>
                       </div>
-                      <p className="text-[11px] text-muted-foreground mt-0.5">
-                        Instantly copytrade multi-agent AI swarms trading 24/7 on DreamDEX. Zero pool deposits or lockups required.
+                      <p className="text-[11px] text-muted-foreground mt-1 leading-snug">
+                        Copytrade multi-agent AI swarms trading 24/7 on DreamDEX with zero lockups.
                       </p>
                     </div>
                   </div>
-                  <ArrowRightIcon className="w-4 h-4 text-muted-foreground group-hover:text-foreground group-hover:translate-x-0.5 transition-all shrink-0 mt-2" />
+                  <div className="flex items-center justify-end text-xs font-mono text-muted-foreground group-hover:text-foreground mt-2">
+                    <span className="text-[10px]">Open Cockpit</span>
+                    <ArrowRightIcon className="w-3.5 h-3.5 ml-1 group-hover:translate-x-0.5 transition-transform" />
+                  </div>
                 </button>
 
-                {/* Option B: Pro Terminal & Alpha Copilot */}
+                {/* Option B: Strategy Studio */}
+                <button
+                  onClick={() => handleFinish('Strategy Studio')}
+                  className="rounded-xl border border-primary/40 hover:border-primary bg-primary/5 hover:bg-primary/10 p-3 text-left transition-all group flex flex-col justify-between cursor-pointer"
+                >
+                  <div className="flex items-start gap-2.5">
+                    <div className="p-1.5 rounded-lg bg-primary/20 text-primary group-hover:scale-105 transition-transform mt-0.5">
+                      <SparklesIcon className="w-4 h-4" />
+                    </div>
+                    <div>
+                      <div className="flex items-center gap-1.5 flex-wrap">
+                        <span className="text-xs font-semibold text-foreground">
+                          Strategy Studio
+                        </span>
+                        <Badge variant="outline" className="text-[8px] font-mono border-primary/40 text-primary bg-primary/10 px-1 py-0">
+                          Flagship
+                        </Badge>
+                      </div>
+                      <p className="text-[11px] text-muted-foreground mt-1 leading-snug">
+                        Build custom agents with Gemini AI prompts & visual sentence capsules.
+                      </p>
+                    </div>
+                  </div>
+                  <div className="flex items-center justify-end text-xs font-mono text-primary group-hover:text-primary mt-2">
+                    <span className="text-[10px]">Build Agents</span>
+                    <ArrowRightIcon className="w-3.5 h-3.5 ml-1 group-hover:translate-x-0.5 transition-transform" />
+                  </div>
+                </button>
+
+                {/* Option C: Backtester */}
+                <button
+                  onClick={() => handleFinish('Backtester')}
+                  className="rounded-xl border border-border/70 hover:border-foreground/40 bg-secondary/30 hover:bg-secondary/60 p-3 text-left transition-all group flex flex-col justify-between cursor-pointer"
+                >
+                  <div className="flex items-start gap-2.5">
+                    <div className="p-1.5 rounded-lg bg-primary/10 text-foreground group-hover:scale-105 transition-transform mt-0.5">
+                      <ChartBarIcon className="w-4 h-4" />
+                    </div>
+                    <div>
+                      <div className="flex items-center gap-1.5 flex-wrap">
+                        <span className="text-xs font-semibold text-foreground">
+                          Quant Backtester
+                        </span>
+                        <Badge variant="outline" className="text-[8px] font-mono border-border/50 text-muted-foreground px-1 py-0">
+                          Sim Lab
+                        </Badge>
+                      </div>
+                      <p className="text-[11px] text-muted-foreground mt-1 leading-snug">
+                        Replay and simulate custom or protocol agents with Sortino, Sharpe & PnL.
+                      </p>
+                    </div>
+                  </div>
+                  <div className="flex items-center justify-end text-xs font-mono text-muted-foreground group-hover:text-foreground mt-2">
+                    <span className="text-[10px]">Launch Lab</span>
+                    <ArrowRightIcon className="w-3.5 h-3.5 ml-1 group-hover:translate-x-0.5 transition-transform" />
+                  </div>
+                </button>
+
+                {/* Option D: Pro Trade Terminal */}
                 <button
                   onClick={() => handleFinish('Trade Terminal')}
-                  className="w-full rounded-xl border border-border/70 hover:border-foreground/40 bg-secondary/30 hover:bg-secondary/60 p-3 text-left transition-all group flex items-start justify-between cursor-pointer"
+                  className="rounded-xl border border-border/70 hover:border-foreground/40 bg-secondary/30 hover:bg-secondary/60 p-3 text-left transition-all group flex flex-col justify-between cursor-pointer"
                 >
-                  <div className="flex items-start gap-3">
-                    <div className="p-2 rounded-lg bg-primary/10 text-foreground group-hover:scale-105 transition-transform mt-0.5">
+                  <div className="flex items-start gap-2.5">
+                    <div className="p-1.5 rounded-lg bg-primary/10 text-foreground group-hover:scale-105 transition-transform mt-0.5">
                       <AdjustmentsHorizontalIcon className="w-4 h-4" />
                     </div>
                     <div>
-                      <div className="flex items-center gap-2">
+                      <div className="flex items-center gap-1.5 flex-wrap">
                         <span className="text-xs font-semibold text-foreground">
-                          AI Alpha Copilot & Trade Terminal
+                          Trade Terminal
                         </span>
-                        <Badge variant="outline" className="text-[9px] font-mono border-border/50 text-muted-foreground">
+                        <Badge variant="outline" className="text-[8px] font-mono border-border/50 text-muted-foreground px-1 py-0">
                           Pro Trader
                         </Badge>
                       </div>
-                      <p className="text-[11px] text-muted-foreground mt-0.5">
-                        Trade binary contracts manually with real-time CLOB depth, EV calculations, and live AI guidance.
+                      <p className="text-[11px] text-muted-foreground mt-1 leading-snug">
+                        Manual CLOB order book execution with EV math & live AI copilot.
                       </p>
                     </div>
                   </div>
-                  <ArrowRightIcon className="w-4 h-4 text-muted-foreground group-hover:text-foreground group-hover:translate-x-0.5 transition-all shrink-0 mt-2" />
-                </button>
-
-                {/* Option C: Edge Radar & Quant Studio */}
-                <button
-                  onClick={() => handleFinish('Edge Radar')}
-                  className="w-full rounded-xl border border-border/70 hover:border-foreground/40 bg-secondary/30 hover:bg-secondary/60 p-3 text-left transition-all group flex items-start justify-between cursor-pointer"
-                >
-                  <div className="flex items-start gap-3">
-                    <div className="p-2 rounded-lg bg-primary/10 text-foreground group-hover:scale-105 transition-transform mt-0.5">
-                      <ViewfinderCircleIcon className="w-4 h-4" />
-                    </div>
-                    <div>
-                      <div className="flex items-center gap-2">
-                        <span className="text-xs font-semibold text-foreground">
-                          Edge Radar & Quant Studio
-                        </span>
-                        <Badge variant="outline" className="text-[9px] font-mono border-border/50 text-muted-foreground">
-                          Quant Anomaly
-                        </Badge>
-                      </div>
-                      <p className="text-[11px] text-muted-foreground mt-0.5">
-                        Analyze Black-Scholes pricing anomalies, backtest formulas, and auto-settle expired contracts.
-                      </p>
-                    </div>
+                  <div className="flex items-center justify-end text-xs font-mono text-muted-foreground group-hover:text-foreground mt-2">
+                    <span className="text-[10px]">Trade CLOB</span>
+                    <ArrowRightIcon className="w-3.5 h-3.5 ml-1 group-hover:translate-x-0.5 transition-transform" />
                   </div>
-                  <ArrowRightIcon className="w-4 h-4 text-muted-foreground group-hover:text-foreground group-hover:translate-x-0.5 transition-all shrink-0 mt-2" />
                 </button>
               </div>
             </div>

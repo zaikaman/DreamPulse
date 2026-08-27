@@ -336,5 +336,96 @@ describe('Phase 6 Settlement Sweeper & Collateral Compounder Tests', () => {
       expect(history.length).toBe(1);
       expect(history[0].claimableAmount).toBe(11.0);
     });
+
+    it('scans and sweeps winning manual trades placed through Trade Terminal on rolling CLOB markets', async () => {
+      const settlementService = new SettlementService();
+      const terminalUserAddress = '0x1111222233334444555566667777888899990000';
+      const rollingMarketId = '0x6bfa-BTCUSD-5m-96500-1740000000000';
+
+      const { marketService } = await import('../src/services/market-service.js');
+      vi.spyOn(marketService, 'getMarketById').mockReturnValue({
+        id: rollingMarketId,
+        symbol: 'BTC/USD',
+        strikePrice: 96500,
+        windowDuration: '5m',
+        openTimestamp: new Date(Date.now() - 600000).toISOString(),
+        closeTimestamp: new Date(Date.now() - 300000).toISOString(),
+        resolutionTimestamp: new Date(Date.now() - 240000).toISOString(),
+        status: 'Finalized',
+        settlementPrice: 96800,
+        winningOutcome: 'YES',
+        bestBidYes: 1.0,
+        bestAskYes: 1.0,
+        bestBidNo: 0.0,
+        bestAskNo: 0.0,
+        impliedProbYes: 1.0,
+        fairValueYes: 1.0,
+        edgePercentage: 0,
+      });
+
+      vi.spyOn(orderService, 'getOrders').mockReturnValue([
+        {
+          id: 'terminal-order-1',
+          userAddress: terminalUserAddress,
+          marketId: rollingMarketId,
+          agentType: 'Manual',
+          source: 'TERMINAL',
+          outcome: 'YES',
+          direction: 'BUY',
+          orderType: 'IOC',
+          price: 0.45,
+          lotSize: 20,
+          totalCost: 9.0,
+          status: 'FILLED',
+          pnl: 11.0, // Won trade ($20 gross payout - $9 entry cost)
+          isSettled: true,
+          createdAt: new Date().toISOString(),
+        },
+      ] as any);
+
+      vi.spyOn(somniaExchange.client, 'getClaimable').mockResolvedValue([]);
+      vi.spyOn(somniaExchange.client, 'listBinaryMarkets').mockResolvedValue([]);
+      vi.spyOn(somniaExchange.client, 'listPastBinaryMarkets').mockResolvedValue([]);
+
+      const unclaimed = await settlementService.scanUnclaimedSettlements(terminalUserAddress, true);
+      expect(unclaimed.length).toBe(1);
+      expect(unclaimed[0].marketId).toBe(rollingMarketId);
+      expect(unclaimed[0].winningOutcome).toBe('YES');
+      expect(unclaimed[0].claimableAmount).toBe(20.0); // Full $20 payout
+
+      const sweepResult = await settlementService.triggerBatchSweep(terminalUserAddress, true);
+      expect(sweepResult.success).toBe(true);
+      expect(sweepResult.claimedMarketsCount).toBe(1);
+      expect(sweepResult.totalClaimedAmount).toBe('20.00 tUSDC');
+      expect(sweepResult.sweeps[0].userAddress.toLowerCase()).toBe(terminalUserAddress.toLowerCase());
+      expect(sweepResult.sweeps[0].claimableAmount).toBe(20.0);
+    });
+
+    it('includes Trade Terminal manual users in getCandidateSweeperTargets', async () => {
+      const settlementService = new SettlementService();
+      const terminalUserAddress = '0x1111222233334444555566667777888899990000';
+
+      vi.spyOn(orderService, 'getOrders').mockReturnValue([
+        {
+          id: 'manual-order-123',
+          userAddress: terminalUserAddress,
+          marketId: '0x6bfa-BTCUSD-5m-96500-1740000000000',
+          agentType: 'Manual',
+          source: 'TERMINAL',
+          outcome: 'YES',
+          direction: 'BUY',
+          orderType: 'IOC',
+          price: 0.5,
+          lotSize: 10,
+          totalCost: 5,
+          status: 'FILLED',
+          isSettled: true,
+          createdAt: new Date().toISOString(),
+        },
+      ] as any);
+
+      const targets = settlementService.getCandidateSweeperTargets();
+      expect(targets.some((t) => t.toLowerCase() === terminalUserAddress.toLowerCase())).toBe(true);
+    });
   });
 });

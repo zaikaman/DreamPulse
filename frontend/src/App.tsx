@@ -4,7 +4,7 @@ import './styles/landing.css';
 import './styles/terminal.css';
 import './styles/dashboard.css';
 
-import type { AgentType } from './types/index.js';
+import type { AgentType, CustomAgentDefinition, CustomAgentRules } from './types/index.js';
 import { useMarkets } from './hooks/useMarkets.js';
 import { useTelemetry } from './hooks/useTelemetry.js';
 import { useSessionKey } from './hooks/useSessionKey.js';
@@ -25,7 +25,8 @@ import { useOnboarding } from './hooks/useOnboarding.js';
 
 // Lazy load heavy modules to minimize initial bundle size and accelerate TTI
 const SwarmCockpitView = React.lazy(() => import('./components/dashboard/SwarmCockpitView.js').then((m) => ({ default: m.SwarmCockpitView })));
-const StrategyStudio = React.lazy(() => import('./components/StrategyStudio.js').then((m) => ({ default: m.StrategyStudio })));
+const StrategyStudioView = React.lazy(() => import('./components/StrategyStudioView.js').then((m) => ({ default: m.StrategyStudioView })));
+const Backtester = React.lazy(() => import('./components/StrategyStudio.js').then((m) => ({ default: m.Backtester })));
 const SweeperControls = React.lazy(() => import('./components/SweeperControls.js').then((m) => ({ default: m.SweeperControls })));
 const AnalyticsView = React.lazy(() => import('./components/dashboard/AnalyticsView.js').then((m) => ({ default: m.AnalyticsView })));
 const SessionDelegationModal = React.lazy(() => import('./components/SessionDelegationModal.js').then((m) => ({ default: m.SessionDelegationModal })));
@@ -80,7 +81,15 @@ export const App: React.FC = () => {
 
   const [isSessionModalOpen, setIsSessionModalOpen] = useState<boolean>(false);
   const [sessionModalInitialRevoke, setSessionModalInitialRevoke] = useState<boolean>(false);
-  const [forkedStrategyConfig, setForkedStrategyConfig] = useState<{ agentType: AgentType; config: Record<string, any> } | null>(null);
+  const [forkedStrategyConfig, setForkedStrategyConfig] = useState<{
+    agentType: AgentType;
+    config?: Record<string, any>;
+    customAgentId?: string;
+    customDraft?: Partial<CustomAgentDefinition>;
+    customRules?: CustomAgentRules;
+    symbol?: string;
+    timeframe?: '1m' | '5m' | '15m' | '1h';
+  } | null>(null);
 
   const handleOpenSessionModal = useCallback((options?: { revoke?: boolean }) => {
     setSessionModalInitialRevoke(Boolean(options?.revoke));
@@ -89,8 +98,8 @@ export const App: React.FC = () => {
 
   const handleForkToStudio = (agentType: AgentType, config: Record<string, any>) => {
     setForkedStrategyConfig({ agentType, config });
-    setActiveNav('Strategy Studio');
-    window.location.hash = '#studio';
+    setActiveNav('Backtester');
+    window.location.hash = '#backtest';
   };
 
   const handleToggleSidebar = useCallback(() => {
@@ -139,8 +148,10 @@ export const App: React.FC = () => {
         setActiveNav('Swarm Cockpit');
       } else if (hash === 'analytics') {
         setActiveNav('Analytics');
-      } else if (hash === 'studio' || hash === 'backtest') {
+      } else if (hash === 'studio') {
         setActiveNav('Strategy Studio');
+      } else if (hash === 'backtest' || hash === 'backtester') {
+        setActiveNav('Backtester');
       } else if (hash === 'settlement' || hash === 'sweeper') {
         setActiveNav('Settlement');
       } else if (hash === 'landing' || !hash) {
@@ -165,6 +176,7 @@ export const App: React.FC = () => {
       else if (tab === 'Swarm Cockpit') window.location.hash = '#cockpit';
       else if (tab === 'Analytics') window.location.hash = '#analytics';
       else if (tab === 'Strategy Studio') window.location.hash = '#studio';
+      else if (tab === 'Backtester') window.location.hash = '#backtest';
       else if (tab === 'Settlement') window.location.hash = '#settlement';
     },
     onTriggerSweep: () => {
@@ -236,6 +248,7 @@ export const App: React.FC = () => {
           else if (target === 'AI Swarm Feed') window.location.hash = '#swarm';
           else if (target === 'Swarm Cockpit') window.location.hash = '#cockpit';
           else if (target === 'Strategy Studio') window.location.hash = '#studio';
+          else if (target === 'Backtester') window.location.hash = '#backtest';
           else if (target === 'Analytics') window.location.hash = '#analytics';
           else if (target === 'Settlement') window.location.hash = '#settlement';
         }}
@@ -260,8 +273,9 @@ export const App: React.FC = () => {
           else if (view === 'Markets & Depth') window.location.hash = '#markets';
           else if (view === 'AI Swarm Feed') window.location.hash = '#swarm';
           else if (view === 'Swarm Cockpit') window.location.hash = '#cockpit';
-          else if (view === 'Analytics') window.location.hash = '#analytics';
           else if (view === 'Strategy Studio') window.location.hash = '#studio';
+          else if (view === 'Backtester') window.location.hash = '#backtest';
+          else if (view === 'Analytics') window.location.hash = '#analytics';
           else if (view === 'Settlement') window.location.hash = '#settlement';
         }}
         markets={markets}
@@ -299,8 +313,9 @@ export const App: React.FC = () => {
               else if (tab === 'Markets & Depth') window.location.hash = '#markets';
               else if (tab === 'AI Swarm Feed') window.location.hash = '#swarm';
               else if (tab === 'Swarm Cockpit') window.location.hash = '#cockpit';
-              else if (tab === 'Analytics') window.location.hash = '#analytics';
               else if (tab === 'Strategy Studio') window.location.hash = '#studio';
+              else if (tab === 'Backtester') window.location.hash = '#backtest';
+              else if (tab === 'Analytics') window.location.hash = '#analytics';
               else if (tab === 'Settlement') window.location.hash = '#settlement';
             }}
             wallet={wallet}
@@ -370,7 +385,28 @@ export const App: React.FC = () => {
           </React.Suspense>
         ) : activeNav === 'Strategy Studio' ? (
           <React.Suspense fallback={<div className="glass-card" style={{ minHeight: '340px', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: '12px' }}><Spinner size="lg" /><span style={{ fontSize: '13px', color: 'var(--muted-foreground)' }}>Loading Strategy Studio...</span></div>}>
-            <StrategyStudio
+            <StrategyStudioView
+              wallet={wallet}
+              activeSession={activeSession}
+              onOpenSessionModal={handleOpenSessionModal}
+              onConnectWallet={connectWallet}
+              onNavigateToBacktester={(agentId?: string, customDraft?: Partial<CustomAgentDefinition>) => {
+                setForkedStrategyConfig({
+                  agentType: 'CUSTOM',
+                  customAgentId: agentId,
+                  customDraft: customDraft,
+                  customRules: customDraft?.rules,
+                  symbol: customDraft?.symbol,
+                  timeframe: customDraft?.timeframe as any,
+                });
+                setActiveNav('Backtester');
+                window.location.hash = '#backtest';
+              }}
+            />
+          </React.Suspense>
+        ) : activeNav === 'Backtester' ? (
+          <React.Suspense fallback={<div className="glass-card" style={{ minHeight: '340px', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: '12px' }}><Spinner size="lg" /><span style={{ fontSize: '13px', color: 'var(--muted-foreground)' }}>Loading Backtester...</span></div>}>
+            <Backtester
               initialConfig={forkedStrategyConfig}
               wallet={wallet}
               activeSession={activeSession}

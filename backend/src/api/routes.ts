@@ -7,6 +7,7 @@ import { orderService } from '../services/order-service.js';
 import { settlementService } from '../services/settlement-service.js';
 import { compounderService } from '../services/compounder-service.js';
 import { backtestService } from '../services/backtest-service.js';
+import { customAgentService } from '../services/custom-agent-service.js';
 import { operatorAccount, SOMNIA_ADDRESSES, publicClient, somniaExchange } from '../config/somnia.js';
 import type { MarketStatus, AgentType, OrderStatus } from '../types/index.js';
 import { type Address, type Hex, isAddress, getAddress, parseAbi } from 'viem';
@@ -983,6 +984,8 @@ apiRouter.post('/backtest/run', async (req: Request, res: Response) => {
       initialCapital,
       strategyConfig,
       frictionConfig,
+      customRules,
+      customAgentId,
     } = req.body;
 
     const result = await backtestService.runSimulation({
@@ -996,6 +999,8 @@ apiRouter.post('/backtest/run', async (req: Request, res: Response) => {
       initialCapital: initialCapital ? parseFloat(initialCapital) : 1000.0,
       strategyConfig: strategyConfig || {},
       frictionConfig: frictionConfig || {},
+      customRules,
+      customAgentId,
     });
 
     res.json({
@@ -1033,6 +1038,183 @@ apiRouter.get('/debug/market/:id', (req: Request, res: Response) => {
   const active = (marketService as any).markets?.size;
   const hist = (marketService as any).historicalMarkets?.size;
   res.json({ found: !!m, market: m, activeCount: active, histCount: hist });
+});
+
+// ------------------------------------------------------------------------------
+// 9. Custom Strategy Studio & Swarm Builder Endpoints
+// ------------------------------------------------------------------------------
+apiRouter.get('/agents/custom', async (req: Request, res: Response) => {
+  try {
+    const userAddress = typeof req.query.userAddress === 'string' ? req.query.userAddress : undefined;
+    const agents = await customAgentService.getCustomAgents(userAddress);
+    res.json({ success: true, count: agents.length, data: agents });
+  } catch (err: any) {
+    res.status(500).json({ success: false, error: err.message || 'Failed to fetch custom agents' });
+  }
+});
+
+apiRouter.get('/agents/custom/:id', async (req: Request, res: Response) => {
+  try {
+    const agent = await customAgentService.getCustomAgentById(req.params.id);
+    if (!agent) {
+      return res.status(404).json({ success: false, error: 'Custom agent not found' });
+    }
+    res.json({ success: true, data: agent });
+  } catch (err: any) {
+    res.status(500).json({ success: false, error: err.message || 'Failed to fetch agent' });
+  }
+});
+
+apiRouter.post('/agents/custom', async (req: Request, res: Response) => {
+  try {
+    const { userAddress, name, description, symbol, timeframe, strategyType, rules, color, icon, isActive } = req.body;
+    if (!userAddress || !rules) {
+      return res.status(400).json({ success: false, error: 'userAddress and rules are required' });
+    }
+    const created = await customAgentService.createCustomAgent({
+      userAddress,
+      name: name || 'Custom Strategy',
+      description: description || '',
+      symbol: symbol || 'BTC/USD',
+      timeframe: timeframe || '5m',
+      strategyType: strategyType || 'CUSTOM',
+      rules,
+      color: color || '#2dd4bf',
+      icon: icon || 'BoltIcon',
+      isActive: isActive !== false,
+    });
+    res.json({ success: true, data: created });
+  } catch (err: any) {
+    res.status(500).json({ success: false, error: err.message || 'Failed to create agent' });
+  }
+});
+
+apiRouter.put('/agents/custom/:id', async (req: Request, res: Response) => {
+  try {
+    const updated = await customAgentService.updateCustomAgent(req.params.id, req.body);
+    if (!updated) {
+      return res.status(404).json({ success: false, error: 'Custom agent not found' });
+    }
+    res.json({ success: true, data: updated });
+  } catch (err: any) {
+    res.status(500).json({ success: false, error: err.message || 'Failed to update agent' });
+  }
+});
+
+apiRouter.delete('/agents/custom/:id', async (req: Request, res: Response) => {
+  try {
+    const userAddress = typeof req.query.userAddress === 'string' ? req.query.userAddress : '';
+    const success = await customAgentService.deleteCustomAgent(req.params.id, userAddress);
+    res.json({ success });
+  } catch (err: any) {
+    res.status(500).json({ success: false, error: err.message || 'Failed to delete agent' });
+  }
+});
+
+apiRouter.post('/agents/custom/:id/deploy', async (req: Request, res: Response) => {
+  try {
+    const { userAddress, allowance } = req.body;
+    if (!userAddress) {
+      return res.status(400).json({ success: false, error: 'userAddress is required' });
+    }
+    const updated = await customAgentService.deployAgent(
+      req.params.id,
+      userAddress,
+      allowance !== undefined ? Number(allowance) : undefined
+    );
+    if (!updated) {
+      return res.status(404).json({ success: false, error: 'Custom agent not found' });
+    }
+    res.json({ success: true, data: updated });
+  } catch (err: any) {
+    res.status(500).json({ success: false, error: err.message || 'Failed to deploy agent' });
+  }
+});
+
+apiRouter.post('/agents/custom/:id/pause', async (req: Request, res: Response) => {
+  try {
+    const { userAddress } = req.body;
+    if (!userAddress) {
+      return res.status(400).json({ success: false, error: 'userAddress is required' });
+    }
+    const updated = await customAgentService.pauseAgent(req.params.id, userAddress);
+    if (!updated) {
+      return res.status(404).json({ success: false, error: 'Custom agent not found' });
+    }
+    res.json({ success: true, data: updated });
+  } catch (err: any) {
+    res.status(500).json({ success: false, error: err.message || 'Failed to pause agent' });
+  }
+});
+
+apiRouter.post('/agents/custom/:id/allowance', async (req: Request, res: Response) => {
+  try {
+    const { userAddress, allowance } = req.body;
+    if (!userAddress || allowance === undefined) {
+      return res.status(400).json({ success: false, error: 'userAddress and allowance are required' });
+    }
+    const updated = await customAgentService.setAgentAllowance(req.params.id, userAddress, Number(allowance));
+    if (!updated) {
+      return res.status(404).json({ success: false, error: 'Custom agent not found' });
+    }
+    res.json({ success: true, data: updated });
+  } catch (err: any) {
+    res.status(500).json({ success: false, error: err.message || 'Failed to update agent allowance' });
+  }
+});
+
+apiRouter.post('/agents/generate', async (req: Request, res: Response) => {
+  try {
+    const { prompt } = req.body;
+    if (!prompt || typeof prompt !== 'string') {
+      return res.status(400).json({ success: false, error: 'Prompt is required' });
+    }
+    const generated = await customAgentService.generateAgentFromPrompt(prompt);
+    res.json({ success: true, data: generated });
+  } catch (err: any) {
+    res.status(500).json({ success: false, error: err.message || 'Failed to generate agent strategy' });
+  }
+});
+
+apiRouter.get('/swarms/custom', async (req: Request, res: Response) => {
+  try {
+    const userAddress = typeof req.query.userAddress === 'string' ? req.query.userAddress : undefined;
+    const swarms = await customAgentService.getCustomSwarms(userAddress);
+    res.json({ success: true, count: swarms.length, data: swarms });
+  } catch (err: any) {
+    res.status(500).json({ success: false, error: err.message || 'Failed to fetch custom swarms' });
+  }
+});
+
+apiRouter.post('/swarms/custom', async (req: Request, res: Response) => {
+  try {
+    const { userAddress, name, description, agents, consensusRule, confidenceThreshold, isActive } = req.body;
+    if (!userAddress) {
+      return res.status(400).json({ success: false, error: 'userAddress is required' });
+    }
+    const created = await customAgentService.createCustomSwarm({
+      userAddress,
+      name: name || 'Custom Swarm',
+      description: description || '',
+      agents: agents || [],
+      consensusRule: consensusRule || 'MAJORITY',
+      confidenceThreshold: confidenceThreshold ?? 0.6,
+      isActive: isActive !== false,
+    });
+    res.json({ success: true, data: created });
+  } catch (err: any) {
+    res.status(500).json({ success: false, error: err.message || 'Failed to create swarm' });
+  }
+});
+
+apiRouter.delete('/swarms/custom/:id', async (req: Request, res: Response) => {
+  try {
+    const userAddress = typeof req.query.userAddress === 'string' ? req.query.userAddress : '';
+    const success = await customAgentService.deleteCustomSwarm(req.params.id, userAddress);
+    res.json({ success });
+  } catch (err: any) {
+    res.status(500).json({ success: false, error: err.message || 'Failed to delete swarm' });
+  }
 });
 
 

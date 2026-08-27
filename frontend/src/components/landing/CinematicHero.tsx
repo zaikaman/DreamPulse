@@ -17,6 +17,7 @@ import {
   WalletIcon,
   Bars3Icon,
   XMarkIcon,
+  SparklesIcon,
 } from "@heroicons/react/24/outline";
 import { BrandLogo } from "../common/BrandLogo";
 
@@ -30,6 +31,7 @@ export type DashboardViewType =
   | "AI Swarm Feed"
   | "Swarm Cockpit"
   | "Strategy Studio"
+  | "Backtester"
   | "Analytics"
   | "Settlement";
 
@@ -84,9 +86,21 @@ const HERO_SLIDES: HeroSlide[] = [
     description:
       "Grant cryptographically scoped trading permissions to local AI agents without sharing private keys, featuring automated batch settlement sweeps and collateral compounding.",
     primaryCtaText: "Open Swarm Cockpit",
-    secondaryCtaText: "Launch Strategy Studio",
+    secondaryCtaText: "Explore Edge Radar",
     targetView: "Swarm Cockpit",
-    secondaryTargetView: "Strategy Studio",
+    secondaryTargetView: "Edge Radar",
+  },
+  {
+    badge1: { icon: SparklesIcon, label: "Gemini Prompt-to-Strategy" },
+    badge2: { icon: CpuChipIcon, label: "Visual Sentence Capsules" },
+    badge3: { icon: ChartBarIcon, label: "Deep Quant Replay Lab" },
+    title: "Build Your Own Swarm. No Code Required.",
+    description:
+      "Synthesize customized algorithmic agents from plain English prompts or visual condition capsules, simulate on real Somnia/Binance market history, and deploy autonomous multi-agent councils.",
+    primaryCtaText: "Open Strategy Studio",
+    secondaryCtaText: "Launch Backtester",
+    targetView: "Strategy Studio",
+    secondaryTargetView: "Backtester",
   },
 ];
 
@@ -141,6 +155,7 @@ export const CinematicHero: React.FC<CinematicHeroProps> = ({
     { label: "AI Swarm Feed", view: "AI Swarm Feed", delay: "250ms" },
     { label: "Swarm Cockpit", view: "Swarm Cockpit", delay: "300ms" },
     { label: "Strategy Studio", view: "Strategy Studio", delay: "350ms" },
+    { label: "Backtester", view: "Backtester", delay: "400ms" },
   ];
 
   const Badge1Icon = slide.badge1.icon;

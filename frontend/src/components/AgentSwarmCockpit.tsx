@@ -289,7 +289,7 @@ export const AgentSwarmCockpit: React.FC<AgentSwarmCockpitProps> = ({
             })}
           </div>
           <span className="ml-auto hidden lg:inline-flex items-center gap-1.5 text-[10px] font-mono text-muted-foreground">
-            <span className="w-1.5 h-1.5 rounded-full bg-amber-400" /> {activeCount} agents live • {isOperator ? 'Operator controls unlocked' : 'Simulate in Strategy Studio → deploy to My Personal Swarm'}
+            <span className="w-1.5 h-1.5 rounded-full bg-amber-400" /> {activeCount} agents live • {isOperator ? 'Operator controls unlocked' : 'Simulate in Backtester → deploy to My Personal Swarm'}
           </span>
         </div>
       </div>
@@ -543,6 +543,6 @@ const AgentActionButton: React.FC<{ isOperator: boolean; isSaving: boolean; save
     </button>
   ) : (
     <button type="button" onClick={onFork} className="w-full inline-flex items-center justify-center gap-1.5 py-2 rounded-lg border text-xs font-semibold transition-colors cursor-pointer bg-secondary/30 hover:bg-secondary/50" style={{ color, borderColor: `${color}2a` }}>
-      <ArrowUpRightIcon className="w-3.5 h-3.5" /> Simulate in Strategy Studio
+      <ArrowUpRightIcon className="w-3.5 h-3.5" /> Simulate in Backtester
     </button>
   );

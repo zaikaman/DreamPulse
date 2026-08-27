@@ -9,7 +9,7 @@ export type OrderType = 'LIMIT' | 'IOC' | 'POST_ONLY';
 export type OrderStatus = 'PENDING' | 'FILLED' | 'PARTIALLY_FILLED' | 'CANCELLED' | 'REJECTED';
 export type OrderSource = 'SWARM' | 'TERMINAL';
 export type SwarmAgentType = 'Volt' | 'Oracle' | 'Titan' | 'Sweeper';
-export type AgentType = SwarmAgentType | 'Manual';
+export type AgentType = SwarmAgentType | 'Manual' | 'CUSTOM';
 
 export interface Market {
   id: string;
@@ -171,6 +171,8 @@ export interface BacktestResult {
   netPnl: number;
   maxDrawdown: number;
   sharpeRatio: number;
+  sortinoRatio?: number;
+  profitFactor?: number;
   createdAt: string;
 }
 
@@ -223,4 +225,81 @@ export interface PersonalSwarmStatus {
   sweeper: { enabled: boolean; pnl: number; sweeps: number };
   customizedAt?: string;
   isCopyMode: boolean;
+}
+
+// ------------------------------------------------------------------------------
+// Custom Agent & Swarm Definitions (Strategy Studio)
+// ------------------------------------------------------------------------------
+export type IndicatorType = 'RSI' | 'SMA' | 'EMA' | 'BOLLINGER_UPPER' | 'BOLLINGER_LOWER' | 'MACD' | 'PRICE_DRIFT';
+export type ComparisonOperator = 'CROSS_ABOVE' | 'CROSS_BELOW' | 'GREATER_THAN' | 'LESS_THAN' | 'EQUALS';
+export type BinaryActionDirection = 'CALL' | 'PUT';
+
+export interface ConditionRule {
+  id: string;
+  indicator: IndicatorType;
+  period?: number;
+  secondaryPeriod?: number;
+  stdDev?: number;
+  operator: ComparisonOperator;
+  value: number;
+}
+
+export interface ActionRule {
+  direction: BinaryActionDirection;
+  durationSec: number;
+  stakeType: 'FIXED' | 'PERCENTAGE';
+  stakeAmount: number;
+}
+
+export interface RiskRule {
+  maxConsecutiveLosses: number;
+  cooldownMinutes: number;
+  minPoolPayoutPct: number;
+  dailyDrawdownLimitPct?: number;
+}
+
+export interface CustomAgentRules {
+  operator: 'AND' | 'OR';
+  conditions: ConditionRule[];
+  action: ActionRule;
+  risk: RiskRule;
+}
+
+export interface CustomAgentDefinition {
+  id: string;
+  userAddress: string;
+  name: string;
+  description: string;
+  symbol: string;
+  timeframe: '1m' | '5m' | '15m' | '1h';
+  strategyType: 'MOMENTUM' | 'MEAN_REVERSION' | 'BREAKOUT' | 'VOLATILITY' | 'CUSTOM';
+  rules: CustomAgentRules;
+  color: string;
+  icon: string;
+  isActive: boolean;
+  isDeployed?: boolean;
+  allocatedAllowance?: number;
+  spentAllowance?: number;
+  createdAt: string;
+  updatedAt?: string;
+}
+
+export interface SwarmMemberConfig {
+  agentId: string;
+  agentName: string;
+  role: 'SCOUT' | 'OSCILLATOR' | 'VETO' | 'EXECUTOR';
+  weight: number;
+}
+
+export interface CustomSwarmDefinition {
+  id: string;
+  userAddress: string;
+  name: string;
+  description: string;
+  agents: SwarmMemberConfig[];
+  consensusRule: 'UNANIMOUS' | 'MAJORITY' | 'WEIGHTED' | 'VETO';
+  confidenceThreshold: number;
+  isActive: boolean;
+  createdAt: string;
+  updatedAt?: string;
 }

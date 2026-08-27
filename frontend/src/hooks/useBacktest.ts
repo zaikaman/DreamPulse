@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
-import type { AgentType } from '../types/index.js';
+import type { AgentType, CustomAgentRules } from '../types/index.js';
 import { apiClient } from '../services/api.js';
 
 export interface FrictionParams {
@@ -16,7 +16,7 @@ export interface BacktestParams {
   startDate?: string;
   endDate?: string;
   initialCapital?: number;
-  strategyConfig: {
+  strategyConfig?: {
     minEdge?: number;
     driftThreshold?: number;
     targetSpread?: number;
@@ -26,6 +26,8 @@ export interface BacktestParams {
     confidenceThreshold?: number;
   };
   frictionConfig?: FrictionParams;
+  customRules?: CustomAgentRules;
+  customAgentId?: string;
 }
 
 export interface BacktestEquityPoint {

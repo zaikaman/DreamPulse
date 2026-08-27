@@ -14,8 +14,8 @@
 <p align="center">
   <a href="https://shannon-explorer.somnia.network"><img src="https://img.shields.io/badge/Blockchain-Somnia%20Shannon%20(50312)-00ffcc?style=for-the-badge&logo=ethereum&logoColor=black" alt="Somnia Shannon Testnet" /></a>
   <a href="https://docs.dreamdex.io/developers/event-contracts"><img src="https://img.shields.io/badge/Protocol-DreamDEX%20Event%20Contracts-7928CA?style=for-the-badge&logo=chainlink&logoColor=white" alt="DreamDEX Protocol" /></a>
-  <a href="https://github.com/zaikaman/DreamPulse"><img src="https://img.shields.io/badge/Tests-100%2F100%20Passed%20(100%25)-00e676?style=for-the-badge&logo=vitest&logoColor=white" alt="Tests 100/100 Passing" /></a>
-  <a href="https://groq.com"><img src="https://img.shields.io/badge/LLM-Groq%20Qwen%202.5%20%2B%20Gemini-f55036?style=for-the-badge&logo=openai&logoColor=white" alt="Groq + Gemini LLM" /></a>
+  <a href="https://github.com/zaikaman/DreamPulse"><img src="https://img.shields.io/badge/Tests-103%2F103%20Passed%20(100%25)-00e676?style=for-the-badge&logo=vitest&logoColor=white" alt="Tests 103/103 Passing" /></a>
+  <a href="https://groq.com"><img src="https://img.shields.io/badge/LLM-Groq%20(Swarm)%20%2B%20Gemini%20(Studio)-f55036?style=for-the-badge&logo=openai&logoColor=white" alt="Groq + Gemini LLM" /></a>
 </p>
 
 ---
@@ -28,7 +28,7 @@
 4. [Autonomous Agent Personas](#autonomous-agent-personas)
 5. [Mathematical & Quantitative Foundation](#mathematical--quantitative-foundation)
 6. [Non-Custodial Session Delegation & BatchApprove.sol](#non-custodial-session-delegation--batchapprovesol)
-7. [Strategy Studio & Institutional Backtesting](#strategy-studio--institutional-backtesting)
+7. [Strategy Studio (No-Code Agent & Swarm Builder) & Quantitative Backtester](#strategy-studio-no-code-agent--swarm-builder--quantitative-backtester)
 8. [Personal Swarm: Copy-Trading vs Isolated Per-Wallet Swarms](#personal-swarm-copy-trading-vs-isolated-per-wallet-swarms)
 9. [Institutional Design System & Minimalist Terminal UI](#institutional-design-system--minimalist-terminal-ui)
 10. [Minimalist Onboarding & First-Run Activation Flow](#minimalist-onboarding--first-run-activation-flow)
@@ -101,7 +101,7 @@ flowchart TB
             SWEEPER["Sweeper\n(Batch Settlement Daemon)"]
         end
 
-        LLM["Cognitive LLM Reasoning Pool\n(Groq Qwen 2.5 Multi-Key Round-Robin + Gemini Fallback)"]
+        LLM["Cognitive LLM Engines\n(Groq Swarm Telemetry + Gemini Strategy Studio)"]
         RISK["Risk Control & Circuit Breaker\n- Self-Trade Depth Sanitizer\n- Dynamic NonceManager\n- Per-Session Caps"]
     end
 
@@ -109,7 +109,7 @@ flowchart TB
         RADAR["Edge Radar Heatmap"]
         LADDER["CLOB Order Book Depth Ladder"]
         FEED["Real-Time AI Thought Feed"]
-        STUDIO["Strategy Studio (Backtester)"]
+        STUDIO["Strategy Studio & Backtester\n(No-Code Builder + Quant Lab)"]
         MODAL["Non-Custodial Session Modal"]
     end
 
@@ -260,23 +260,73 @@ Agents operate strictly via Somnia's `OperatorPermissionsRegistry` using scoped 
 
 ---
 
-## Strategy Studio & Institutional Backtesting
+## Strategy Studio (No-Code Agent & Swarm Builder) & Quantitative Backtester
 
-DreamPulse includes a full-featured **Strategy Studio** running an institutional-grade quantitative backtesting engine:
+DreamPulse introduces an end-to-end strategy design and validation lab, dividing automated strategy creation into two tightly integrated workflows: the **Visual No-Code Strategy Studio** (`#studio`) and the **Quantitative Backtesting Lab** (`#backtest`).
 
-* **Real Historical Market Data**: Direct ingestion of 1m, 5m, 15m, and 1h Binance candlestick feeds across BTC, ETH, SOL, BNB, and DOGE.
+### 1. Visual No-Code Strategy Studio (`#studio`)
+
+Traders and quantitative developers can assemble custom binary options trading agents and multi-agent swarms with zero code using an interactive **Sentence / Capsule Builder** (inspired by Notion and Apple Shortcuts):
+
+```mermaid
+flowchart LR
+    subgraph SequentialCapsules ["Visual Algorithmic Sentence"]
+        direction LR
+        P1["[ 1. WHEN ]\nMarket & Timeframe\n(e.g., BTC/USD · 1m)"]
+        P2["[ 2. IF ]\nTrigger Condition Capsules\n(RSI < 28 · Bollinger Lower Touch)"]
+        P3["[ 3. THEN EXECUTE ]\nBinary Action & Expiry\n(CALL · 60s Expiry · $10 STT)"]
+        P4["[ 4. RISK LEASH ]\nAutonomous Guardrails\n(Max 2 Losses · 3m Cooldown · 75% Payout)"]
+        P1 --> P2 --> P3 --> P4
+    end
+```
+
+#### Core Studio Capabilities:
+* **Interactive Sentence & Capsule Canvas**:
+  * **Market & Timeframe Peg**: Select asset (`BTC/USD`, `ETH/USD`, `SOL/USD`, `BNB/USD`, `DOGE/USD`) and candle resolution (`1m`, `5m`, `15m`, `1h`).
+  * **Trigger Condition Capsules**: Add multi-indicator triggers (`RSI`, `BOLLINGER_LOWER`, `BOLLINGER_UPPER`, `EMA`, `SMA`, `PRICE_DRIFT`) with custom periods, comparison operators (`<`, `>`, `↑ Crosses Above`, `↓ Crosses Below`), and threshold values.
+  * **Configurable Logic Gate**: Switch seamlessly between `ALL Must Agree (AND)` and `ANY May Trigger (OR)`.
+  * **Binary Action Specification**: Direction (`CALL` / `PUT`), contract duration / expiration (`60s Turbo`, `5m`, `15m`, `1h`), and fixed lot sizing.
+  * **Autonomous Risk Leash**: Max consecutive loss ceiling before auto-pause, loss cooldown duration, and minimum required pool payout percentage.
+* **Dedicated Gemini Prompt-to-Strategy Co-Pilot**:
+  * Plain English strategy description Omnibar (e.g. *"Aggressive BTC 60s Call sniper when RSI drops below 25 after a sharp dip"*).
+  * **Exclusively Dedicated Gemini Engine**: Uses Google Gemini (`GEMINI_API_KEY`, `GEMINI_BASE_URL`, `GEMINI_MODEL`) strictly for user strategy synthesis, with zero background swarm consumption, reserving 100% of your Gemini quota for studio creation.
+  * Instant pre-set suggestion chips for 1-click strategy generation.
+* **Instant Ghost Radar**:
+  * Real-time heuristic performance HUD previewing estimated win rate, 24-hour trigger frequency, simulated net PnL, and profit factor.
+* **Independent Agent Deployment & Isolated tUSDC Allowance**:
+  * **Independent On-Chain Deployment**: Deploy each custom agent separately with dedicated execution authority, avoiding all-or-nothing swarm coupling.
+  * **Granular tUSDC Bankroll Allowance**: Assign an individual maximum risk budget (e.g. `$25`, `$50`, `$100`, `$250`, `$500`, or custom tUSDC) to each agent, ensuring strict risk containment where no single strategy can drain your capital.
+  * **Real-Time Allowance Depletion Meter**: Live visual progress tracking of allocated vs. spent tUSDC allowance, with remaining balance monitoring.
+  * **1-Click Deploy / Pause Controls**: Toggle any agent between `DEPLOYED (Live Autotrading)` and `PAUSED (Dormant)` with single-click instant responsiveness.
+  * **Inline Bankroll Modification**: Adjust an agent's tUSDC budget on the fly without needing to recreate or retune its underlying indicators.
+* **Strategy Library & Starter Presets**:
+  * Pre-loaded starter templates: *RSI Oversold Dip Sniper*, *Bollinger Band Exhaustion Fade*, and *Fast EMA Momentum Rider*.
+  * Saved custom agents and deployed bankrolls persist to PostgreSQL via Supabase RLS with in-memory caching.
+
+---
+
+### 2. Quantitative Backtester & Simulation Lab (`#backtest`)
+
+The quantitative backtesting engine allows institutional-grade historical simulation of both canonical Protocol Swarm agents and user-created custom strategies:
+
+* **Dual Simulation Architecture**:
+  * **Protocol Swarm Agents**: Backtest canonical `Volt Sniper`, `Oracle Arb`, or `Titan MM` strategies under varying parameter sets.
+  * **Custom User Agents**: Select any agent from your Strategy Studio library to replay its JSON rule AST bar-by-bar against real historical candlesticks.
+* **Real Historical Market Data**:
+  * Direct ingestion of 1m, 5m, 15m, and 1h Binance candlestick feeds across all supported trading pairs.
+  * Forward-fill bar slicing prevents lookahead bias during indicator calculation (`RSI`, `EMA`, `Bollinger Bands`).
 * **Realistic Execution Friction Modeling**:
   * Configurable taker slippage (in basis points, e.g. 4 bps).
   * Exchange maker/taker fee simulation (e.g. 2.5 bps).
   * Artificial network execution latency delay (e.g. 25ms–100ms).
 * **Institutional Metrics Computed**:
-  * **Sharpe & Sortino Ratios**: Downside risk-adjusted performance.
-  * **Profit Factor & Expectancy**: Total gross gains over gross losses.
-  * **Win Rate & Payoff Ratio**: Average win size over average loss size.
-  * **Underwater Drawdown Curve**: Detailed visual timeline of peak-to-trough capital pullbacks.
-* **Hybrid Deployment Model**:
-  * **Operators** → *Deploy to Global Swarm*: any verified backtest can be pushed live to the canonical Protocol Swarm on Somnia Shannon (affects all copy-traders).
-  * **Traders** → *Deploy to My Personal Swarm*: backtested Volt/Oracle/Titan parameters are saved to the trader's isolated per-wallet swarm (`user_swarm_configs`). This automatically switches the wallet from `COPY` (mirroring the Protocol Swarm) to `PERSONAL` (independent evaluation loop, copy-trading disabled). Traders can revert to `COPY` at any time in the Swarm Cockpit.
+  * **Sharpe & Sortino Ratios**: Downside risk-adjusted performance against volatility.
+  * **Profit Factor & Trade Expectancy**: Total gross gains over gross losses and expected net return per fill.
+  * **Win Rate & Payoff Ratio**: Win percentage and average win size over average loss size.
+  * **Underwater Drawdown Curve**: Detailed visual timeline of peak-to-trough equity pullbacks.
+* **Deployment Bridge**:
+  * **Operators** → *Deploy to Global Swarm*: pushes verified parameters live to the canonical Protocol Swarm on Somnia Shannon.
+  * **Traders** → *Deploy to My Personal Swarm*: automatically saves parameters to the user's isolated per-wallet swarm (`user_swarm_configs`), flipping the session to `PERSONAL` mode.
 
 ---
 
@@ -507,8 +557,16 @@ The DreamPulse backend daemon exposes a comprehensive REST and WebSocket gateway
 | `POST` | `/api/v1/swarm/reset` | Resets the caller's swarm back to `COPY` (mirroring the Protocol Swarm, disables isolation). |
 | `GET` | `/api/v1/orders` | Paginated query of order history with filtering by agent, outcome, status, and scope. |
 | `GET` | `/api/v1/sweeper/summary` | Returns claimable unclaimed balances, all-time claimed amounts, and active settlements. |
-| `POST` | `/api/v1/sweeper/trigger` | Triggers an immediate batch settlement sweep across all resolved contracts. |
 | `POST` | `/api/v1/backtest/run` | Executes quantitative historical backtest with custom strategy and friction parameters. |
+| `GET` | `/api/v1/agents/custom` | Retrieves custom user strategies and starter templates from PostgreSQL. |
+| `POST` | `/api/v1/agents/custom` | Saves a new custom binary options agent with JSON rule AST conditions and risk leash. |
+| `GET` | `/api/v1/agents/custom/:id` | Retrieves a specific custom agent definition. |
+| `PUT` | `/api/v1/agents/custom/:id` | Updates parameters, rules, or state of a custom agent. |
+| `DELETE` | `/api/v1/agents/custom/:id` | Deletes a custom agent from database and cache. |
+| `POST` | `/api/v1/agents/generate` | Generates a structured strategy specification from natural language using dedicated Gemini API. |
+| `POST` | `/api/v1/agents/custom/:id/deploy` | Deploys an individual custom agent for autonomous execution with dedicated tUSDC allowance. |
+| `POST` | `/api/v1/agents/custom/:id/pause` | Pauses an active custom agent's autonomous trading loop. |
+| `POST` | `/api/v1/agents/custom/:id/allowance` | Sets or updates the maximum allocated tUSDC bankroll allowance for an agent. |
 | `GET` | `/api/health` | Service health status, uptime, and database connectivity. |
 
 ### Real-Time WebSocket Telemetry (`/ws/telemetry`)
@@ -555,12 +613,14 @@ SUPABASE_URL=https://your-project.supabase.co
 SUPABASE_SERVICE_ROLE_KEY=your-service-role-key
 SUPABASE_ANON_KEY=your-anon-key
 
-# LLM Cognitive Engine (Groq Multi-Key Pool + Gemini Fallback)
+# LLM Cognitive Engines
+# 1. Groq Multi-Key Pool (Exclusively for Real-Time Swarm Telemetry & Reasoning)
 GROQ_BASE_URL=https://api.groq.com/openai/v1
 GROQ_MODEL=qwen/qwen3.6-27b
 GROQ_API_KEY=gsk_your_groq_key_1
 GROQ_API_KEY_2=gsk_your_groq_key_2
 
+# 2. Google Gemini (Exclusively for Strategy Studio Builder)
 GEMINI_BASE_URL=https://generativelanguage.googleapis.com/v1beta/openai/
 GEMINI_API_KEY=your_gemini_api_key
 GEMINI_MODEL=gemini-2.5-flash
@@ -600,7 +660,7 @@ For step-by-step instructions on deploying the **Frontend to Vercel** and the **
 
 ---
 
-## Verification & Test Suite (97/97 Passing)
+## Verification & Test Suite (103/103 Passing)
 
 DreamPulse enforces strict production-grade quality invariants with an automated **Vitest** test suite covering quantitative mathematics, smart contract session boundaries, multi-agent evaluation logic, backtesting algorithms, and API endpoints.
 
@@ -619,13 +679,13 @@ npm run verify
 | [`tests/quantitative.test.ts`](file:///d:/DreamPulse/backend/tests/quantitative.test.ts) | **20** | Abramowitz-Stegun normal CDF $\Phi(z)$, Standardized $z$-Score ($d_2$), Bayesian EWMA realized volatility, inventory-skewed reservation prices, depth VWAP, integer quantization arithmetic, and net EV edge filtering. |
 | [`tests/agents.test.ts`](file:///d:/DreamPulse/backend/tests/agents.test.ts) | **19** | Volt spot staleness sniper momentum triggers, Oracle volatility surface arb logic, Titan two-sided market maker quotes, inventory aversion bounds, self-trade prevention depth filtering, and multi-agent swarm runner execution. |
 | [`tests/market-service.test.ts`](file:///d:/DreamPulse/backend/tests/market-service.test.ts) | **15** | Somnia on-chain CLOB order book polling, GraphQL indexer query parsing, anomaly detection (spread/staleness/mispricing), Binance spot ticker ingestion, and fallback market generation. |
-| [`tests/session.test.ts`](file:///d:/DreamPulse/backend/tests/session.test.ts) | **13** | Non-custodial session registration, EIP-712 typed signature verification, single trade size caps ($20 limit), cumulative daily volume caps ($200 limit), session revocation, multi-wallet isolation, and copy-trade target filtering. |
-| [`tests/api.test.ts`](file:///d:/DreamPulse/backend/tests/api.test.ts) | **10** | Express REST API health, market lists, order book depth ladders, anomaly feeds, telemetry stream endpoints, session management routes, and order execution logs. |
+| [`tests/session.test.ts`](file:///d:/DreamPulse/backend/tests/session.test.ts) | **14** | Non-custodial session registration, EIP-712 typed signature verification, single trade size caps ($20 limit), cumulative daily volume caps ($200 limit), session revocation, multi-wallet isolation, and copy-trade target filtering. |
+| [`tests/api.test.ts`](file:///d:/DreamPulse/backend/tests/api.test.ts) | **13** | Express REST API health, market lists, order book depth ladders, anomaly feeds, telemetry stream endpoints, session management routes, order execution logs, copy-trade toggle, and sweeper trigger. |
 | [`tests/settlement.test.ts`](file:///d:/DreamPulse/backend/tests/settlement.test.ts) | **9** | Matured market resolution detection, automated winning share redemptions via Sweeper daemon, 100% collateral compounding into active trading balances, and multi-market batch claim aggregation. |
 | [`tests/backtest.test.ts`](file:///d:/DreamPulse/backend/tests/backtest.test.ts) | **6** | Historical backtesting engine against Binance tick data, Sortino ratio, Profit Factor, Max Drawdown underwater curve computations, fee and slippage simulations. |
-| [`tests/llm.test.ts`](file:///d:/DreamPulse/backend/tests/llm.test.ts) | **3** | Groq Qwen 2.5 multi-key round-robin rotation, fallback failover to Google Gemini, and database key-index persistence. |
+| [`tests/llm.test.ts`](file:///d:/DreamPulse/backend/tests/llm.test.ts) | **4** | Groq Qwen 2.5 multi-key round-robin rotation, persistent key index, structured reasoning thoughts, and exclusive Google Gemini Strategy Studio isolation. |
 | [`tests/setup.test.ts`](file:///d:/DreamPulse/backend/tests/setup.test.ts) | **2** | Environment configuration sanity check, Somnia Shannon network (Chain ID `50312`), and contract constants validation. |
-| **Total** | **97** | **100% Passing across 9 test suites with zero failures and zero `any` types** |
+| **Total** | **103** | **100% Passing across 9 test suites with zero failures and zero `any` types** |
 
 ### Test Suite Execution Output
 ```
@@ -634,16 +694,16 @@ npm run verify
  ✓ tests/setup.test.ts (2 tests)
  ✓ tests/quantitative.test.ts (20 tests)
  ✓ tests/settlement.test.ts (9 tests)
- ✓ tests/llm.test.ts (3 tests)
+ ✓ tests/llm.test.ts (4 tests)
  ✓ tests/backtest.test.ts (6 tests)
  ✓ tests/agents.test.ts (19 tests)
- ✓ tests/api.test.ts (10 tests)
+ ✓ tests/api.test.ts (13 tests)
  ✓ tests/market-service.test.ts (15 tests)
- ✓ tests/session.test.ts (13 tests)
+ ✓ tests/session.test.ts (14 tests)
 
  Test Files  9 passed (9)
-      Tests  97 passed (97)
-   Duration  14.67s
+      Tests  103 passed (103)
+   Duration  15.26s
 ```
 
 ---
