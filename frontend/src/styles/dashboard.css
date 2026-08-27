@@ -3,36 +3,36 @@
    ============================================================================== */
 
 :root {
-  /* Shadcn Dark Theme Tokens */
-  --background: #09090b;
-  --foreground: #fafafa;
+  /* Dark Theme Tokens */
+  --background: 224 25% 5%;
+  --foreground: 210 25% 98%;
   
-  --card: #111114;
-  --card-foreground: #fafafa;
+  --card: 224 25% 7.5%;
+  --card-foreground: 210 25% 98%;
   
-  --popover: #111114;
-  --popover-foreground: #fafafa;
+  --popover: 224 25% 7.5%;
+  --popover-foreground: 210 25% 98%;
   
-  --primary: #fafafa;
-  --primary-foreground: #18181b;
+  --primary: 210 25% 98%;
+  --primary-foreground: 224 28% 8%;
   
-  --secondary: #18181b;
-  --secondary-foreground: #fafafa;
+  --secondary: 224 20% 12%;
+  --secondary-foreground: 210 25% 98%;
   
-  --muted: #1c1c20;
-  --muted-foreground: #a1a1aa;
+  --muted: 224 20% 12%;
+  --muted-foreground: 218 14% 65%;
   
-  --accent: #27272a;
-  --accent-foreground: #fafafa;
+  --accent: 224 22% 14%;
+  --accent-foreground: 210 25% 98%;
   
-  --destructive: #ef4444;
-  --destructive-foreground: #fafafa;
+  --destructive: 0 84.2% 60.2%;
+  --destructive-foreground: 0 0% 98%;
   
-  --border: #27272a;
+  --border: 224 16% 15%;
   --border-subtle: rgba(255, 255, 255, 0.08);
   --border-strong: rgba(255, 255, 255, 0.18);
-  --input: #27272a;
-  --ring: #d4d4d8;
+  --input: 224 16% 15%;
+  --ring: 217.2 91.2% 59.8%;
   
   /* Trading & Protocol Specific Accents */
   --brand-cyan: #00ffcc;
@@ -44,19 +44,19 @@
   --trade-anomaly: #f59e0b;
   --trade-anomaly-glow: rgba(245, 158, 11, 0.2);
   
-  /* Sidebar Tokens (From Shadcn Template) */
-  --sidebar-bg: #09090b;
-  --sidebar-border: #1f1f23;
-  --sidebar-item-hover: #18181b;
-  --sidebar-item-active: #18181b;
+  /* Sidebar Tokens */
+  --sidebar-bg: hsl(224 25% 5% / 0.65);
+  --sidebar-border: hsl(224 16% 15% / 0.5);
+  --sidebar-item-hover: hsl(224 20% 12% / 0.7);
+  --sidebar-item-active: hsl(224 20% 12%);
   
   /* Radii & Typography */
   --radius-sm: 6px;
   --radius-md: 8px;
-  --radius-lg: 12px;
-  --radius-xl: 16px;
-  --font-sans: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-  --font-mono: 'JetBrains Mono', 'Fira Code', monospace;
+  --radius-lg: 10px;
+  --radius-xl: 14px;
+  --font-sans: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+  --font-mono: 'JetBrains Mono', 'Fira Code', ui-monospace, SFMono-Regular, monospace;
 }
 
 /* ==============================================================================
@@ -854,21 +854,24 @@ select.terminal-select option {
 }
 
 .stat-card {
-  background: var(--card);
-  border: 1px solid var(--border);
+  background-color: hsl(var(--card) / 0.72);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border: 1px solid hsl(var(--border) / 0.65);
   border-radius: var(--radius-lg);
   padding: 16px 18px;
   display: flex;
   flex-direction: column;
   justify-content: space-between;
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2);
-  transition: border-color 0.2s ease, transform 0.2s ease;
+  box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.2), inset 0 1px 1px 0 rgba(255, 255, 255, 0.06);
+  transition: border-color 0.2s ease, transform 0.2s ease, box-shadow 0.2s ease;
   position: relative;
 }
 
 .stat-card:hover {
-  border-color: var(--border-strong);
+  border-color: rgba(255, 255, 255, 0.25);
   transform: translateY(-1px);
+  box-shadow: 0 12px 36px 0 rgba(0, 0, 0, 0.3), inset 0 1px 1px 0 rgba(255, 255, 255, 0.1);
 }
 
 .stat-card-header {
@@ -936,43 +939,49 @@ select.terminal-select option {
   display: inline-flex;
   align-items: center;
   gap: 4px;
-  padding: 1px 6px;
+  padding: 2px 7px;
   border-radius: 4px;
-  font-size: 10.5px;
+  font-size: 10px;
   font-family: var(--font-mono);
   font-weight: 600;
+  background: hsl(var(--secondary) / 0.8);
+  color: hsl(var(--foreground));
+  border: 1px solid hsl(var(--border) / 0.6);
+  letter-spacing: 0.02em;
 }
 
 .stat-pill-tag.tag-green {
-  background: rgba(16, 185, 129, 0.12);
-  color: var(--trade-yes);
-  border: 1px solid rgba(16, 185, 129, 0.25);
+  background: rgba(16, 185, 129, 0.08);
+  color: #34d399;
+  border: 1px solid rgba(16, 185, 129, 0.2);
 }
 
 .stat-pill-tag.tag-amber {
-  background: rgba(245, 158, 11, 0.12);
-  color: var(--trade-anomaly);
-  border: 1px solid rgba(245, 158, 11, 0.25);
+  background: rgba(245, 158, 11, 0.08);
+  color: #fbbf24;
+  border: 1px solid rgba(245, 158, 11, 0.2);
 }
 
 .stat-pill-tag.tag-cyan {
-  background: rgba(0, 255, 204, 0.12);
-  color: var(--brand-cyan);
-  border: 1px solid rgba(0, 255, 204, 0.25);
+  background: hsl(var(--secondary) / 0.8);
+  color: hsl(var(--foreground));
+  border: 1px solid hsl(var(--border) / 0.6);
 }
 
 /* Panel & Card Shadcn Overrides */
 .terminal-panel {
-  background: var(--card) !important;
-  border: 1px solid var(--border) !important;
+  background-color: hsl(var(--card) / 0.72) !important;
+  backdrop-filter: blur(16px) !important;
+  -webkit-backdrop-filter: blur(16px) !important;
+  border: 1px solid hsl(var(--border) / 0.65) !important;
   border-radius: var(--radius-lg) !important;
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2) !important;
+  box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.2), inset 0 1px 1px 0 rgba(255, 255, 255, 0.06) !important;
   display: flex;
   flex-direction: column;
 }
 
 .terminal-panel-header {
-  border-bottom: 1px solid var(--border) !important;
+  border-bottom: 1px solid hsl(var(--border) / 0.6) !important;
   padding: 12px 18px !important;
   display: flex;
   align-items: center;
@@ -1217,9 +1226,9 @@ select.terminal-select option {
 }
 
 .modal-close-btn:hover {
-  background: var(--muted);
+  background: hsl(var(--muted));
   color: #ffffff;
-  border-color: var(--border);
+  border-color: hsl(var(--border));
 }
 
 .modal-body {
@@ -1704,33 +1713,36 @@ select.terminal-select option {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 8px 14px;
-  border-radius: var(--radius-md);
+  padding: 8px 16px;
+  border-radius: var(--radius-lg);
   margin-bottom: 12px;
-  background: #111114;
-  border: 1px solid var(--border);
+  background-color: hsl(var(--card) / 0.65);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border: 1px solid hsl(var(--border) / 0.6);
+  box-shadow: 0 4px 20px 0 rgba(0, 0, 0, 0.2);
   transition: all 0.2s;
 }
 
 .session-status-banner.active {
-  background: rgba(0, 255, 204, 0.03);
-  border-color: rgba(0, 255, 204, 0.25);
-  box-shadow: 0 2px 12px rgba(0, 255, 204, 0.05);
+  background-color: hsl(var(--card) / 0.65);
+  border-color: hsl(var(--border) / 0.7);
+  box-shadow: 0 4px 20px 0 rgba(0, 0, 0, 0.2);
 }
 
 .session-status-banner.inactive {
-  background: rgba(255, 255, 255, 0.02);
-  border-color: var(--border);
+  background-color: hsl(var(--card) / 0.5);
+  border-color: hsl(var(--border) / 0.5);
 }
 
 .session-status-banner.warning {
-  background: rgba(245, 158, 11, 0.05);
+  background-color: hsl(var(--card) / 0.6);
   border-color: rgba(245, 158, 11, 0.3);
 }
 
 .session-status-banner.unlinked {
-  background: rgba(255, 255, 255, 0.02);
-  border-color: var(--border);
+  background-color: hsl(var(--card) / 0.5);
+  border-color: hsl(var(--border) / 0.5);
 }
 
 .session-banner-left {
@@ -1752,9 +1764,9 @@ select.terminal-select option {
 }
 
 .status-badge-dot.active {
-  background: rgba(0, 255, 204, 0.12);
-  color: var(--brand-cyan);
-  border: 1px solid rgba(0, 255, 204, 0.3);
+  background: hsl(var(--secondary) / 0.8);
+  color: hsl(var(--foreground));
+  border: 1px solid hsl(var(--border) / 0.6);
 }
 
 .status-badge-dot.active .live-dot-green {
@@ -1766,15 +1778,15 @@ select.terminal-select option {
 }
 
 .status-badge-dot.neutral {
-  background: #18181b;
+  background: hsl(var(--secondary) / 0.8);
   color: var(--muted-foreground);
-  border: 1px solid var(--border);
+  border: 1px solid hsl(var(--border) / 0.6);
 }
 
 .status-badge-dot.warning {
-  background: rgba(245, 158, 11, 0.15);
-  color: var(--trade-anomaly);
-  border: 1px solid rgba(245, 158, 11, 0.35);
+  background: rgba(245, 158, 11, 0.1);
+  color: #fbbf24;
+  border: 1px solid rgba(245, 158, 11, 0.3);
 }
 
 .session-banner-text {
@@ -1810,7 +1822,7 @@ select.terminal-select option {
 .session-metric-divider {
   width: 1px;
   height: 24px;
-  background: var(--border);
+  background: hsl(var(--border));
 }
 
 .metric-label {
@@ -1831,17 +1843,20 @@ select.terminal-select option {
   display: flex;
   align-items: center;
   gap: 4px;
-  background: #18181b;
-  border: 1px solid var(--border);
-  padding: 2px 6px;
+  background: hsl(var(--secondary) / 0.6);
+  border: 1px solid hsl(var(--border) / 0.6);
+  padding: 2px 7px;
   border-radius: 4px;
   font-size: 10px;
-  color: var(--brand-cyan);
+  font-family: var(--font-mono);
+  color: hsl(var(--foreground));
   cursor: pointer;
+  transition: border-color 0.15s, background-color 0.15s;
 }
 
 .operator-chip:hover {
-  border-color: var(--brand-cyan);
+  border-color: hsl(var(--border));
+  background: hsl(var(--secondary));
 }
 
 .copy-success-icon {
@@ -1936,12 +1951,12 @@ select.terminal-select option {
 }
 
 .btn-subtle-config {
-  background: #18181b;
-  border: 1px solid var(--border);
-  color: var(--foreground);
+  background: hsl(var(--secondary) / 0.8);
+  border: 1px solid hsl(var(--border) / 0.6);
+  color: var(--muted-foreground);
   font-size: 11px;
-  font-weight: 600;
-  padding: 5px 10px;
+  font-weight: 500;
+  padding: 4px 10px;
   border-radius: var(--radius-sm);
   cursor: pointer;
   display: flex;
@@ -1951,17 +1966,18 @@ select.terminal-select option {
 }
 
 .btn-subtle-config:hover {
-  background: #27272a;
-  color: #ffffff;
+  background: hsl(var(--secondary));
+  color: hsl(var(--foreground));
+  border-color: hsl(var(--border));
 }
 
 .btn-revoke-compact {
   background: transparent;
-  border: 1px solid rgba(244, 63, 94, 0.25);
-  color: var(--trade-no);
+  border: 1px solid hsl(var(--border) / 0.6);
+  color: var(--muted-foreground);
   font-size: 11px;
-  font-weight: 600;
-  padding: 5px 10px;
+  font-weight: 500;
+  padding: 4px 10px;
   border-radius: var(--radius-sm);
   cursor: pointer;
   display: flex;
@@ -1971,8 +1987,9 @@ select.terminal-select option {
 }
 
 .btn-revoke-compact:hover {
-  background: rgba(244, 63, 94, 0.1);
-  border-color: var(--trade-no);
+  background: rgba(244, 63, 94, 0.08);
+  border-color: rgba(244, 63, 94, 0.3);
+  color: #f87171;
 }
 
 /* Header Wallet & Session Buttons */

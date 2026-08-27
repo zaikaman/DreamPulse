@@ -29,7 +29,7 @@
 5. [Mathematical & Quantitative Foundation](#-mathematical--quantitative-foundation)
 6. [Non-Custodial Session Delegation & BatchApprove.sol](#-non-custodial-session-delegation--batchapprovesol)
 7. [Strategy Studio & Institutional Backtesting](#-strategy-studio--institutional-backtesting)
-8. [Cyber-Financial Terminal UI & UX](#-cyber-financial-terminal-ui--ux)
+8. [Institutional Design System & Minimalist Terminal UI](#-institutional-design-system--minimalist-terminal-ui)
 9. [Smart Contracts & On-Chain Deployments](#-smart-contracts--on-chain-deployments)
 10. [Hackathon Judging Criteria Alignment](#-hackathon-judging-criteria-alignment)
 11. [Developer Feedback Report (Somnia & DreamDEX SDK)](#-developer-feedback-report-somnia--dreamdex-sdk)
@@ -266,16 +266,20 @@ DreamPulse includes a full-featured **Strategy Studio** running an institutional
 
 ---
 
-## 💻 Cyber-Financial Terminal UI & UX
+## 💻 Institutional Design System & Minimalist Terminal UI
 
-The DreamPulse frontend is crafted as a high-density, cyberpunk financial cockpit built with React 18, Vite, and custom Vanilla CSS design tokens:
+The DreamPulse frontend is crafted with a high-aesthetic, minimalist institutional quant design system built with React 18, TypeScript, Tailwind CSS, and custom glassmorphic shaders:
 
-* **High-Density Overview Dashboard**: Real-time ticker cards, market matrix, live depth ladders, and active position ledger.
-* **Edge Radar Heatmap**: Visual matrix tracking all active binary markets across duration windows (5m, 15m, 1h), color-coded by statistical mispricing edge (Emerald Green for YES underpriced, Ruby Red for NO underpriced).
-* **Streaming AI Thought Feed**: Real-time terminal feed broadcasting structured thoughts from Groq and Gemini LLMs showing triggering conditions, confidence percentages ($>88\%$), and mathematical rationale.
-* **Interactive Swarm Cockpit**: Operator control board with dynamic sensitivity sliders, kill switches, and per-agent telemetry monitors.
-* **Procedural Web Audio Engine**: Zero-asset audio synthesizer utilizing the Web Audio API to deliver millisecond-accurate audio cues for trade fills, opportunity alerts, and settlement claims.
-* **Keyboard Hotkeys**: Full accessibility with keyboard-driven controls (`1`–`6` for tab navigation, `S` for manual sweep trigger, `M` for audio mute, `Space` for feed pause).
+* **Minimalist Obsidian & Slate Design System**: Calm, ultra-refined dark aesthetic with frosted translucent panels (`.glass-card`, `.glass-panel`), bespoke HSL tokens, and Radix UI primitives.
+* **Procedural Silk WebGL Shader Background**: Real-time Three.js GPU-accelerated fluid cloth simulation (`Silk.tsx`) creating smooth atmospheric depth behind the terminal.
+* **Cinematic Landing Showcase**: Immersive entry portal featuring interactive live swarm telemetry, protocol architecture breakdown, and seamless Web3 wallet authentication.
+* **Institutional 3-Category Sidebar**:
+  * **Market Intelligence**: *Terminal Overview*, *Edge Radar (Black-Scholes mispricing)*, and *Order Book & Depth (CLOB ladders)*.
+  * **Quantitative Swarm**: *Live Swarm Feed (real-time chain-of-thought)* and *Swarm Cockpit (guardrails & controls)*.
+  * **Execution & Studio**: *Strategy Studio (quant backtester IDE)*, *Settlement Sweeper (batch claim & compound)*, and *Portfolio Analytics (Sharpe/Sortino)*.
+* **Global Command Palette (`⌘K / Ctrl+K`)**: Lightning-fast fuzzy search modal to jump between prediction markets, navigate views, and execute platform actions.
+* **Non-Custodial Session Delegation Modal**: Intuitive modal to grant scoped operator permissions with daily volume caps and single-trade limits.
+* **Procedural Web Audio Feedback**: Zero-asset synthesizer utilizing the Web Audio API to deliver millisecond-accurate acoustic feedback for order fills, opportunity alerts, and settlement sweeps.
 
 ---
 
@@ -306,7 +310,7 @@ All DreamPulse interactions execute on the **Somnia Shannon Testnet**:
 | :--- | :--- |
 | **Innovation & Originality (20%)** | • Introduces an autonomous 4-agent cooperative swarm rather than isolated trading scripts.<br />• First implementation combining dual-engine LLM reasoning (Groq Qwen 2.5 + Gemini) with analytical Black-Scholes binary option mathematics.<br />• Solves the prediction market cold-start problem through automated, inventory-skewed market making. |
 | **Technical Implementation (25%)** | • Flawless deep integration with `@somnia-chain/markets-sdk` across orders, depth ladders, cancellations, and settlement redemptions.<br />• 97/97 unit and integration tests passing with 100% type safety and zero `any` types.<br />• Built custom `BatchApprove.sol` smart contract deployed on Shannon Testnet to overcome protocol-level multi-pool approval barriers.<br />• Dynamic `NonceManager` handling sub-second on-chain concurrency and automated revert circuit breakers. |
-| **User Experience & Design (20%)** | • High-density Cyber-Terminal UI inspired by institutional financial systems with custom dark-mode tokens.<br />• Zero-friction onboarding via 1-click session key delegation with hardcoded daily and single-trade safety guardrails.<br />• Real-time WebSocket telemetry with $<50\text{ms}$ updates, animated order depth visualizers, and procedural Web Audio feedback.<br />• In-browser Strategy Studio backtester computing Sortino, Sharpe, and equity curves. |
+| **User Experience & Design (20%)** | • High-aesthetic, minimalist institutional quant terminal inspired by modern hedge fund platforms (obsidian glassmorphism, GPU-accelerated Three.js Silk shader, and Radix UI primitives).<br />• Global Command Palette (`⌘K / Ctrl+K`) for sub-second keyboard-driven market navigation and execution.<br />• Zero-friction onboarding via 1-click non-custodial session delegation with strict single-trade caps and daily volume guardrails.<br />• Real-time WebSocket telemetry ($<50\text{ms}$ updates), live Black-Scholes Edge Radar, and procedural Web Audio acoustic feedback. |
 | **Business & Ecosystem Impact (20%)** | • Directly solves the primary existential crisis of Event Contracts: stale quotes, wide spreads, and idle capital.<br />• Generates continuous, organic trading volume and liquidity on Somnia, showcasing its 400k+ TPS capacity.<br />• The `Sweeper` daemon guarantees that winning collateral is perpetually recycled back into active trading rather than remaining stranded. |
 | **Presentation & Demo (15%)** | • Complete technical documentation, interactive architecture flowcharts, mathematical explanations, and full API references.<br />• Clear 2–3 minute video presentation script demonstrating end-to-end user onboarding, swarm execution, live thoughts, and on-chain settlements. |
 

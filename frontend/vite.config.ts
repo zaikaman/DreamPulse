@@ -53,6 +53,7 @@ export default defineConfig({
           'vendor-react': ['react', 'react-dom'],
           'vendor-web3': ['viem'],
           'vendor-icons': ['lucide-react'],
+          'vendor-three': ['three', '@react-three/fiber'],
         },
       },
     },

@@ -185,10 +185,10 @@ export const SessionStatusBar: React.FC<SessionStatusBarProps> = ({
                     width: `${spentPercent}%`,
                     backgroundColor:
                       spentPercent > 85
-                        ? 'var(--color-no)'
+                        ? 'hsl(var(--destructive))'
                         : spentPercent > 60
-                        ? 'var(--color-anomaly)'
-                        : 'var(--accent-cyan)',
+                        ? '#f59e0b'
+                        : 'hsl(var(--primary))',
                   }}
                 ></div>
               </div>
@@ -207,28 +207,14 @@ export const SessionStatusBar: React.FC<SessionStatusBarProps> = ({
             {isCollateralZero && onClaimFaucet && (
               <>
                 <div className="session-metric-divider"></div>
-                <div className="session-metric-item" style={{ color: 'var(--color-anomaly)', display: 'flex', alignItems: 'center', gap: '6px' }}>
-                  <AlertTriangle size={13} />
-                  <span style={{ fontSize: '11px', fontWeight: 600 }}>0.00 tUSDC Collateral</span>
+                <div className="session-metric-item" style={{ color: 'var(--muted-foreground)', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                  <AlertTriangle size={12} className="text-amber-400" />
+                  <span style={{ fontSize: '11px', fontWeight: 500 }} className="font-mono text-muted-foreground">0.00 tUSDC Collateral</span>
                   <button
                     type="button"
-                    className="btn-faucet-action-compact"
                     onClick={() => onClaimFaucet(1000)}
                     disabled={isFauceting}
-                    style={{
-                      background: 'var(--trade-anomaly)',
-                      color: '#000',
-                      border: 'none',
-                      padding: '3px 8px',
-                      borderRadius: '4px',
-                      fontSize: '10px',
-                      fontWeight: 700,
-                      cursor: 'pointer',
-                      display: 'inline-flex',
-                      alignItems: 'center',
-                      gap: '4px',
-                      marginLeft: '4px',
-                    }}
+                    className="px-2 py-0.5 text-[10px] font-mono rounded bg-secondary/80 text-foreground border border-border/60 hover:bg-secondary cursor-pointer inline-flex items-center gap-1 transition-colors ml-1"
                   >
                     {isFauceting ? <Spinner size="xs" variant="amber" /> : <Coins size={10} />}
                     <span>Claim 1k tUSDC</span>

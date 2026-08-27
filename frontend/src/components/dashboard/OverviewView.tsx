@@ -5,10 +5,6 @@ import {
   ExternalLink,
   ListOrdered,
   Brain,
-  Shield,
-  Sparkles,
-  Pause,
-  Activity,
 } from 'lucide-react';
 import type { Market, AgentThoughtLog, SessionGrant } from '../../types/index.js';
 import type { MarketTickData } from '../../hooks/useTelemetry.js';
@@ -18,6 +14,9 @@ import { useUserPortfolio } from '../../hooks/useUserPortfolio.js';
 import { StatCardsGrid } from './StatCardsGrid.js';
 import { SessionStatusBar } from '../SessionStatusBar.js';
 import { OpportunityTableSkeleton, Skeleton } from '../ui/Skeleton.js';
+import { Badge } from '../ui/badge.js';
+import { Button } from '../ui/button.js';
+import { cn } from '../../lib/utils.js';
 
 interface OverviewViewProps {
   markets: Market[];
@@ -150,26 +149,26 @@ const OverviewViewComponent: React.FC<OverviewViewProps> = ({
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'space-between',
-            padding: '14px 20px',
+            padding: '12px 18px',
           }}
         >
-          <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-            <Zap size={16} style={{ color: 'var(--trade-anomaly)' }} />
-            <span style={{ fontWeight: 600, fontSize: '14px' }}>Top Arbitrage & Mispricing Opportunities</span>
-            <span className="stat-pill-tag tag-amber" style={{ marginLeft: '4px' }}>
-              {opportunities.filter((o) => o.absEdge >= 0.03).length} ACTIVE ANOMALIES
-            </span>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+            <Zap size={15} className="text-muted-foreground" />
+            <span style={{ fontWeight: 600, fontSize: '13px' }} className="text-foreground">Top Arbitrage & Mispricing Opportunities</span>
+            <Badge variant="outline" className="font-mono text-[10px] text-muted-foreground bg-secondary/40 border-border/50">
+              {opportunities.filter((o) => o.absEdge >= 0.03).length} ANOMALIES
+            </Badge>
           </div>
 
-          <button
-            type="button"
-            className="shadcn-tab-btn"
-            style={{ fontSize: '12px', padding: '4px 10px' }}
+          <Button
+            variant="outline"
+            size="sm"
+            className="h-7 text-xs gap-1 font-normal text-muted-foreground hover:text-foreground"
             onClick={() => onNavigateToTab('Edge Radar')}
           >
             <span>Open Full Radar</span>
-            <ArrowRight size={13} style={{ marginLeft: '4px' }} />
-          </button>
+            <ArrowRight size={12} />
+          </Button>
         </div>
 
         {/* High-Signal Clean Opportunity Table */}
@@ -177,22 +176,22 @@ const OverviewViewComponent: React.FC<OverviewViewProps> = ({
           <OpportunityTableSkeleton rows={5} />
         ) : (
           <div style={{ overflowX: 'auto' }}>
-            <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '13px' }}>
+            <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '12px' }}>
               <thead>
-                <tr style={{ background: '#0e0e11', borderBottom: '1px solid var(--border)', color: 'var(--muted-foreground)', textAlign: 'left' }}>
-                  <th style={{ padding: '10px 20px', fontWeight: 500 }}>ASSET & STRIKE</th>
-                  <th style={{ padding: '10px 16px', fontWeight: 500 }}>EXPIRY</th>
-                  <th style={{ padding: '10px 16px', fontWeight: 500 }}>IMPLIED PROB</th>
-                  <th style={{ padding: '10px 16px', fontWeight: 500 }}>FAIR VALUE Φ(z)</th>
-                  <th style={{ padding: '10px 16px', fontWeight: 500 }}>EDGE DELTA</th>
-                  <th style={{ padding: '10px 16px', fontWeight: 500 }}>ACTION</th>
-                  <th style={{ padding: '10px 20px', textAlign: 'right', fontWeight: 500 }}>INSPECT</th>
+                <tr className="border-b border-border/60 text-muted-foreground text-[10px] font-mono uppercase tracking-wider" style={{ background: 'transparent', textAlign: 'left' }}>
+                  <th style={{ padding: '9px 18px', fontWeight: 500 }}>ASSET & STRIKE</th>
+                  <th style={{ padding: '9px 14px', fontWeight: 500 }}>EXPIRY</th>
+                  <th style={{ padding: '9px 14px', fontWeight: 500 }}>IMPLIED PROB</th>
+                  <th style={{ padding: '9px 14px', fontWeight: 500 }}>FAIR VALUE Φ(z)</th>
+                  <th style={{ padding: '9px 14px', fontWeight: 500 }}>EDGE DELTA</th>
+                  <th style={{ padding: '9px 14px', fontWeight: 500 }}>ACTION</th>
+                  <th style={{ padding: '9px 18px', textAlign: 'right', fontWeight: 500 }}>INSPECT</th>
                 </tr>
               </thead>
               <tbody>
                 {opportunities.length === 0 ? (
                   <tr>
-                    <td colSpan={7} style={{ padding: '32px', textAlign: 'center', color: 'var(--muted-foreground)' }}>
+                    <td colSpan={7} style={{ padding: '32px', textAlign: 'center' }} className="text-muted-foreground font-mono text-xs">
                       Scanning Somnia Event Contracts for pricing anomalies...
                     </td>
                   </tr>
@@ -203,51 +202,56 @@ const OverviewViewComponent: React.FC<OverviewViewProps> = ({
                     return (
                       <tr
                         key={market.id}
+                        className="border-b border-border/30 hover:bg-muted/30 transition-colors cursor-pointer"
                         style={{
-                          borderBottom: '1px solid var(--border-subtle)',
-                          background: isSelected ? 'rgba(0, 255, 204, 0.04)' : 'transparent',
-                          transition: 'background 0.15s ease',
-                          cursor: 'pointer',
+                          background: isSelected ? 'hsl(var(--secondary) / 0.5)' : 'transparent',
                         }}
                         onClick={() => onSelectMarket(market.id)}
                       >
-                        <td style={{ padding: '12px 20px' }}>
+                        <td style={{ padding: '10px 18px' }}>
                           <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                            <span style={{ fontWeight: 600 }}>{market.symbol}</span>
-                            <span style={{ fontFamily: 'var(--font-mono)', color: 'var(--muted-foreground)', fontSize: '12px' }}>
+                            <span style={{ fontWeight: 600 }} className="text-foreground">{market.symbol}</span>
+                            <span className="font-mono text-muted-foreground text-xs">
                               ${market.strikePrice.toLocaleString()}
                             </span>
                           </div>
                         </td>
-                        <td style={{ padding: '12px 16px' }}>
-                          <span className="badge" style={{ background: '#1e1e24', color: '#d4d4d8', padding: '2px 7px', borderRadius: '4px', fontSize: '11px' }}>
+                        <td style={{ padding: '10px 14px' }}>
+                          <Badge variant="secondary" className="font-mono text-[10px] px-1.5 py-0 text-muted-foreground">
                             {market.windowDuration}
-                          </span>
+                          </Badge>
                         </td>
-                        <td style={{ padding: '12px 16px', fontFamily: 'var(--font-mono)', fontWeight: 600 }}>
+                        <td style={{ padding: '10px 14px' }} className="font-mono text-muted-foreground">
                           {(implied * 100).toFixed(1)}%
                         </td>
-                        <td style={{ padding: '12px 16px', fontFamily: 'var(--font-mono)', color: 'var(--brand-cyan)' }}>
+                        <td style={{ padding: '10px 14px' }} className="font-mono font-medium text-foreground">
                           {(fair * 100).toFixed(1)}%
                         </td>
-                        <td style={{ padding: '12px 16px', fontFamily: 'var(--font-mono)', fontWeight: 700 }}>
-                          <span style={{ color: isYesEdge ? 'var(--trade-yes)' : 'var(--trade-no)' }}>
+                        <td style={{ padding: '10px 14px' }}>
+                          <span className={cn("font-mono font-semibold", isYesEdge ? "text-emerald-400" : "text-rose-400")}>
                             {isYesEdge ? '+' : ''}{(edge * 100).toFixed(1)}%
                           </span>
                         </td>
-                        <td style={{ padding: '12px 16px' }}>
-                          <span
-                            className={`stat-pill-tag ${
-                              action === 'BUY_YES' ? 'tag-green' : action === 'BUY_NO' ? 'tag-amber' : 'tag-cyan'
-                            }`}
+                        <td style={{ padding: '10px 14px' }}>
+                          <Badge
+                            variant="outline"
+                            className={cn(
+                              "font-mono text-[10px]",
+                              action === 'BUY_YES'
+                                ? "border-emerald-500/30 text-emerald-400 bg-emerald-500/10"
+                                : action === 'BUY_NO'
+                                ? "border-rose-500/30 text-rose-400 bg-rose-500/10"
+                                : "border-border/50 text-muted-foreground bg-secondary/40"
+                            )}
                           >
-                            {action === 'BUY_YES' ? 'BUY YES (Underpriced)' : action === 'BUY_NO' ? 'BUY NO (Overpriced)' : 'NEUTRAL'}
-                          </span>
+                            {action === 'BUY_YES' ? 'BUY YES' : action === 'BUY_NO' ? 'BUY NO' : 'NEUTRAL'}
+                          </Badge>
                         </td>
-                        <td style={{ padding: '12px 20px', textAlign: 'right' }}>
-                          <button
-                            type="button"
-                            className="btn-action"
+                        <td style={{ padding: '10px 18px', textAlign: 'right' }}>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            className="h-6 text-xs text-muted-foreground hover:text-foreground gap-1 font-normal"
                             onClick={(e) => {
                               e.stopPropagation();
                               onSelectMarket(market.id);
@@ -255,8 +259,8 @@ const OverviewViewComponent: React.FC<OverviewViewProps> = ({
                             }}
                           >
                             <span>Inspect</span>
-                            <ExternalLink size={11} />
-                          </button>
+                            <ExternalLink size={10} />
+                          </Button>
                         </td>
                       </tr>
                     );
@@ -269,27 +273,29 @@ const OverviewViewComponent: React.FC<OverviewViewProps> = ({
       </div>
 
       {/* 3. Secondary Split: Quick Market Catalog + Latest Swarm Reasoning */}
-      <div style={{ display: 'grid', gridTemplateColumns: '1.2fr 1fr', gap: '20px' }}>
+      <div style={{ display: 'grid', gridTemplateColumns: '1.2fr 1fr', gap: '16px' }}>
         {/* Left: Quick Active Markets */}
-        <div className="terminal-panel" style={{ padding: '16px 20px' }}>
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '14px' }}>
+        <div className="terminal-panel" style={{ padding: '14px 18px' }}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '12px' }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-              <ListOrdered size={16} style={{ color: 'var(--brand-cyan)' }} />
-              <span style={{ fontWeight: 600, fontSize: '14px' }}>Active Prediction Catalog</span>
-              <span className="stat-pill-tag tag-cyan">{markets.length} Markets</span>
+              <ListOrdered size={15} className="text-muted-foreground" />
+              <span style={{ fontWeight: 600, fontSize: '13px' }} className="text-foreground">Active Prediction Catalog</span>
+              <Badge variant="outline" className="font-mono text-[10px] text-muted-foreground bg-secondary/40 border-border/50">
+                {markets.length} Markets
+              </Badge>
             </div>
-            <button
-              type="button"
-              className="shadcn-tab-btn"
-              style={{ fontSize: '12px', padding: '3px 8px' }}
+            <Button
+              variant="outline"
+              size="sm"
+              className="h-7 text-xs gap-1 font-normal text-muted-foreground hover:text-foreground"
               onClick={() => onNavigateToTab('Markets & Depth')}
             >
               <span>View Full CLOB</span>
-              <ArrowRight size={13} style={{ marginLeft: '4px' }} />
-            </button>
+              <ArrowRight size={12} />
+            </Button>
           </div>
 
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
             {isLoading && markets.length === 0 ? (
               [1, 2, 3, 4].map((i) => (
                 <div
@@ -298,9 +304,9 @@ const OverviewViewComponent: React.FC<OverviewViewProps> = ({
                     display: 'flex',
                     alignItems: 'center',
                     justifyContent: 'space-between',
-                    padding: '10px 14px',
-                    background: '#18181b',
-                    border: '1px solid var(--border)',
+                    padding: '8px 12px',
+                    background: 'hsl(var(--card) / 0.4)',
+                    border: '1px solid hsl(var(--border) / 0.5)',
                     borderRadius: '8px',
                   }}
                 >
@@ -326,41 +332,32 @@ const OverviewViewComponent: React.FC<OverviewViewProps> = ({
                 return (
                   <div
                     key={m.id}
-                    style={{
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'space-between',
-                      padding: '10px 14px',
-                      background: isSelected ? 'rgba(0, 255, 204, 0.05)' : '#18181b',
-                      border: `1px solid ${isSelected ? 'var(--brand-cyan)' : 'var(--border)'}`,
-                      borderRadius: '8px',
-                      cursor: 'pointer',
-                      transition: 'all 0.15s ease',
-                    }}
                     onClick={() => onSelectMarket(m.id)}
+                    className={cn(
+                      "flex items-center justify-between p-2 rounded-lg border transition-all cursor-pointer",
+                      isSelected
+                        ? "border-border bg-secondary/60"
+                        : "border-border/50 bg-card/40 hover:bg-card/80 hover:border-border/70"
+                    )}
                   >
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                      <span style={{ fontWeight: 600, fontSize: '13px' }}>{m.symbol}</span>
-                      <span style={{ fontSize: '11px', color: 'var(--muted-foreground)' }}>${m.strikePrice.toLocaleString()}</span>
-                      <span className="badge" style={{ background: '#27272a', color: '#d4d4d8', padding: '1px 5px', fontSize: '10px' }}>
+                    <div className="flex items-center gap-2">
+                      <span className="font-semibold text-xs text-foreground">{m.symbol}</span>
+                      <span className="font-mono text-xs text-muted-foreground">${m.strikePrice.toLocaleString()}</span>
+                      <Badge variant="secondary" className="font-mono text-[10px] px-1.5 py-0 text-muted-foreground">
                         {m.windowDuration}
-                      </span>
+                      </Badge>
                     </div>
 
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '14px' }}>
-                      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', fontSize: '11px' }}>
-                        <span style={{ fontFamily: 'var(--font-mono)', fontWeight: 600 }}>
-                          YES: {(implied * 100).toFixed(0)}%
-                        </span>
-                        <span style={{ color: 'var(--muted-foreground)', fontSize: '10px' }}>
-                          NO: {((1 - implied) * 100).toFixed(0)}%
-                        </span>
+                    <div className="flex items-center gap-3">
+                      <div className="flex flex-col items-end text-xs font-mono">
+                        <span className="text-foreground font-medium">YES: {(implied * 100).toFixed(0)}%</span>
+                        <span className="text-muted-foreground text-[10px]">NO: {((1 - implied) * 100).toFixed(0)}%</span>
                       </div>
 
-                      <button
-                        type="button"
-                        className="btn-action"
-                        style={{ fontSize: '10.5px', padding: '4px 10px', height: 'auto' }}
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="h-6 text-xs px-2 gap-1 font-normal text-muted-foreground hover:text-foreground"
                         onClick={(e) => {
                           e.stopPropagation();
                           onSelectMarket(m.id);
@@ -369,7 +366,7 @@ const OverviewViewComponent: React.FC<OverviewViewProps> = ({
                       >
                         <span>Trade</span>
                         <ArrowRight size={10} />
-                      </button>
+                      </Button>
                     </div>
                   </div>
                 );
@@ -381,141 +378,75 @@ const OverviewViewComponent: React.FC<OverviewViewProps> = ({
         {/* Right: Live AI Reasoning Snapshot */}
         <div
           className="terminal-panel"
-          style={{ padding: '16px 20px' }}
+          style={{ padding: '14px 18px' }}
           onMouseEnter={() => setIsHovered(true)}
           onMouseLeave={() => setIsHovered(false)}
         >
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '12px' }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-              <Brain size={16} style={{ color: '#a855f7' }} />
-              <span style={{ fontWeight: 700, fontSize: '14px' }}>Live Swarm Intelligence</span>
-              <span
-                style={{
-                  fontSize: '10px',
-                  fontFamily: 'var(--font-mono)',
-                  padding: '2px 7px',
-                  borderRadius: '999px',
-                  background: isHovered ? 'rgba(245, 158, 11, 0.18)' : 'rgba(16, 185, 129, 0.15)',
-                  color: isHovered ? '#fbbf24' : '#34d399',
-                  border: isHovered ? '1px solid rgba(245, 158, 11, 0.4)' : '1px solid rgba(16, 185, 129, 0.3)',
-                  display: 'inline-flex',
-                  alignItems: 'center',
-                  gap: '4px',
-                }}
-              >
-                {isHovered ? <Pause size={9} /> : <Activity size={9} />}
-                {isHovered ? 'HOVERING TO READ' : 'STREAMING'}
-              </span>
+              <Brain size={15} className="text-muted-foreground" />
+              <span style={{ fontWeight: 600, fontSize: '13px' }} className="text-foreground">Live Swarm Intelligence</span>
+              <Badge variant="outline" className="font-mono text-[10px] text-muted-foreground bg-secondary/40 border-border/50 gap-1.5">
+                <div className={cn("size-1.5 rounded-full", isHovered ? "bg-amber-400" : "bg-emerald-400")} />
+                <span>{isHovered ? 'PAUSED' : 'STREAMING'}</span>
+              </Badge>
             </div>
-            <button
-              type="button"
-              className="shadcn-tab-btn"
-              style={{ fontSize: '12px', padding: '3px 8px' }}
+            <Button
+              variant="outline"
+              size="sm"
+              className="h-7 text-xs gap-1 font-normal text-muted-foreground hover:text-foreground"
               onClick={() => onNavigateToTab('AI Swarm Feed')}
             >
               <span>Full Stream</span>
-              <ArrowRight size={13} style={{ marginLeft: '4px' }} />
-            </button>
+              <ArrowRight size={12} />
+            </Button>
           </div>
 
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
             {distinctThoughts.length === 0 ? (
-              <div style={{ padding: '24px', textAlign: 'center', color: 'var(--muted-foreground)', fontSize: '12px' }}>
-                Swarm actively evaluating 12 Shannon CLOB markets. Executed trades will appear here.
+              <div style={{ padding: '24px', textAlign: 'center' }} className="text-muted-foreground font-mono text-xs">
+                Swarm actively evaluating Shannon CLOB markets. Executed trades will appear here.
               </div>
             ) : (
               distinctThoughts.map((t, idx) => {
-                const isVolt = t.agentType === 'Volt';
-                const isOracle = t.agentType === 'Oracle';
-                const isTitan = t.agentType === 'Titan';
-                const color = isVolt ? '#f59e0b' : isOracle ? '#00ffcc' : isTitan ? '#a855f7' : '#10b981';
-                const AgentIcon = isVolt ? Zap : isOracle ? Brain : isTitan ? Shield : Sparkles;
                 const timeDiff = Math.max(0, Math.floor((nowTime - new Date(t.createdAt).getTime()) / 1000));
                 const relTime = timeDiff < 5 ? 'Just now' : `${timeDiff}s ago`;
 
                 return (
                   <div
                     key={t.id || idx}
-                    style={{
-                      padding: '10px 12px',
-                      background: '#141417',
-                      border: '1px solid var(--border)',
-                      borderLeft: `3px solid ${color}`,
-                      borderRadius: '8px',
-                      display: 'flex',
-                      flexDirection: 'column',
-                      gap: '5px',
-                      transition: 'border-color 0.15s ease',
-                    }}
+                    className="p-2.5 rounded-lg border border-border/50 bg-card/40 hover:border-border/70 transition-colors flex flex-col gap-1.5"
                   >
-                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '4px' }}>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                        <div
-                          style={{
-                            display: 'inline-flex',
-                            alignItems: 'center',
-                            gap: '4px',
-                            fontWeight: 700,
-                            fontSize: '11px',
-                            color,
-                            fontFamily: 'var(--font-mono)',
-                          }}
-                        >
-                          <AgentIcon size={12} />
+                    <div className="flex items-center justify-between flex-wrap gap-2">
+                      <div className="flex items-center gap-1.5">
+                        <Badge variant="outline" className="font-mono text-[10px] gap-1 text-foreground border-border/60 bg-secondary/50 font-semibold">
                           <span>{t.agentType.toUpperCase()}</span>
-                        </div>
-                        <span
-                          className="badge"
-                          style={{
-                            fontSize: '9px',
-                            background: '#27272a',
-                            padding: '1px 5px',
-                            color: '#a1a1aa',
-                          }}
-                        >
+                        </Badge>
+                        <Badge variant="secondary" className="text-[9px] font-mono text-muted-foreground px-1.5 py-0">
                           {t.actionTaken || t.triggerEvent}
-                        </span>
+                        </Badge>
                         {t.txHash && (
                           <a
                             href={`https://shannon-explorer.somnia.network/tx/${t.txHash}`}
                             target="_blank"
                             rel="noreferrer"
-                            style={{
-                              fontSize: '9px',
-                              color: '#00ffcc',
-                              textDecoration: 'none',
-                              fontFamily: 'var(--font-mono)',
-                              background: 'rgba(0, 255, 204, 0.1)',
-                              padding: '1px 5px',
-                              borderRadius: '3px',
-                            }}
+                            className="text-[9px] font-mono text-muted-foreground hover:text-foreground underline decoration-border/60"
                           >
                             Tx: {t.txHash.slice(0, 6)}...
                           </a>
                         )}
                       </div>
 
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                        <span style={{ fontSize: '10.5px', fontFamily: 'var(--font-mono)', color: 'var(--trade-yes)', fontWeight: 600 }}>
+                      <div className="flex items-center gap-2">
+                        <span className="text-[10px] font-mono text-muted-foreground">
                           {(t.confidence * 100).toFixed(0)}% Conf
                         </span>
-                        <span style={{ fontSize: '9.5px', color: 'var(--muted-foreground)', fontFamily: 'var(--font-mono)' }}>
+                        <span className="text-[9px] font-mono text-muted-foreground/70">
                           {relTime}
                         </span>
                       </div>
                     </div>
-                    <p
-                      style={{
-                        margin: 0,
-                        fontSize: '11.5px',
-                        color: '#d4d4d8',
-                        lineHeight: 1.35,
-                        display: '-webkit-box',
-                        WebkitLineClamp: 2,
-                        WebkitBoxOrient: 'vertical',
-                        overflow: 'hidden',
-                      }}
-                    >
+                    <p className="text-xs text-muted-foreground line-clamp-2 leading-relaxed m-0">
                       {t.reasoningText}
                     </p>
                   </div>

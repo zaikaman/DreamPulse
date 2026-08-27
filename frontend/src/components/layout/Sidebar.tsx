@@ -1,0 +1,280 @@
+import React from "react";
+import {
+  LayoutDashboard,
+  Radar,
+  Layers,
+  Bot,
+  SlidersHorizontal,
+  Code2,
+  Sparkles,
+  PieChart,
+  CheckCircle2,
+  Coins,
+  Shield,
+  Zap,
+} from "lucide-react";
+import { BrandLogo, BrandIcon } from "../common/BrandLogo";
+import { Button } from "../ui/button";
+import { Badge } from "../ui/badge";
+import { cn, formatAddress } from "../../lib/utils";
+import type { DashboardViewType } from "../landing/CinematicHero";
+import type { Market } from "../../types/index";
+
+interface SidebarProps {
+  currentView: DashboardViewType;
+  onSelectView: (view: DashboardViewType) => void;
+  markets?: Market[];
+  selectedMarketId?: string | null;
+  onSelectMarket?: (marketId: string) => void;
+  isCollapsed?: boolean;
+  onToggleCollapse?: () => void;
+  onOpenSessionModal?: () => void;
+  wallet?: {
+    address: string | null;
+    balanceSTT?: string;
+    balanceCollateral?: string;
+  };
+  activeSession?: any | null;
+  onConnectWallet?: () => void;
+}
+
+export const Sidebar: React.FC<SidebarProps> = ({
+  currentView,
+  onSelectView,
+  markets = [],
+  isCollapsed = false,
+  onOpenSessionModal,
+  wallet,
+  activeSession,
+  onConnectWallet,
+}) => {
+  // Category 1: Market Intelligence & Price Discovery
+  const marketNavItems = [
+    {
+      id: "Overview" as DashboardViewType,
+      label: "Terminal Overview",
+      badge: markets.length > 0 ? `${markets.length}` : undefined,
+      description: "Macro Swarm & Live CLOB Telemetry",
+      icon: LayoutDashboard,
+    },
+    {
+      id: "Edge Radar" as DashboardViewType,
+      label: "Edge Radar",
+      description: "Black-Scholes Φ(z) Mispricings",
+      icon: Radar,
+    },
+    {
+      id: "Markets & Depth" as DashboardViewType,
+      label: "Order Book & Depth",
+      description: "Microsecond CLOB Ladders & Fills",
+      icon: Layers,
+    },
+  ];
+
+  // Category 2: Quantitative AI Swarm
+  const swarmNavItems = [
+    {
+      id: "AI Swarm Feed" as DashboardViewType,
+      label: "Live Swarm Feed",
+      description: "Real-time Multi-Agent Reasoning",
+      icon: Bot,
+    },
+    {
+      id: "Swarm Cockpit" as DashboardViewType,
+      label: "Swarm Cockpit",
+      description: "Risk Guardrails & Swarm Controls",
+      icon: SlidersHorizontal,
+    },
+  ];
+
+  // Category 3: Strategy, Settlement & Performance
+  const executionNavItems = [
+    {
+      id: "Strategy Studio" as DashboardViewType,
+      label: "Strategy Studio",
+      description: "Quant Backtester & Formula Studio",
+      icon: Code2,
+    },
+    {
+      id: "Settlement" as DashboardViewType,
+      label: "Settlement Sweeper",
+      description: "Batch Outcome Claims & Compounder",
+      icon: CheckCircle2,
+    },
+    {
+      id: "Analytics" as DashboardViewType,
+      label: "Portfolio Analytics",
+      description: "Sharpe, Sortino & PnL Replay",
+      icon: PieChart,
+    },
+  ];
+
+  const renderNavGroup = (title: string, items: typeof marketNavItems) => (
+    <div className="space-y-1">
+      {!isCollapsed && (
+        <div className="px-2.5 pb-1 pt-2 text-[10px] font-semibold text-muted-foreground uppercase tracking-wider font-mono">
+          {title}
+        </div>
+      )}
+      <nav className="space-y-0.5">
+        {items.map((item) => {
+          const Icon = item.icon;
+          const isActive = currentView === item.id;
+          return (
+            <button
+              key={item.id}
+              onClick={() => onSelectView(item.id)}
+              title={isCollapsed ? `${item.label} — ${item.description}` : undefined}
+              className={cn(
+                "w-full flex items-center rounded-lg text-xs font-medium transition-colors text-left group cursor-pointer",
+                isCollapsed ? "justify-center p-2" : "justify-between px-2.5 py-1.5",
+                isActive
+                  ? "bg-secondary text-foreground font-semibold shadow-2xs"
+                  : "text-muted-foreground hover:bg-muted/60 hover:text-foreground"
+              )}
+            >
+              <div className="flex items-center gap-2.5 truncate">
+                <Icon
+                  className={cn(
+                    "size-4 shrink-0",
+                    isActive ? "text-foreground" : "text-muted-foreground group-hover:text-foreground"
+                  )}
+                />
+                {!isCollapsed && <span className="truncate">{item.label}</span>}
+              </div>
+              {!isCollapsed && item.badge && (
+                <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-muted/80 text-muted-foreground font-medium">
+                  {item.badge}
+                </span>
+              )}
+            </button>
+          );
+        })}
+      </nav>
+    </div>
+  );
+
+  return (
+    <aside
+      className={cn(
+        "shrink-0 border-r border-border/50 bg-sidebar/65 backdrop-blur-xl text-sidebar-foreground flex flex-col justify-between p-3 font-sans select-none overflow-y-auto transition-all duration-200",
+        isCollapsed ? "w-16 items-center px-2" : "w-64"
+      )}
+    >
+      <div className="space-y-3 w-full">
+        {/* Brand Header */}
+        <button
+          onClick={() => onSelectView("Landing")}
+          className={cn(
+            "w-full flex items-center gap-2.5 px-2 py-1 rounded-xl hover:bg-muted/60 transition-all text-left group cursor-pointer",
+            isCollapsed && "justify-center px-0"
+          )}
+          title="Return to Cinematic Landing Hero"
+        >
+          {isCollapsed ? (
+            <BrandIcon size="sm" glow interactive />
+          ) : (
+            <BrandLogo size="md" glow interactive />
+          )}
+        </button>
+
+        {/* Quick Action Button */}
+        {!isCollapsed ? (
+          <div className="px-1 pt-1">
+            <button
+              onClick={() => onOpenSessionModal?.()}
+              className="w-full flex items-center justify-center gap-2 rounded-lg bg-primary text-primary-foreground h-9 px-3 text-xs font-medium hover:bg-primary/90 transition-colors shadow-2xs cursor-pointer"
+            >
+              <Sparkles className="size-3.5" />
+              <span>{activeSession ? "Session Active" : "Delegate Session"}</span>
+            </button>
+          </div>
+        ) : (
+          <div className="flex flex-col items-center pt-1">
+            <Button
+              size="icon"
+              onClick={() => onOpenSessionModal?.()}
+              className="size-9 rounded-lg shadow-2xs"
+              title={activeSession ? "Session Active" : "Delegate Session"}
+            >
+              <Sparkles className="size-4" />
+            </Button>
+          </div>
+        )}
+
+        {/* Categorized Navigation */}
+        <div className="space-y-2 pt-1">
+          {renderNavGroup("Market Intelligence", marketNavItems)}
+          {renderNavGroup("Quantitative Swarm", swarmNavItems)}
+          {renderNavGroup("Execution & Studio", executionNavItems)}
+        </div>
+      </div>
+
+      {/* Footer Support Card & Web3 Status */}
+      <div className="space-y-2.5 pt-3 border-t border-border/50 w-full">
+        {!isCollapsed && (
+          <div className="rounded-xl border border-border/50 bg-card/40 backdrop-blur-md p-2.5 space-y-1 text-xs shadow-2xs">
+            <div className="flex items-center justify-between">
+              <span className="font-semibold text-foreground text-xs flex items-center gap-1.5">
+                <Zap className="size-3 text-foreground/70" />
+                Somnia L1
+              </span>
+              <Badge
+                variant="outline"
+                className="h-4 px-1.5 text-[9px] border-emerald-500/30 text-emerald-400 font-mono"
+              >
+                Shannon 50312
+              </Badge>
+            </div>
+            <p className="text-[11px] text-muted-foreground leading-relaxed">
+              Sub-100ms finality CLOB event trading with non-custodial session keys.
+            </p>
+          </div>
+        )}
+
+        {/* Wallet info or Connect row */}
+        {wallet?.address ? (
+          <div
+            className={cn(
+              "w-full flex items-center justify-between p-1.5 rounded-lg bg-card/40 border border-border/50 text-xs",
+              isCollapsed && "justify-center p-1"
+            )}
+          >
+            <div className="flex items-center gap-2 min-w-0">
+              <div className="size-1.5 rounded-full bg-emerald-400 shrink-0" />
+              {!isCollapsed && (
+                <div className="text-left truncate">
+                  <div className="font-mono text-xs text-foreground truncate">
+                    {formatAddress(wallet.address)}
+                  </div>
+                  <div className="text-[10px] font-mono text-muted-foreground truncate">
+                    {wallet.balanceCollateral || "0"} tUSDC
+                  </div>
+                </div>
+              )}
+            </div>
+            {!isCollapsed && activeSession && (
+              <span title="Session Key Active">
+                <Shield className="size-3 text-emerald-400 shrink-0" />
+              </span>
+            )}
+          </div>
+        ) : (
+          !isCollapsed && (
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={onConnectWallet}
+              className="w-full gap-1.5 text-xs font-normal text-muted-foreground hover:text-foreground"
+            >
+              <Coins className="size-3.5" />
+              <span>Connect Wallet</span>
+            </Button>
+          )
+        )}
+      </div>
+    </aside>
+  );
+};
+
+export default Sidebar;

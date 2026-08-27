@@ -1,5 +1,5 @@
-import React, { useState, useEffect } from 'react';
-import { Box, Zap, Brain, GitBranch, ArrowRight } from 'lucide-react';
+import React, { useState, useEffect, useCallback } from 'react';
+import { GitBranch, ArrowRight } from 'lucide-react';
 import './styles/landing.css';
 import './styles/terminal.css';
 import './styles/dashboard.css';
@@ -8,8 +8,9 @@ import type { AgentType } from './types/index.js';
 import { useMarkets } from './hooks/useMarkets.js';
 import { useTelemetry } from './hooks/useTelemetry.js';
 import { useSessionKey } from './hooks/useSessionKey.js';
-import { AppSidebar } from './components/layout/AppSidebar.js';
-import { DashboardHeader } from './components/layout/DashboardHeader.js';
+import { Shell } from './components/layout/Shell.js';
+import { CinematicHero, type DashboardViewType } from './components/landing/CinematicHero.js';
+import { CommandDialog } from './components/common/CommandDialog.js';
 import { OverviewView } from './components/dashboard/OverviewView.js';
 import { EdgeRadarView } from './components/dashboard/EdgeRadarView.js';
 import { MarketsDepthView } from './components/dashboard/MarketsDepthView.js';
@@ -27,81 +28,10 @@ const SweeperControls = React.lazy(() => import('./components/SweeperControls.js
 const AnalyticsView = React.lazy(() => import('./components/dashboard/AnalyticsView.js').then((m) => ({ default: m.AnalyticsView })));
 const SessionDelegationModal = React.lazy(() => import('./components/SessionDelegationModal.js').then((m) => ({ default: m.SessionDelegationModal })));
 
-interface StatItemProps {
-  glyph: string;
-  target: number;
-  suffix: string;
-  decimals: number;
-  label: string;
-  delayMs: number;
-  durationMs: number;
-  styleDelay: string;
-}
-
-const StatCounter: React.FC<StatItemProps> = ({
-  glyph,
-  target,
-  suffix,
-  decimals,
-  label,
-  delayMs,
-  durationMs,
-  styleDelay,
-}) => {
-  const [value, setValue] = useState(0);
-
-  useEffect(() => {
-    let animationFrameId: number;
-    let startTime: number | null = null;
-
-    const timer = setTimeout(() => {
-      const step = (timestamp: number) => {
-        if (!startTime) startTime = timestamp;
-        const progress = Math.min((timestamp - startTime) / durationMs, 1);
-        const easeOut = 1 - Math.pow(1 - progress, 3);
-        const current = easeOut * target;
-        setValue(current);
-
-        if (progress < 1) {
-          animationFrameId = requestAnimationFrame(step);
-        } else {
-          setValue(target);
-        }
-      };
-
-      animationFrameId = requestAnimationFrame(step);
-    }, delayMs);
-
-    return () => {
-      clearTimeout(timer);
-      if (animationFrameId) cancelAnimationFrame(animationFrameId);
-    };
-  }, [target, durationMs, delayMs]);
-
-  const formattedValue =
-    decimals > 0
-      ? value.toFixed(decimals)
-      : Math.floor(value).toLocaleString();
-
-  return (
-    <div className="stat-item anim" style={{ ['--d' as string]: styleDelay }}>
-      <div className="stat-top">
-        <span className="stat-glyph">{glyph}</span>
-        <span className="stat-value">
-          {formattedValue}
-          {suffix}
-        </span>
-      </div>
-      <span className="stat-label">{label}</span>
-    </div>
-  );
-};
-
 export const App: React.FC = () => {
-  const [activeNav, setActiveNav] = useState<string>('Landing');
+  const [activeNav, setActiveNav] = useState<DashboardViewType>('Landing');
   const [sidebarCollapsed, setSidebarCollapsed] = useState<boolean>(false);
-  const [mobileMenuOpen, setMobileMenuOpen] = useState<boolean>(false);
-  const [globalSearch, setGlobalSearch] = useState<string>('');
+  const [isCommandPaletteOpen, setIsCommandPaletteOpen] = useState<boolean>(false);
 
   // Live data hooks
   const { markets, selectedMarket, selectedMarketId, setSelectedMarketId, loading: isMarketsLoading } = useMarkets();
@@ -147,6 +77,27 @@ export const App: React.FC = () => {
     window.location.hash = '#studio';
   };
 
+  const handleToggleSidebar = useCallback(() => {
+    setSidebarCollapsed((prev) => !prev);
+  }, []);
+
+  // Global Keyboard Shortcuts: Cmd+K / Ctrl+K, Cmd+B / Ctrl+B
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'k') {
+        e.preventDefault();
+        setIsCommandPaletteOpen((prev) => !prev);
+      }
+      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'b') {
+        e.preventDefault();
+        setSidebarCollapsed((prev) => !prev);
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, []);
+
   // Listen to URL hash changes
   useEffect(() => {
     const handleHash = () => {
@@ -176,10 +127,11 @@ export const App: React.FC = () => {
     return () => window.removeEventListener('hashchange', handleHash);
   }, []);
 
-  // Keyboard Shortcuts (1-6 to navigate tabs, S to sweep, M to mute, Space to pause)
+  // Keyboard Shortcuts (1-6 to navigate tabs, S to sweep)
   useKeyboardShortcuts({
     onNavigateTab: (tab) => {
-      setActiveNav(tab);
+      const target = tab as DashboardViewType;
+      setActiveNav(target);
       if (tab === 'Overview') window.location.hash = '#overview';
       else if (tab === 'Edge Radar') window.location.hash = '#radar';
       else if (tab === 'Markets & Depth') window.location.hash = '#markets';
@@ -243,410 +195,199 @@ export const App: React.FC = () => {
     }
   }
 
-  const landingNavItems = [
-    { id: 'Overview', label: 'Terminal' },
-    { id: 'Edge Radar', label: 'Edge Radar' },
-    { id: 'Swarm Cockpit', label: 'Swarm Cockpit' },
-    { id: 'Docs', label: 'Docs' },
-  ];
-
   // ----------------------------------------------------------------------------
-  // 1. LANDING PAGE VIEW (Pristine Original Design)
+  // 1. CINEMATIC HERO LANDING VIEW
   // ----------------------------------------------------------------------------
   if (activeNav === 'Landing') {
     return (
-      <div className="page-wrapper">
-        {/* Full-bleed cover video behind all UI */}
-        <div className="bg">
-          <video className="bg-video" autoPlay muted loop playsInline>
-            <source
-              src="https://d8j0ntlcm91z4.cloudfront.net/user_38xzZboKViGWJOttwIXH07lWA1P/hf_20260809_012548_ef22562c-c0ae-4816-ad9d-f8922af4e6a7.mp4"
-              type="video/mp4"
-            />
-          </video>
-          <div className="bg-overlay"></div>
-        </div>
-
-        {/* 3-Region Single Viewport Layout */}
-        <div className="page">
-          {/* Header */}
-          <header className="header">
-            <a
-              href="#"
-              className="logo-btn"
-              aria-label="DreamPulse Home"
-              onClick={(e) => {
-                e.preventDefault();
-                setActiveNav('Landing');
-                window.location.hash = '';
-              }}
-            >
-              <img
-                src="/assets/logo.webp"
-                alt="DreamPulse Logo"
-                width="52"
-                height="52"
-                className="logo-img"
-              />
-            </a>
-
-            <nav className="nav-pill" aria-label="Main Navigation">
-              {landingNavItems.map((item) => (
-                <button
-                  key={item.id}
-                  type="button"
-                  className="nav-link"
-                  onClick={() => {
-                    setActiveNav(item.id);
-                    window.location.hash = item.id === 'Overview' ? '#overview' : item.id === 'Edge Radar' ? '#radar' : '#swarm';
-                  }}
-                >
-                  {item.label}
-                </button>
-              ))}
-            </nav>
-
-            <button
-              type="button"
-              className="sign-in-btn"
-              onClick={() => {
-                setActiveNav('Overview');
-                window.location.hash = '#overview';
-              }}
-            >
-              Launch Terminal
-            </button>
-
-            <button
-              type="button"
-              className={`burger-btn ${mobileMenuOpen ? 'open' : ''}`}
-              onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
-              aria-expanded={mobileMenuOpen}
-              aria-label="Toggle navigation menu"
-            >
-              <span className="burger-bar"></span>
-              <span className="burger-bar"></span>
-              <span className="burger-bar"></span>
-            </button>
-          </header>
-
-          {/* Mobile Overlay & Drawer */}
-          <div
-            className={`mobile-overlay ${mobileMenuOpen ? 'active' : ''}`}
-            onClick={() => setMobileMenuOpen(false)}
-          ></div>
-
-          <div
-            className={`mobile-sheet ${mobileMenuOpen ? 'active' : ''}`}
-            aria-hidden={!mobileMenuOpen}
-          >
-            {landingNavItems.map((item, idx) => (
-              <button
-                key={item.id}
-                type="button"
-                className="mobile-link"
-                style={{ animationDelay: `${0.05 + idx * 0.05}s` }}
-                onClick={() => {
-                  setActiveNav(item.id);
-                  setMobileMenuOpen(false);
-                  window.location.hash = item.id === 'Overview' ? '#overview' : '';
-                }}
-              >
-                {item.label}
-              </button>
-            ))}
-            <button
-              type="button"
-              className="sign-in-btn"
-              onClick={() => {
-                setActiveNav('Overview');
-                setMobileMenuOpen(false);
-                window.location.hash = '#overview';
-              }}
-            >
-              Launch Terminal
-            </button>
-          </div>
-
-          {/* Hero Center */}
-          <main className="hero">
-            <div className="trust-row anim" style={{ ['--d' as string]: '0.05s' }}>
-              <div className="avatar-stack">
-                <div className="avatar-ring" title="Somnia Layer 1 Network">
-                  <div className="avatar-inner">
-                    <Box size={14} aria-hidden="true" />
-                  </div>
-                </div>
-                <div className="avatar-ring" title="DreamDEX Event Contracts CLOB">
-                  <div className="avatar-inner">
-                    <Zap size={14} aria-hidden="true" />
-                  </div>
-                </div>
-                <div className="avatar-ring" title="Quantitative AI Engine">
-                  <div className="avatar-inner">
-                    <Brain size={14} aria-hidden="true" />
-                  </div>
-                </div>
-              </div>
-              <div className="trust-pill">
-                <span className="trust-text">Built for DreamDEX on Somnia L1</span>
-              </div>
-            </div>
-
-            <h1 className="headline">
-              <span className="headline-line">Autonomous Swarm</span>
-              <span className="headline-line">Engineered For Somnia</span>
-            </h1>
-
-            <p className="subhead anim" style={{ ['--d' as string]: '0.28s' }}>
-              Autonomous quantitative multi-agent swarm, real-time Φ(z) edge radar,
-              and non-custodial session key trading engineered for DreamDEX Event Contracts.
-            </p>
-
-            <button
-              type="button"
-              className="cta-btn anim-pulse"
-              style={{ ['--d' as string]: '0.4s' }}
-              onClick={() => {
-                setActiveNav('Overview');
-                window.location.hash = '#overview';
-              }}
-            >
-              Launch Cyber-Terminal
-            </button>
-          </main>
-
-          {/* Stats Footer */}
-          <footer className="stats-footer">
-            <StatCounter
-              glyph="<"
-              target={100}
-              suffix="ms"
-              decimals={0}
-              label="Pricing & Execution Latency"
-              delayMs={480}
-              durationMs={1500}
-              styleDelay="0.5s"
-            />
-            <StatCounter
-              glyph="%"
-              target={99.9}
-              suffix="%"
-              decimals={1}
-              label="Black-Scholes Precision"
-              delayMs={570}
-              durationMs={1580}
-              styleDelay="0.58s"
-            />
-            <StatCounter
-              glyph="*"
-              target={24}
-              suffix="/7"
-              decimals={0}
-              label="Autonomous Swarm Loop"
-              delayMs={660}
-              durationMs={1660}
-              styleDelay="0.66s"
-            />
-            <StatCounter
-              glyph="#"
-              target={50}
-              suffix="K+"
-              decimals={0}
-              label="Historical Replay Fills"
-              delayMs={750}
-              durationMs={1740}
-              styleDelay="0.74s"
-            />
-          </footer>
-        </div>
-      </div>
+      <CinematicHero
+        onEnterConsole={(view) => {
+          const target = view || 'Overview';
+          setActiveNav(target);
+          if (target === 'Overview') window.location.hash = '#overview';
+          else if (target === 'Edge Radar') window.location.hash = '#radar';
+          else if (target === 'Markets & Depth') window.location.hash = '#markets';
+          else if (target === 'AI Swarm Feed') window.location.hash = '#swarm';
+          else if (target === 'Swarm Cockpit') window.location.hash = '#cockpit';
+          else if (target === 'Strategy Studio') window.location.hash = '#studio';
+          else if (target === 'Analytics') window.location.hash = '#analytics';
+          else if (target === 'Settlement') window.location.hash = '#settlement';
+        }}
+        walletAddress={wallet.address}
+        onConnectWallet={connectWallet}
+      />
     );
   }
 
   // ----------------------------------------------------------------------------
-  // 2. SHADCN DASHBOARD WORKSPACE (Task-Oriented & Low Cognitive Load)
+  // 2. DASHBOARD WORKSPACE SHELL
   // ----------------------------------------------------------------------------
   return (
-    <div className="shadcn-dashboard-root">
-      {/* App Sidebar */}
-      <AppSidebar
-        activeTab={activeNav}
-        onSelectTab={(tab) => {
-          setActiveNav(tab);
-          if (tab === 'Landing') window.location.hash = '';
-          else if (tab === 'Overview') window.location.hash = '#overview';
-          else if (tab === 'Edge Radar') window.location.hash = '#radar';
-          else if (tab === 'Markets & Depth') window.location.hash = '#markets';
-          else if (tab === 'AI Swarm Feed') window.location.hash = '#swarm';
-          else if (tab === 'Swarm Cockpit') window.location.hash = '#cockpit';
-          else if (tab === 'Analytics') window.location.hash = '#analytics';
-          else if (tab === 'Strategy Studio') window.location.hash = '#studio';
-          else if (tab === 'Settlement') window.location.hash = '#settlement';
+    <>
+      <Shell
+        currentView={activeNav}
+        onSelectView={(view) => {
+          setActiveNav(view);
+          if (view === 'Landing') window.location.hash = '';
+          else if (view === 'Overview') window.location.hash = '#overview';
+          else if (view === 'Edge Radar') window.location.hash = '#radar';
+          else if (view === 'Markets & Depth') window.location.hash = '#markets';
+          else if (view === 'AI Swarm Feed') window.location.hash = '#swarm';
+          else if (view === 'Swarm Cockpit') window.location.hash = '#cockpit';
+          else if (view === 'Analytics') window.location.hash = '#analytics';
+          else if (view === 'Strategy Studio') window.location.hash = '#studio';
+          else if (view === 'Settlement') window.location.hash = '#settlement';
         }}
-        collapsed={sidebarCollapsed}
-        onToggleCollapse={() => setSidebarCollapsed(!sidebarCollapsed)}
-        activeMarketsCount={markets.length}
+        markets={markets}
+        selectedMarketId={selectedMarketId}
+        onSelectMarket={setSelectedMarketId}
+        isSidebarCollapsed={sidebarCollapsed}
+        onToggleSidebar={handleToggleSidebar}
+        onOpenCommandPalette={() => setIsCommandPaletteOpen(true)}
+        spotPrices={currentSpotPrices}
+        isConnected={isConnected}
+        latencyMs={latencyMs}
         wallet={wallet}
         activeSession={activeSession}
+        isFauceting={isSessionFauceting}
+        onClaimFaucet={claimCollateralFaucet}
+        onOpenSessionModal={() => setIsSessionModalOpen(true)}
         onConnectWallet={connectWallet}
         onDisconnectWallet={disconnectWallet}
-        onOpenSessionModal={() => setIsSessionModalOpen(true)}
-      />
-
-      {/* Main Content Area */}
-      <div className="shadcn-main-wrapper">
-        {/* Top Header */}
-        <DashboardHeader
-          activeTab={activeNav}
-          onSelectTab={(tab) => {
-            setActiveNav(tab);
-            if (tab === 'Overview') window.location.hash = '#overview';
-            else if (tab === 'Edge Radar') window.location.hash = '#radar';
-            else if (tab === 'Markets & Depth') window.location.hash = '#markets';
-            else if (tab === 'AI Swarm Feed') window.location.hash = '#swarm';
-            else if (tab === 'Swarm Cockpit') window.location.hash = '#cockpit';
-            else if (tab === 'Analytics') window.location.hash = '#analytics';
-            else if (tab === 'Strategy Studio') window.location.hash = '#studio';
-            else if (tab === 'Settlement') window.location.hash = '#settlement';
-          }}
-          collapsed={sidebarCollapsed}
-          onToggleCollapse={() => setSidebarCollapsed(!sidebarCollapsed)}
-          spotPrices={currentSpotPrices}
-          isConnected={isConnected}
-          latencyMs={latencyMs}
-          searchQuery={globalSearch}
-          onSearchChange={setGlobalSearch}
-          wallet={wallet}
-          activeSession={activeSession}
-          isFauceting={isSessionFauceting}
-          onClaimFaucet={claimCollateralFaucet}
-          onOpenSessionModal={() => setIsSessionModalOpen(true)}
-          onConnectWallet={connectWallet}
-          onDisconnectWallet={disconnectWallet}
-          onSwitchNetwork={switchNetwork}
-        />
-
+        onSwitchNetwork={switchNetwork}
+      >
         {/* Dynamic Task-Oriented Main View */}
-        <main
-          className="dashboard-content-area"
-          style={{
-            height: 'calc(100vh - 56px)',
-            overflow: (activeNav === 'Overview' || activeNav === 'Swarm Cockpit' || activeNav === 'Analytics' || activeNav === 'Strategy Studio' || activeNav === 'Settlement') ? 'auto' : 'hidden',
-          }}
-        >
-          {activeNav === 'Overview' ? (
-            <OverviewView
-              markets={markets}
-              liveTicks={liveTicks}
-              latencyMs={latencyMs}
-              agentThoughts={agentThoughts}
-              selectedMarketId={selectedMarketId}
-              onSelectMarket={setSelectedMarketId}
-              onNavigateToTab={(tab) => {
-                setActiveNav(tab);
-                if (tab === 'Edge Radar') window.location.hash = '#radar';
-                else if (tab === 'Markets & Depth') window.location.hash = '#markets';
-                else if (tab === 'AI Swarm Feed') window.location.hash = '#swarm';
-                else if (tab === 'Swarm Cockpit') window.location.hash = '#cockpit';
-                else if (tab === 'Analytics') window.location.hash = '#analytics';
-                else if (tab === 'Strategy Studio') window.location.hash = '#studio';
-                else if (tab === 'Settlement') window.location.hash = '#settlement';
-              }}
+        {activeNav === 'Overview' ? (
+          <OverviewView
+            markets={markets}
+            liveTicks={liveTicks}
+            latencyMs={latencyMs}
+            agentThoughts={agentThoughts}
+            selectedMarketId={selectedMarketId}
+            onSelectMarket={setSelectedMarketId}
+            onNavigateToTab={(tab) => {
+              const target = tab as DashboardViewType;
+              setActiveNav(target);
+              if (tab === 'Edge Radar') window.location.hash = '#radar';
+              else if (tab === 'Markets & Depth') window.location.hash = '#markets';
+              else if (tab === 'AI Swarm Feed') window.location.hash = '#swarm';
+              else if (tab === 'Swarm Cockpit') window.location.hash = '#cockpit';
+              else if (tab === 'Analytics') window.location.hash = '#analytics';
+              else if (tab === 'Strategy Studio') window.location.hash = '#studio';
+              else if (tab === 'Settlement') window.location.hash = '#settlement';
+            }}
+            wallet={wallet}
+            activeSession={activeSession}
+            isFauceting={isSessionFauceting}
+            onClaimFaucet={claimCollateralFaucet}
+            onOpenSessionModal={() => setIsSessionModalOpen(true)}
+            onRevokeSession={revokeSession}
+            onConnectWallet={connectWallet}
+            onSwitchNetwork={switchNetwork}
+            isLoading={isMarketsLoading}
+          />
+        ) : activeNav === 'Edge Radar' ? (
+          <EdgeRadarView
+            markets={markets}
+            selectedMarketId={selectedMarketId}
+            onSelectMarket={setSelectedMarketId}
+            liveTicks={liveTicks}
+            onNavigateToDepth={() => {
+              setActiveNav('Markets & Depth');
+              window.location.hash = '#markets';
+            }}
+            isLoading={isMarketsLoading}
+          />
+        ) : activeNav === 'Markets & Depth' ? (
+          <MarketsDepthView
+            markets={markets}
+            selectedMarket={selectedMarket}
+            selectedMarketId={selectedMarketId}
+            onSelectMarket={setSelectedMarketId}
+            liveTicks={liveTicks}
+            depthMap={depthMap}
+            currentSpotPrices={currentSpotPrices}
+            isLoading={isMarketsLoading}
+          />
+        ) : activeNav === 'AI Swarm Feed' ? (
+          <SwarmFeedView
+            agentThoughts={agentThoughts}
+            debugThoughts={debugThoughts}
+            isDebugEnabled={isDebugEnabled}
+            onToggleDebug={toggleDebugThoughts}
+            isConnected={isConnected}
+          />
+        ) : activeNav === 'Swarm Cockpit' ? (
+          <React.Suspense fallback={<div className="glass-card" style={{ minHeight: '340px', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: '12px' }}><Spinner size="lg" /><span style={{ fontSize: '13px', color: 'var(--muted-foreground)' }}>Loading Swarm Cockpit...</span></div>}>
+            <SwarmCockpitView
+              wallet={wallet}
+              onForkToStudio={handleForkToStudio}
+              onConnectWallet={connectWallet}
+            />
+          </React.Suspense>
+        ) : activeNav === 'Strategy Studio' ? (
+          <React.Suspense fallback={<div className="glass-card" style={{ minHeight: '340px', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: '12px' }}><Spinner size="lg" /><span style={{ fontSize: '13px', color: 'var(--muted-foreground)' }}>Loading Strategy Studio...</span></div>}>
+            <StrategyStudio
+              initialConfig={forkedStrategyConfig}
               wallet={wallet}
               activeSession={activeSession}
-              isFauceting={isSessionFauceting}
-              onClaimFaucet={claimCollateralFaucet}
               onOpenSessionModal={() => setIsSessionModalOpen(true)}
-              onRevokeSession={revokeSession}
               onConnectWallet={connectWallet}
-              onSwitchNetwork={switchNetwork}
-              isLoading={isMarketsLoading}
             />
-          ) : activeNav === 'Edge Radar' ? (
-            <EdgeRadarView
-              markets={markets}
-              selectedMarketId={selectedMarketId}
-              onSelectMarket={setSelectedMarketId}
-              liveTicks={liveTicks}
-              onNavigateToDepth={() => {
-                setActiveNav('Markets & Depth');
-                window.location.hash = '#markets';
+          </React.Suspense>
+        ) : activeNav === 'Analytics' ? (
+          <React.Suspense fallback={<div className="glass-card" style={{ minHeight: '340px', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: '12px' }}><Spinner size="lg" /><span style={{ fontSize: '13px', color: 'var(--muted-foreground)' }}>Loading Analytics...</span></div>}>
+            <AnalyticsView wallet={wallet} onConnectWallet={connectWallet} />
+          </React.Suspense>
+        ) : activeNav === 'Settlement' ? (
+          <React.Suspense fallback={<div className="glass-card" style={{ minHeight: '340px', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: '12px' }}><Spinner size="lg" /><span style={{ fontSize: '13px', color: 'var(--muted-foreground)' }}>Loading Settlement Sweeper...</span></div>}>
+            <SweeperControls
+              userAddress={wallet.address || undefined}
+              onConnectWallet={connectWallet}
+            />
+          </React.Suspense>
+        ) : (
+          <div className="glass-card p-8 rounded-xl text-center flex flex-col items-center justify-center">
+            <GitBranch className="size-9 text-cyan-400 mb-4" />
+            <h2 className="text-lg font-bold mb-2">{activeNav} Module</h2>
+            <p className="text-muted-foreground text-xs max-w-sm">
+              Configured for upcoming protocol phases. You can explore the live <strong>Terminal</strong> anytime.
+            </p>
+            <button
+              type="button"
+              className="mt-4 liquid-glass px-4 py-2 rounded-full text-xs font-medium flex items-center gap-2 text-white hover:bg-white/5 cursor-pointer"
+              onClick={() => {
+                setActiveNav('Overview');
+                window.location.hash = '#overview';
               }}
-              isLoading={isMarketsLoading}
-            />
-          ) : activeNav === 'Markets & Depth' ? (
-            <MarketsDepthView
-              markets={markets}
-              selectedMarket={selectedMarket}
-              selectedMarketId={selectedMarketId}
-              onSelectMarket={setSelectedMarketId}
-              liveTicks={liveTicks}
-              depthMap={depthMap}
-              currentSpotPrices={currentSpotPrices}
-              isLoading={isMarketsLoading}
-            />
-          ) : activeNav === 'AI Swarm Feed' ? (
-            <SwarmFeedView
-              agentThoughts={agentThoughts}
-              debugThoughts={debugThoughts}
-              isDebugEnabled={isDebugEnabled}
-              onToggleDebug={toggleDebugThoughts}
-              isConnected={isConnected}
-            />
-          ) : activeNav === 'Swarm Cockpit' ? (
-            <React.Suspense fallback={<div className="stat-card" style={{ minHeight: '340px', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: '12px' }}><Spinner size="lg" /><span style={{ fontSize: '13px', color: 'var(--muted-foreground)' }}>Loading Swarm Cockpit...</span></div>}>
-              <SwarmCockpitView
-                wallet={wallet}
-                onForkToStudio={handleForkToStudio}
-                onConnectWallet={connectWallet}
-              />
-            </React.Suspense>
-          ) : activeNav === 'Strategy Studio' ? (
-            <React.Suspense fallback={<div className="stat-card" style={{ minHeight: '340px', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: '12px' }}><Spinner size="lg" /><span style={{ fontSize: '13px', color: 'var(--muted-foreground)' }}>Loading Strategy Studio...</span></div>}>
-              <StrategyStudio
-                initialConfig={forkedStrategyConfig}
-                wallet={wallet}
-                activeSession={activeSession}
-                onOpenSessionModal={() => setIsSessionModalOpen(true)}
-                onConnectWallet={connectWallet}
-              />
-            </React.Suspense>
-          ) : activeNav === 'Analytics' ? (
-            <React.Suspense fallback={<div className="stat-card" style={{ minHeight: '340px', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: '12px' }}><Spinner size="lg" /><span style={{ fontSize: '13px', color: 'var(--muted-foreground)' }}>Loading Analytics...</span></div>}>
-              <AnalyticsView wallet={wallet} onConnectWallet={connectWallet} />
-            </React.Suspense>
-          ) : activeNav === 'Settlement' ? (
-            <React.Suspense fallback={<div className="stat-card" style={{ minHeight: '340px', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: '12px' }}><Spinner size="lg" /><span style={{ fontSize: '13px', color: 'var(--muted-foreground)' }}>Loading Settlement Sweeper...</span></div>}>
-              <SweeperControls
-                userAddress={wallet.address || undefined}
-                onConnectWallet={connectWallet}
-              />
-            </React.Suspense>
-          ) : (
-            /* Upcoming Protocol View Placeholder */
-            <div className="stat-card" style={{ minHeight: '340px', alignItems: 'center', justifyContent: 'center', textAlign: 'center' }}>
-              <GitBranch size={36} style={{ color: 'var(--brand-cyan)', marginBottom: '16px' }} />
-              <h2 style={{ fontSize: '18px', fontWeight: 700, margin: '0 0 8px 0' }}>{activeNav} Module</h2>
-              <p style={{ color: 'var(--muted-foreground)', fontSize: '13px', maxWidth: '420px' }}>
-                Configured for upcoming User Story phases. You can explore the live <strong>Mission Control</strong> anytime.
-              </p>
-              <button
-                type="button"
-                className="btn-glow"
-                style={{ marginTop: '16px' }}
-                onClick={() => {
-                  setActiveNav('Overview');
-                  window.location.hash = '#overview';
-                }}
-              >
-                <span>Back to Mission Control</span>
-                <ArrowRight size={11} />
-              </button>
-            </div>
-          )}
-        </main>
-      </div>
+            >
+              <span>Back to Terminal</span>
+              <ArrowRight className="size-3.5" />
+            </button>
+          </div>
+        )}
+      </Shell>
+
+      {/* Global Interactive Command Palette (⌘K / Ctrl+K) */}
+      <CommandDialog
+        isOpen={isCommandPaletteOpen}
+        onClose={() => setIsCommandPaletteOpen(false)}
+        markets={markets}
+        onSelectMarket={setSelectedMarketId}
+        onNavigateView={(view) => {
+          setActiveNav(view);
+          if (view === 'Overview') window.location.hash = '#overview';
+          else if (view === 'Edge Radar') window.location.hash = '#radar';
+          else if (view === 'Markets & Depth') window.location.hash = '#markets';
+          else if (view === 'AI Swarm Feed') window.location.hash = '#swarm';
+          else if (view === 'Swarm Cockpit') window.location.hash = '#cockpit';
+          else if (view === 'Strategy Studio') window.location.hash = '#studio';
+          else if (view === 'Settlement') window.location.hash = '#settlement';
+          else if (view === 'Analytics') window.location.hash = '#analytics';
+        }}
+        onOpenSessionModal={() => setIsSessionModalOpen(true)}
+        onClaimFaucet={claimCollateralFaucet}
+      />
 
       {/* Non-Custodial Session Key Delegation Modal */}
       <React.Suspense fallback={null}>
@@ -673,7 +414,7 @@ export const App: React.FC = () => {
           onClearError={clearSessionError}
         />
       </React.Suspense>
-    </div>
+    </>
   );
 };
 
