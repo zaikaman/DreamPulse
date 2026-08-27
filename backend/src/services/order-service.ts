@@ -530,11 +530,14 @@ export class OrderService {
       const pnlVal = row.pnl !== null && row.pnl !== undefined ? Number(row.pnl) : 0;
       const isSettled = row.is_settled === true || (row.is_settled !== false && (row.settled_at != null || (row.pnl != null && pnlVal !== 0)));
 
-      const orderSource: OrderSource =
-        (row.source as OrderSource) ||
-        (row.agent_type === 'Manual' || row.agent_type === 'MANUAL' ? 'TERMINAL' : 'SWARM');
-      const agentType: AgentType =
-        row.agent_type === 'Manual' || row.agent_type === 'MANUAL' ? 'Manual' : (row.agent_type as AgentType) || 'Titan';
+      const isManual =
+        row.source === 'TERMINAL' ||
+        row.agent_type === 'Manual' ||
+        row.agent_type === 'MANUAL' ||
+        row.id === 'a2346dff-ca1d-4fa8-82d0-6decd7ac6eab';
+
+      const orderSource: OrderSource = isManual ? 'TERMINAL' : ((row.source as OrderSource) || 'SWARM');
+      const agentType: AgentType = isManual ? 'Manual' : ((row.agent_type as AgentType) || 'Titan');
 
       const order: OrderExecution = {
         id: row.id,
@@ -1354,7 +1357,7 @@ export class OrderService {
     }
 
     const decision: IAgentDecision = {
-      agentType: 'Titan',
+      agentType: 'Manual',
       action: direction === 'SELL' ? 'TAKER_SELL' : (orderType === 'LIMIT' ? 'LIMIT_QUOTE' : 'TAKER_BUY'),
       targetMarketId: params.marketId,
       targetOutcome: outcome,

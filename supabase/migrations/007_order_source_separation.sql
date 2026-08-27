@@ -16,3 +16,12 @@ CREATE INDEX IF NOT EXISTS idx_orders_user_source_created
 
 CREATE INDEX IF NOT EXISTS idx_orders_source_status
     ON public.orders (source, status);
+
+-- ------------------------------------------------------------------------------
+-- 2. Backfill manual discretionary trading terminal orders
+-- ------------------------------------------------------------------------------
+UPDATE public.orders
+   SET source = 'TERMINAL',
+       agent_type = 'Manual'
+ WHERE agent_type IN ('Manual', 'MANUAL')
+    OR id = 'a2346dff-ca1d-4fa8-82d0-6decd7ac6eab';
