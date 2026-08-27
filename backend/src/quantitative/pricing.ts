@@ -308,6 +308,34 @@ export function calculateFairValue(
   };
 }
 
+/**
+ * Calculates a stabilized, multi-factor confluence probability for binary event contracts.
+ * Blends Black-Scholes theoretical value with short-term drift momentum and depth skew,
+ * eliminating single-tick pin-risk flip-flopping.
+ *
+ * @param bsmProbYes Theoretical BSM cumulative normal probability
+ * @param spotDrift1m 1-minute percentage spot drift (e.g. +0.002 for +0.20%)
+ * @param spotDrift5m 5-minute percentage spot drift
+ * @param orderBookSkew Normalized order book depth skew in [-1, 1]
+ */
+export function calculateConfluenceProbability(
+  bsmProbYes: number,
+  spotDrift1m: number = 0,
+  spotDrift5m: number = 0,
+  orderBookSkew: number = 0,
+): number {
+  // Momentum sigmoid: transforms percentage drift into a probability modifier [0, 1]
+  const momentumSignal = 1 / (1 + Math.exp(-(spotDrift1m * 250 + spotDrift5m * 150)));
+
+  // Depth imbalance modifier in [0.35, 0.65]
+  const depthSignal = 0.5 + Math.max(-1, Math.min(1, orderBookSkew)) * 0.15;
+
+  // Multi-factor blend: 60% BSM Model + 28% Spot Momentum + 12% Depth Imbalance
+  const blended = 0.60 * bsmProbYes + 0.28 * momentumSignal + 0.12 * depthSignal;
+
+  return Number(Math.min(0.99, Math.max(0.01, blended)).toFixed(4));
+}
+
 export interface EdgeEvaluation {
   impliedProbYes: number;
   fairValueYes: number;

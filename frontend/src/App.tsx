@@ -405,20 +405,32 @@ export const App: React.FC = () => {
         isOpen={isCommandPaletteOpen}
         onClose={() => setIsCommandPaletteOpen(false)}
         markets={markets}
-        onSelectMarket={setSelectedMarketId}
+        onSelectMarket={(marketId) => {
+          setSelectedMarketId(marketId);
+          setActiveNav('Trade Terminal');
+          window.location.hash = '#terminal';
+        }}
         onNavigateView={(view) => {
           setActiveNav(view);
           if (view === 'Overview') window.location.hash = '#overview';
           else if (view === 'Edge Radar') window.location.hash = '#radar';
-          else if (view === 'Markets & Depth') window.location.hash = '#markets';
+          else if (view === 'Markets' || view === 'Markets & Depth') window.location.hash = '#markets';
+          else if (view === 'Trade Terminal') window.location.hash = '#terminal';
           else if (view === 'AI Swarm Feed') window.location.hash = '#swarm';
           else if (view === 'Swarm Cockpit') window.location.hash = '#cockpit';
           else if (view === 'Strategy Studio') window.location.hash = '#studio';
           else if (view === 'Settlement') window.location.hash = '#settlement';
           else if (view === 'Analytics') window.location.hash = '#analytics';
+          else if (view === 'Landing') window.location.hash = '';
         }}
         onOpenSessionModal={handleOpenSessionModal}
         onClaimFaucet={claimCollateralFaucet}
+        wallet={wallet}
+        activeSession={activeSession}
+        onConnectWallet={connectWallet}
+        onDisconnectWallet={disconnectWallet}
+        onToggleSidebar={handleToggleSidebar}
+        onToggleDebug={toggleDebugThoughts}
       />
 
       {/* Non-Custodial Session Key Delegation Modal */}

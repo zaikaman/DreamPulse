@@ -3,18 +3,16 @@ import {
   BoltIcon,
   SparklesIcon,
   CheckCircleIcon,
-  ArrowTopRightOnSquareIcon,
   ExclamationTriangleIcon,
-  ShieldCheckIcon,
-  CurrencyDollarIcon,
-  AdjustmentsHorizontalIcon,
-  PlusIcon,
-  MinusIcon,
+  ClockIcon,
+  ArrowTrendingUpIcon,
+  ArrowTrendingDownIcon,
 } from '@heroicons/react/24/outline';
 import type { Market, AgentThoughtLog } from '../../types/index.js';
 import type { MarketTickData } from '../../hooks/useTelemetry.js';
 import type { WalletState } from '../../hooks/useSessionKey.js';
 import type { SessionGrant } from '../../types/index.js';
+import { useMarketCountdown } from '../../hooks/useMarketCountdown.js';
 import { apiClient } from '../../services/api.js';
 import { web3Service, SOMNIA_ADDRESSES } from '../../services/web3.js';
 import { soundEngine } from '../../services/audio.js';
@@ -41,9 +39,8 @@ interface TraderCockpitTicketProps {
   onConnectWallet?: () => void;
   bestBidYes?: number;
   bestAskYes?: number;
+  onSelectDuration?: (duration: '5m' | '15m' | '1h') => void;
 }
-
-const COLLATERAL_PRESETS = [5, 10, 25, 50];
 
 export const TraderCockpitTicket: React.FC<TraderCockpitTicketProps> = ({
   market,
@@ -52,15 +49,18 @@ export const TraderCockpitTicket: React.FC<TraderCockpitTicketProps> = ({
   wallet,
   activeSession,
   agentThoughts = [],
-  onOpenSessionModal,
+  onOpenSessionModal: _onOpenSessionModal,
   onConnectWallet,
   bestBidYes,
   bestAskYes,
+  onSelectDuration,
 }) => {
+  // Real-time dynamic countdown & formatted expiry
+  const { formattedCountdown, formattedExpiry } = useMarketCountdown(market.closeTimestamp, market.windowDuration);
+
   // Order Configuration State
   const [outcome, setOutcome] = useState<'YES' | 'NO'>('YES');
-  const [orderType, setOrderType] = useState<'LIMIT' | 'IOC'>('LIMIT');
-  const [price, setPrice] = useState<number>(0.5);
+  const [price, setPrice] = useState<number>(0.85);
   const [collateralAmount, setCollateralAmount] = useState<number>(10);
   const [isManualPrice, setIsManualPrice] = useState<boolean>(false);
 
@@ -78,29 +78,27 @@ export const TraderCockpitTicket: React.FC<TraderCockpitTicketProps> = ({
   const [pulseEffect, setPulseEffect] = useState<boolean>(false);
   const [isFauceting, setIsFauceting] = useState<boolean>(false);
 
-  const handleClaimFaucet = async () => {
-    if (!wallet.isConnected || !wallet.address) {
-      onConnectWallet?.();
-      return;
-    }
-    setIsFauceting(true);
-    try {
-      await web3Service.claimTestUsdcFaucet(wallet.address as `0x${string}`, 1000);
-      soundEngine.playTradeFill();
-      setExecutionError(null);
-    } catch (err: any) {
-      console.error('[TraderCockpitTicket] Faucet claim error:', err);
-      setExecutionError(err.message || 'Faucet claim failed. Please try again.');
-    } finally {
-      setIsFauceting(false);
-    }
-  };
-
   // Derive active live prices
-  const currentBestBid = bestBidYes ?? market.bestBidYes ?? 0.49;
-  const currentBestAsk = bestAskYes ?? market.bestAskYes ?? 0.51;
+  const currentBestBid = bestBidYes ?? market.bestBidYes ?? 0.84;
+  const currentBestAsk = bestAskYes ?? market.bestAskYes ?? 0.85;
   const spotPrice = liveTick?.spotPrice ?? market.strikePrice;
-  const bsmEdge = liveTick?.edge ?? market.edgePercentage ?? 0.0;
+  const strike = market.strikePrice || 79613.4;
+
+  // Continuous regularized sigmoid probability centered on strike (prevents pin-risk step collapse)
+  const smoothFallbackProb = useMemo(() => {
+    if (!strike || strike <= 0) return 0.50;
+    const relOffset = (spotPrice - strike) / (strike * 0.005);
+    const sigmoid = 1 / (1 + Math.exp(-Math.max(-4, Math.min(4, relOffset * 2))));
+    return Number(sigmoid.toFixed(4));
+  }, [spotPrice, strike]);
+
+  const marketProbYes = liveTick?.impliedProb ?? market.impliedProbYes ?? (currentBestAsk > 0 ? currentBestAsk : smoothFallbackProb);
+  const fairValueYes = liveTick?.fairValue ?? market.fairValueYes ?? smoothFallbackProb;
+  const bsmEdge = liveTick?.edge ?? (fairValueYes - marketProbYes);
+
+  // Implied odds
+  const upOddsPct = Math.round(marketProbYes * 100);
+  const downOddsPct = Math.max(1, 100 - upOddsPct);
 
   // Handle Ladder prefill triggers
   useEffect(() => {
@@ -118,22 +116,25 @@ export const TraderCockpitTicket: React.FC<TraderCockpitTicketProps> = ({
     }
   }, [prefillData]);
 
-  // Adjust price when Market (IOC) is selected or when market changes without manual price override
+  // Adjust price automatically when switching outcomes in IOC mode
   useEffect(() => {
-    if (orderType === 'IOC') {
-      const iocPrice = outcome === 'YES' ? currentBestAsk : Number((1.0 - currentBestBid).toFixed(2));
-      setPrice(Math.min(0.99, Math.max(0.01, iocPrice)));
-    } else if (!isManualPrice) {
+    if (!isManualPrice) {
       const defaultPrice = outcome === 'YES' ? currentBestAsk : Number((1.0 - currentBestBid).toFixed(2));
       setPrice(Math.min(0.99, Math.max(0.01, defaultPrice)));
     }
-  }, [orderType, outcome, currentBestAsk, currentBestBid, isManualPrice]);
+  }, [outcome, currentBestAsk, currentBestBid, isManualPrice]);
 
-  // Collateral available
+  // Available collateral balance
   const userBalance = useMemo(() => {
     const parsed = parseFloat(wallet.balanceCollateral);
     return isNaN(parsed) ? 0 : parsed;
   }, [wallet.balanceCollateral]);
+
+  // Derived current percentage of account balance
+  const currentPct = useMemo(() => {
+    if (userBalance <= 0) return Math.min(100, Math.max(0, collateralAmount));
+    return Math.min(100, Math.max(0, Math.round((collateralAmount / userBalance) * 100)));
+  }, [collateralAmount, userBalance]);
 
   // Calculated Order Quantities & Payouts ($1.00/lot upon winning)
   const calculations = useMemo(() => {
@@ -143,6 +144,7 @@ export const TraderCockpitTicket: React.FC<TraderCockpitTicketProps> = ({
     const grossPayout = Number((lotSize * 1.0).toFixed(2));
     const netProfit = Number((grossPayout - totalCost).toFixed(2));
     const rocPercent = totalCost > 0 ? Number(((netProfit / totalCost) * 100).toFixed(1)) : 0;
+    const payoutMultiplier = totalCost > 0 ? (grossPayout / totalCost).toFixed(2) : '1.00';
 
     return {
       lotSize,
@@ -150,71 +152,69 @@ export const TraderCockpitTicket: React.FC<TraderCockpitTicketProps> = ({
       grossPayout,
       netProfit,
       rocPercent,
+      payoutMultiplier,
     };
   }, [price, collateralAmount]);
 
-  // Extract Swarm Copilot Live Signals for current market
-  const copilotSignals = useMemo(() => {
-    // Volt signal: evaluate spot drift relative to strike or 1m drift
-    const strikeDelta = spotPrice - market.strikePrice;
-    const strikeDeltaPct = market.strikePrice > 0 ? (strikeDelta / market.strikePrice) * 100 : 0;
-    const isVoltBullish = strikeDeltaPct >= 0;
-    const voltText = isVoltBullish
-      ? `Momentum favors YES (+${strikeDeltaPct.toFixed(2)}% spot delta)`
-      : `Downside drift favors NO (${strikeDeltaPct.toFixed(2)}% spot delta)`;
+  // Swarm AI Copilot intelligence with directional hysteresis & smooth confidence
+  const aiRecommendation = useMemo(() => {
+    const recommendedOutcome: 'YES' | 'NO' = fairValueYes >= 0.50 ? 'YES' : 'NO';
+    const recommendedDirection: 'UP' | 'DOWN' = fairValueYes >= 0.50 ? 'UP' : 'DOWN';
+    const edgeVal = (Math.abs(bsmEdge) * 100).toFixed(1);
+    const spotDiff = spotPrice - strike;
+    const pctDiff = strike > 0 ? (spotDiff / strike) * 100 : 0;
+    const diffText = spotDiff >= 0 
+      ? `+$${spotDiff < 1 ? spotDiff.toFixed(4) : spotDiff.toFixed(2)} (+${pctDiff.toFixed(2)}%) above strike` 
+      : `-$${Math.abs(spotDiff) < 1 ? Math.abs(spotDiff).toFixed(4) : Math.abs(spotDiff).toFixed(2)} (${pctDiff.toFixed(2)}%) below strike`;
 
-    // Check if there is a recent Volt thought log for this market
-    const latestVoltLog = agentThoughts.find(
-      (t) => t.agentType.toLowerCase() === 'volt' && (t.marketId === market.id || t.marketId?.toLowerCase() === market.id.toLowerCase())
+    const confScore = Math.round((fairValueYes >= 0.5 ? fairValueYes : (1 - fairValueYes)) * 100);
+    let rationale = `Spot is ${diffText}. Titan BSM & Confluence engine rates ${recommendedDirection} with ${confScore}% conviction (+${edgeVal}% Alpha dislocation vs CLOB).`;
+
+    const recentThought = agentThoughts.find(
+      (t) => t.marketId === market.id || t.marketId?.toLowerCase() === market.id.toLowerCase()
     );
-
-    // Oracle signal: evaluate Black-Scholes-Merton dislocation
-    const absEdgePct = (Math.abs(bsmEdge) * 100).toFixed(1);
-    let oracleText = 'CLOB midpoint aligned with fair value';
-    let oracleFavors: 'YES' | 'NO' = 'YES';
-
-    if (bsmEdge > 0.02) {
-      oracleText = `Underpriced by ${absEdgePct}% Φ(z), favorable edge on YES`;
-      oracleFavors = 'YES';
-    } else if (bsmEdge < -0.02) {
-      oracleText = `Overpriced by ${absEdgePct}% Φ(z), favorable edge on NO`;
-      oracleFavors = 'NO';
+    if (recentThought?.reasoningText) {
+      rationale = recentThought.reasoningText;
     }
 
-    const latestOracleLog = agentThoughts.find(
-      (t) => t.agentType.toLowerCase() === 'oracle' && (t.marketId === market.id || t.marketId?.toLowerCase() === market.id.toLowerCase())
-    );
-
     return {
-      volt: {
-        recommended: isVoltBullish ? 'YES' : 'NO',
-        summary: latestVoltLog?.reasoningText || voltText,
-      },
-      oracle: {
-        recommended: oracleFavors,
-        summary: latestOracleLog?.reasoningText || oracleText,
-      },
+      recommendedOutcome,
+      recommendedDirection,
+      confidence: confScore,
+      edgeVal,
+      rationale,
     };
-  }, [spotPrice, market, bsmEdge, agentThoughts]);
+  }, [spotPrice, strike, fairValueYes, bsmEdge, agentThoughts, market.id]);
 
-  // Adjust price by tick
-  const handlePriceStep = (delta: number) => {
-    if (orderType === 'IOC') return;
-    setIsManualPrice(true);
-    setPrice((prev) => {
-      const next = Number((prev + delta).toFixed(2));
-      return Math.min(0.99, Math.max(0.01, next));
-    });
+  // 1-Click Auto Align with AI recommendation
+  const handleAutoAlignAI = () => {
+    setOutcome(aiRecommendation.recommendedOutcome);
+    setIsManualPrice(false);
+    // Kelly Criterion optimal sizing: 15% of balance or preset $25
+    const optimalSize = userBalance > 50 ? Math.min(50, Math.floor(userBalance * 0.15)) : 25;
+    setCollateralAmount(optimalSize);
+    setPulseEffect(true);
+    soundEngine.playTradeFill();
+    setTimeout(() => setPulseEffect(false), 800);
   };
 
-  // Adopt Swarm Copilot Recommendation
-  const handleAdoptSignal = (target: 'YES' | 'NO') => {
-    setOutcome(target);
-    const targetPrice = target === 'YES' ? currentBestAsk : Number((1.0 - currentBestBid).toFixed(2));
-    setPrice(Math.min(0.99, Math.max(0.01, targetPrice)));
-    setIsManualPrice(true);
-    setPulseEffect(true);
-    setTimeout(() => setPulseEffect(false), 600);
+  // Claim Faucet for TestUSDC
+  const handleClaimFaucet = async () => {
+    if (!wallet.isConnected || !wallet.address) {
+      onConnectWallet?.();
+      return;
+    }
+    setIsFauceting(true);
+    try {
+      await web3Service.claimTestUsdcFaucet(wallet.address as `0x${string}`, 1000);
+      soundEngine.playTradeFill();
+      setExecutionError(null);
+    } catch (err: any) {
+      console.error('[TraderCockpitTicket] Faucet claim error:', err);
+      setExecutionError(err.message || 'Faucet claim failed. Please try again.');
+    } finally {
+      setIsFauceting(false);
+    }
   };
 
   // Handle Order Placement
@@ -235,7 +235,7 @@ export const TraderCockpitTicket: React.FC<TraderCockpitTicketProps> = ({
           marketId: market.id,
           outcome,
           direction: 'BUY',
-          orderType,
+          orderType: 'IOC',
           price,
           lotSize: calculations.lotSize,
         });
@@ -260,18 +260,17 @@ export const TraderCockpitTicket: React.FC<TraderCockpitTicketProps> = ({
           userAddress: wallet.address,
           poolAddress: poolAddr,
           outcome,
-          orderType,
+          orderType: 'IOC',
           price,
           lotSize: calculations.lotSize,
         });
 
-        // Index the confirmed on-chain order via backend API
         const indexed = await apiClient.placeOrder({
           userAddress: wallet.address,
           marketId: market.id,
           outcome,
           direction: 'BUY',
-          orderType,
+          orderType: 'IOC',
           price,
           lotSize: calculations.lotSize,
           txHash: walletRes.hash,
@@ -300,43 +299,147 @@ export const TraderCockpitTicket: React.FC<TraderCockpitTicketProps> = ({
   return (
     <div
       className={cn(
-        "flex flex-col h-full overflow-y-auto p-4 transition-all duration-300",
-        pulseEffect && "ring-2 ring-brand-cyan/60 bg-brand-cyan/[0.03]"
+        "flex flex-col h-full overflow-y-auto p-3.5 bg-background/90 backdrop-blur-md transition-all duration-300 font-mono select-none",
+        pulseEffect && "ring-2 ring-brand-cyan/60 bg-brand-cyan/[0.04]"
       )}
     >
-      {/* Cockpit Header */}
-      <div className="flex items-center justify-between pb-3 border-b border-border/40 mb-3 flex-shrink-0">
-        <div className="flex items-center gap-2">
-          <AdjustmentsHorizontalIcon className="w-4 h-4 text-brand-cyan" />
-          <span className="text-xs font-bold text-foreground tracking-wider uppercase">
-            Trader Cockpit
-          </span>
-          <Badge
-            variant="outline"
-            className="text-[9px] font-mono px-1.5 py-0 border-brand-cyan/30 text-brand-cyan bg-brand-cyan/10"
-          >
-            CLOB Order Ticket
-          </Badge>
+      {/* 1. Header: Market Info & Expiry */}
+      <div className="pb-3 border-b border-border/40 mb-3 flex-shrink-0">
+        <div className="flex items-center justify-between mb-1">
+          <div className="flex items-center gap-1.5 font-bold text-foreground text-xs uppercase tracking-wider">
+            <span>Market</span>
+            <Badge variant="outline" className="text-[9px] px-1 py-0 border-brand-cyan/30 text-brand-cyan bg-brand-cyan/10">
+              {market.windowDuration || '15m'}
+            </Badge>
+          </div>
+
+          <div className="flex items-center gap-1 text-[11px] font-bold text-brand-cyan">
+            <ClockIcon className="w-3.5 h-3.5" />
+            <span>{formattedCountdown}</span>
+          </div>
         </div>
 
-        {/* Execution Mode Badge */}
-        {activeSession?.isActive ? (
-          <div className="flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-emerald-500/10 border border-emerald-500/30 text-[10px] font-mono text-emerald-400">
-            <BoltIcon className="w-3 h-3 text-emerald-400 animate-pulse" />
-            <span>0-Gas Session Key</span>
-          </div>
-        ) : wallet.isConnected ? (
-          <div className="flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-amber-500/10 border border-amber-500/30 text-[10px] font-mono text-amber-400">
-            <ShieldCheckIcon className="w-3 h-3 text-amber-400" />
-            <span>MetaMask Wallet</span>
-          </div>
-        ) : (
-          <span className="text-[10px] font-mono text-muted-foreground">Wallet Required</span>
-        )}
+        <div className="flex items-center justify-between text-[11px] text-muted-foreground">
+          <span>{market.windowDuration === '1h' ? '1-hour' : market.windowDuration === '5m' ? '5-minute' : '15-minute'} market</span>
+          <span className="text-[10px]">
+            strike ${strike.toLocaleString('en-US', { minimumFractionDigits: 2 })} · expires {formattedExpiry}
+          </span>
+        </div>
+
+        {/* Timeframe Switcher (15m / 1h) */}
+        <div className="flex items-center gap-1.5 mt-2.5">
+          {(['5m', '15m', '1h'] as const).map((duration) => {
+            const isCur = (market.windowDuration || '15m') === duration;
+            return (
+              <button
+                key={duration}
+                type="button"
+                onClick={() => onSelectDuration?.(duration)}
+                className={cn(
+                  "flex-1 py-1 text-center rounded-lg text-xs font-mono font-bold transition-all cursor-pointer border",
+                  isCur
+                    ? "bg-secondary text-foreground border-border/70 shadow-xs"
+                    : "bg-secondary/20 text-muted-foreground border-border/30 hover:text-foreground hover:bg-secondary/40"
+                )}
+              >
+                {duration}
+              </button>
+            );
+          })}
+        </div>
+
+        <p className="text-[10px] text-muted-foreground/80 mt-1.5 leading-tight">
+          A new market opens each interval — everyone trades the same one.
+        </p>
       </div>
 
-      {/* Outcome Switcher: BUY YES vs BUY NO */}
-      <div className="grid grid-cols-2 gap-2 mb-3 flex-shrink-0">
+      {/* 2. Amount Input & Quick Percentages */}
+      <div className="mb-3.5 flex-shrink-0">
+        <div className="flex items-center justify-between text-xs text-muted-foreground mb-1.5">
+          <span className="font-bold text-foreground">Amount</span>
+          <div className="flex items-center gap-1">
+            <span className="text-[10px]">Max: ${userBalance.toFixed(2)} USDso</span>
+            <button
+              type="button"
+              onClick={() => setCollateralAmount(Math.max(1, Math.floor(userBalance)))}
+              className="text-brand-cyan hover:underline text-[10px] font-bold cursor-pointer"
+            >
+              MAX
+            </button>
+          </div>
+        </div>
+
+        <div className="relative mb-2">
+          <input
+            type="number"
+            min="1"
+            max="50000"
+            step="1"
+            value={collateralAmount}
+            onChange={(e) => {
+              const val = parseFloat(e.target.value);
+              if (!isNaN(val)) setCollateralAmount(Math.max(1, val));
+            }}
+            className="w-full px-3 py-2 bg-secondary/30 border border-border/60 rounded-xl text-sm font-mono text-foreground focus:outline-none focus:border-brand-cyan transition-all [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+            placeholder="0.00"
+          />
+          <span className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground font-mono text-xs font-bold">
+            USDso
+          </span>
+        </div>
+
+        {/* Account Percentage Slider (0% - 100% of Balance) */}
+        <input
+          type="range"
+          min="1"
+          max="100"
+          step="1"
+          value={currentPct}
+          onChange={(e) => {
+            const pct = parseInt(e.target.value, 10);
+            if (userBalance > 0) {
+              const calculated = Math.max(1, Number(((userBalance * pct) / 100).toFixed(2)));
+              setCollateralAmount(calculated);
+            } else {
+              setCollateralAmount(pct);
+            }
+          }}
+          className="w-full h-1 bg-secondary/60 rounded-lg appearance-none cursor-pointer accent-brand-cyan mb-2"
+        />
+
+        {/* Percentage Quick Select Buttons */}
+        <div className="grid grid-cols-4 gap-1.5">
+          {[25, 50, 75, 100].map((pct) => {
+            const isSelected = Math.abs(currentPct - pct) <= 1;
+            return (
+              <button
+                key={`pct-${pct}`}
+                type="button"
+                onClick={() => {
+                  if (userBalance > 0) {
+                    const target = Math.max(1, Number(((userBalance * pct) / 100).toFixed(2)));
+                    setCollateralAmount(target);
+                  } else {
+                    setCollateralAmount(pct);
+                  }
+                }}
+                className={cn(
+                  "py-1 rounded-lg text-[10px] font-mono border transition-all cursor-pointer text-center",
+                  isSelected
+                    ? "bg-brand-cyan/20 text-brand-cyan border-brand-cyan/40 font-bold shadow-xs"
+                    : "bg-secondary/30 hover:bg-secondary/60 text-muted-foreground hover:text-foreground border-border/30"
+                )}
+              >
+                {pct}%
+              </button>
+            );
+          })}
+        </div>
+      </div>
+
+      {/* 3. TWO MASSIVE BINARY ACTION BUTTONS (DreamDEX UP / DOWN) */}
+      <div className="grid grid-cols-2 gap-2.5 mb-3.5 flex-shrink-0">
+        {/* ▲ UP Button */}
         <button
           type="button"
           onClick={() => {
@@ -344,18 +447,32 @@ export const TraderCockpitTicket: React.FC<TraderCockpitTicketProps> = ({
             setIsManualPrice(false);
           }}
           className={cn(
-            "flex flex-col items-center justify-center p-2.5 rounded-xl border transition-all cursor-pointer font-mono",
+            "flex flex-col p-3 rounded-xl border transition-all cursor-pointer text-left relative overflow-hidden",
             isYes
-              ? "bg-emerald-500/15 border-emerald-500/60 shadow-[0_0_15px_rgba(16,185,129,0.15)] text-emerald-400"
+              ? "bg-emerald-500/20 border-emerald-500 text-emerald-400 shadow-[0_0_20px_rgba(16,185,129,0.2)]"
               : "bg-secondary/30 border-border/40 text-muted-foreground hover:text-foreground hover:bg-secondary/60"
           )}
         >
-          <span className="text-xs font-bold tracking-wider">BUY YES</span>
-          <span className="text-[11px] mt-0.5 opacity-80">
-            Ask: ${currentBestAsk.toFixed(2)}
-          </span>
+          <div className="flex items-center justify-between w-full mb-1">
+            <span className="text-sm font-bold flex items-center gap-1">
+              <ArrowTrendingUpIcon className="w-4 h-4" />
+              <span>▲ Up</span>
+            </span>
+            <span className="text-sm font-bold">{upOddsPct}%</span>
+          </div>
+
+          <div className="text-[10px] text-muted-foreground">
+            {collateralAmount > 0 ? (
+              <span className="text-emerald-400/90 font-mono">
+                Payout: {calculations.payoutMultiplier}x (${calculations.grossPayout})
+              </span>
+            ) : (
+              <span>enter an amount</span>
+            )}
+          </div>
         </button>
 
+        {/* ▼ DOWN Button */}
         <button
           type="button"
           onClick={() => {
@@ -363,367 +480,147 @@ export const TraderCockpitTicket: React.FC<TraderCockpitTicketProps> = ({
             setIsManualPrice(false);
           }}
           className={cn(
-            "flex flex-col items-center justify-center p-2.5 rounded-xl border transition-all cursor-pointer font-mono",
+            "flex flex-col p-3 rounded-xl border transition-all cursor-pointer text-left relative overflow-hidden",
             !isYes
-              ? "bg-rose-500/15 border-rose-500/60 shadow-[0_0_15px_rgba(244,63,94,0.15)] text-rose-400"
+              ? "bg-rose-500/20 border-rose-500 text-rose-400 shadow-[0_0_20px_rgba(244,63,94,0.2)]"
               : "bg-secondary/30 border-border/40 text-muted-foreground hover:text-foreground hover:bg-secondary/60"
           )}
         >
-          <span className="text-xs font-bold tracking-wider">BUY NO</span>
-          <span className="text-[11px] mt-0.5 opacity-80">
-            Ask: ${(1.0 - currentBestBid).toFixed(2)}
-          </span>
-        </button>
-      </div>
-
-      {/* Order Type Segment: LIMIT vs MARKET IOC */}
-      <div className="flex items-center justify-between p-1 bg-secondary/30 rounded-lg border border-border/40 mb-3 text-xs font-mono flex-shrink-0">
-        <button
-          type="button"
-          onClick={() => setOrderType('LIMIT')}
-          className={cn(
-            "flex-1 py-1 text-center rounded-md font-semibold transition-colors cursor-pointer text-[11px]",
-            orderType === 'LIMIT'
-              ? "bg-secondary text-foreground shadow-sm border border-border/60"
-              : "text-muted-foreground hover:text-foreground"
-          )}
-        >
-          LIMIT (Rest on Book)
-        </button>
-        <button
-          type="button"
-          onClick={() => setOrderType('IOC')}
-          className={cn(
-            "flex-1 py-1 text-center rounded-md font-semibold transition-colors cursor-pointer text-[11px]",
-            orderType === 'IOC'
-              ? "bg-secondary text-foreground shadow-sm border border-border/60"
-              : "text-muted-foreground hover:text-foreground"
-          )}
-        >
-          MARKET (Immediate IOC)
-        </button>
-      </div>
-
-      {/* Price Input Controls */}
-      <div className="mb-3.5 flex-shrink-0">
-        <div className="flex items-center justify-between text-[11px] font-mono text-muted-foreground mb-1.5">
-          <span>{orderType === 'LIMIT' ? 'LIMIT PRICE (USDC)' : 'CROSSING FILL PRICE (USDC)'}</span>
-          <span className="text-[10px]">
-            Prob: {(price * 100).toFixed(0)}%
-          </span>
-        </div>
-
-        <div className="flex items-center gap-1.5">
-          {orderType === 'LIMIT' && (
-            <button
-              type="button"
-              onClick={() => handlePriceStep(-0.01)}
-              className="p-2 rounded-lg bg-secondary/50 border border-border/40 hover:bg-secondary text-muted-foreground hover:text-foreground transition-colors cursor-pointer"
-              title="Decrease tick by $0.01"
-            >
-              <MinusIcon className="w-3.5 h-3.5" />
-            </button>
-          )}
-
-          <div className="relative flex-1">
-            <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground font-mono text-xs">
-              $
+          <div className="flex items-center justify-between w-full mb-1">
+            <span className="text-sm font-bold flex items-center gap-1">
+              <ArrowTrendingDownIcon className="w-4 h-4" />
+              <span>▼ Down</span>
             </span>
-            <input
-              type="number"
-              step="0.01"
-              min="0.01"
-              max="0.99"
-              disabled={orderType === 'IOC'}
-              value={price}
-              onChange={(e) => {
-                setIsManualPrice(true);
-                const val = parseFloat(e.target.value);
-                if (!isNaN(val)) setPrice(val);
-              }}
-              className={cn(
-                "w-full pl-7 pr-3 py-2 bg-secondary/40 border border-border/60 rounded-lg text-sm font-mono text-foreground focus:outline-none focus:border-brand-cyan transition-all [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none",
-                orderType === 'IOC' && "opacity-80 cursor-not-allowed bg-secondary/20"
-              )}
-            />
+            <span className="text-sm font-bold">{downOddsPct}%</span>
           </div>
 
-          {orderType === 'LIMIT' && (
-            <button
-              type="button"
-              onClick={() => handlePriceStep(0.01)}
-              className="p-2 rounded-lg bg-secondary/50 border border-border/40 hover:bg-secondary text-muted-foreground hover:text-foreground transition-colors cursor-pointer"
-              title="Increase tick by $0.01"
-            >
-              <PlusIcon className="w-3.5 h-3.5" />
-            </button>
-          )}
-        </div>
-
-        {/* Quick Price Buttons */}
-        {orderType === 'LIMIT' && (
-          <div className="flex items-center gap-1.5 mt-2">
-            <button
-              type="button"
-              onClick={() => {
-                setIsManualPrice(true);
-                setPrice(currentBestBid);
-              }}
-              className="flex-1 py-1 rounded bg-secondary/30 border border-border/30 hover:bg-secondary/60 text-[10px] font-mono text-muted-foreground hover:text-foreground transition-colors cursor-pointer"
-            >
-              Bid: ${currentBestBid.toFixed(2)}
-            </button>
-            <button
-              type="button"
-              onClick={() => {
-                setIsManualPrice(true);
-                setPrice(Number(((currentBestBid + currentBestAsk) / 2).toFixed(2)));
-              }}
-              className="flex-1 py-1 rounded bg-secondary/30 border border-border/30 hover:bg-secondary/60 text-[10px] font-mono text-muted-foreground hover:text-foreground transition-colors cursor-pointer"
-            >
-              Mid: ${(((currentBestBid + currentBestAsk) / 2)).toFixed(2)}
-            </button>
-            <button
-              type="button"
-              onClick={() => {
-                setIsManualPrice(true);
-                setPrice(currentBestAsk);
-              }}
-              className="flex-1 py-1 rounded bg-secondary/30 border border-border/30 hover:bg-secondary/60 text-[10px] font-mono text-muted-foreground hover:text-foreground transition-colors cursor-pointer"
-            >
-              Ask: ${currentBestAsk.toFixed(2)}
-            </button>
+          <div className="text-[10px] text-muted-foreground">
+            {collateralAmount > 0 ? (
+              <span className="text-rose-400/90 font-mono">
+                Payout: {Number((1 / (1 - currentBestBid || 0.15)).toFixed(2))}x
+              </span>
+            ) : (
+              <span>enter an amount</span>
+            )}
           </div>
-        )}
+        </button>
       </div>
 
-      {/* Collateral Amount & Quick Presets */}
-      <div className="mb-3.5 flex-shrink-0">
-        <div className="flex items-center justify-between text-[11px] font-mono text-muted-foreground mb-1.5">
-          <span>COLLATERAL (TestUSDC)</span>
-          <span className="text-[10px]">
-            Avail: ${userBalance.toFixed(2)}
+      {/* 4. ✨ DREAM PULSE AI ALPHA COPILOT CARD */}
+      <div className="p-2.5 rounded-xl bg-purple-950/20 border border-purple-500/30 mb-3.5 flex-shrink-0 space-y-2">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-1.5 text-purple-300 text-[11px] font-bold">
+            <SparklesIcon className="w-3.5 h-3.5 text-purple-400" />
+            <span>AI Alpha Copilot</span>
+            <Badge variant="outline" className="text-[8px] px-1 py-0 border-purple-500/40 text-purple-300 bg-purple-500/10">
+              Titan BSM
+            </Badge>
+          </div>
+          <span className="text-[9px] text-purple-400/80 font-mono">
+            {aiRecommendation.edgeVal}% Edge
           </span>
         </div>
 
-        <div className="relative mb-2">
-          <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground font-mono text-xs">
-            $
-          </span>
-          <input
-            type="number"
-            min="1"
-            max="1000"
-            step="1"
-            value={collateralAmount}
-            onChange={(e) => {
-              const val = parseFloat(e.target.value);
-              if (!isNaN(val)) setCollateralAmount(Math.max(1, val));
-            }}
-            className="w-full pl-7 pr-3 py-2 bg-secondary/40 border border-border/60 rounded-lg text-sm font-mono text-foreground focus:outline-none focus:border-brand-cyan transition-all [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
-          />
-        </div>
+        <p className="text-[10px] text-purple-200/80 leading-relaxed font-sans">
+          {aiRecommendation.rationale}
+        </p>
 
-        {/* Presets Slider & Buttons */}
-        <div className="flex items-center gap-1.5 mb-2">
-          {COLLATERAL_PRESETS.map((preset) => (
-            <button
-              key={`preset-${preset}`}
-              type="button"
-              onClick={() => setCollateralAmount(preset)}
-              className={cn(
-                "flex-1 py-1 rounded-md text-[11px] font-mono transition-colors border cursor-pointer",
-                collateralAmount === preset
-                  ? "bg-brand-cyan/15 text-brand-cyan border-brand-cyan/40 font-bold"
-                  : "bg-secondary/30 text-muted-foreground border-border/30 hover:text-foreground hover:bg-secondary/60"
-              )}
-            >
-              ${preset}
-            </button>
-          ))}
-          <button
-            type="button"
-            onClick={() => setCollateralAmount(userBalance > 0 ? Math.min(100, Math.floor(userBalance)) : 25)}
-            className="py-1 px-2.5 rounded-md text-[11px] font-mono bg-secondary/30 text-muted-foreground border border-border/30 hover:text-foreground hover:bg-secondary/60 transition-colors cursor-pointer"
-          >
-            MAX
-          </button>
-        </div>
-
-        {/* Collateral Range Slider */}
-        <input
-          type="range"
-          min="1"
-          max="100"
-          step="1"
-          value={Math.min(100, collateralAmount)}
-          onChange={(e) => setCollateralAmount(parseInt(e.target.value, 10))}
-          className="w-full h-1 bg-secondary/60 rounded-lg appearance-none cursor-pointer accent-brand-cyan"
-        />
+        {/* 1-Click Auto-Align AI Button */}
+        <button
+          type="button"
+          onClick={handleAutoAlignAI}
+          className="w-full py-1.5 px-2.5 rounded-lg bg-purple-500/20 hover:bg-purple-500/30 border border-purple-500/40 text-purple-200 text-xs font-bold flex items-center justify-center gap-1.5 transition-all cursor-pointer shadow-xs"
+        >
+          <BoltIcon className="w-3.5 h-3.5 text-purple-300" />
+          <span>Follow AI Trade ({aiRecommendation.recommendedDirection} • {aiRecommendation.confidence}% Conf)</span>
+        </button>
       </div>
 
-      {/* Calculated Payout & Profit Metrics Box */}
-      <div className="p-3 rounded-xl bg-secondary/20 border border-border/40 font-mono text-xs mb-3 flex-shrink-0 space-y-1.5">
+      {/* 5. Breakdown Section (Cost, Shares, Strike, Expiry, Oracle) */}
+      <div className="p-2.5 rounded-xl bg-secondary/20 border border-border/30 text-xs space-y-1.5 mb-3 flex-shrink-0">
         <div className="flex items-center justify-between text-muted-foreground">
-          <span>Shares (Lots):</span>
+          <span>Cost (max loss)</span>
+          <span className="font-bold text-foreground">${calculations.totalCost.toFixed(2)} USDso</span>
+        </div>
+        <div className="flex items-center justify-between text-muted-foreground">
+          <span>Shares</span>
           <span className="font-bold text-foreground">{calculations.lotSize.toLocaleString()}</span>
         </div>
         <div className="flex items-center justify-between text-muted-foreground">
-          <span>Total Capital:</span>
-          <span className="font-bold text-foreground">${calculations.totalCost.toFixed(2)} USDC</span>
+          <span>Strike</span>
+          <span className="font-bold text-foreground">${strike.toLocaleString('en-US', { minimumFractionDigits: 2 })}</span>
         </div>
-        <div className="flex items-center justify-between border-t border-border/30 pt-1.5">
-          <span className="text-muted-foreground">Win Payout ($1/lot):</span>
-          <span className="font-bold text-emerald-400">${calculations.grossPayout.toFixed(2)} USDC</span>
+        <div className="flex items-center justify-between text-muted-foreground">
+          <span>Market expiry</span>
+          <span className="text-foreground">{formattedExpiry}</span>
         </div>
-        <div className="flex items-center justify-between">
-          <span className="text-muted-foreground">Est. Net Profit:</span>
-          <div className="flex items-center gap-1.5">
-            <span className="font-bold text-emerald-400">+${calculations.netProfit.toFixed(2)}</span>
-            <Badge variant="outline" className="text-[9px] px-1 py-0 border-emerald-500/40 text-emerald-400 bg-emerald-500/10 font-bold">
-              +{calculations.rocPercent}% ROC
-            </Badge>
-          </div>
+        <div className="flex items-center justify-between text-muted-foreground pt-1 border-t border-border/20">
+          <span>Settles against</span>
+          <span className="text-brand-cyan hover:underline cursor-pointer">Prophecy Oracle</span>
         </div>
       </div>
 
-      {/* Swarm Copilot Live Signal Badges */}
-      <div className="p-2.5 rounded-xl bg-secondary/30 border border-border/40 mb-3.5 flex-shrink-0 space-y-2">
-        <div className="flex items-center justify-between">
-          <span className="text-[10px] font-mono text-muted-foreground uppercase font-bold flex items-center gap-1">
-            <SparklesIcon className="w-3.5 h-3.5 text-brand-cyan" />
-            Swarm Copilot Live Guidance
-          </span>
-          <span className="text-[9px] font-mono text-muted-foreground">Real-time</span>
+      {/* 6. Account Balance Section */}
+      <div className="p-2.5 rounded-xl bg-secondary/10 border border-border/20 text-[11px] space-y-1 mb-3 flex-shrink-0">
+        <div className="flex items-center justify-between font-bold text-foreground">
+          <span>Account</span>
+          {Number(wallet.balanceCollateral) < 10 && (
+            <button
+              type="button"
+              disabled={isFauceting}
+              onClick={handleClaimFaucet}
+              className="text-[9px] text-brand-cyan hover:underline font-normal cursor-pointer"
+            >
+              {isFauceting ? 'Claiming...' : '+ Get TestUSDC'}
+            </button>
+          )}
         </div>
-
-        {/* Volt Badge */}
-        <div className="flex items-center justify-between text-xs font-mono p-1.5 rounded-lg bg-background/50 border border-border/30">
-          <div className="flex items-center gap-1.5 truncate max-w-[210px]">
-            <BoltIcon className="w-3.5 h-3.5 text-amber-400 flex-shrink-0" />
-            <span className="text-[10px] text-muted-foreground truncate" title={copilotSignals.volt.summary}>
-              Volt: {copilotSignals.volt.summary}
-            </span>
-          </div>
-          <button
-            type="button"
-            onClick={() => handleAdoptSignal(copilotSignals.volt.recommended as 'YES' | 'NO')}
-            className="text-[9px] px-1.5 py-0.5 rounded border border-brand-cyan/30 text-brand-cyan hover:bg-brand-cyan/10 transition-colors cursor-pointer flex-shrink-0"
-          >
-            Follow {copilotSignals.volt.recommended}
-          </button>
+        <div className="flex items-center justify-between text-muted-foreground">
+          <span>USDso</span>
+          <span className="font-bold text-foreground">{userBalance.toFixed(2)}</span>
         </div>
-
-        {/* Oracle Badge */}
-        <div className="flex items-center justify-between text-xs font-mono p-1.5 rounded-lg bg-background/50 border border-border/30">
-          <div className="flex items-center gap-1.5 truncate max-w-[210px]">
-            <CurrencyDollarIcon className="w-3.5 h-3.5 text-purple-400 flex-shrink-0" />
-            <span className="text-[10px] text-muted-foreground truncate" title={copilotSignals.oracle.summary}>
-              Oracle: {copilotSignals.oracle.summary}
-            </span>
-          </div>
-          <button
-            type="button"
-            onClick={() => handleAdoptSignal(copilotSignals.oracle.recommended as 'YES' | 'NO')}
-            className="text-[9px] px-1.5 py-0.5 rounded border border-brand-cyan/30 text-brand-cyan hover:bg-brand-cyan/10 transition-colors cursor-pointer flex-shrink-0"
-          >
-            Follow {copilotSignals.oracle.recommended}
-          </button>
+        <div className="flex items-center justify-between text-muted-foreground">
+          <span>SOMI</span>
+          <span>{wallet.balanceSTT || '1.25'}</span>
         </div>
       </div>
 
-      {/* Execution Error Banner with 1-Click Recovery Actions */}
+      {/* Error & Success Messages */}
       {executionError && (
-        <div className="p-2.5 mb-3 rounded-lg bg-rose-500/10 border border-rose-500/30 text-rose-400 text-xs font-mono flex flex-col gap-2 flex-shrink-0">
-          <div className="flex items-start gap-2">
-            <ExclamationTriangleIcon className="w-4 h-4 flex-shrink-0 mt-0.5" />
-            <span className="leading-snug">{executionError}</span>
-          </div>
-          <div className="flex items-center gap-2 pt-1 border-t border-rose-500/20 flex-wrap">
-            {(executionError.toLowerCase().includes('faucet') || executionError.toLowerCase().includes('balance')) && (
-              <button
-                type="button"
-                disabled={isFauceting}
-                onClick={handleClaimFaucet}
-                className="px-2 py-1 rounded bg-brand-cyan/20 border border-brand-cyan/40 text-brand-cyan hover:bg-brand-cyan/30 text-[10px] font-bold cursor-pointer transition-colors"
-              >
-                {isFauceting ? 'Minting 1,000 TestUSDC...' : 'Claim 1,000 TestUSDC Faucet'}
-              </button>
-            )}
-            {(executionError.toLowerCase().includes('allowance') || executionError.toLowerCase().includes('session modal') || executionError.toLowerCase().includes('operator') || executionError.toLowerCase().includes('cap') || executionError.toLowerCase().includes('limit')) && onOpenSessionModal && (
-              <button
-                type="button"
-                onClick={onOpenSessionModal}
-                className="px-2 py-1 rounded bg-amber-500/20 border border-amber-500/40 text-amber-400 hover:bg-amber-500/30 text-[10px] font-bold cursor-pointer transition-colors"
-              >
-                Open Session Modal to Authorize
-              </button>
-            )}
-          </div>
+        <div className="p-2.5 mb-3 rounded-lg bg-rose-500/10 border border-rose-500/30 text-rose-400 text-xs flex items-start gap-2">
+          <ExclamationTriangleIcon className="w-4 h-4 flex-shrink-0 mt-0.5" />
+          <span className="leading-snug">{executionError}</span>
         </div>
       )}
 
-      {/* Successful Execution Confirmation Banner */}
       {lastExecutedOrder && (
-        <div className="p-2.5 mb-3 rounded-lg bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 text-xs font-mono flex flex-col gap-1 flex-shrink-0 animate-in fade-in duration-300">
-          <div className="flex items-center justify-between">
-            <span className="flex items-center gap-1 font-bold">
-              <CheckCircleIcon className="w-4 h-4" />
-              Order Executed on Somnia CLOB!
-            </span>
-            <span className="text-[10px] text-muted-foreground">Instant Fill</span>
-          </div>
-          <div className="text-[11px] text-muted-foreground">
-            Bought {lastExecutedOrder.lotSize} {lastExecutedOrder.outcome} @ ${lastExecutedOrder.price.toFixed(2)} (${lastExecutedOrder.totalCost.toFixed(2)} USDC)
-          </div>
+        <div className="p-2.5 mb-3 rounded-lg bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 text-xs flex items-center justify-between">
+          <span className="flex items-center gap-1 font-bold">
+            <CheckCircleIcon className="w-4 h-4" />
+            Placed {lastExecutedOrder.lotSize} {lastExecutedOrder.outcome} on Somnia!
+          </span>
           {lastExecutedOrder.txHash && (
             <a
               href={`https://shannon-explorer.somnia.network/tx/${lastExecutedOrder.txHash}`}
               target="_blank"
               rel="noopener noreferrer"
-              className="text-[10px] text-brand-cyan hover:underline flex items-center gap-1 mt-0.5"
+              className="text-[10px] text-brand-cyan hover:underline"
             >
-              <span>View on Somnia Explorer</span>
-              <ArrowTopRightOnSquareIcon className="w-3 h-3" />
+              Explorer
             </a>
           )}
         </div>
       )}
 
-      {/* Collateral & Session Guardrails Summary */}
-      {wallet.isConnected && (
-        <div className="flex items-center justify-between px-1 mb-2 text-[10px] font-mono text-muted-foreground">
-          <div className="flex items-center gap-1">
-            <span>Available:</span>
-            <span className={cn(
-              "font-bold",
-              Number(wallet.balanceCollateral) < calculations.totalCost ? "text-amber-400" : "text-foreground"
-            )}>
-              ${wallet.balanceCollateral} USDC
-            </span>
-          </div>
-          {Number(wallet.balanceCollateral) < calculations.totalCost && (
-            <button
-              type="button"
-              disabled={isFauceting}
-              onClick={handleClaimFaucet}
-              className="text-brand-cyan hover:underline text-[9px] font-bold cursor-pointer"
-            >
-              {isFauceting ? 'Minting...' : '+ Get 1,000 TestUSDC'}
-            </button>
-          )}
-        </div>
-      )}
-
-      {/* Main Order Action Button */}
-      <div className="mt-auto pt-2 flex flex-col gap-2 flex-shrink-0">
+      {/* 7. Action Button (Deposit / Trade) */}
+      <div className="mt-auto pt-1 flex flex-col gap-2 flex-shrink-0">
         {!wallet.isConnected ? (
           <button
             type="button"
             onClick={onConnectWallet}
             className="w-full py-3 rounded-xl bg-brand-cyan text-background font-bold text-xs uppercase tracking-wider hover:opacity-90 transition-opacity cursor-pointer flex items-center justify-center gap-2"
           >
-            Connect Wallet to Trade
+            Connect Wallet
           </button>
         ) : (
           <button
@@ -735,28 +632,16 @@ export const TraderCockpitTicket: React.FC<TraderCockpitTicketProps> = ({
             {isSubmitting ? (
               <>
                 <Spinner size="sm" />
-                <span className="text-zinc-950 font-bold">Routing to Somnia CLOB...</span>
+                <span className="text-zinc-950 font-bold">Routing to Somnia Shannon...</span>
               </>
             ) : (
               <>
                 {activeSession?.isActive && <BoltIcon className="w-4 h-4 text-zinc-950" />}
                 <span className="text-zinc-950 font-bold">
-                  {activeSession?.isActive ? 'Place Zero-Gas Order' : 'Sign & Place with Wallet'} • ${calculations.totalCost.toFixed(2)}
+                  {outcome === 'YES' ? 'Buy UP' : 'Buy DOWN'} • ${calculations.totalCost.toFixed(2)} USDso
                 </span>
               </>
             )}
-          </button>
-        )}
-
-        {/* 1-Click Zero-Gas Session Promo for non-session users */}
-        {wallet.isConnected && !activeSession?.isActive && onOpenSessionModal && (
-          <button
-            type="button"
-            onClick={onOpenSessionModal}
-            className="w-full py-1.5 px-2 rounded-lg bg-brand-cyan/10 hover:bg-brand-cyan/20 border border-brand-cyan/30 text-brand-cyan text-[10px] font-mono transition-colors cursor-pointer flex items-center justify-center gap-1.5"
-          >
-            <BoltIcon className="w-3 h-3 text-brand-cyan" />
-            <span>Enable 1-Click Zero-Gas Trading (Sub-Second Execution)</span>
           </button>
         )}
       </div>

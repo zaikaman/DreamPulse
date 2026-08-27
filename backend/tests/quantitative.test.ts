@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest';
 import { normalCdf, normalPdf, erf, calculateZScore, calculateBinaryYesProbability } from '../src/quantitative/cdf.js';
 import {
   calculateFairValue,
+  calculateConfluenceProbability,
   calculateEdge,
   calculateSpotDrift,
   parseWindowToSeconds,
@@ -115,6 +116,20 @@ describe('Quantitative Pricing & Edge Calculation Engine', () => {
     // With explicit custom volatility
     const resCustom = calculateFairValue(96500, 96000, 300, 'BTC/USD', 0.80);
     expect(resCustom.volatilityUsed).toBe(0.80);
+  });
+
+  it('calculates stabilized multi-factor confluence probability correctly', () => {
+    // Neutral drift and neutral orderbook -> matches BSM probability closely
+    const neutral = calculateConfluenceProbability(0.55, 0, 0, 0);
+    expect(neutral).toBeCloseTo(0.53, 1);
+
+    // Strong upward spot drift (+0.3%) boosts probability
+    const bullish = calculateConfluenceProbability(0.55, 0.003, 0.005, 0.5);
+    expect(bullish).toBeGreaterThan(0.60);
+
+    // Strong downward spot drift (-0.3%) dampens probability
+    const bearish = calculateConfluenceProbability(0.55, -0.003, -0.005, -0.5);
+    expect(bearish).toBeLessThan(0.45);
   });
 
   it('detects edge discrepancies and anomalies accurately', () => {

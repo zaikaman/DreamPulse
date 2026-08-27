@@ -1,6 +1,6 @@
 import { EventEmitter } from 'events';
 import type { Market, MarketStatus, OutcomeType } from '../types/index.js';
-import { calculateFairValue, calculateEdge, parseWindowToSeconds } from '../quantitative/pricing.js';
+import { calculateFairValue, calculateEdge, calculateConfluenceProbability, parseWindowToSeconds } from '../quantitative/pricing.js';
 import { SOMNIA_ADDRESSES, somniaExchange, MARKET_STATUS } from '../config/somnia.js';
 import { env } from '../config/env.js';
 import { getServiceSupabase, supabase } from '../config/supabase.js';
@@ -36,6 +36,7 @@ export class MarketService extends EventEmitter {
   private depthBooks: Map<string, OrderBookDepth> = new Map();
   private spotPrices: Map<string, SpotTicker> = new Map();
   private unifiedMarketsMap: Map<string, UnifiedMarket> = new Map();
+  private smoothedFairValues: Map<string, number> = new Map();
   private updateInterval: NodeJS.Timeout | null = null;
   private onchainPollInterval: NodeJS.Timeout | null = null;
   private dbSyncInterval: NodeJS.Timeout | null = null;
@@ -84,10 +85,21 @@ export class MarketService extends EventEmitter {
       if (market.symbol === ticker.symbol && market.status === 'Open') {
         const closeTime = new Date(market.closeTimestamp).getTime();
         const timeLeftSeconds = Math.max(1, Math.floor((closeTime - now) / 1000));
-        const fair = calculateFairValue(ticker.price, market.strikePrice, timeLeftSeconds, market.symbol, undefined, ticker.priceHistory);
-        const edge = calculateEdge(fair.fairValueYes, market.bestBidYes, market.bestAskYes);
+        const rawFair = calculateFairValue(ticker.price, market.strikePrice, timeLeftSeconds, market.symbol, undefined, ticker.priceHistory);
+        const confluence = calculateConfluenceProbability(
+          rawFair.fairValueYes,
+          ticker.change1m || 0,
+          ticker.change5m || 0,
+          0,
+        );
 
-        market.fairValueYes = fair.fairValueYes;
+        const prevFair = this.smoothedFairValues.get(market.id) ?? confluence;
+        const smoothedFair = Number((0.25 * confluence + 0.75 * prevFair).toFixed(4));
+        this.smoothedFairValues.set(market.id, smoothedFair);
+
+        const edge = calculateEdge(smoothedFair, market.bestBidYes, market.bestAskYes);
+
+        market.fairValueYes = smoothedFair;
         market.impliedProbYes = edge.impliedProbYes;
         market.edgePercentage = edge.edgePercentage;
       }
@@ -634,10 +646,21 @@ export class MarketService extends EventEmitter {
       } else if (market.status === 'Open') {
         const ticker = this.spotPrices.get(market.symbol);
         const spot = ticker?.price || market.strikePrice;
-        const fair = calculateFairValue(spot, market.strikePrice, timeLeftSeconds, market.symbol, undefined, ticker?.priceHistory);
-        const edge = calculateEdge(fair.fairValueYes, market.bestBidYes, market.bestAskYes);
+        const rawFair = calculateFairValue(spot, market.strikePrice, timeLeftSeconds, market.symbol, undefined, ticker?.priceHistory);
+        const confluence = calculateConfluenceProbability(
+          rawFair.fairValueYes,
+          ticker?.change1m || 0,
+          ticker?.change5m || 0,
+          0,
+        );
 
-        market.fairValueYes = fair.fairValueYes;
+        const prevFair = this.smoothedFairValues.get(market.id) ?? confluence;
+        const smoothedFair = Number((0.25 * confluence + 0.75 * prevFair).toFixed(4));
+        this.smoothedFairValues.set(market.id, smoothedFair);
+
+        const edge = calculateEdge(smoothedFair, market.bestBidYes, market.bestAskYes);
+
+        market.fairValueYes = smoothedFair;
         market.impliedProbYes = edge.impliedProbYes;
         market.edgePercentage = edge.edgePercentage;
       }

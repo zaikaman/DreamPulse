@@ -14,7 +14,7 @@
 <p align="center">
   <a href="https://shannon-explorer.somnia.network"><img src="https://img.shields.io/badge/Blockchain-Somnia%20Shannon%20(50312)-00ffcc?style=for-the-badge&logo=ethereum&logoColor=black" alt="Somnia Shannon Testnet" /></a>
   <a href="https://docs.dreamdex.io/developers/event-contracts"><img src="https://img.shields.io/badge/Protocol-DreamDEX%20Event%20Contracts-7928CA?style=for-the-badge&logo=chainlink&logoColor=white" alt="DreamDEX Protocol" /></a>
-  <a href="https://github.com/zaikaman/DreamPulse"><img src="https://img.shields.io/badge/Tests-97%2F97%20Passed%20(100%25)-00e676?style=for-the-badge&logo=vitest&logoColor=white" alt="Tests 97/97 Passing" /></a>
+  <a href="https://github.com/zaikaman/DreamPulse"><img src="https://img.shields.io/badge/Tests-100%2F100%20Passed%20(100%25)-00e676?style=for-the-badge&logo=vitest&logoColor=white" alt="Tests 100/100 Passing" /></a>
   <a href="https://groq.com"><img src="https://img.shields.io/badge/LLM-Groq%20Qwen%202.5%20%2B%20Gemini-f55036?style=for-the-badge&logo=openai&logoColor=white" alt="Groq + Gemini LLM" /></a>
 </p>
 
@@ -37,7 +37,7 @@
 13. [System Architecture Diagrams](#system-architecture-diagrams)
 14. [API & WebSocket Telemetry Protocol](#api--websocket-telemetry-protocol)
 15. [Local Installation & Development Guide](#local-installation--development-guide)
-16. [Verification & Test Suite (97/97 Passing)](#verification--test-suite-9797-passing)
+16. [Verification & Test Suite (100/100 Passing)](#verification--test-suite-100100-passing)
 17. [2–3 Minute Demo Video Walkthrough](#23-minute-demo-video-walkthrough)
 18. [License & Acknowledgements](#license--acknowledgements)
 
@@ -203,6 +203,16 @@ $$P_{\text{VWAP}} = \frac{\sum_{i=1}^k P_i \cdot Q_i}{\sum_{i=1}^k Q_i}$$
 
 If slippage $P_{\text{VWAP}} - P_{\text{top}} > \text{maxSlippage}$, execution is automatically aborted.
 
+### 6. Quantitative Probability Stabilization Engine (Anti-Pin-Risk)
+In ultra-short prediction contracts (5m, 15m), raw un-smoothed Black-Scholes probabilities suffer from **"Pin-Risk Cliff Degeneration"** as $T \to 0$ (the $\sigma \sqrt{T}$ denominator collapsing, turning micro-fluctuations into violent $10\% \leftrightarrow 90\%$ step-function flips). DreamPulse introduces a 4-tier quantitative stabilization engine:
+
+1. **Short-Horizon Diffusion Regularization**: Enforces a non-zero diffusion buffer ($T_{\text{floor}} = 45\text{s}$) in $z$-score computation to prevent division by near-zero and preserve continuous, smooth probability density around the strike price.
+2. **Multi-Factor Confluence Scoring**: Blends Black-Scholes theoretical probability $\Phi(z)$ ($60\%$) with a non-linear spot momentum drift sigmoid ($28\%$) and order book depth imbalance skew ($12\%$):
+   $$P_{\text{confluence}} = 0.60 \cdot \Phi(z) + 0.28 \cdot \text{Sigmoid}\left(250 \cdot \Delta_{\text{1m}} + 150 \cdot \Delta_{\text{5m}}\right) + 0.12 \cdot \left(0.5 + 0.15 \cdot \text{DepthSkew}\right)$$
+3. **Temporal EMA Probability Smoothing**: Filters out single-tick microstructure bid-ask bounce:
+   $$P_{\text{smooth}}(t) = 0.25 \cdot P_{\text{confluence}}(t) + 0.75 \cdot P_{\text{smooth}}(t-1)$$
+4. **Directional Conviction Hysteresis**: Employs an ATM deadband requiring sustained directional momentum to change AI bias, ensuring rock-solid, reliable trading recommendations.
+
 ---
 
 ## Non-Custodial Session Delegation & BatchApprove.sol
@@ -299,17 +309,23 @@ The DreamPulse frontend is crafted with a high-aesthetic, minimalist institution
 * **Minimalist Obsidian & Slate Design System**: Calm, ultra-refined dark aesthetic with frosted translucent panels (`.glass-card`, `.glass-panel`), bespoke HSL tokens, and Radix UI primitives.
 * **Procedural Silk WebGL Shader Background**: Real-time Three.js GPU-accelerated fluid cloth simulation (`Silk.tsx`) creating smooth atmospheric depth behind the terminal.
 * **Cinematic Landing Showcase**: Immersive entry portal featuring interactive live swarm telemetry, protocol architecture breakdown, and seamless Web3 wallet authentication.
+* **Revamped Pro Event Contracts Trade Terminal With AI Alpha Copilot**:
+  * **Full-Bleed Trading Arena (`TradeTerminalView.tsx`)**: Edge-to-edge full viewport width layout with top-level DEX navigation bar, asset switcher dropdown (BTC, ETH, SOL, BNB, DOGE), live spot feed with 24h delta, localized contract question, and instant probability indicators.
+  * **Visual Binary Settlement Chart (`EventContractChart.tsx`)**: Real-time SVG settlement chart featuring a dashed Strike reference line, live spot price trail with glowing pulse ripple, shaded **UP (Emerald)** and **DOWN (Rose)** payout zones, AI Forecast projection cone overlay, interactive crosshair tooltip, and floating time-to-settlement badge.
+  * **Dual-View Single-Click Book Toggle (`Show book / Hide book`)**: Effortlessly switch the main canvas between the visual binary settlement chart and the granular CLOB Order Book Depth Ladder without disrupting order configuration.
+  * **Recently Settled Rounds Carousel (`RecentlySettledRounds.tsx`)**: Horizontal scrolling strip below the chart tracking past 5m/15m/1h round resolutions with settlement prices, localized timestamps (24h format), and UP/DOWN resolution badges.
+  * **Pro Binary Order Ticket with AI Copilot (`TraderCockpitTicket.tsx`)**:
+    * **High-Conviction Binary Action Cards**: Massive **▲ UP** and **▼ DOWN** cards with live odds, payout multipliers, and net win return calculations.
+    * **DreamPulse AI Alpha Copilot**: Built-in institutional decision support displaying theoretical Black-Scholes fair value $\Phi(z)$ vs market odds, calculated mathematical edge ($+12.7\%$), real-time LLM rationale, and a **`⚡ 1-Click Follow AI Trade`** button that auto-sizes and aligns the ticket.
+    * **Collateral Slider & Presets**: Percentage shortcuts (`25%`, `50%`, `75%`, `100%`, `MAX`) and custom amount inputs with live balance verification and TestUSDC faucet integration.
+    * **Gasless Session Key Execution**: Sub-second zero-gas order submission via `placeOrderFor` on Somnia Shannon Testnet with direct MetaMask wallet fallback.
+  * **Synchronized Local Time Engine (`useMarketCountdown.ts`)**: Unified hook that derives the user's browser timezone (24h local format, e.g. `18:40`) and synchronizes live countdown timers (`03:12`) in lockstep across the header, chart, and order ticket.
+  * **Bottom Multi-Tab Portfolio & Execution Drawer (`ActivePositionsDrawer.tsx`)**: Persistent bottom drawer displaying active positions, resting limit orders, and trade history with 1-click Shannon explorer verification.
 * **Institutional 3-Category Sidebar**:
   * **Market Intelligence**: *Terminal Overview*, *Edge Radar (Black-Scholes mispricing)*, and *Order Book & Depth (CLOB ladders)*.
   * **Quantitative Swarm**: *Live Swarm Feed (real-time chain-of-thought)* and *Swarm Cockpit* — now a dual-panel workspace: **Protocol Swarm (Transparency, read-only, source of copy-trades)** + **My Personal Swarm (per-wallet COPY↔PERSONAL toggle, isolated sliders & PnL)**.
   * **Execution & Studio**: *Strategy Studio (quant backtester IDE — Simulate then Deploy to My Personal Swarm or, for Operator, to Global Swarm)*, *Settlement Sweeper (batch claim & compound)*, and *Portfolio Analytics (Sharpe/Sortino)*.
 * **Global Command Palette (`⌘K / Ctrl+K`)**: Lightning-fast fuzzy search modal to jump between prediction markets, navigate views, and execute platform actions.
-* **Interactive CLOB Order Placement Ticket ("Trader Cockpit")**: Consumer-grade trading ticket embedded directly into the CLOB Depth view:
-  * **1-Click Ladder Interaction**: Clicking any Ask row automatically pre-fills a BUY YES order at that exact price and size; clicking any Bid row pre-fills BUY NO.
-  * **Dual Order Types**: Supports `LIMIT` orders (resting on the Somnia CLOB) and `MARKET (IOC)` orders (immediate crossing fill).
-  * **Collateral Slider & Presets**: Quick-select `$5`, `$10`, `$25`, `$50`, `MAX` buttons with real-time calculations for lot size, winning payout ($1.00/lot), net profit, and Return on Capital (ROC %).
-  * **Inline Swarm Copilot Signals**: Real-time guidance badges directly inside the ticket displaying Volt momentum drift and Oracle Black-Scholes-Merton $\Phi(z)$ dislocation with 1-click "Follow Signal" action.
-  * **Zero-Gas / Session Execution**: Sub-second execution using active session keys via `placeOrderFor` with zero gas required from the trader, plus direct MetaMask wallet fallback signing.
 * **Procedural Web Audio Feedback**: Zero-asset synthesizer utilizing the Web Audio API to deliver millisecond-accurate acoustic feedback for order fills, opportunity alerts, and settlement sweeps.
 
 ---

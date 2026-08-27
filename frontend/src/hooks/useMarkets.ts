@@ -34,6 +34,17 @@ export function useMarkets(options?: UseMarketsOptions) {
   const [loading, setLoading] = useState<boolean>(markets.length === 0);
   const [error, setError] = useState<string | null>(null);
   const isMountedRef = useRef<boolean>(true);
+  const selectedSymbolRef = useRef<string | null>(null);
+  const selectedWindowRef = useRef<string | null>(null);
+
+  // Sync refs when selected market changes
+  useEffect(() => {
+    const found = markets.find((m) => m.id === selectedMarketId);
+    if (found) {
+      selectedSymbolRef.current = found.symbol;
+      selectedWindowRef.current = found.windowDuration;
+    }
+  }, [selectedMarketId, markets]);
 
   const fetchMarkets = useCallback(async () => {
     try {
@@ -52,10 +63,19 @@ export function useMarkets(options?: UseMarketsOptions) {
           }
         } catch {}
 
-        // Auto-select first market if none selected
+        // Keep current selected market or find matching asset symbol instead of jumping to index 0
         setSelectedMarketId((prev) => {
           if (prev && response.data.some((m) => m.id === prev)) {
             return prev;
+          }
+          // If the previous ID expired/rolled over, find active market with the SAME symbol & window
+          const targetSym = selectedSymbolRef.current;
+          const targetWin = selectedWindowRef.current;
+          if (targetSym) {
+            const sameSymAndWin = response.data.find((m) => m.symbol === targetSym && (!targetWin || m.windowDuration === targetWin));
+            if (sameSymAndWin) return sameSymAndWin.id;
+            const sameSym = response.data.find((m) => m.symbol === targetSym);
+            if (sameSym) return sameSym.id;
           }
           return response.data.length > 0 ? response.data[0].id : null;
         });

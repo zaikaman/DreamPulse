@@ -54,11 +54,15 @@ export function normalCdf(z: number): number {
  *
  * $$z = \frac{\ln(S / K) + (r - \sigma^2 / 2) \cdot T}{\sigma \sqrt{T}}$$
  *
+ * Includes a regularized short-horizon diffusion floor to prevent numerical singularity
+ * and pin-risk cliff collapse as time-to-expiry approaches zero.
+ *
  * @param spot Current spot price of underlying asset (e.g. BTC or ETH)
  * @param strike Settlement strike target price
  * @param annualVolatility Implied or realized annualized volatility (e.g. 0.55 for 55%)
  * @param timeToExpiryYears Time remaining until resolution in fractional years (e.g. 300 / 31536000 for 5m)
  * @param riskFreeRate Annualized risk-free interest rate (default 0.0)
+ * @param regularizeHorizon When true (default), applies a 45-second diffusion buffer for smooth probability transitions
  */
 export function calculateZScore(
   spot: number,
@@ -66,6 +70,7 @@ export function calculateZScore(
   annualVolatility: number,
   timeToExpiryYears: number,
   riskFreeRate: number = 0.0,
+  regularizeHorizon: boolean = true,
 ): number {
   if (spot <= 0 || strike <= 0) {
     throw new Error(`Spot (${spot}) and Strike (${strike}) must be strictly positive.`);
@@ -78,7 +83,11 @@ export function calculateZScore(
     return spot >= strike ? 10.0 : -10.0;
   }
 
-  const volSqrtT = annualVolatility * Math.sqrt(timeToExpiryYears);
+  // Short-horizon diffusion regularizer (45s floor) to prevent cliff degeneration
+  const minHorizonYears = 45 / (365.25 * 86400);
+  const effectiveTimeYears = regularizeHorizon ? Math.max(timeToExpiryYears, minHorizonYears) : timeToExpiryYears;
+
+  const volSqrtT = annualVolatility * Math.sqrt(effectiveTimeYears);
   const drift = (riskFreeRate - 0.5 * annualVolatility * annualVolatility) * timeToExpiryYears;
   const z = (Math.log(spot / strike) + drift) / volSqrtT;
 
@@ -90,7 +99,7 @@ export function calculateZScore(
  *
  * P(Spot_T >= Strike) = Φ(d2)
  *
- * @returns Probability between 0.0001 and 0.9999
+ * @returns Probability between 0.001 and 0.999
  */
 export function calculateBinaryYesProbability(
   spot: number,
@@ -98,9 +107,11 @@ export function calculateBinaryYesProbability(
   annualVolatility: number,
   timeToExpiryYears: number,
   riskFreeRate: number = 0.0,
+  regularizeHorizon: boolean = true,
 ): number {
-  const z = calculateZScore(spot, strike, annualVolatility, timeToExpiryYears, riskFreeRate);
+  const z = calculateZScore(spot, strike, annualVolatility, timeToExpiryYears, riskFreeRate, regularizeHorizon);
   const prob = normalCdf(z);
   // Clamp between (0.001, 0.999) to respect DreamDEX probability interval invariants
   return Math.min(0.999, Math.max(0.001, prob));
 }
+

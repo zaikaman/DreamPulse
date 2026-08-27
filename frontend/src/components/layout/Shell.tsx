@@ -108,8 +108,8 @@ export const Shell: React.FC<ShellProps> = ({
           onConnectWallet={onConnectWallet}
         />
 
-        <main className="flex-1 overflow-y-auto p-3 sm:p-4 md:p-6">
-          <div className="mx-auto max-w-7xl h-full flex flex-col">{children}</div>
+        <main className={currentView === 'Trade Terminal' ? "flex-1 overflow-hidden p-1.5 sm:p-2 md:p-2.5" : "flex-1 overflow-y-auto p-3 sm:p-4 md:p-6"}>
+          <div className={currentView === 'Trade Terminal' ? "w-full h-full flex flex-col min-h-0" : "mx-auto max-w-7xl h-full flex flex-col"}>{children}</div>
         </main>
       </div>
     </div>
