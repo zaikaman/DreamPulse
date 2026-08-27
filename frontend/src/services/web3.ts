@@ -195,6 +195,29 @@ export const SPOT_POOL_ABI = [
   },
 ] as const;
 
+export const BINARY_POOL_ABI = [
+  {
+    type: 'function',
+    name: 'placeBinaryOrder',
+    stateMutability: 'payable',
+    inputs: [
+      { name: 'kind', type: 'uint8' },
+      { name: 'price', type: 'uint256' },
+      { name: 'quantity', type: 'uint256' },
+      { name: 'expireTimestampNs', type: 'uint64' },
+      { name: 'orderType', type: 'uint8' },
+      { name: 'selfMatchingOption', type: 'uint8' },
+      { name: 'builder', type: 'address' },
+      { name: 'builderFeeBpsTimes1k', type: 'uint96' },
+      { name: 'userData', type: 'uint64' },
+    ],
+    outputs: [
+      { name: 'success', type: 'bool' },
+      { name: 'id', type: 'uint128' },
+    ],
+  },
+] as const;
+
 export const ERC20_ABI = [
   {
     type: 'function',
@@ -1192,6 +1215,68 @@ export class Web3Service {
       abi: ERC20_ABI,
       functionName: 'faucet',
       args: [amountRaw],
+    });
+
+    await publicClient.waitForTransactionReceipt({ hash });
+    return { hash };
+  }
+
+  /**
+   * Places a binary order directly using the user's connected wallet (MetaMask).
+   * Ensures necessary ERC20 TestUSDC approval exists before calling the pool.
+   */
+  public async placeBinaryOrderWithWallet(params: {
+    userAddress: Address;
+    poolAddress: Address;
+    outcome: 'YES' | 'NO';
+    orderType: 'LIMIT' | 'IOC';
+    price: number;
+    lotSize: number;
+  }): Promise<{ hash: Hex }> {
+    const wallet = this.getWalletClient(params.userAddress);
+    const one = 10n ** 6n;
+    const rawQuantity = BigInt(Math.floor(params.lotSize * 1_000_000));
+    const rawPrice = BigInt(Math.floor(params.price * 1_000_000));
+    const priceYes = params.outcome === 'YES' ? rawPrice : one - rawPrice;
+    const kind = params.outcome === 'YES' ? 0 : 1;
+    const orderTypeEnum = params.orderType === 'IOC' ? 1 : 0;
+    const expireTimestampNs = BigInt(Math.floor(Date.now() / 1000) + 3600) * 1_000_000_000n;
+
+    // Check TestUSDC allowance for the pool
+    const token = SOMNIA_ADDRESSES.testUsdc;
+    const currentAllowance = await publicClient.readContract({
+      address: token,
+      abi: ERC20_ABI,
+      functionName: 'allowance',
+      args: [params.userAddress, params.poolAddress],
+    });
+
+    const neededAllowance = (rawPrice * rawQuantity) / one;
+    if (currentAllowance < neededAllowance) {
+      const approveTx = await wallet.writeContract({
+        address: token,
+        abi: ERC20_ABI,
+        functionName: 'approve',
+        args: [params.poolAddress, parseUnits('1000000', 6)],
+      });
+      await publicClient.waitForTransactionReceipt({ hash: approveTx });
+    }
+
+    const hash = await wallet.writeContract({
+      address: params.poolAddress,
+      abi: BINARY_POOL_ABI,
+      functionName: 'placeBinaryOrder',
+      args: [
+        kind,
+        priceYes,
+        rawQuantity,
+        expireTimestampNs,
+        orderTypeEnum,
+        0, // selfMatchingOption
+        '0x0000000000000000000000000000000000000000', // builder
+        0n, // builderFee
+        0n, // userData
+      ],
     });
 
     await publicClient.waitForTransactionReceipt({ hash });

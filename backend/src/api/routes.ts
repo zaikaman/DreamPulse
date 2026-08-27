@@ -9,7 +9,7 @@ import { compounderService } from '../services/compounder-service.js';
 import { backtestService } from '../services/backtest-service.js';
 import { operatorAccount, SOMNIA_ADDRESSES, publicClient, somniaExchange } from '../config/somnia.js';
 import type { MarketStatus, AgentType, OrderStatus } from '../types/index.js';
-import { type Address, isAddress, getAddress, parseAbi } from 'viem';
+import { type Address, type Hex, isAddress, getAddress, parseAbi } from 'viem';
 import { analyticsService, type AnalyticsRange } from '../services/analytics-service.js';
 import { userSwarmService } from '../services/user-swarm-service.js';
 
@@ -716,6 +716,60 @@ apiRouter.get('/orders/:id', (req: Request, res: Response) => {
     success: true,
     data: order,
   });
+});
+
+apiRouter.post('/orders/place', async (req: Request, res: Response) => {
+  try {
+    const { userAddress, marketId, outcome, direction, orderType, price, lotSize, txHash } = req.body;
+
+    if (!userAddress || typeof userAddress !== 'string' || !isAddress(userAddress)) {
+      return res.status(400).json({ success: false, error: 'Valid userAddress is required' });
+    }
+
+    if (!marketId || typeof marketId !== 'string') {
+      return res.status(400).json({ success: false, error: 'Valid marketId is required' });
+    }
+
+    if (outcome !== 'YES' && outcome !== 'NO') {
+      return res.status(400).json({ success: false, error: 'Outcome must be YES or NO' });
+    }
+
+    const numPrice = Number(price);
+    if (isNaN(numPrice) || numPrice <= 0 || numPrice >= 1.0) {
+      return res.status(400).json({ success: false, error: 'Price must be between 0.01 and 0.99' });
+    }
+
+    const numLotSize = Number(lotSize);
+    if (isNaN(numLotSize) || numLotSize <= 0) {
+      return res.status(400).json({ success: false, error: 'Lot size must be greater than 0' });
+    }
+
+    const normOrderType = orderType === 'IOC' || orderType === 'MARKET' ? 'IOC' : 'LIMIT';
+    const normDirection = direction === 'SELL' ? 'SELL' : 'BUY';
+
+    const order = await orderService.submitUserOrder({
+      userAddress: getAddress(userAddress) as Address,
+      marketId,
+      outcome,
+      direction: normDirection,
+      orderType: normOrderType,
+      price: numPrice,
+      lotSize: numLotSize,
+      txHash: typeof txHash === 'string' && txHash.startsWith('0x') ? (txHash as Hex) : undefined,
+    });
+
+    return res.status(201).json({
+      success: true,
+      message: 'Order placed successfully',
+      data: order,
+    });
+  } catch (err: any) {
+    console.warn('[Routes] Error placing order:', err.message);
+    return res.status(400).json({
+      success: false,
+      error: err.message || 'Failed to place order',
+    });
+  }
 });
 
 apiRouter.get('/portfolio/summary', async (req: Request, res: Response) => {

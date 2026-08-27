@@ -54,6 +54,17 @@ export interface QueryOrdersParams {
   offset?: number;
 }
 
+export interface UserOrderSubmissionParams {
+  userAddress: Address;
+  marketId: string;
+  outcome: OutcomeType;
+  direction?: OrderDirection;
+  orderType: 'LIMIT' | 'IOC';
+  price: number;
+  lotSize: number;
+  txHash?: Hex;
+}
+
 const testUsdcAbi = parseAbi([
   'function balanceOf(address account) view returns (uint256)',
   'function faucet(uint256 amount)',
@@ -1033,6 +1044,146 @@ export class OrderService {
     }
 
     return orderExecution;
+  }
+
+  /**
+   * Submits a direct user trade from the Trader Cockpit.
+   * If client already signed via MetaMask (txHash provided), records and broadcasts the fill.
+   * Otherwise, executes through the user's active session key via Somnia CLOB with zero gas for the user.
+   */
+  public async submitUserOrder(params: UserOrderSubmissionParams): Promise<OrderExecution> {
+    const outcome = params.outcome;
+    const direction = params.direction || 'BUY';
+    const orderType = params.orderType;
+    const rawPrice = params.price;
+    const rawLotSize = params.lotSize;
+
+    const {
+      rawQuantity,
+      quantizedSize,
+      quantizedPrice,
+      totalCost,
+    } = quantizeOrder(rawPrice, rawLotSize, outcome);
+
+    if (rawQuantity <= 0n) {
+      throw new Error(`Order size ${rawLotSize} rounds to 0 lots`);
+    }
+
+    // 1. If client already signed directly via MetaMask wallet
+    if (params.txHash) {
+      const orderId = crypto.randomUUID();
+      const now = new Date().toISOString();
+      const market = marketService.getMarketById(params.marketId);
+
+      const orderExecution: OrderExecution = {
+        id: orderId,
+        userAddress: params.userAddress,
+        sessionId: '',
+        marketId: params.marketId,
+        agentType: 'Titan',
+        outcome,
+        direction,
+        orderType,
+        price: quantizedPrice,
+        lotSize: quantizedSize,
+        totalCost,
+        status: 'FILLED',
+        txHash: params.txHash,
+        pnl: 0,
+        isSettled: false,
+        createdAt: now,
+        filledAt: now,
+        marketSnapshot: market
+          ? {
+              symbol: market.symbol,
+              strikePrice: market.strikePrice,
+              closeTimestamp: market.closeTimestamp,
+              settlementPrice: market.settlementPrice,
+              winningOutcome: market.winningOutcome,
+              windowDuration: market.windowDuration,
+            }
+          : undefined,
+      };
+
+      this.orderMap.set(orderId, orderExecution);
+      this.orders.unshift(orderExecution);
+      if (this.orders.length > 5000) {
+        const evicted = this.orders.pop();
+        if (evicted) {
+          this.orderMap.delete(evicted.id);
+        }
+      }
+
+      telemetryWsGateway.broadcastOrderFilled({
+        userAddress: params.userAddress,
+        orderId,
+        marketId: params.marketId,
+        agentType: 'Titan',
+        outcome,
+        direction,
+        price: quantizedPrice,
+        lotSize: quantizedSize,
+        txHash: params.txHash,
+      });
+
+      this.notifyStateChange();
+
+      // Persist to Supabase asynchronously
+      try {
+        await marketService.ensureMarketPersisted(params.marketId);
+        await supabase.from('orders').insert({
+          id: orderId,
+          user_address: params.userAddress,
+          session_id: null,
+          market_id: params.marketId,
+          agent_type: 'Titan',
+          outcome,
+          direction,
+          order_type: orderType,
+          price: quantizedPrice,
+          lot_size: quantizedSize,
+          total_cost: totalCost,
+          status: 'FILLED',
+          tx_hash: params.txHash,
+          pnl: 0,
+          is_settled: false,
+          created_at: now,
+          filled_at: now,
+        });
+      } catch (_err) {
+        // non-fatal
+      }
+
+      return orderExecution;
+    }
+
+    // 2. Zero-gas session key execution
+    const session = await sessionService.getUserActiveSession(params.userAddress);
+    if (!session) {
+      throw new Error(`No active session key found for address ${params.userAddress}. Please connect wallet or authorize session key.`);
+    }
+
+    if (outcome !== 'YES' && outcome !== 'NO') {
+      throw new Error(`Invalid outcome '${outcome}'. Expected 'YES' or 'NO'.`);
+    }
+
+    const decision: IAgentDecision = {
+      agentType: 'Titan',
+      action: direction === 'SELL' ? 'TAKER_SELL' : (orderType === 'LIMIT' ? 'LIMIT_QUOTE' : 'TAKER_BUY'),
+      targetMarketId: params.marketId,
+      targetOutcome: outcome,
+      price: quantizedPrice,
+      lotSize: quantizedSize,
+      confidence: 1.0,
+      rationale: `Trader Cockpit user execution (${orderType} ${outcome}) by ${params.userAddress}`,
+    };
+
+    const executed = await this.executeAgentDecision(decision, session as unknown as SessionGrant);
+    if (!executed) {
+      throw new Error(`Order placement could not be completed on-chain. Please verify collateral allowance and try again.`);
+    }
+
+    return executed;
   }
 
   /**

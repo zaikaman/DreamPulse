@@ -308,6 +308,11 @@ export const App: React.FC = () => {
             depthMap={depthMap}
             currentSpotPrices={currentSpotPrices}
             isLoading={isMarketsLoading}
+            wallet={wallet}
+            activeSession={activeSession}
+            agentThoughts={agentThoughts}
+            onOpenSessionModal={() => setIsSessionModalOpen(true)}
+            onConnectWallet={connectWallet}
           />
         ) : activeNav === 'AI Swarm Feed' ? (
           <SwarmFeedView

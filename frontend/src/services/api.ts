@@ -187,6 +187,22 @@ export const apiClient = {
     return fetchJson(endpoint);
   },
 
+  async placeOrder(payload: {
+    userAddress: string;
+    marketId: string;
+    outcome: 'YES' | 'NO';
+    direction?: 'BUY' | 'SELL';
+    orderType: 'LIMIT' | 'IOC';
+    price: number;
+    lotSize: number;
+    txHash?: string;
+  }): Promise<{ success: boolean; message: string; data: OrderExecution }> {
+    return fetchJson<{ success: boolean; message: string; data: OrderExecution }>('/orders/place', {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    });
+  },
+
   async getPortfolioSummary(userAddress?: string): Promise<{ success: boolean; data: PortfolioSummary }> {
     const endpoint = userAddress ? `/portfolio/summary?userAddress=${encodeURIComponent(userAddress)}` : '/portfolio/summary';
     return fetchJson<{ success: boolean; data: PortfolioSummary }>(endpoint);

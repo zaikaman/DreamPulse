@@ -5,8 +5,9 @@ import {
   CurrencyDollarIcon,
   ScaleIcon,
 } from '@heroicons/react/24/outline';
-import type { Market } from '../../types/index.js';
+import type { Market, SessionGrant, AgentThoughtLog } from '../../types/index.js';
 import type { MarketTickData, DepthUpdateData } from '../../hooks/useTelemetry.js';
+import type { WalletState } from '../../hooks/useSessionKey.js';
 import { MarketMatrix } from '../MarketMatrix.js';
 import { OrderBookDepth } from '../OrderBookDepth.js';
 
@@ -19,6 +20,11 @@ interface MarketsDepthViewProps {
   depthMap: Map<string, DepthUpdateData>;
   currentSpotPrices: Record<string, number>;
   isLoading?: boolean;
+  wallet?: WalletState;
+  activeSession?: SessionGrant | null;
+  agentThoughts?: AgentThoughtLog[];
+  onOpenSessionModal?: () => void;
+  onConnectWallet?: () => void;
 }
 
 const MarketsDepthViewComponent: React.FC<MarketsDepthViewProps> = ({
@@ -30,6 +36,11 @@ const MarketsDepthViewComponent: React.FC<MarketsDepthViewProps> = ({
   depthMap,
   currentSpotPrices,
   isLoading = false,
+  wallet,
+  activeSession,
+  agentThoughts,
+  onOpenSessionModal,
+  onConnectWallet,
 }) => {
   // Compute top edge anomaly contract across open markets
   const topEdgeMarket = useMemo<{ market: Market | null; edge: number }>(() => {
@@ -117,7 +128,7 @@ const MarketsDepthViewComponent: React.FC<MarketsDepthViewProps> = ({
       </div>
 
       {/* Main Split Grid */}
-      <div className="grid grid-cols-1 xl:grid-cols-[1.3fr_1fr] gap-3.5 h-full min-h-0 flex-1 overflow-hidden">
+      <div className="grid grid-cols-1 xl:grid-cols-[1.15fr_1.35fr] gap-3.5 h-full min-h-0 flex-1 overflow-hidden">
         {/* Left: Active Markets Catalog & Matrix */}
         <div className="flex-1 min-h-0 h-full flex flex-col overflow-hidden">
           <MarketMatrix
@@ -130,12 +141,17 @@ const MarketsDepthViewComponent: React.FC<MarketsDepthViewProps> = ({
           />
         </div>
 
-        {/* Right: Selected Market CLOB Depth Visualizer */}
+        {/* Right: Selected Market CLOB Depth Visualizer & Trader Cockpit */}
         <div className="flex-1 min-h-0 h-full flex flex-col overflow-hidden">
           <OrderBookDepth
             selectedMarket={selectedMarket}
             liveDepth={selectedMarketId ? depthMap.get(selectedMarketId) : undefined}
             liveTick={selectedMarketId ? liveTicks.get(selectedMarketId) : undefined}
+            wallet={wallet}
+            activeSession={activeSession}
+            agentThoughts={agentThoughts}
+            onOpenSessionModal={onOpenSessionModal}
+            onConnectWallet={onConnectWallet}
           />
         </div>
       </div>

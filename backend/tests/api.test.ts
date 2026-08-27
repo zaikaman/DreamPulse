@@ -110,4 +110,43 @@ describe('Express REST API Endpoints', () => {
     expect(res.body).toHaveProperty('totalFills');
     expect(Array.isArray(res.body.data)).toBe(true);
   });
+
+  it('POST /api/v1/orders/place rejects missing or invalid parameters', async () => {
+    const res1 = await request(app).post('/api/v1/orders/place').send({});
+    expect(res1.status).toBe(400);
+    expect(res1.body.success).toBe(false);
+
+    const res2 = await request(app).post('/api/v1/orders/place').send({
+      userAddress: 'invalid-address',
+      marketId: 'test-market-id',
+      outcome: 'YES',
+      price: 0.5,
+      lotSize: 10,
+    });
+    expect(res2.status).toBe(400);
+    expect(res2.body.error).toContain('Valid userAddress is required');
+  });
+
+  it('POST /api/v1/orders/place records client-signed order with txHash', async () => {
+    const payload = {
+      userAddress: '0x15C7e8CE38F021c5b45d098AaD788f63090bF20A',
+      marketId: 'test-market-id',
+      outcome: 'YES',
+      direction: 'BUY',
+      orderType: 'LIMIT',
+      price: 0.45,
+      lotSize: 20,
+      txHash: '0x1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef',
+    };
+
+    const res = await request(app).post('/api/v1/orders/place').send(payload);
+    expect(res.status).toBe(201);
+    expect(res.body.success).toBe(true);
+    expect(res.body.data).toHaveProperty('id');
+    expect(res.body.data.price).toBe(0.45);
+    expect(res.body.data.lotSize).toBe(20);
+    expect(res.body.data.outcome).toBe('YES');
+    expect(res.body.data.status).toBe('FILLED');
+    expect(res.body.data.txHash).toBe(payload.txHash);
+  });
 });

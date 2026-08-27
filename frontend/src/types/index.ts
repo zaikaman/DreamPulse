@@ -27,6 +27,8 @@ export interface Market {
   impliedProbYes: number;
   fairValueYes: number;
   edgePercentage: number;
+  poolAddress?: string;
+  marketIdHex?: string;
 }
 
 export interface OrderBookLevel {
