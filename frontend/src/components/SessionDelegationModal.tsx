@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   ShieldCheckIcon,
   KeyIcon,
@@ -27,6 +27,7 @@ import { parseWeb3Error } from '../lib/errorUtils.js';
 
 interface SessionDelegationModalProps {
   isOpen: boolean;
+  initialRevokeMode?: boolean;
   onClose: () => void;
   wallet: WalletState;
   activeSession: SessionGrant | null;
@@ -56,6 +57,7 @@ interface SessionDelegationModalProps {
 
 export const SessionDelegationModal: React.FC<SessionDelegationModalProps> = ({
   isOpen,
+  initialRevokeMode = false,
   onClose,
   wallet,
   activeSession,
@@ -81,8 +83,15 @@ export const SessionDelegationModal: React.FC<SessionDelegationModalProps> = ({
   const [durationHours, setDurationHours] = useState<number>(24);
   const [depositAmount, setDepositAmount] = useState<number>(10);
   const [copiedOperator, setCopiedOperator] = useState<boolean>(false);
-  const [confirmRevoke, setConfirmRevoke] = useState<boolean>(false);
+  const [confirmRevoke, setConfirmRevoke] = useState<boolean>(initialRevokeMode);
   const [revokeOnChainOption, setRevokeOnChainOption] = useState<boolean>(true);
+
+  useEffect(() => {
+    if (isOpen) {
+      setConfirmRevoke(Boolean(initialRevokeMode));
+      setRevokeOnChainOption(true);
+    }
+  }, [isOpen, initialRevokeMode]);
 
   if (!isOpen) return null;
 
@@ -159,10 +168,16 @@ export const SessionDelegationModal: React.FC<SessionDelegationModalProps> = ({
             </div>
             <div>
               <h2 id="session-modal-title" className="modal-heading">
-                {false ? 'Reconfigure Session Limits' : 'Non-Custodial Session Delegation'}
+                {confirmRevoke
+                  ? 'Revoke Session Authorization'
+                  : activeSession?.isActive
+                  ? 'Manage Session Delegation'
+                  : 'Non-Custodial Session Delegation'}
               </h2>
               <span className="modal-subheading">
-                EIP-712 cryptographic authorization for autonomous swarm execution
+                {confirmRevoke
+                  ? 'Confirm revocation of autonomous agent execution and operator permissions'
+                  : 'EIP-712 cryptographic authorization for autonomous swarm execution'}
               </span>
             </div>
           </div>

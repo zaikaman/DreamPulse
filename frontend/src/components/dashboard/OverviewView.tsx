@@ -31,8 +31,7 @@ interface OverviewViewProps {
   isLoading?: boolean;
   isFauceting?: boolean;
   onClaimFaucet?: (amount?: number) => Promise<void>;
-  onOpenSessionModal?: () => void;
-  onRevokeSession?: () => Promise<void>;
+  onOpenSessionModal?: (options?: { revoke?: boolean }) => void;
   onConnectWallet?: () => Promise<void>;
   onSwitchNetwork?: () => Promise<void>;
 }
@@ -51,7 +50,6 @@ const OverviewViewComponent: React.FC<OverviewViewProps> = ({
   isFauceting,
   onClaimFaucet,
   onOpenSessionModal,
-  onRevokeSession,
   onConnectWallet,
   onSwitchNetwork,
 }) => {
@@ -110,14 +108,13 @@ const OverviewViewComponent: React.FC<OverviewViewProps> = ({
   return (
     <div className="overview-container flex flex-col gap-2.5 h-full min-h-0 flex-1 overflow-hidden" style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
       {/* Non-Custodial Session Delegation Status Banner */}
-      {wallet && onOpenSessionModal && onRevokeSession && onConnectWallet && onSwitchNetwork && (
+      {wallet && onOpenSessionModal && onConnectWallet && onSwitchNetwork && (
         <SessionStatusBar
           wallet={wallet}
           activeSession={activeSession || null}
           isFauceting={isFauceting}
           onClaimFaucet={onClaimFaucet}
           onOpenModal={onOpenSessionModal}
-          onRevokeSession={onRevokeSession}
           onConnectWallet={onConnectWallet}
           onSwitchNetwork={onSwitchNetwork}
         />

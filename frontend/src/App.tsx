@@ -70,7 +70,13 @@ export const App: React.FC = () => {
   } = useSessionKey();
 
   const [isSessionModalOpen, setIsSessionModalOpen] = useState<boolean>(false);
+  const [sessionModalInitialRevoke, setSessionModalInitialRevoke] = useState<boolean>(false);
   const [forkedStrategyConfig, setForkedStrategyConfig] = useState<{ agentType: AgentType; config: Record<string, any> } | null>(null);
+
+  const handleOpenSessionModal = useCallback((options?: { revoke?: boolean }) => {
+    setSessionModalInitialRevoke(Boolean(options?.revoke));
+    setIsSessionModalOpen(true);
+  }, []);
 
   const handleForkToStudio = (agentType: AgentType, config: Record<string, any>) => {
     setForkedStrategyConfig({ agentType, config });
@@ -262,7 +268,7 @@ export const App: React.FC = () => {
         activeSession={activeSession}
         isFauceting={isSessionFauceting}
         onClaimFaucet={claimCollateralFaucet}
-        onOpenSessionModal={() => setIsSessionModalOpen(true)}
+        onOpenSessionModal={handleOpenSessionModal}
         onConnectWallet={connectWallet}
         onDisconnectWallet={disconnectWallet}
         onSwitchNetwork={switchNetwork}
@@ -291,8 +297,7 @@ export const App: React.FC = () => {
             activeSession={activeSession}
             isFauceting={isSessionFauceting}
             onClaimFaucet={claimCollateralFaucet}
-            onOpenSessionModal={() => setIsSessionModalOpen(true)}
-            onRevokeSession={revokeSession}
+            onOpenSessionModal={handleOpenSessionModal}
             onConnectWallet={connectWallet}
             onSwitchNetwork={switchNetwork}
             isLoading={isMarketsLoading}
@@ -331,7 +336,7 @@ export const App: React.FC = () => {
             wallet={wallet}
             activeSession={activeSession}
             agentThoughts={agentThoughts}
-            onOpenSessionModal={() => setIsSessionModalOpen(true)}
+            onOpenSessionModal={handleOpenSessionModal}
             onConnectWallet={connectWallet}
           />
         ) : activeNav === 'AI Swarm Feed' ? (
@@ -349,7 +354,7 @@ export const App: React.FC = () => {
               activeSession={activeSession}
               onForkToStudio={handleForkToStudio}
               onConnectWallet={connectWallet}
-              onOpenSessionModal={() => setIsSessionModalOpen(true)}
+              onOpenSessionModal={handleOpenSessionModal}
             />
           </React.Suspense>
         ) : activeNav === 'Strategy Studio' ? (
@@ -358,7 +363,7 @@ export const App: React.FC = () => {
               initialConfig={forkedStrategyConfig}
               wallet={wallet}
               activeSession={activeSession}
-              onOpenSessionModal={() => setIsSessionModalOpen(true)}
+              onOpenSessionModal={handleOpenSessionModal}
               onConnectWallet={connectWallet}
             />
           </React.Suspense>
@@ -412,7 +417,7 @@ export const App: React.FC = () => {
           else if (view === 'Settlement') window.location.hash = '#settlement';
           else if (view === 'Analytics') window.location.hash = '#analytics';
         }}
-        onOpenSessionModal={() => setIsSessionModalOpen(true)}
+        onOpenSessionModal={handleOpenSessionModal}
         onClaimFaucet={claimCollateralFaucet}
       />
 
@@ -420,7 +425,11 @@ export const App: React.FC = () => {
       <React.Suspense fallback={null}>
         <SessionDelegationModal
           isOpen={isSessionModalOpen}
-          onClose={() => setIsSessionModalOpen(false)}
+          initialRevokeMode={sessionModalInitialRevoke}
+          onClose={() => {
+            setIsSessionModalOpen(false);
+            setSessionModalInitialRevoke(false);
+          }}
           wallet={wallet}
           activeSession={activeSession}
           isSigning={isSessionSigning}

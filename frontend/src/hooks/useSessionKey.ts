@@ -489,7 +489,8 @@ export function useSessionKey(): UseSessionKeyReturn {
       setError(null);
 
       try {
-        if (options?.onChain && wallet.address) {
+        const shouldRevokeOnChain = options && typeof options.onChain === 'boolean' ? options.onChain : true;
+        if (shouldRevokeOnChain && wallet.address) {
           await web3Service.revokeOperatorOnChain({
             userAddress: wallet.address,
             operator: SOMNIA_ADDRESSES.operatorAccount,
@@ -502,6 +503,7 @@ export function useSessionKey(): UseSessionKeyReturn {
       } catch (err: any) {
         const parsed = parseWeb3Error(err);
         setError(parsed.message);
+        throw err;
       } finally {
         setIsLoading(false);
       }

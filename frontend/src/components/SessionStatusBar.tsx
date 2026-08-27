@@ -25,8 +25,7 @@ interface SessionStatusBarProps {
   activeSession: SessionGrant | null;
   isFauceting?: boolean;
   onClaimFaucet?: (amount?: number) => Promise<void>;
-  onOpenModal: () => void;
-  onRevokeSession: () => Promise<void>;
+  onOpenModal: (options?: { revoke?: boolean }) => void;
   onConnectWallet: () => Promise<void>;
   onSwitchNetwork: () => Promise<void>;
 }
@@ -37,7 +36,6 @@ export const SessionStatusBar: React.FC<SessionStatusBarProps> = ({
   isFauceting = false,
   onClaimFaucet,
   onOpenModal,
-  onRevokeSession,
   onConnectWallet,
   onSwitchNetwork,
 }) => {
@@ -241,7 +239,7 @@ export const SessionStatusBar: React.FC<SessionStatusBarProps> = ({
           <Button
             variant="outline"
             size="sm"
-            onClick={onOpenModal}
+            onClick={() => onOpenModal()}
             title="Configure Session Limits"
             className="h-7 text-xs px-2.5 gap-1.5 border-border/60 bg-secondary/50 hover:bg-secondary text-muted-foreground hover:text-foreground"
           >
@@ -251,8 +249,8 @@ export const SessionStatusBar: React.FC<SessionStatusBarProps> = ({
           <Button
             variant="outline"
             size="sm"
-            onClick={onRevokeSession}
-            title="Instantly Revoke Session Authorization"
+            onClick={() => onOpenModal({ revoke: true })}
+            title="Revoke Session Authorization & On-Chain Permissions"
             className="h-7 text-xs px-2.5 gap-1.5 border-rose-500/30 bg-rose-500/10 text-rose-400 hover:bg-rose-500/20 hover:text-rose-300"
           >
             <XCircleIcon className="w-3.5 h-3.5" />
@@ -294,7 +292,7 @@ export const SessionStatusBar: React.FC<SessionStatusBarProps> = ({
         )}
         <Button
           size="sm"
-          onClick={onOpenModal}
+          onClick={() => onOpenModal()}
           className="h-7 text-xs font-semibold px-3 gap-1.5"
         >
           <KeyIcon className="w-3.5 h-3.5" />
