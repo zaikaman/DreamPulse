@@ -152,7 +152,7 @@ export const CinematicHero: React.FC<CinematicHeroProps> = ({
     : null;
 
   return (
-    <div className="h-screen h-[100dvh] w-screen overflow-hidden relative bg-black text-white font-sans select-none flex flex-col justify-between">
+    <div className="min-h-screen min-h-[100dvh] lg:h-screen lg:h-[100dvh] w-full overflow-y-auto lg:overflow-hidden relative bg-black text-white font-sans select-none flex flex-col justify-between">
       {/* 1. Full-Screen Ambient Trading Background Video (z-index 0) */}
       <div className="fixed inset-0 w-full h-full z-0 overflow-hidden pointer-events-none">
         <video
@@ -318,8 +318,8 @@ export const CinematicHero: React.FC<CinematicHeroProps> = ({
       </div>
 
       {/* 5. Showcase Hero Content (Bottom of viewport, z-index 10) */}
-      <main className="flex-1 flex flex-col justify-end px-4 sm:px-6 md:px-12 pb-8 md:pb-16 z-10">
-        <div className="flex flex-col md:flex-row md:items-end justify-between gap-8">
+      <main className="flex-1 flex flex-col justify-end px-4 sm:px-6 md:px-12 pt-8 sm:pt-6 pb-6 md:pb-16 z-10">
+        <div className="flex flex-col md:flex-row md:items-end justify-between gap-6 md:gap-8">
           {/* Left Side: Metadata Badges, Title, Description, Showcase CTAs */}
           <div
             className={`flex-1 transition-opacity duration-200 ${
@@ -328,26 +328,26 @@ export const CinematicHero: React.FC<CinematicHeroProps> = ({
           >
             {/* Badges Row */}
             <div
-              className="animate-blur-fade-up flex flex-wrap items-center gap-3 sm:gap-6 mb-6 md:mb-8 text-xs sm:text-sm text-gray-300"
+              className="animate-blur-fade-up flex flex-wrap items-center gap-2 sm:gap-6 mb-4 md:mb-6 text-[11px] sm:text-sm text-gray-300"
               style={{ animationDelay: "300ms" }}
             >
               <div className="flex items-center gap-1.5 font-medium text-white">
-                <Badge1Icon className="w-4 h-4 sm:w-5 h-5 text-white" />
+                <Badge1Icon className="w-3.5 h-3.5 sm:w-5 sm:h-5 text-white" />
                 <span>{slide.badge1.label}</span>
               </div>
               <div className="flex items-center gap-1.5 text-gray-300">
-                <Badge2Icon className="w-4 h-4 text-gray-400" />
+                <Badge2Icon className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-gray-400" />
                 <span>{slide.badge2.label}</span>
               </div>
               <div className="flex items-center gap-1.5 text-gray-300">
-                <Badge3Icon className="w-4 h-4 text-gray-400" />
+                <Badge3Icon className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-gray-400" />
                 <span>{slide.badge3.label}</span>
               </div>
             </div>
 
             {/* Main Headline */}
             <h1
-              className="animate-blur-fade-up text-3xl sm:text-5xl md:text-6xl lg:text-7xl font-normal tracking-[-0.04em] mb-4 md:mb-6 text-white leading-[1.08] max-w-4xl"
+              className="animate-blur-fade-up text-2xl sm:text-4xl md:text-5xl lg:text-7xl font-normal tracking-[-0.03em] mb-3 md:mb-5 text-white leading-[1.1] max-w-4xl"
               style={{ animationDelay: "400ms" }}
             >
               {slide.title}
@@ -355,36 +355,36 @@ export const CinematicHero: React.FC<CinematicHeroProps> = ({
 
             {/* Subtitle Description */}
             <p
-              className="animate-blur-fade-up text-base sm:text-lg md:text-xl text-gray-400 mb-6 md:mb-12 max-w-2xl leading-relaxed font-light"
+              className="animate-blur-fade-up text-xs sm:text-base md:text-lg text-gray-400 mb-5 md:mb-10 max-w-2xl leading-relaxed font-light"
               style={{ animationDelay: "500ms" }}
             >
               {slide.description}
             </p>
 
             {/* Showcase CTA Buttons */}
-            <div className="flex flex-wrap items-center gap-3 sm:gap-4">
+            <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2.5 sm:gap-4 w-full sm:w-auto">
               <button
                 onClick={() => onEnterConsole(slide.targetView)}
-                className="animate-blur-fade-up bg-white text-black hover:bg-gray-200 transition-all rounded-full font-medium px-6 sm:px-8 py-2.5 sm:py-3 text-sm sm:text-base flex items-center gap-2.5 shadow-xl hover:shadow-white/20 active:scale-95 cursor-pointer"
+                className="animate-blur-fade-up bg-white text-black hover:bg-gray-200 transition-all rounded-full font-medium px-5 sm:px-8 py-2.5 sm:py-3 text-xs sm:text-base flex items-center justify-center gap-2.5 shadow-xl hover:shadow-white/20 active:scale-95 cursor-pointer"
                 style={{ animationDelay: "600ms" }}
               >
-                <PlayIcon className="size-[18px] fill-black text-black" />
+                <PlayIcon className="size-[16px] sm:size-[18px] fill-black text-black" />
                 <span>{slide.primaryCtaText}</span>
               </button>
 
               <button
                 onClick={() => onEnterConsole(slide.secondaryTargetView)}
-                className="animate-blur-fade-up liquid-glass text-white rounded-full font-medium px-6 sm:px-8 py-2.5 sm:py-3 text-sm sm:text-base flex items-center gap-2 hover:bg-white/5 transition-all active:scale-95 cursor-pointer"
+                className="animate-blur-fade-up liquid-glass text-white rounded-full font-medium px-5 sm:px-8 py-2.5 sm:py-3 text-xs sm:text-base flex items-center justify-center gap-2 hover:bg-white/5 transition-all active:scale-95 cursor-pointer"
                 style={{ animationDelay: "700ms" }}
               >
                 <span>{slide.secondaryCtaText}</span>
-                <ArrowRightIcon className="w-4 h-4" />
+                <ArrowRightIcon className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
               </button>
             </div>
           </div>
 
           {/* Right Side: Showcase Navigation Arrows & Slide Indicators */}
-          <div className="flex flex-col items-start md:items-end gap-3 shrink-0">
+          <div className="flex flex-row md:flex-col items-center md:items-end justify-between md:justify-start w-full md:w-auto gap-3 shrink-0 pt-2 md:pt-0">
             {/* Slide Index Counter */}
             <div
               className="animate-blur-fade-up text-xs font-mono text-gray-400 tracking-wider flex items-center gap-2"
@@ -410,22 +410,22 @@ export const CinematicHero: React.FC<CinematicHeroProps> = ({
             <div className="flex items-center gap-2">
               <button
                 onClick={handlePrevSlide}
-                className="animate-blur-fade-up liquid-glass rounded-full px-4 sm:px-6 py-2.5 sm:py-3 flex items-center gap-1.5 text-sm text-white hover:bg-white/5 transition-all active:scale-95 cursor-pointer"
+                className="animate-blur-fade-up liquid-glass rounded-full px-3.5 sm:px-6 py-2 sm:py-3 flex items-center gap-1.5 text-xs sm:text-sm text-white hover:bg-white/5 transition-all active:scale-95 cursor-pointer"
                 style={{ animationDelay: "800ms" }}
                 aria-label="Previous Slide"
               >
-                <ChevronLeftIcon className="w-4 h-4" />
+                <ChevronLeftIcon className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
                 <span>Previous</span>
               </button>
 
               <button
                 onClick={handleNextSlide}
-                className="animate-blur-fade-up liquid-glass rounded-full px-4 sm:px-6 py-2.5 sm:py-3 flex items-center gap-1.5 text-sm text-white hover:bg-white/5 transition-all active:scale-95 cursor-pointer"
+                className="animate-blur-fade-up liquid-glass rounded-full px-3.5 sm:px-6 py-2 sm:py-3 flex items-center gap-1.5 text-xs sm:text-sm text-white hover:bg-white/5 transition-all active:scale-95 cursor-pointer"
                 style={{ animationDelay: "900ms" }}
                 aria-label="Next Slide"
               >
                 <span>Next</span>
-                <ChevronRightIcon className="w-4 h-4" />
+                <ChevronRightIcon className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
               </button>
             </div>
           </div>

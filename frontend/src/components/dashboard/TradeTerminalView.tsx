@@ -74,7 +74,7 @@ export const TradeTerminalView: React.FC<TradeTerminalViewProps> = ({
   const { formattedExpiry } = useMarketCountdown(market?.closeTimestamp, market?.windowDuration);
 
   return (
-    <div className="flex flex-col h-full w-full min-h-0 flex-1 overflow-hidden gap-2 select-none">
+    <div className="flex flex-col w-full min-h-0 flex-1 overflow-y-auto lg:overflow-hidden gap-2 select-none pb-4 lg:pb-0">
       {/* Top Pro DEX Navigation Bar */}
       {market && (
         <div className="terminal-panel p-2 px-3 flex items-center justify-between flex-wrap gap-2 flex-shrink-0 bg-background/70 border border-border/40 backdrop-blur-md rounded-xl">
@@ -180,11 +180,11 @@ export const TradeTerminalView: React.FC<TradeTerminalViewProps> = ({
       )}
 
       {/* Main Dual-Column Pro Trading Layout (70% Left / 30% Right) */}
-      <div className="grid grid-cols-1 lg:grid-cols-12 gap-2 flex-1 min-h-0 overflow-hidden">
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-2 flex-1 min-h-0 lg:overflow-hidden">
         {/* Left Column (8 cols = ~67%): Visual Settlement Chart or CLOB Orderbook */}
-        <div className="lg:col-span-8 h-full min-h-0 flex flex-col gap-2 overflow-hidden">
+        <div className="lg:col-span-8 flex flex-col gap-2 min-h-[380px] lg:min-h-0 lg:h-full lg:overflow-hidden">
           {/* Main Visual Arena */}
-          <div className="flex-1 min-h-0 overflow-hidden">
+          <div className="flex-1 min-h-[320px] lg:min-h-0 overflow-hidden">
             {isBookVisible ? (
               <OrderBookDepth
                 selectedMarket={market}
@@ -222,7 +222,7 @@ export const TradeTerminalView: React.FC<TradeTerminalViewProps> = ({
         </div>
 
         {/* Right Column (4 cols = ~33%): DreamDEX Pro Order Ticket + AI Copilot */}
-        <div className="lg:col-span-4 h-full min-h-0 flex flex-col overflow-hidden rounded-xl border border-border/40 bg-background/80 backdrop-blur-md">
+        <div className="lg:col-span-4 lg:h-full min-h-0 flex flex-col overflow-hidden rounded-xl border border-border/40 bg-background/80 backdrop-blur-md">
           {market && (
             <TraderCockpitTicket
               market={market}

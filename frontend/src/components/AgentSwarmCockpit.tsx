@@ -181,7 +181,7 @@ export const AgentSwarmCockpit: React.FC<AgentSwarmCockpitProps> = ({
       )}
 
       {/* ---------- KPI Header Grid — matches MarketsDepthView / StatCardsGrid language ---------- */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
         {/* KPI 1 — Swarm Health */}
         <div className="terminal-panel p-3.5 flex flex-col justify-between overflow-hidden relative">
           <div className="flex items-start justify-between gap-2">

@@ -255,7 +255,7 @@ export const ActivePositionsDrawer: React.FC<ActivePositionsDrawerProps> = ({
 
       {/* Expanded Content Area */}
       {isExpanded && (
-        <div className="h-44 overflow-y-auto p-2 font-mono text-xs">
+        <div className="max-h-56 min-h-[11rem] overflow-y-auto overflow-x-auto p-2 font-mono text-xs">
           {!wallet.isConnected ? (
             <div className="flex flex-col items-center justify-center h-full text-muted-foreground py-6">
               <span>Connect your wallet to monitor open positions and resting limit orders.</span>
@@ -266,7 +266,7 @@ export const ActivePositionsDrawer: React.FC<ActivePositionsDrawerProps> = ({
                 <span>No open positions currently active. Execute an order in the Trader Cockpit to open a position.</span>
               </div>
             ) : (
-              <table className="w-full text-left">
+              <table className="w-full min-w-[580px] text-left">
                 <thead>
                   <tr className="text-[10px] text-muted-foreground uppercase border-b border-border/20">
                     <th className="pb-1.5 pl-2">Target Asset & Event</th>
@@ -391,7 +391,7 @@ Tx: ${pos.txHash || 'N/A'}`;
                 <span>No resting limit orders on the CLOB. Market IOC orders fill immediately upon placement.</span>
               </div>
             ) : (
-              <table className="w-full text-left">
+              <table className="w-full min-w-[540px] text-left">
                 <thead>
                   <tr className="text-[10px] text-muted-foreground uppercase border-b border-border/20">
                     <th className="pb-1.5 pl-2">Target Asset & Event</th>
@@ -462,7 +462,7 @@ Tx: ${pos.txHash || 'N/A'}`;
                 <span>No settled trades in history yet.</span>
               </div>
             ) : (
-              <table className="w-full text-left">
+              <table className="w-full min-w-[620px] text-left">
                 <thead>
                   <tr className="text-[10px] text-muted-foreground uppercase border-b border-border/20">
                     <th className="pb-1.5 pl-2">Target Asset & Event</th>

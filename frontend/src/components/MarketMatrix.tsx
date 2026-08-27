@@ -10,6 +10,7 @@ import {
   ArrowsUpDownIcon,
   FunnelIcon,
   SparklesIcon,
+  ArrowRightIcon,
 } from '@heroicons/react/24/outline';
 import type { Market } from '../types/index.js';
 import type { MarketTickData } from '../hooks/useTelemetry.js';
@@ -415,7 +416,7 @@ export const MarketMatrix: React.FC<MarketMatrixProps> = ({
         ) : viewMode === 'table' ? (
           /* Table View */
           <div className="overflow-x-auto rounded-lg border border-border/40 bg-secondary/10">
-            <table className="w-full text-left text-xs font-mono">
+            <table className="w-full min-w-[640px] text-left text-xs font-mono">
               <thead className="border-b border-border/40 bg-secondary/30 text-[10px] uppercase tracking-wider text-muted-foreground font-semibold">
                 <tr>
                   <th className="px-3.5 py-2.5">Contract</th>
@@ -511,7 +512,10 @@ export const MarketMatrix: React.FC<MarketMatrixProps> = ({
                           }}
                           className="px-2.5 py-1 rounded bg-brand-cyan/15 hover:bg-brand-cyan/25 border border-brand-cyan/40 text-brand-cyan text-[11px] font-mono font-bold transition-colors cursor-pointer"
                         >
-                          Trade →
+                          <span className="inline-flex items-center gap-1">
+                            <span>Trade</span>
+                            <ArrowRightIcon className="w-3 h-3 inline" />
+                          </span>
                         </button>
                       </td>
                     </tr>

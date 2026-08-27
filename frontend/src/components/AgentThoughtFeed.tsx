@@ -15,6 +15,7 @@ import {
   CheckCircleIcon,
   SignalIcon,
   FireIcon,
+  XMarkIcon,
 } from '@heroicons/react/24/outline';
 import type { AgentThoughtLog } from '../types/index.js';
 import { AgentThoughtFeedSkeleton } from './ui/Skeleton.js';
@@ -292,9 +293,10 @@ export const AgentThoughtFeed: React.FC<AgentThoughtFeedProps> = ({
               <button
                 type="button"
                 onClick={() => setSearchQuery('')}
-                className="absolute right-2 bg-transparent border-none text-muted-foreground hover:text-foreground cursor-pointer text-xs"
+                className="absolute right-2 text-muted-foreground hover:text-foreground cursor-pointer"
+                title="Clear search"
               >
-                ×
+                <XMarkIcon className="w-3.5 h-3.5" />
               </button>
             )}
           </div>

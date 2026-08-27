@@ -464,6 +464,13 @@ export const CommandDialog: React.FC<CommandDialogProps> = ({
           )}
           <button
             onClick={onClose}
+            className="sm:hidden p-1 text-muted-foreground hover:text-foreground transition-colors cursor-pointer shrink-0"
+            title="Close dialog"
+          >
+            <XMarkIcon className="w-4 h-4" />
+          </button>
+          <button
+            onClick={onClose}
             className="hidden sm:inline-flex h-5 select-none items-center gap-1 rounded border border-border/60 bg-muted/80 px-1.5 font-mono text-[10px] font-medium text-muted-foreground hover:bg-muted hover:text-foreground transition-colors cursor-pointer"
             title="Press ESC to close"
           >

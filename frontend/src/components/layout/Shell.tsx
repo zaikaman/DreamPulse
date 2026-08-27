@@ -1,7 +1,8 @@
-import React from "react";
+import React, { useState } from "react";
 import { Header } from "./Header";
 import { Sidebar } from "./Sidebar";
 import { Silk } from "../ui/Silk";
+import { cn } from "../../lib/utils";
 import type { DashboardViewType } from "../landing/CinematicHero";
 import type { Market } from "../../types/index";
 
@@ -58,6 +59,21 @@ export const Shell: React.FC<ShellProps> = ({
   onSwitchNetwork,
   children,
 }) => {
+  const [isMobileDrawerOpen, setIsMobileDrawerOpen] = useState(false);
+
+  const handleToggleSidebar = () => {
+    if (window.innerWidth < 768) {
+      setIsMobileDrawerOpen((prev) => !prev);
+    } else {
+      onToggleSidebar?.();
+    }
+  };
+
+  const handleSelectView = (view: DashboardViewType) => {
+    setIsMobileDrawerOpen(false);
+    onSelectView(view);
+  };
+
   return (
     <div className="relative flex h-screen w-full flex-col bg-background text-foreground antialiased overflow-hidden">
       {/* Ambient Silk Shader Dynamic Canvas Background */}
@@ -78,8 +94,8 @@ export const Shell: React.FC<ShellProps> = ({
       {/* Top Header */}
       <Header
         activeView={currentView}
-        onSelectView={onSelectView}
-        onToggleSidebar={onToggleSidebar}
+        onSelectView={handleSelectView}
+        onToggleSidebar={handleToggleSidebar}
         onOpenCommandPalette={onOpenCommandPalette}
         spotPrices={spotPrices}
         isConnected={isConnected}
@@ -95,10 +111,19 @@ export const Shell: React.FC<ShellProps> = ({
       />
 
       {/* Main Workspace Layout */}
-      <div className="relative z-10 flex flex-1 overflow-hidden">
+      <div className="relative z-10 flex flex-1 min-h-0 overflow-hidden">
+        {/* Mobile Backdrop Overlay */}
+        {isMobileDrawerOpen && (
+          <div
+            className="fixed inset-0 z-40 bg-black/65 backdrop-blur-xs md:hidden"
+            onClick={() => setIsMobileDrawerOpen(false)}
+            aria-hidden="true"
+          />
+        )}
+
         <Sidebar
           currentView={currentView}
-          onSelectView={onSelectView}
+          onSelectView={handleSelectView}
           markets={markets}
           selectedMarketId={selectedMarketId}
           onSelectMarket={onSelectMarket}
@@ -109,10 +134,27 @@ export const Shell: React.FC<ShellProps> = ({
           wallet={wallet}
           activeSession={activeSession}
           onConnectWallet={onConnectWallet}
+          isMobileOpen={isMobileDrawerOpen}
+          onCloseMobile={() => setIsMobileDrawerOpen(false)}
         />
 
-        <main className={currentView === 'Trade Terminal' ? "flex-1 overflow-hidden p-1.5 sm:p-2 md:p-2.5" : "flex-1 overflow-y-auto p-3 sm:p-4 md:p-6"}>
-          <div className={currentView === 'Trade Terminal' ? "w-full h-full flex flex-col min-h-0" : "mx-auto max-w-7xl h-full flex flex-col"}>{children}</div>
+        <main
+          className={cn(
+            "flex-1 min-w-0 transition-all duration-200",
+            currentView === 'Trade Terminal'
+              ? "overflow-y-auto lg:overflow-hidden p-1.5 sm:p-2 md:p-2.5"
+              : "overflow-y-auto p-2.5 sm:p-4 md:p-6"
+          )}
+        >
+          <div
+            className={
+              currentView === 'Trade Terminal'
+                ? "w-full h-full flex flex-col min-h-0"
+                : "mx-auto max-w-7xl min-h-0 flex flex-col"
+            }
+          >
+            {children}
+          </div>
         </main>
       </div>
     </div>

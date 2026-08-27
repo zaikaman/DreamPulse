@@ -68,9 +68,9 @@ const MarketsDepthViewComponent: React.FC<MarketsDepthViewProps> = ({
   }, [markets]);
 
   return (
-    <div className="flex flex-col gap-3.5 h-full min-h-0 flex-1 overflow-hidden">
+    <div className="flex flex-col gap-3.5 min-h-0 flex-1 overflow-y-auto xl:overflow-hidden pb-4">
       {/* Top Telemetry KPI Banner */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-3 flex-shrink-0">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 flex-shrink-0">
         {/* KPI 1: Active Contracts */}
         <div className="terminal-panel p-3 flex flex-col items-center justify-center text-center">
           <span className="text-[10px] font-mono font-semibold text-muted-foreground uppercase tracking-wider">
@@ -128,9 +128,9 @@ const MarketsDepthViewComponent: React.FC<MarketsDepthViewProps> = ({
       </div>
 
       {/* Main Split Grid */}
-      <div className="grid grid-cols-1 xl:grid-cols-[1.15fr_1.35fr] gap-3.5 h-full min-h-0 flex-1 overflow-hidden">
+      <div className="grid grid-cols-1 xl:grid-cols-[1.15fr_1.35fr] gap-3.5 xl:h-full min-h-0 flex-1">
         {/* Left: Active Markets Catalog & Matrix */}
-        <div className="flex-1 min-h-0 h-full flex flex-col overflow-hidden">
+        <div className="flex-1 min-h-[480px] xl:min-h-0 xl:h-full flex flex-col overflow-hidden">
           <MarketMatrix
             markets={markets}
             selectedMarketId={selectedMarketId}
@@ -142,7 +142,7 @@ const MarketsDepthViewComponent: React.FC<MarketsDepthViewProps> = ({
         </div>
 
         {/* Right: Selected Market CLOB Depth Visualizer & Trader Cockpit */}
-        <div className="flex-1 min-h-0 h-full flex flex-col overflow-hidden">
+        <div className="flex-1 min-h-[480px] xl:min-h-0 xl:h-full flex flex-col overflow-hidden">
           <OrderBookDepth
             selectedMarket={selectedMarket}
             liveDepth={selectedMarketId ? depthMap.get(selectedMarketId) : undefined}

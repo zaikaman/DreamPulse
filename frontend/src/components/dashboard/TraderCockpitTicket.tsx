@@ -516,7 +516,7 @@ export const TraderCockpitTicket: React.FC<TraderCockpitTicketProps> = ({
         </button>
       </div>
 
-      {/* 4. ✨ DREAM PULSE AI ALPHA COPILOT CARD */}
+      {/* 4. DREAM PULSE AI ALPHA COPILOT CARD */}
       <div className="p-2.5 rounded-xl bg-purple-950/20 border border-purple-500/30 mb-3.5 flex-shrink-0 space-y-2">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-1.5 text-purple-300 text-[11px] font-bold">

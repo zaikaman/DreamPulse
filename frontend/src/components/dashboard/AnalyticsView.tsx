@@ -371,7 +371,7 @@ export const AnalyticsView: React.FC<AnalyticsViewProps> = ({ wallet, onConnectW
               const term = data.sourceBreakdown.find(b => b.source === 'TERMINAL');
               const pnl = term?.pnl ?? 0;
               return (
-                <div className="grid grid-cols-4 gap-2 pt-1">
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 pt-1">
                   <div>
                     <div className="text-[10px] text-muted-foreground uppercase font-mono">Net PnL</div>
                     <div className="text-sm font-mono font-bold" style={{ color: pnl >= 0 ? 'var(--trade-yes)' : 'var(--trade-no)' }}>
@@ -415,7 +415,7 @@ export const AnalyticsView: React.FC<AnalyticsViewProps> = ({ wallet, onConnectW
               const swarm = data.sourceBreakdown.find(b => b.source === 'SWARM');
               const pnl = swarm?.pnl ?? 0;
               return (
-                <div className="grid grid-cols-4 gap-2 pt-1">
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 pt-1">
                   <div>
                     <div className="text-[10px] text-muted-foreground uppercase font-mono">Net PnL</div>
                     <div className="text-sm font-mono font-bold" style={{ color: pnl >= 0 ? 'var(--trade-yes)' : 'var(--trade-no)' }}>
@@ -448,7 +448,7 @@ export const AnalyticsView: React.FC<AnalyticsViewProps> = ({ wallet, onConnectW
       )}
 
       {/* KPI Grid — compact 4-col, 2 rows */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 flex-shrink-0">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 flex-shrink-0">
         <div className="terminal-panel p-3 flex flex-col gap-1.5">
           <div className="flex items-center justify-between"><span className="text-[10px] font-mono font-semibold tracking-wider text-muted-foreground uppercase">{isGuest ? 'SWARM TOTAL PnL' : 'YOUR TOTAL PnL'}</span><ArrowTrendingUpIcon className="w-3.5 h-3.5 text-muted-foreground/60" /></div>
           <div className="text-lg font-mono font-bold" style={{ color: isUserPositive ? 'var(--trade-yes)' : 'var(--trade-no)' }}>{isUserPositive ? '+' : ''}{(summary?.totalPnl ?? 0).toFixed(2)} <span className="text-[10px] text-muted-foreground">tUSDC</span></div>

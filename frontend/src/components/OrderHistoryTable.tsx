@@ -15,6 +15,7 @@ import {
   WalletIcon,
   ArrowPathIcon,
   DocumentCheckIcon,
+  XMarkIcon,
 } from '@heroicons/react/24/outline';
 import type { OrderExecution, AgentType, OutcomeType } from '../types/index.js';
 import { apiClient } from '../services/api.js';
@@ -463,7 +464,9 @@ export const OrderHistoryTable: React.FC<OrderHistoryTableProps> = ({
           <MagnifyingGlassIcon className="w-3.5 h-3.5" style={{ color: 'var(--muted-foreground)' }} />
           <input id="input-orders-search" type="text" placeholder="Search address or tx hash..." value={searchInput} onChange={(e) => setSearchInput(e.target.value)} style={{ background: 'transparent', border: 'none', outline: 'none', color: 'var(--foreground)', fontSize: '11px', fontFamily: 'var(--font-mono)', width: '100%' }} />
           {searchInput && (
-            <button type="button" onClick={() => { setSearchInput(''); setDebouncedSearch(''); setCurrentPage(1); }} style={{ background: 'transparent', border: 'none', color: 'var(--muted-foreground)', cursor: 'pointer', fontSize: '12px', padding: '0 2px' }}>×</button>
+            <button type="button" onClick={() => { setSearchInput(''); setDebouncedSearch(''); setCurrentPage(1); }} style={{ background: 'transparent', border: 'none', color: 'var(--muted-foreground)', cursor: 'pointer', padding: '0 2px' }} title="Clear search">
+              <XMarkIcon className="w-3.5 h-3.5" />
+            </button>
           )}
         </div>
       </div>
@@ -492,7 +495,7 @@ export const OrderHistoryTable: React.FC<OrderHistoryTableProps> = ({
               </span>
             </div>
           )}
-          <table className="terminal-table" style={{ width: '100%', borderCollapse: 'collapse', opacity: isFetching && orders.length > 0 ? 0.55 : 1, transition: 'opacity 0.15s ease' }}>
+          <table className="terminal-table" style={{ width: '100%', minWidth: '760px', borderCollapse: 'collapse', opacity: isFetching && orders.length > 0 ? 0.55 : 1, transition: 'opacity 0.15s ease' }}>
             <thead>
               <tr style={{ background: 'rgba(255, 255, 255, 0.02)', borderBottom: '1px solid var(--border)' }}>
                 <th style={{ padding: '10px 16px', textAlign: 'left', fontSize: '10px', color: 'var(--muted-foreground)', textTransform: 'uppercase', letterSpacing: '0.04em' }}>Time (UTC)</th>

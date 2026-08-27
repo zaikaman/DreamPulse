@@ -87,7 +87,7 @@ export const Header: React.FC<HeaderProps> = ({
           <Separator orientation="vertical" className="h-4 mx-1 border-border/50" />
           <button
             onClick={onOpenCommandPalette}
-            className="flex items-center gap-2 rounded-lg border border-border/60 bg-muted/30 backdrop-blur-sm px-3 py-1 text-xs text-muted-foreground hover:border-foreground/30 hover:text-foreground transition-colors w-44 sm:w-60 cursor-pointer"
+            className="flex items-center gap-2 rounded-lg border border-border/60 bg-muted/30 backdrop-blur-sm px-2.5 sm:px-3 py-1 text-xs text-muted-foreground hover:border-foreground/30 hover:text-foreground transition-colors w-32 sm:w-48 md:w-60 cursor-pointer"
             title="Quick search markets, navigation, commands (⌘K / Ctrl+K)"
           >
             <MagnifyingGlassIcon className="w-3.5 h-3.5" />

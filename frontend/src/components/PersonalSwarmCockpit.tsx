@@ -246,7 +246,7 @@ export const PersonalSwarmCockpit: React.FC<PersonalSwarmCockpitProps> = ({
           </div>
         </div>
         {/* KPI strip for personal swarm */}
-        <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 p-3.5 bg-secondary/10 border-b border-border/30">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 p-3.5 bg-secondary/10 border-b border-border/30">
           <div className="p-2.5 rounded-lg border bg-card/60 border-border/50 flex flex-col gap-0.5">
             <span className="text-[10px] font-mono text-muted-foreground uppercase tracking-wider">My Swarm PnL</span>
             <span className="text-xs font-mono font-bold" style={{ color: totalPersonalPnl >= 0 ? '#6ee7b7' : '#fda4af' }}>{totalPersonalPnl >= 0 ? `+${totalPersonalPnl.toFixed(2)}` : totalPersonalPnl.toFixed(2)} <span className="text-[10px]">tUSDC</span></span>

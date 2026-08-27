@@ -70,9 +70,9 @@ export const SwarmFeedView: React.FC<SwarmFeedViewProps> = ({
   ];
 
   return (
-    <div className="flex flex-col gap-4 h-full min-h-0 flex-1 overflow-hidden">
+    <div className="flex flex-col gap-4 min-h-0 flex-1 overflow-y-auto lg:overflow-hidden pb-4">
       {/* Agent Swarm Overview Header — Minimalist (aligns with Overview / Edge Radar) */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 flex-shrink-0">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 flex-shrink-0">
         {agents.map((ag) => {
           const Icon = ag.Icon;
           return (
@@ -105,7 +105,7 @@ export const SwarmFeedView: React.FC<SwarmFeedViewProps> = ({
       </div>
 
       {/* Full-Page Live Streaming AI Thought Stream (Fills 100% of remaining space) */}
-      <div className="flex-1 min-h-0 flex flex-col overflow-hidden">
+      <div className="flex-1 min-h-[480px] lg:min-h-0 flex flex-col overflow-hidden">
         <AgentThoughtFeed
           thoughts={agentThoughts}
           debugThoughts={debugThoughts}

@@ -31,7 +31,7 @@ html, body {
   background-color: var(--bg);
   color: var(--text);
   font-family: var(--font-sans);
-  overflow: hidden;
+  overflow-x: hidden;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
   text-rendering: optimizeLegibility;

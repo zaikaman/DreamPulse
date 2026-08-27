@@ -12,6 +12,7 @@ import {
   CurrencyDollarIcon,
   ShieldCheckIcon,
   BoltIcon,
+  XMarkIcon,
 } from "@heroicons/react/24/outline";
 import { BrandLogo, BrandIcon } from "../common/BrandLogo";
 import { Button } from "../ui/button";
@@ -37,6 +38,8 @@ interface SidebarProps {
   };
   activeSession?: any | null;
   onConnectWallet?: () => void;
+  isMobileOpen?: boolean;
+  onCloseMobile?: () => void;
 }
 
 interface NavItem {
@@ -57,7 +60,14 @@ export const Sidebar: React.FC<SidebarProps> = ({
   wallet,
   activeSession,
   onConnectWallet,
+  isMobileOpen = false,
+  onCloseMobile,
 }) => {
+  const effectiveCollapsed = isMobileOpen ? false : isCollapsed;
+  const handleNavClick = (viewId: DashboardViewType) => {
+    onSelectView(viewId);
+    onCloseMobile?.();
+  };
   // Category 1: Market Intelligence & Price Discovery
   const marketNavItems: NavItem[] = [
     {
@@ -126,7 +136,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
 
   const renderNavGroup = (title: string, items: typeof marketNavItems) => (
     <div className="space-y-1">
-      {!isCollapsed && (
+      {!effectiveCollapsed && (
         <div className="px-2.5 pb-1 pt-2 text-[10px] font-semibold text-muted-foreground uppercase tracking-wider font-mono">
           {title}
         </div>
@@ -138,11 +148,11 @@ export const Sidebar: React.FC<SidebarProps> = ({
           return (
             <button
               key={item.id}
-              onClick={() => onSelectView(item.id)}
-              title={isCollapsed ? `${item.label} — ${item.description}` : undefined}
+              onClick={() => handleNavClick(item.id)}
+              title={effectiveCollapsed ? `${item.label} — ${item.description}` : undefined}
               className={cn(
                 "w-full flex items-center rounded-lg text-xs font-medium transition-colors text-left group cursor-pointer",
-                isCollapsed ? "justify-center p-2" : "justify-between px-2.5 py-1.5",
+                effectiveCollapsed ? "justify-center p-2" : "justify-between px-2.5 py-1.5",
                 isActive
                   ? "bg-secondary text-foreground font-semibold shadow-2xs"
                   : "text-muted-foreground hover:bg-muted/60 hover:text-foreground"
@@ -155,9 +165,9 @@ export const Sidebar: React.FC<SidebarProps> = ({
                     isActive ? "text-foreground" : "text-muted-foreground group-hover:text-foreground"
                   )}
                 />
-                {!isCollapsed && <span className="truncate">{item.label}</span>}
+                {!effectiveCollapsed && <span className="truncate">{item.label}</span>}
               </div>
-              {!isCollapsed && item.badge && (
+              {!effectiveCollapsed && item.badge && (
                 <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-muted/80 text-muted-foreground font-medium">
                   {item.badge}
                 </span>
@@ -172,32 +182,51 @@ export const Sidebar: React.FC<SidebarProps> = ({
   return (
     <aside
       className={cn(
-        "shrink-0 border-r border-border/50 bg-sidebar/65 backdrop-blur-xl text-sidebar-foreground flex flex-col justify-between p-3 font-sans select-none overflow-y-auto transition-all duration-200",
-        isCollapsed ? "w-16 items-center px-2" : "w-64"
+        "border-r border-border/50 text-sidebar-foreground flex flex-col justify-between p-3 font-sans select-none overflow-y-auto transition-all duration-200",
+        isMobileOpen
+          ? "fixed inset-y-0 left-0 z-50 w-72 max-w-[85vw] bg-sidebar/95 backdrop-blur-2xl shadow-2xl animate-in slide-in-from-left duration-200"
+          : cn(
+              "hidden md:flex shrink-0 bg-sidebar/65 backdrop-blur-xl",
+              effectiveCollapsed ? "w-16 items-center px-2" : "w-64"
+            )
       )}
     >
       <div className="space-y-3 w-full">
         {/* Brand Header */}
-        <button
-          onClick={() => onSelectView("Landing")}
-          className={cn(
-            "w-full flex items-center gap-2.5 px-2 py-1 rounded-xl hover:bg-muted/60 transition-all text-left group cursor-pointer",
-            isCollapsed && "justify-center px-0"
+        <div className="flex items-center justify-between w-full">
+          <button
+            onClick={() => handleNavClick("Landing")}
+            className={cn(
+              "flex items-center gap-2.5 px-2 py-1 rounded-xl hover:bg-muted/60 transition-all text-left group cursor-pointer",
+              effectiveCollapsed && "justify-center px-0 w-full"
+            )}
+            title="Return to Cinematic Landing Hero"
+          >
+            {effectiveCollapsed ? (
+              <BrandIcon size="sm" glow interactive />
+            ) : (
+              <BrandLogo size="md" glow interactive />
+            )}
+          </button>
+          {isMobileOpen && (
+            <button
+              onClick={onCloseMobile}
+              className="p-1.5 rounded-lg text-muted-foreground hover:text-foreground hover:bg-secondary/60 transition-colors md:hidden cursor-pointer"
+              title="Close Navigation Drawer"
+            >
+              <XMarkIcon className="w-5 h-5" />
+            </button>
           )}
-          title="Return to Cinematic Landing Hero"
-        >
-          {isCollapsed ? (
-            <BrandIcon size="sm" glow interactive />
-          ) : (
-            <BrandLogo size="md" glow interactive />
-          )}
-        </button>
+        </div>
 
         {/* Quick Action Button */}
-        {!isCollapsed ? (
+        {!effectiveCollapsed ? (
           <div className="px-1 pt-1">
             <button
-              onClick={() => onOpenSessionModal?.()}
+              onClick={() => {
+                onOpenSessionModal?.();
+                onCloseMobile?.();
+              }}
               className="w-full flex items-center justify-center gap-2 rounded-lg bg-primary text-primary-foreground h-9 px-3 text-xs font-medium hover:bg-primary/90 transition-colors shadow-2xs cursor-pointer"
             >
               <SparklesIcon className="w-3.5 h-3.5" />
@@ -208,7 +237,10 @@ export const Sidebar: React.FC<SidebarProps> = ({
           <div className="flex flex-col items-center pt-1">
             <Button
               size="icon"
-              onClick={() => onOpenSessionModal?.()}
+              onClick={() => {
+                onOpenSessionModal?.();
+                onCloseMobile?.();
+              }}
               className="w-9 h-9 rounded-lg shadow-2xs"
               title={activeSession ? "Session Active" : "Delegate Session"}
             >
@@ -228,9 +260,12 @@ export const Sidebar: React.FC<SidebarProps> = ({
       {/* Footer Support Card & Web3 Status */}
       <div className="space-y-2.5 pt-3 border-t border-border/50 w-full">
         {/* Guided Setup Tour Trigger */}
-        {!isCollapsed ? (
+        {!effectiveCollapsed ? (
           <button
-            onClick={() => onOpenTour?.()}
+            onClick={() => {
+              onOpenTour?.();
+              onCloseMobile?.();
+            }}
             className="w-full flex items-center justify-between px-2.5 py-1.5 rounded-lg border border-border/40 bg-secondary/30 hover:bg-secondary/70 text-muted-foreground hover:text-foreground text-xs transition-colors cursor-pointer"
             title="Open DreamPulse Setup & Feature Guide"
           >
@@ -245,7 +280,10 @@ export const Sidebar: React.FC<SidebarProps> = ({
         ) : (
           <div className="flex justify-center">
             <button
-              onClick={() => onOpenTour?.()}
+              onClick={() => {
+                onOpenTour?.();
+                onCloseMobile?.();
+              }}
               className="p-1.5 rounded-lg text-muted-foreground hover:text-foreground hover:bg-secondary/60 transition-colors cursor-pointer"
               title="Guided Tour"
             >
@@ -254,7 +292,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
           </div>
         )}
 
-        {!isCollapsed && (
+        {!effectiveCollapsed && (
           <div className="rounded-xl border border-border/50 bg-card/40 backdrop-blur-md p-2.5 space-y-1 text-xs shadow-2xs">
             <div className="flex items-center justify-between">
               <span className="font-semibold text-foreground text-xs flex items-center gap-1.5">
@@ -279,12 +317,12 @@ export const Sidebar: React.FC<SidebarProps> = ({
           <div
             className={cn(
               "w-full flex items-center justify-between p-1.5 rounded-lg bg-card/40 border border-border/50 text-xs",
-              isCollapsed && "justify-center p-1"
+              effectiveCollapsed && "justify-center p-1"
             )}
           >
             <div className="flex items-center gap-2 min-w-0">
               <div className="w-1.5 h-1.5 rounded-full bg-emerald-400 shrink-0" />
-              {!isCollapsed && (
+              {!effectiveCollapsed && (
                 <div className="text-left truncate">
                   <div className="font-mono text-xs text-foreground truncate">
                     {formatAddress(wallet.address)}
@@ -295,18 +333,21 @@ export const Sidebar: React.FC<SidebarProps> = ({
                 </div>
               )}
             </div>
-            {!isCollapsed && activeSession && (
+            {!effectiveCollapsed && activeSession && (
               <span title="Session Key Active">
                 <ShieldCheckIcon className="w-3 h-3 text-emerald-400 shrink-0" />
               </span>
             )}
           </div>
         ) : (
-          !isCollapsed && (
+          !effectiveCollapsed && (
             <Button
               size="sm"
               variant="outline"
-              onClick={onConnectWallet}
+              onClick={() => {
+                onConnectWallet?.();
+                onCloseMobile?.();
+              }}
               className="w-full gap-1.5 text-xs font-normal text-muted-foreground hover:text-foreground"
             >
               <CurrencyDollarIcon className="w-3.5 h-3.5" />

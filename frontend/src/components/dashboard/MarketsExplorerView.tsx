@@ -56,9 +56,9 @@ export const MarketsExplorerView: React.FC<MarketsExplorerViewProps> = ({
   }, [markets]);
 
   return (
-    <div className="flex flex-col gap-3.5 h-full min-h-0 flex-1 overflow-hidden">
+    <div className="flex flex-col gap-3.5 min-h-0 flex-1 overflow-y-auto lg:overflow-hidden pb-4">
       {/* Top Global Intelligence Strip */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-3 flex-shrink-0">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 flex-shrink-0">
         <div className="terminal-panel p-3 flex flex-col justify-between">
           <span className="text-[10px] text-muted-foreground font-mono uppercase tracking-wider font-semibold">
             ACTIVE CONTRACTS

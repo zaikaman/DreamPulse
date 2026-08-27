@@ -66,7 +66,7 @@ const EdgeRadarHeatmapComponent: React.FC<EdgeRadarHeatmapProps> = ({
         </div>
 
         {/* Minimalist Legend */}
-        <div className="flex items-center gap-4 text-[11px] font-mono text-muted-foreground">
+        <div className="flex items-center gap-3 sm:gap-4 text-[11px] font-mono text-muted-foreground flex-wrap">
           <div className="flex items-center gap-1.5">
             <span className="w-1.5 h-1.5 rounded-full bg-emerald-400" />
             <span>YES Alpha (&gt;0)</span>

@@ -126,7 +126,7 @@ export const OnboardingWizardModal: React.FC<OnboardingWizardModalProps> = ({
         showCloseButton={false}
       >
         {/* Modal Header */}
-        <div className="flex items-center justify-between px-6 pt-5 pb-4 border-b border-border/50 bg-secondary/20">
+        <div className="flex items-center justify-between px-4 sm:px-6 pt-4 sm:pt-5 pb-3 sm:pb-4 border-b border-border/50 bg-secondary/20">
           <div className="flex items-center gap-3">
             <BrandIcon size="sm" glow interactive />
             <div>
@@ -168,7 +168,7 @@ export const OnboardingWizardModal: React.FC<OnboardingWizardModalProps> = ({
         </div>
 
         {/* Modal Body */}
-        <div className="px-6 py-5 min-h-[300px] flex flex-col justify-between">
+        <div className="px-4 sm:px-6 py-4 sm:py-5 min-h-[280px] max-h-[68vh] max-h-[68dvh] overflow-y-auto flex flex-col justify-between">
           {/* ------------------------------------------------------------- */}
           {/* STEP 1: WELCOME & NETWORK SETUP */}
           {/* ------------------------------------------------------------- */}

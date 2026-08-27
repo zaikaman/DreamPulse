@@ -374,7 +374,7 @@ export const SweeperControls: React.FC<SweeperControlsProps> = ({
         </div>
 
         <div className="overflow-x-auto">
-          <table className="w-full border-collapse text-xs">
+          <table className="w-full min-w-[580px] border-collapse text-xs">
             <thead className="sticky top-0 z-10 bg-[#111114] border-b border-border/60">
               <tr className="text-[10px] font-mono text-muted-foreground uppercase tracking-wider">
                 <th className="px-3 py-2.5 text-left font-semibold">Timestamp</th>

@@ -516,7 +516,7 @@ export const StrategyStudio: React.FC<StrategyStudioProps> = ({
       {isLoading && !currentResult ? (
         <StrategyStudioSkeleton />
       ) : currentResult ? (
-        <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
           <MetricCard label="Net Strategy PnL" value={`${currentResult.netPnl >= 0 ? '+' : ''}$${currentResult.netPnl.toFixed(2)}`} sub={`${((currentResult.netPnl / currentResult.initialCapital) * 100).toFixed(1)}% Total Return`} color={currentResult.netPnl >= 0 ? '#6ee7b7' : '#fda4af'} icon={ArrowTrendingUpIcon} />
           <MetricCard label="Win Rate" value={`${currentResult.winRate.toFixed(1)}%`} sub={`${currentResult.totalWins ?? Math.round((currentResult.winRate / 100) * currentResult.totalTrades)} of ${currentResult.totalTrades} Wins`} color="#2dd4bf" icon={CheckCircleIcon} />
           <MetricCard label="Sharpe Ratio" value={currentResult.sharpeRatio.toFixed(2)} sub="Risk-Adjusted Alpha" color="#a78bfa" icon={SparklesIcon} />
