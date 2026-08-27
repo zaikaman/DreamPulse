@@ -1067,7 +1067,21 @@ apiRouter.get('/agents/custom/:id', async (req: Request, res: Response) => {
 
 apiRouter.post('/agents/custom', async (req: Request, res: Response) => {
   try {
-    const { userAddress, name, description, symbol, timeframe, strategyType, rules, color, icon, isActive } = req.body;
+    const {
+      userAddress,
+      name,
+      description,
+      symbol,
+      timeframe,
+      strategyType,
+      rules,
+      color,
+      icon,
+      isActive,
+      isDeployed,
+      allocatedAllowance,
+      spentAllowance,
+    } = req.body;
     if (!userAddress || !rules) {
       return res.status(400).json({ success: false, error: 'userAddress and rules are required' });
     }
@@ -1082,6 +1096,9 @@ apiRouter.post('/agents/custom', async (req: Request, res: Response) => {
       color: color || '#2dd4bf',
       icon: icon || 'BoltIcon',
       isActive: isActive !== false,
+      isDeployed: isDeployed === true,
+      allocatedAllowance: allocatedAllowance !== undefined ? Number(allocatedAllowance) : 100,
+      spentAllowance: spentAllowance !== undefined ? Number(spentAllowance) : 0,
     });
     res.json({ success: true, data: created });
   } catch (err: any) {

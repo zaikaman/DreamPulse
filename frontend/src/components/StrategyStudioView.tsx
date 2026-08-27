@@ -1308,7 +1308,7 @@ export const StrategyStudioView: React.FC<StrategyStudioViewProps> = ({
                         </button>
                       )}
 
-                      {!agent.id.startsWith('template-') && (
+                      {!agent.id.startsWith('00000000-0000-0000-0000-') && !agent.id.startsWith('template-') && (
                         <button
                           type="button"
                           onClick={() => deleteAgent(agent.id)}

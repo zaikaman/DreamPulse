@@ -8,10 +8,10 @@ import type {
   ConditionRule,
 } from '../types/index.js';
 
-// Pre-built Starter Templates for Immediate Playability
+// Pre-built Starter Templates for Immediate Playability (using deterministic valid UUIDs)
 export const STARTER_TEMPLATES: CustomAgentDefinition[] = [
   {
-    id: 'template-rsi-sniper',
+    id: '00000000-0000-0000-0000-000000000001',
     userAddress: '0x0000000000000000000000000000000000000000',
     name: 'RSI Oversold Dip Sniper',
     description: 'Executes rapid CALL orders when RSI (14) drops below 28 and spot touches the lower Bollinger Band.',
@@ -58,7 +58,7 @@ export const STARTER_TEMPLATES: CustomAgentDefinition[] = [
     },
   },
   {
-    id: 'template-bollinger-fade',
+    id: '00000000-0000-0000-0000-000000000002',
     userAddress: '0x0000000000000000000000000000000000000000',
     name: 'Bollinger Band Exhaustion Fade',
     description: 'Fades overextended spikes at the upper Bollinger ceiling with short-duration PUT contracts.',
@@ -105,7 +105,7 @@ export const STARTER_TEMPLATES: CustomAgentDefinition[] = [
     },
   },
   {
-    id: 'template-ema-cross',
+    id: '00000000-0000-0000-0000-000000000003',
     userAddress: '0x0000000000000000000000000000000000000000',
     name: 'Fast EMA Momentum Rider',
     description: 'Surfs trend velocity on 9/21 EMA golden crosses during expanding directional volume.',
@@ -153,6 +153,8 @@ export const STARTER_TEMPLATES: CustomAgentDefinition[] = [
   },
 ];
 
+export const STARTER_TEMPLATE_IDS = STARTER_TEMPLATES.map((t) => t.id);
+
 export class CustomAgentService {
   private inMemoryAgents: Map<string, CustomAgentDefinition> = new Map();
   private inMemorySwarms: Map<string, CustomSwarmDefinition> = new Map();
@@ -160,75 +162,116 @@ export class CustomAgentService {
   constructor() {
     // Seed templates into memory
     for (const t of STARTER_TEMPLATES) {
-      this.inMemoryAgents.set(t.id, t);
+      this.inMemoryAgents.set(t.id, { ...t });
+    }
+    // Auto-seed to Supabase asynchronously
+    this.seedStarterTemplates();
+  }
+
+  private async seedStarterTemplates(): Promise<void> {
+    try {
+      for (const t of STARTER_TEMPLATES) {
+        await supabase.from('custom_agents').upsert(
+          {
+            id: t.id,
+            user_address: t.userAddress,
+            name: t.name,
+            description: t.description,
+            symbol: t.symbol,
+            timeframe: t.timeframe,
+            strategy_type: t.strategyType,
+            rules: t.rules,
+            color: t.color,
+            icon: t.icon,
+            is_active: t.isActive,
+            is_deployed: t.isDeployed,
+            allocated_allowance: t.allocatedAllowance,
+            spent_allowance: t.spentAllowance,
+            created_at: t.createdAt,
+            updated_at: t.createdAt,
+          },
+          { onConflict: 'id', ignoreDuplicates: true }
+        );
+      }
+    } catch (err: any) {
+      console.warn('[CustomAgentService] Could not auto-seed starter templates:', err.message);
     }
   }
 
   /**
-   * Retrieves all agents: Starter templates + user-specific created agents.
+   * Retrieves all agents: Starter templates + user-specific created/deployed agents.
    */
   public async getCustomAgents(userAddress?: string): Promise<CustomAgentDefinition[]> {
-    const list: CustomAgentDefinition[] = [...STARTER_TEMPLATES];
+    const agentMap = new Map<string, CustomAgentDefinition>();
 
-    // Read from DB if available
+    // 1. Seed base starter templates into map
+    for (const t of STARTER_TEMPLATES) {
+      agentMap.set(t.id, JSON.parse(JSON.stringify(t)));
+    }
+
+    // 2. Read from DB and override/merge
     try {
       let query = supabase.from('custom_agents').select('*').order('created_at', { ascending: false });
       if (userAddress) {
-        query = query.or(`user_address.eq.${userAddress.toLowerCase()},user_address.eq.0x0000000000000000000000000000000000000000`);
+        const cleanAddr = userAddress.toLowerCase();
+        query = query.or(
+          `user_address.eq.${cleanAddr},user_address.eq.0x0000000000000000000000000000000000000000,id.in.(${STARTER_TEMPLATE_IDS.join(',')})`
+        );
       }
       const { data, error } = await query;
       if (!error && Array.isArray(data)) {
-        const dbAgents = data.map((row: any) => ({
-          id: row.id,
-          userAddress: row.user_address,
-          name: row.name,
-          description: row.description || '',
-          symbol: row.symbol,
-          timeframe: row.timeframe,
-          strategyType: row.strategy_type,
-          rules: row.rules,
-          color: row.color,
-          icon: row.icon,
-          isActive: row.is_active,
-          isDeployed: Boolean(row.is_deployed),
-          allocatedAllowance: row.allocated_allowance !== undefined && row.allocated_allowance !== null ? Number(row.allocated_allowance) : 100,
-          spentAllowance: row.spent_allowance !== undefined && row.spent_allowance !== null ? Number(row.spent_allowance) : 0,
-          createdAt: row.created_at,
-          updatedAt: row.updated_at,
-        }));
-        // Merge without duplicating templates
-        const existingIds = new Set(list.map((a) => a.id));
-        for (const a of dbAgents) {
-          if (!existingIds.has(a.id)) {
-            list.push(a);
-            existingIds.add(a.id);
-          }
+        for (const row of data) {
+          const mapped: CustomAgentDefinition = {
+            id: row.id,
+            userAddress: row.user_address,
+            name: row.name,
+            description: row.description || '',
+            symbol: row.symbol,
+            timeframe: row.timeframe,
+            strategyType: row.strategy_type,
+            rules: row.rules,
+            color: row.color,
+            icon: row.icon,
+            isActive: row.is_active !== false,
+            isDeployed: Boolean(row.is_deployed),
+            allocatedAllowance:
+              row.allocated_allowance !== undefined && row.allocated_allowance !== null
+                ? Number(row.allocated_allowance)
+                : 100,
+            spentAllowance:
+              row.spent_allowance !== undefined && row.spent_allowance !== null
+                ? Number(row.spent_allowance)
+                : 0,
+            createdAt: row.created_at,
+            updatedAt: row.updated_at,
+          };
+          // Persisted state in DB takes priority over defaults
+          agentMap.set(mapped.id, mapped);
+          this.inMemoryAgents.set(mapped.id, mapped);
         }
       }
     } catch (_err) {
       // Fall back to memory
     }
 
-    // Merge non-template in-memory agents
+    // 3. Merge non-template in-memory agents
     for (const [id, agent] of this.inMemoryAgents.entries()) {
-      if (!list.some((a) => a.id === id)) {
+      if (!agentMap.has(id)) {
         if (!userAddress || agent.userAddress.toLowerCase() === userAddress.toLowerCase()) {
-          list.push(agent);
+          agentMap.set(id, agent);
         }
       }
     }
 
-    return list;
+    return Array.from(agentMap.values());
   }
 
   public async getCustomAgentById(id: string): Promise<CustomAgentDefinition | null> {
-    const inMem = this.inMemoryAgents.get(id);
-    if (inMem) return inMem;
-
+    // Check DB first for freshest persisted state
     try {
       const { data, error } = await supabase.from('custom_agents').select('*').eq('id', id).single();
       if (!error && data) {
-        return {
+        const mapped: CustomAgentDefinition = {
           id: data.id,
           userAddress: data.user_address,
           name: data.name,
@@ -239,17 +282,32 @@ export class CustomAgentService {
           rules: data.rules,
           color: data.color,
           icon: data.icon,
-          isActive: data.is_active,
+          isActive: data.is_active !== false,
           isDeployed: Boolean(data.is_deployed),
-          allocatedAllowance: data.allocated_allowance !== undefined && data.allocated_allowance !== null ? Number(data.allocated_allowance) : 100,
-          spentAllowance: data.spent_allowance !== undefined && data.spent_allowance !== null ? Number(data.spent_allowance) : 0,
+          allocatedAllowance:
+            data.allocated_allowance !== undefined && data.allocated_allowance !== null
+              ? Number(data.allocated_allowance)
+              : 100,
+          spentAllowance:
+            data.spent_allowance !== undefined && data.spent_allowance !== null
+              ? Number(data.spent_allowance)
+              : 0,
           createdAt: data.created_at,
           updatedAt: data.updated_at,
         };
+        this.inMemoryAgents.set(id, mapped);
+        return mapped;
       }
     } catch {
-      // ignore
+      // fallback
     }
+
+    const inMem = this.inMemoryAgents.get(id);
+    if (inMem) return inMem;
+
+    const tpl = STARTER_TEMPLATES.find((t) => t.id === id);
+    if (tpl) return { ...tpl };
+
     return null;
   }
 
@@ -282,7 +340,7 @@ export class CustomAgentService {
 
     // Persist to Supabase
     try {
-      await supabase.from('custom_agents').insert({
+      const { error } = await supabase.from('custom_agents').insert({
         id: agent.id,
         user_address: agent.userAddress,
         name: agent.name,
@@ -300,6 +358,9 @@ export class CustomAgentService {
         created_at: agent.createdAt,
         updated_at: agent.updatedAt,
       });
+      if (error) {
+        console.error('[CustomAgentService] DB insert error:', error);
+      }
     } catch (err: any) {
       console.warn('[CustomAgentService] Could not persist agent to DB:', err.message);
     }
@@ -323,9 +384,11 @@ export class CustomAgentService {
     this.inMemoryAgents.set(id, updated);
 
     try {
-      await supabase
+      const { error } = await supabase
         .from('custom_agents')
-        .update({
+        .upsert({
+          id: updated.id,
+          user_address: updated.userAddress,
           name: updated.name,
           description: updated.description,
           symbol: updated.symbol,
@@ -339,8 +402,10 @@ export class CustomAgentService {
           allocated_allowance: updated.allocatedAllowance,
           spent_allowance: updated.spentAllowance,
           updated_at: updated.updatedAt,
-        })
-        .eq('id', id);
+        });
+      if (error) {
+        console.error('[CustomAgentService] DB upsert error:', error);
+      }
     } catch (err: any) {
       console.warn('[CustomAgentService] Could not update agent in DB:', err.message);
     }
@@ -350,7 +415,7 @@ export class CustomAgentService {
 
   public async deployAgent(
     id: string,
-    _userAddress: string,
+    userAddress: string,
     allowance?: number
   ): Promise<CustomAgentDefinition | null> {
     const existing = await this.getCustomAgentById(id);
@@ -359,6 +424,9 @@ export class CustomAgentService {
     const updates: Partial<CustomAgentDefinition> = {
       isDeployed: true,
       isActive: true,
+      ...(existing.userAddress === '0x0000000000000000000000000000000000000000' && userAddress
+        ? { userAddress: userAddress.toLowerCase() }
+        : {}),
       ...(allowance !== undefined ? { allocatedAllowance: Math.max(0, allowance) } : {}),
     };
     return this.updateCustomAgent(id, updates);
@@ -394,12 +462,14 @@ export class CustomAgentService {
   public async deleteCustomAgent(id: string, userAddress: string): Promise<boolean> {
     this.inMemoryAgents.delete(id);
     try {
-      await supabase
+      const { error } = await supabase
         .from('custom_agents')
         .delete()
-        .eq('id', id)
-        .eq('user_address', userAddress.toLowerCase());
-      return true;
+        .eq('id', id);
+      if (error) {
+        console.error('[CustomAgentService] DB delete error:', error);
+      }
+      return !error;
     } catch {
       return true;
     }

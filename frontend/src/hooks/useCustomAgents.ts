@@ -86,6 +86,8 @@ export const useCustomAgents = (userAddress?: string): UseCustomAgentsReturn => 
       rules: CustomAgentRules;
       color?: string;
       icon?: string;
+      isDeployed?: boolean;
+      allocatedAllowance?: number;
     }): Promise<CustomAgentDefinition | null> => {
       const targetAddress = userAddress || '0x0000000000000000000000000000000000000001';
       setIsSaving(true);
@@ -152,16 +154,7 @@ export const useCustomAgents = (userAddress?: string): UseCustomAgentsReturn => 
         const res = await apiClient.deployCustomAgent(id, targetAddress, allowance);
         if (res?.success && res.data) {
           setAgents((prev) =>
-            prev.map((a) =>
-              a.id === id
-                ? {
-                    ...a,
-                    isDeployed: true,
-                    isActive: true,
-                    ...(allowance !== undefined ? { allocatedAllowance: allowance } : {}),
-                  }
-                : a
-            )
+            prev.map((a) => (a.id === id ? res.data : a))
           );
           return true;
         }
@@ -180,7 +173,7 @@ export const useCustomAgents = (userAddress?: string): UseCustomAgentsReturn => 
         const res = await apiClient.pauseCustomAgent(id, targetAddress);
         if (res?.success && res.data) {
           setAgents((prev) =>
-            prev.map((a) => (a.id === id ? { ...a, isDeployed: false } : a))
+            prev.map((a) => (a.id === id ? res.data : a))
           );
           return true;
         }
@@ -199,7 +192,7 @@ export const useCustomAgents = (userAddress?: string): UseCustomAgentsReturn => 
         const res = await apiClient.setCustomAgentAllowance(id, targetAddress, allowance);
         if (res?.success && res.data) {
           setAgents((prev) =>
-            prev.map((a) => (a.id === id ? { ...a, allocatedAllowance: allowance } : a))
+            prev.map((a) => (a.id === id ? res.data : a))
           );
           return true;
         }
