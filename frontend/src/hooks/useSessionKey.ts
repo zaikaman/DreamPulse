@@ -36,6 +36,7 @@ export interface UseSessionKeyReturn {
     durationHours: number;
     depositAmount?: number;
     targetPool?: Address;
+    copyTradeEnabled?: boolean;
   }) => Promise<SessionGrant>;
   revokeSession: (options?: { onChain?: boolean }) => Promise<void>;
   refreshSession: () => Promise<void>;
@@ -351,6 +352,7 @@ export function useSessionKey(): UseSessionKeyReturn {
       durationHours: number;
       depositAmount?: number;
       targetPool?: Address;
+      copyTradeEnabled?: boolean;
     }): Promise<SessionGrant> => {
       if (!wallet.isConnected || !wallet.address) {
         throw new Error('Please connect your Web3 wallet first.');
@@ -444,6 +446,7 @@ export function useSessionKey(): UseSessionKeyReturn {
           vaultDepositAmount: params.depositAmount,
           targetPoolAddress: params.targetPool,
           onChainAuthorized: true,
+          copyTradeEnabled: params.copyTradeEnabled,
         });
 
         const createdSession: SessionGrant = {
@@ -460,6 +463,7 @@ export function useSessionKey(): UseSessionKeyReturn {
           vaultDepositAmount: params.depositAmount,
           targetPoolAddress: params.targetPool,
           onChainAuthorized: true,
+          copyTradeEnabled: params.copyTradeEnabled ?? false,
         };
 
         setActiveSession(createdSession);

@@ -56,6 +56,7 @@ export interface SessionGrant {
   vaultDepositAmount?: number;
   targetPoolAddress?: `0x${string}`;
   onChainAuthorized?: boolean;
+  copyTradeEnabled?: boolean;
 }
 
 export interface AgentStrategy {
@@ -178,7 +179,7 @@ export interface SwarmStatusSummary {
 }
 
 export interface PortfolioSummary {
-  userAddress: string;
+  userAddress: `0x${string}`;
   isOperator: boolean;
   realizedPnl: number;
   unclaimedPnl: number;
@@ -197,6 +198,7 @@ export type SwarmMode = 'COPY' | 'PERSONAL';
 export interface PersonalSwarmConfig {
   userAddress: `0x${string}`;
   mode: SwarmMode;
+  copyTradeEnabled: boolean;
   voltEnabled: boolean;
   oracleEnabled: boolean;
   titanEnabled: boolean;
@@ -211,6 +213,7 @@ export interface PersonalSwarmConfig {
 
 export interface PersonalSwarmStatus {
   mode: SwarmMode;
+  copyTradeEnabled: boolean;
   volt: { enabled: boolean; config: PersonalSwarmConfig['voltConfig']; pnl: number; tradesToday: number };
   oracle: { enabled: boolean; config: PersonalSwarmConfig['oracleConfig']; pnl: number; tradesToday: number };
   titan: { enabled: boolean; config: PersonalSwarmConfig['titanConfig']; pnl: number; tradesToday: number };

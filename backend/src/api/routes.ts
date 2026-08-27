@@ -229,6 +229,7 @@ apiRouter.post('/sessions/register', async (req: Request, res: Response) => {
       vaultDepositAmount,
       targetPoolAddress,
       onChainAuthorized,
+      copyTradeEnabled,
     } = req.body;
 
     if (!userAddress) {
@@ -248,6 +249,7 @@ apiRouter.post('/sessions/register', async (req: Request, res: Response) => {
       vaultDepositAmount,
       targetPoolAddress,
       onChainAuthorized,
+      copyTradeEnabled: typeof copyTradeEnabled === 'boolean' ? copyTradeEnabled : undefined,
     });
 
     return res.status(201).json({
@@ -577,12 +579,13 @@ apiRouter.get('/swarm/my-config', (req: Request, res: Response) => {
 
 apiRouter.put('/swarm/my-config', async (req: Request, res: Response) => {
   try {
-    const { userAddress, mode, voltEnabled, oracleEnabled, titanEnabled, sweeperEnabled, voltConfig, oracleConfig, titanConfig } = req.body;
+    const { userAddress, mode, copyTradeEnabled, voltEnabled, oracleEnabled, titanEnabled, sweeperEnabled, voltConfig, oracleConfig, titanConfig } = req.body;
     if (!userAddress || !isAddress(userAddress)) {
       return res.status(400).json({ success: false, error: 'Missing or invalid userAddress' });
     }
     const updated = await userSwarmService.upsertConfig(userAddress, {
       mode,
+      copyTradeEnabled,
       voltEnabled,
       oracleEnabled,
       titanEnabled,
@@ -592,6 +595,26 @@ apiRouter.put('/swarm/my-config', async (req: Request, res: Response) => {
       titanConfig,
     });
     return res.json({ success: true, config: updated });
+  } catch (err: any) {
+    return res.status(400).json({ success: false, error: err.message });
+  }
+});
+
+apiRouter.post('/swarm/toggle-copytrade', async (req: Request, res: Response) => {
+  try {
+    const { userAddress, enabled } = req.body;
+    if (!userAddress || !isAddress(userAddress)) {
+      return res.status(400).json({ success: false, error: 'Missing or invalid userAddress' });
+    }
+    if (typeof enabled !== 'boolean') {
+      return res.status(400).json({ success: false, error: 'Missing enabled boolean' });
+    }
+    const updated = await userSwarmService.setCopyTradeEnabled(userAddress, enabled);
+    return res.json({
+      success: true,
+      config: updated,
+      message: enabled ? 'Autonomous Swarm Copy-Trading ENABLED' : 'Autonomous Swarm Copy-Trading DISABLED (Terminal Copilot Only)',
+    });
   } catch (err: any) {
     return res.status(400).json({ success: false, error: err.message });
   }

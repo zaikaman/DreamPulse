@@ -17,6 +17,7 @@ import {
 import type { SessionGrant } from '../types/index.js';
 import type { WalletState } from '../hooks/useSessionKey.js';
 import { SOMNIA_ADDRESSES } from '../services/web3.js';
+import { apiClient } from '../services/api.js';
 import { Spinner } from './ui/Spinner.js';
 import { Button } from './ui/button.js';
 
@@ -28,6 +29,8 @@ interface SessionStatusBarProps {
   onOpenModal: (options?: { revoke?: boolean }) => void;
   onConnectWallet: () => Promise<void>;
   onSwitchNetwork: () => Promise<void>;
+  isCopyTradeEnabled?: boolean;
+  onToggleCopyTrade?: (enabled: boolean) => Promise<boolean>;
 }
 
 export const SessionStatusBar: React.FC<SessionStatusBarProps> = ({
@@ -38,12 +41,24 @@ export const SessionStatusBar: React.FC<SessionStatusBarProps> = ({
   onOpenModal,
   onConnectWallet,
   onSwitchNetwork,
+  isCopyTradeEnabled,
+  onToggleCopyTrade,
 }) => {
   const isConnected = wallet.isConnected;
   const isCorrectNetwork = wallet.isCorrectNetwork;
   const isSessionActive = isConnected && isCorrectNetwork && activeSession?.isActive;
   const [copied, setCopied] = useState<boolean>(false);
   const [timeRemaining, setTimeRemaining] = useState<string>('');
+  const [localCopyEnabled, setLocalCopyEnabled] = useState<boolean | null>(null);
+  const [isTogglingCopy, setIsTogglingCopy] = useState<boolean>(false);
+
+  useEffect(() => {
+    if (activeSession) {
+      setLocalCopyEnabled(activeSession.copyTradeEnabled ?? false);
+    }
+  }, [activeSession]);
+
+  const activeCopyTrade = isCopyTradeEnabled ?? localCopyEnabled ?? activeSession?.copyTradeEnabled ?? false;
 
   const collateralNum = parseFloat(wallet.balanceCollateral || '0');
   const isCollateralZero = isConnected && isCorrectNetwork && collateralNum === 0;
@@ -201,6 +216,45 @@ export const SessionStatusBar: React.FC<SessionStatusBarProps> = ({
                   }}
                 ></div>
               </div>
+            </div>
+
+            <div className="session-metric-divider"></div>
+
+            <div className="session-metric-item">
+              <span className="metric-label">SWARM COPY-TRADE</span>
+              <button
+                type="button"
+                disabled={isTogglingCopy}
+                onClick={async () => {
+                  const next = !activeCopyTrade;
+                  setIsTogglingCopy(true);
+                  try {
+                    if (onToggleCopyTrade) {
+                      await onToggleCopyTrade(next);
+                    } else if (wallet.address) {
+                      await apiClient.toggleCopyTrade(wallet.address, next);
+                    }
+                    if (activeSession) {
+                      activeSession.copyTradeEnabled = next;
+                    }
+                    setLocalCopyEnabled(next);
+                  } catch (e) {
+                    console.error('Failed to toggle copy-trade:', e);
+                  } finally {
+                    setIsTogglingCopy(false);
+                  }
+                }}
+                className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-mono font-bold border transition-all cursor-pointer hover:opacity-90 disabled:opacity-50"
+                style={{
+                  background: activeCopyTrade ? 'rgba(56, 189, 248, 0.14)' : 'rgba(245, 158, 11, 0.12)',
+                  color: activeCopyTrade ? '#38bdf8' : '#fbbf24',
+                  borderColor: activeCopyTrade ? 'rgba(56, 189, 248, 0.28)' : 'rgba(245, 158, 11, 0.25)',
+                }}
+                title={activeCopyTrade ? 'Swarm Copy-Trading is ACTIVE — Click to disable (Terminal Copilot Only)' : 'Terminal Copilot Only — Click to enable Swarm Copy-Trading'}
+              >
+                {isTogglingCopy ? <Spinner size="xs" /> : <BoltIcon className="w-3 h-3" />}
+                <span>{activeCopyTrade ? 'SWARM: ACTIVE' : 'COPILOT ONLY'}</span>
+              </button>
             </div>
 
             <div className="session-metric-divider"></div>

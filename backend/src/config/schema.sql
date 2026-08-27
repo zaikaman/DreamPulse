@@ -47,6 +47,7 @@ CREATE TABLE IF NOT EXISTS public.sessions (
     on_chain_authorized BOOLEAN NOT NULL DEFAULT FALSE,
     vault_deposit_amount NUMERIC(18, 4),
     target_pool_address VARCHAR(42),
+    copy_trade_enabled BOOLEAN NOT NULL DEFAULT FALSE,
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     CONSTRAINT valid_user_address CHECK (user_address ~ '^0x[a-fA-F0-9]{40}$'),
@@ -149,6 +150,7 @@ CREATE TABLE IF NOT EXISTS public.backtests (
 CREATE INDEX IF NOT EXISTS idx_markets_status ON public.markets(status);
 CREATE INDEX IF NOT EXISTS idx_markets_symbol_window ON public.markets(symbol, window_duration);
 CREATE INDEX IF NOT EXISTS idx_sessions_user_active ON public.sessions(user_address, is_active);
+CREATE INDEX IF NOT EXISTS idx_sessions_copy_trade_active ON public.sessions(is_active, copy_trade_enabled, on_chain_authorized) WHERE is_active = TRUE;
 CREATE INDEX IF NOT EXISTS idx_orders_user_created ON public.orders(user_address, created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_orders_market ON public.orders(market_id, status);
 CREATE INDEX IF NOT EXISTS idx_sweeps_user ON public.sweeps(user_address, status);
@@ -210,6 +212,7 @@ ON CONFLICT (key) DO NOTHING;
 CREATE TABLE IF NOT EXISTS public.user_swarm_configs (
     user_address VARCHAR(42) PRIMARY KEY,
     mode VARCHAR(16) NOT NULL DEFAULT 'COPY' CHECK (mode IN ('COPY', 'PERSONAL')),
+    copy_trade_enabled BOOLEAN NOT NULL DEFAULT FALSE,
     volt_enabled BOOLEAN NOT NULL DEFAULT TRUE,
     oracle_enabled BOOLEAN NOT NULL DEFAULT TRUE,
     titan_enabled BOOLEAN NOT NULL DEFAULT TRUE,
@@ -224,6 +227,7 @@ CREATE TABLE IF NOT EXISTS public.user_swarm_configs (
 );
 
 CREATE INDEX IF NOT EXISTS idx_user_swarm_mode ON public.user_swarm_configs(mode);
+CREATE INDEX IF NOT EXISTS idx_user_swarm_copy_trade ON public.user_swarm_configs(copy_trade_enabled, mode);
 
 ALTER TABLE public.user_swarm_configs ENABLE ROW LEVEL SECURITY;
 CREATE POLICY "Public Read Swarm Configs" ON public.user_swarm_configs FOR SELECT USING (true);

@@ -344,10 +344,10 @@ export class MultiAgentSwarmRunner {
             for (const userSession of sortedDelegated) {
               if (eligibleCopySessions.length >= MAX_COPIES_PER_SIGNAL) break;
               if (userSession.onChainAuthorized !== true || !userSession.isActive) continue;
-              // Personal swarm isolation: skip copy-trade for users who customized to PERSONAL mode
+              // Personal swarm isolation: skip copy-trade for users who customized to PERSONAL mode or disabled copy-trade
               try {
                 const personalCfg = userSwarmService.getConfig(userSession.userAddress);
-                if (personalCfg.mode === 'PERSONAL') continue;
+                if (!personalCfg.copyTradeEnabled || personalCfg.mode === 'PERSONAL') continue;
               } catch {}
               const estCost = (decision.price ?? 0.5) * (decision.lotSize ?? 1.0);
               const allowance = sessionService.validateTradeAllowance(userSession.id, estCost);

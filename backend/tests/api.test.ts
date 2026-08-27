@@ -149,4 +149,34 @@ describe('Express REST API Endpoints', () => {
     expect(res.body.data.status).toBe('FILLED');
     expect(res.body.data.txHash).toBe(payload.txHash);
   });
+
+  it('POST /api/v1/swarm/toggle-copytrade enables and disables autonomous copy-trading', async () => {
+    const user = '0x15C7e8CE38F021c5b45d098AaD788f63090bF20A';
+
+    // Toggle ON
+    const resOn = await request(app)
+      .post('/api/v1/swarm/toggle-copytrade')
+      .send({ userAddress: user, enabled: true });
+    expect(resOn.status).toBe(200);
+    expect(resOn.body.success).toBe(true);
+    expect(resOn.body.config.copyTradeEnabled).toBe(true);
+
+    // Check config
+    const resCfg1 = await request(app).get(`/api/v1/swarm/my-config?userAddress=${user}`);
+    expect(resCfg1.status).toBe(200);
+    expect(resCfg1.body.config.copyTradeEnabled).toBe(true);
+
+    // Toggle OFF
+    const resOff = await request(app)
+      .post('/api/v1/swarm/toggle-copytrade')
+      .send({ userAddress: user, enabled: false });
+    expect(resOff.status).toBe(200);
+    expect(resOff.body.success).toBe(true);
+    expect(resOff.body.config.copyTradeEnabled).toBe(false);
+
+    // Check config
+    const resCfg2 = await request(app).get(`/api/v1/swarm/my-config?userAddress=${user}`);
+    expect(resCfg2.status).toBe(200);
+    expect(resCfg2.body.config.copyTradeEnabled).toBe(false);
+  });
 });

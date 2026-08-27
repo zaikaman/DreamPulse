@@ -323,6 +323,7 @@ describe('Task T038 & T040: Session Management Service & Risk Guardrails', () =>
       dailyVolumeCap: 50,
       onChainTxHash: '0x1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef',
       onChainAuthorized: true,
+      copyTradeEnabled: true,
     });
 
     await sessionService.registerSession({
@@ -332,6 +333,7 @@ describe('Task T038 & T040: Session Management Service & Risk Guardrails', () =>
       dailyVolumeCap: 50,
       onChainAuthorized: true,
       onChainTxHash: '0x1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef',
+      copyTradeEnabled: true,
     });
 
     await sessionService.registerSession({
@@ -341,6 +343,7 @@ describe('Task T038 & T040: Session Management Service & Risk Guardrails', () =>
       dailyVolumeCap: 50,
       onChainAuthorized: true,
       onChainTxHash: '0x1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef',
+      copyTradeEnabled: true,
     });
 
     const targets = sessionService.getDelegatedCopyTradeSessions(liveOperator.address);
@@ -348,6 +351,37 @@ describe('Task T038 & T040: Session Management Service & Risk Guardrails', () =>
     expect(targets.some((s) => s.userAddress.toLowerCase() === unauthorized.address.toLowerCase())).toBe(false);
     expect(targets.some((s) => s.userAddress.toLowerCase() === '0x1234567890123456789012345678901234567890')).toBe(false);
     expect(targets.some((s) => s.userAddress.toLowerCase() === wrongOperator.address.toLowerCase())).toBe(false);
+  });
+
+  it('decouples session delegation from copy-trading: allows active session while excluding from swarm copy-trades when copyTradeEnabled is false', async () => {
+    const copilotOnlyUser = privateKeyToAccount(generatePrivateKey());
+
+    // User delegates session without opting into copy-trading (copyTradeEnabled: false)
+    const session = await sessionService.registerSession({
+      userAddress: copilotOnlyUser.address,
+      operatorAddress: liveOperator.address,
+      maxTradeSize: 20,
+      dailyVolumeCap: 100,
+      onChainTxHash: '0x1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef',
+      onChainAuthorized: true,
+      copyTradeEnabled: false,
+    });
+
+    expect(session.isActive).toBe(true);
+    expect(session.copyTradeEnabled).toBe(false);
+
+    // Active session is queryable for AI Copilot terminal trades
+    const retrieved = await sessionService.getUserActiveSession(copilotOnlyUser.address);
+    expect(retrieved?.isActive).toBe(true);
+    expect(retrieved?.copyTradeEnabled).toBe(false);
+
+    // Trade allowance passes for 1-click execution under limits
+    const allowance = sessionService.validateTradeAllowance(session.id, 15);
+    expect(allowance.allowed).toBe(true);
+
+    // BUT background swarm copy-trade target list excludes this user
+    const copyTargets = sessionService.getDelegatedCopyTradeSessions(liveOperator.address);
+    expect(copyTargets.some((s) => s.userAddress.toLowerCase() === copilotOnlyUser.address.toLowerCase())).toBe(false);
   });
 });
 

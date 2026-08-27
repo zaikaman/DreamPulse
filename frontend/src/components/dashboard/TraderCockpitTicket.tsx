@@ -599,6 +599,14 @@ export const TraderCockpitTicket: React.FC<TraderCockpitTicketProps> = ({
           <span>SOMI</span>
           <span>{wallet.balanceSTT || '1.25'}</span>
         </div>
+        <div className="flex items-center justify-between text-muted-foreground pt-1 border-t border-border/20 text-[10px]">
+          <span>Execution Path</span>
+          <span className={cn("font-bold", activeSession?.isActive ? "text-emerald-400" : "text-muted-foreground")}>
+            {activeSession?.isActive
+              ? (activeSession.copyTradeEnabled ? "1-Click Gasless (Swarm ON)" : "1-Click Gasless (Copilot Only)")
+              : "Direct Wallet Signing"}
+          </span>
+        </div>
       </div>
 
       {/* Error & Success Messages */}

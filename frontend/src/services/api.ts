@@ -95,6 +95,7 @@ export const apiClient = {
     vaultDepositAmount?: number;
     targetPoolAddress?: string;
     onChainAuthorized?: boolean;
+    copyTradeEnabled?: boolean;
   }): Promise<{ success: boolean; session: SessionGrant }> {
     return fetchJson<{ success: boolean; session: SessionGrant }>('/sessions/register', {
       method: 'POST',
@@ -293,6 +294,9 @@ export const apiClient = {
   },
   async updatePersonalAgentConfig(userAddress: string, agentType: string, config: Record<string, unknown>): Promise<{ success: boolean; config: import('../types/index.js').PersonalSwarmConfig }> {
     return fetchJson('/swarm/config', { method: 'POST', body: JSON.stringify({ userAddress, agentType, config }) });
+  },
+  async toggleCopyTrade(userAddress: string, enabled: boolean): Promise<{ success: boolean; config: import('../types/index.js').PersonalSwarmConfig; message: string }> {
+    return fetchJson('/swarm/toggle-copytrade', { method: 'POST', body: JSON.stringify({ userAddress, enabled }) });
   },
   async getPersonalSwarmStatus(userAddress: string): Promise<{ success: boolean; status: import('../types/index.js').PersonalSwarmStatus }> {
     return fetchJson(`/swarm/my-status?userAddress=${encodeURIComponent(userAddress)}`);

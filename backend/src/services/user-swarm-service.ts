@@ -7,6 +7,7 @@ export type SwarmMode = 'COPY' | 'PERSONAL';
 export interface PersonalSwarmConfig {
   userAddress: Address;
   mode: SwarmMode;
+  copyTradeEnabled: boolean;
   voltEnabled: boolean;
   oracleEnabled: boolean;
   titanEnabled: boolean;
@@ -34,6 +35,7 @@ function buildDefaultConfig(userAddress: Address): PersonalSwarmConfig {
   return {
     userAddress,
     mode: 'COPY',
+    copyTradeEnabled: false,
     voltEnabled: true,
     oracleEnabled: true,
     titanEnabled: true,
@@ -50,6 +52,7 @@ function toRecord(row: any): PersonalSwarmConfig {
   return {
     userAddress: getAddress(row.user_address) as Address,
     mode: (row.mode as SwarmMode) || 'COPY',
+    copyTradeEnabled: row.copy_trade_enabled === true,
     voltEnabled: row.volt_enabled ?? true,
     oracleEnabled: row.oracle_enabled ?? true,
     titanEnabled: row.titan_enabled ?? true,
@@ -102,15 +105,24 @@ export class UserSwarmService {
   }
 
   public getAllPersonalConfigs(): PersonalSwarmConfig[] {
-    return Array.from(this.cache.values()).filter((c) => c.mode === 'PERSONAL');
+    return Array.from(this.cache.values()).filter((c) => c.mode === 'PERSONAL' && c.copyTradeEnabled);
+  }
+
+  public isCopyTradeEnabled(userAddress: string): boolean {
+    try {
+      const cfg = this.getConfig(userAddress);
+      return cfg.copyTradeEnabled === true;
+    } catch {
+      return false;
+    }
   }
 
   public isCopyMode(userAddress: string): boolean {
     try {
       const cfg = this.getConfig(userAddress);
-      return cfg.mode === 'COPY';
+      return cfg.mode === 'COPY' && cfg.copyTradeEnabled === true;
     } catch {
-      return true;
+      return false;
     }
   }
 
@@ -118,6 +130,7 @@ export class UserSwarmService {
     userAddress: string,
     updates: Partial<{
       mode: SwarmMode;
+      copyTradeEnabled: boolean;
       voltEnabled: boolean;
       oracleEnabled: boolean;
       titanEnabled: boolean;
@@ -139,6 +152,10 @@ export class UserSwarmService {
       titanConfig: { ...current.titanConfig },
       updatedAt: now,
     };
+
+    if (typeof updates.copyTradeEnabled === 'boolean') {
+      next.copyTradeEnabled = updates.copyTradeEnabled;
+    }
 
     if (updates.mode) {
       if (updates.mode !== 'COPY' && updates.mode !== 'PERSONAL') throw new Error('Invalid mode');
@@ -232,6 +249,10 @@ export class UserSwarmService {
     return this.upsertConfig(userAddress, { mode });
   }
 
+  public async setCopyTradeEnabled(userAddress: string, enabled: boolean): Promise<PersonalSwarmConfig> {
+    return this.upsertConfig(userAddress, { copyTradeEnabled: enabled });
+  }
+
   public async toggleAgent(userAddress: string, agentType: AgentType, enabled: boolean): Promise<PersonalSwarmConfig> {
     const key = agentType.toLowerCase();
     if (key === 'volt') return this.upsertConfig(userAddress, { voltEnabled: enabled, mode: enabled !== this.getConfig(userAddress).voltEnabled ? 'PERSONAL' as SwarmMode : undefined });
@@ -270,6 +291,7 @@ export class UserSwarmService {
       const payload = {
         user_address: cfg.userAddress,
         mode: cfg.mode,
+        copy_trade_enabled: cfg.copyTradeEnabled,
         volt_enabled: cfg.voltEnabled,
         oracle_enabled: cfg.oracleEnabled,
         titan_enabled: cfg.titanEnabled,

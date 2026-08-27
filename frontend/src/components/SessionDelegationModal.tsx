@@ -49,6 +49,7 @@ interface SessionDelegationModalProps {
     durationHours: number;
     depositAmount?: number;
     targetPool?: `0x${string}`;
+    copyTradeEnabled?: boolean;
   }) => Promise<SessionGrant>;
   onRevokeSession: (options?: { onChain?: boolean }) => Promise<void>;
   onEnsureAllowances?: () => Promise<void>;
@@ -83,6 +84,7 @@ export const SessionDelegationModal: React.FC<SessionDelegationModalProps> = ({
   const [dailyVolumeCap, setDailyVolumeCap] = useState<number>(100);
   const [durationHours, setDurationHours] = useState<number>(24);
   const [depositAmount, setDepositAmount] = useState<number>(10);
+  const [enableCopyTrading, setEnableCopyTrading] = useState<boolean>(false);
   const [copiedOperator, setCopiedOperator] = useState<boolean>(false);
   const [confirmRevoke, setConfirmRevoke] = useState<boolean>(initialRevokeMode);
   const [revokeOnChainOption, setRevokeOnChainOption] = useState<boolean>(true);
@@ -91,8 +93,11 @@ export const SessionDelegationModal: React.FC<SessionDelegationModalProps> = ({
     if (isOpen) {
       setConfirmRevoke(Boolean(initialRevokeMode));
       setRevokeOnChainOption(true);
+      if (activeSession) {
+        setEnableCopyTrading(Boolean(activeSession.copyTradeEnabled));
+      }
     }
-  }, [isOpen, initialRevokeMode]);
+  }, [isOpen, initialRevokeMode, activeSession]);
 
   if (!isOpen) return null;
 
@@ -110,6 +115,7 @@ export const SessionDelegationModal: React.FC<SessionDelegationModalProps> = ({
         dailyVolumeCap,
         durationHours,
         depositAmount: depositAmount > 0 ? depositAmount : undefined,
+        copyTradeEnabled: enableCopyTrading,
       });
       onClose();
     } catch {
@@ -301,6 +307,13 @@ export const SessionDelegationModal: React.FC<SessionDelegationModalProps> = ({
                     <span className="stat-pill-value">{activeSession.vaultDepositAmount} tUSDC</span>
                   </div>
                 )}
+
+                <div className="stat-pill" style={{ border: `1px solid ${activeSession.copyTradeEnabled ? 'rgba(56, 189, 248, 0.25)' : 'hsl(var(--border) / 0.5)'}` }}>
+                  <span className="stat-pill-label">Execution Mode:</span>
+                  <span className="stat-pill-value" style={{ color: activeSession.copyTradeEnabled ? '#38bdf8' : 'hsl(var(--muted-foreground))' }}>
+                    {activeSession.copyTradeEnabled ? 'Swarm Copy-Trading ON' : 'Terminal Copilot Only'}
+                  </span>
+                </div>
 
               {confirmRevoke ? (
                 <div className="revoke-confirm-card">
@@ -645,6 +658,58 @@ export const SessionDelegationModal: React.FC<SessionDelegationModalProps> = ({
                     {val} tUSDC
                   </button>
                 ))}
+              </div>
+            </div>
+
+            {/* Autonomous Swarm Copy-Trading Mode Switch */}
+            <div className="config-group" style={{ background: 'hsl(var(--secondary) / 0.35)', padding: '12px 14px', borderRadius: '8px', border: `1px solid ${enableCopyTrading ? 'rgba(56, 189, 248, 0.4)' : 'hsl(var(--border) / 0.7)'}` }}>
+              <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: '12px' }}>
+                <div style={{ display: 'flex', gap: '10px' }}>
+                  <div style={{ width: '32px', height: '32px', borderRadius: '8px', background: enableCopyTrading ? 'rgba(56, 189, 248, 0.15)' : 'hsl(var(--secondary))', border: `1px solid ${enableCopyTrading ? 'rgba(56, 189, 248, 0.3)' : 'hsl(var(--border) / 0.6)'}`, display: 'grid', placeItems: 'center', color: enableCopyTrading ? '#38bdf8' : 'hsl(var(--muted-foreground))', flexShrink: 0, marginTop: '2px' }}>
+                    <BoltIcon className="w-4 h-4" />
+                  </div>
+                  <div>
+                    <div style={{ fontSize: '12px', fontWeight: 700, color: 'hsl(var(--foreground))', display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
+                      <span>Enable Autonomous Swarm Copy-Trading</span>
+                      <span style={{ fontSize: '9px', padding: '1px 6px', borderRadius: '4px', background: enableCopyTrading ? 'rgba(56, 189, 248, 0.15)' : 'hsl(var(--secondary))', color: enableCopyTrading ? '#38bdf8' : 'hsl(var(--muted-foreground))', border: `1px solid ${enableCopyTrading ? 'rgba(56, 189, 248, 0.3)' : 'hsl(var(--border))'}`, fontWeight: 700, fontFamily: 'var(--font-mono)' }}>
+                        {enableCopyTrading ? 'SWARM MIRROR ON' : 'TERMINAL COPILOT ONLY'}
+                      </span>
+                    </div>
+                    <p style={{ margin: '4px 0 0', fontSize: '11px', color: 'hsl(var(--muted-foreground))', lineHeight: 1.4 }}>
+                      {enableCopyTrading
+                        ? 'Volt, Oracle, and Titan will automatically mirror high-conviction trades from your wallet within your single & daily caps.'
+                        : 'Leave OFF to use session delegation exclusively for fast 1-click execution when YOU trade with the AI Copilot in the Trade Terminal.'}
+                    </p>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setEnableCopyTrading(!enableCopyTrading)}
+                  className="cursor-pointer flex-shrink-0"
+                  style={{
+                    width: '42px',
+                    height: '24px',
+                    borderRadius: '12px',
+                    background: enableCopyTrading ? '#38bdf8' : 'hsl(var(--muted))',
+                    border: 'none',
+                    position: 'relative',
+                    transition: 'background 0.2s ease',
+                    padding: '2px',
+                  }}
+                  aria-label="Toggle autonomous swarm copy trading"
+                >
+                  <span
+                    style={{
+                      display: 'block',
+                      width: '20px',
+                      height: '20px',
+                      borderRadius: '50%',
+                      background: '#09090b',
+                      transform: enableCopyTrading ? 'translateX(18px)' : 'translateX(0)',
+                      transition: 'transform 0.2s ease',
+                    }}
+                  />
+                </button>
               </div>
             </div>
 

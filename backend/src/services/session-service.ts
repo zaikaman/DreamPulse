@@ -1,6 +1,7 @@
 import { isAddress, getAddress, type Address, type Hex } from 'viem';
 import { supabase } from '../config/supabase.js';
 import { SOMNIA_ADDRESSES, operatorAccount } from '../config/somnia.js';
+import { userSwarmService } from './user-swarm-service.js';
 import {
   verifySessionDelegationSignature,
   validateZeroCustodyInvariants,
@@ -39,6 +40,7 @@ export interface SessionRecord {
   vaultDepositAmount?: number;
   targetPoolAddress?: Address;
   onChainAuthorized?: boolean;
+  copyTradeEnabled?: boolean;
   createdAt: string;
   updatedAt: string;
 }
@@ -56,6 +58,7 @@ export interface RegisterSessionParams {
   vaultDepositAmount?: number;
   targetPoolAddress?: string;
   onChainAuthorized?: boolean;
+  copyTradeEnabled?: boolean;
 }
 
 export class SessionService {
@@ -245,6 +248,10 @@ export class SessionService {
       ? (params.onChainTxHash as Hex)
       : undefined;
 
+    if (params.copyTradeEnabled !== undefined) {
+      await userSwarmService.upsertConfig(normalizedUser, { copyTradeEnabled: params.copyTradeEnabled }).catch(() => {});
+    }
+
     const sessionId = crypto.randomUUID();
     const sessionRecord: SessionRecord = {
       id: sessionId,
@@ -263,6 +270,7 @@ export class SessionService {
       vaultDepositAmount: params.vaultDepositAmount,
       targetPoolAddress,
       onChainAuthorized,
+      copyTradeEnabled: params.copyTradeEnabled ?? userSwarmService.isCopyTradeEnabled(normalizedUser),
       createdAt: new Date(now).toISOString(),
       updatedAt: new Date(now).toISOString(),
     };
@@ -290,6 +298,7 @@ export class SessionService {
           on_chain_authorized: onChainAuthorized,
           vault_deposit_amount: params.vaultDepositAmount ?? null,
           target_pool_address: targetPoolAddress || null,
+          copy_trade_enabled: sessionRecord.copyTradeEnabled ?? false,
         });
       } catch (err) {
         console.warn('[SessionService] Supabase insert fallback (session held in memory):', err);
@@ -349,6 +358,7 @@ export class SessionService {
               vaultDepositAmount: row.vault_deposit_amount ? Number(row.vault_deposit_amount) : undefined,
               targetPoolAddress: row.target_pool_address ? (getAddress(row.target_pool_address) as Address) : undefined,
               onChainAuthorized: row.on_chain_authorized === true,
+              copyTradeEnabled: userSwarmService.isCopyTradeEnabled(row.user_address),
               createdAt: row.created_at,
               updatedAt: row.updated_at,
             };
@@ -395,6 +405,8 @@ export class SessionService {
       session.lastSpendResetTimestamp = now;
     }
 
+    session.copyTradeEnabled = userSwarmService.isCopyTradeEnabled(session.userAddress);
+
     return session;
   }
 
@@ -409,6 +421,8 @@ export class SessionService {
       session.isActive = false;
     }
 
+    session.copyTradeEnabled = userSwarmService.isCopyTradeEnabled(session.userAddress);
+
     return session;
   }
 
@@ -421,6 +435,7 @@ export class SessionService {
     for (const [_, sessionId] of this.userToActiveSessionId.entries()) {
       const session = this.sessions.get(sessionId);
       if (session && session.isActive && new Date(session.expiresAt).getTime() > now) {
+        session.copyTradeEnabled = userSwarmService.isCopyTradeEnabled(session.userAddress);
         result.push(session);
       }
     }
@@ -428,7 +443,7 @@ export class SessionService {
   }
 
   /**
-   * Sessions the swarm may copy-trade: live operator match, on-chain grant, not a dummy/test wallet.
+   * Sessions the swarm may copy-trade: live operator match, on-chain grant, not a dummy/test wallet, and copyTradeEnabled === true.
    */
   public getDelegatedCopyTradeSessions(operatorAddress?: string): SessionRecord[] {
     const operator = (operatorAddress || operatorAccount.address).toLowerCase();
@@ -441,6 +456,7 @@ export class SessionService {
       if (session.onChainAuthorized !== true) return false;
       if (!session.isActive) return false;
       if (new Date(session.expiresAt).getTime() <= now) return false;
+      if (!userSwarmService.isCopyTradeEnabled(session.userAddress)) return false;
       return true;
     });
   }

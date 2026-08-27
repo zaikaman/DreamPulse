@@ -42,7 +42,20 @@ export const PersonalSwarmCockpit: React.FC<PersonalSwarmCockpitProps> = ({
   onConnectWallet,
   hasActiveSession = false,
 }) => {
-  const { config, status, isLoading, isSaving, isCopyMode, isPersonalMode, setMode, toggleAgent, updateAgentConfig, resetToCopy } = usePersonalSwarm(userAddress);
+  const {
+    config,
+    status,
+    isLoading,
+    isSaving,
+    isCopyTradeEnabled,
+    isCopyMode,
+    isPersonalMode,
+    setMode,
+    toggleCopyTrade,
+    toggleAgent,
+    updateAgentConfig,
+    resetToCopy,
+  } = usePersonalSwarm(userAddress);
 
   const [voltSliders, setVoltSliders] = useState({ driftThreshold: 0.2, minEdge: 3.0, lotSize: 5.0 });
   const [oracleSliders, setOracleSliders] = useState({ minEdge: 3.5, lotSize: 5.0, maxTradeSize: 20.0 });
@@ -72,8 +85,14 @@ export const PersonalSwarmCockpit: React.FC<PersonalSwarmCockpitProps> = ({
 
   const handleToggleMode = async () => {
     setIsSwitching(true);
-    if (isCopyMode) await setMode('PERSONAL');
+    if (config?.mode === 'COPY') await setMode('PERSONAL');
     else await resetToCopy();
+    setIsSwitching(false);
+  };
+
+  const handleToggleCopyTrade = async () => {
+    setIsSwitching(true);
+    await toggleCopyTrade(!isCopyTradeEnabled);
     setIsSwitching(false);
   };
 
@@ -154,7 +173,7 @@ export const PersonalSwarmCockpit: React.FC<PersonalSwarmCockpitProps> = ({
   const totalPersonalFills = (status?.volt.tradesToday ?? 0) + (status?.oracle.tradesToday ?? 0) + (status?.titan.tradesToday ?? 0);
 
   // If user is in COPY mode -> show disabled overlay cards with CTA to personalize
-  const isEditable = isPersonalMode && hasActiveSession;
+  const isEditable = isPersonalMode && hasActiveSession && isCopyTradeEnabled;
   const needsDelegation = isPersonalMode && !hasActiveSession;
 
   return (
@@ -169,30 +188,61 @@ export const PersonalSwarmCockpit: React.FC<PersonalSwarmCockpitProps> = ({
             <div>
               <h2 className="text-sm font-bold text-foreground tracking-tight leading-none flex items-center gap-2">
                 My Personal Swarm
-                <Badge variant="outline" className={cn('font-mono text-[10px] px-1.5 py-0 border gap-1', isPersonalMode ? 'bg-amber-500/10 text-amber-400 border-amber-500/20' : 'bg-sky-500/10 text-sky-300 border-sky-500/20')}>
-                  <span className={cn('w-1.5 h-1.5 rounded-full', isPersonalMode ? 'bg-amber-400' : 'bg-sky-400')} /> {isPersonalMode ? 'PERSONAL MODE' : 'COPY MODE'}
+                <Badge variant="outline" className={cn('font-mono text-[10px] px-1.5 py-0 border gap-1', !isCopyTradeEnabled ? 'bg-amber-500/10 text-amber-400 border-amber-500/20' : isPersonalMode ? 'bg-purple-500/10 text-purple-300 border-purple-500/20' : 'bg-sky-500/10 text-sky-300 border-sky-500/20')}>
+                  <span className={cn('w-1.5 h-1.5 rounded-full', !isCopyTradeEnabled ? 'bg-amber-400' : isPersonalMode ? 'bg-purple-400' : 'bg-sky-400')} />
+                  {!isCopyTradeEnabled ? 'SWARM: PAUSED (TERMINAL COPILOT ONLY)' : isPersonalMode ? 'PERSONAL MODE' : 'COPY MODE'}
                 </Badge>
               </h2>
               <div className="text-[11px] text-muted-foreground mt-1">
-                {isCopyMode ? 'Mirroring Protocol Swarm via real-time copy-trade (isolated execution, zero custody).' : 'Isolated per-wallet swarm — your strategy executes independently on Somnia.'}
+                {!isCopyTradeEnabled
+                  ? 'Automated swarm trading is paused. Your session is active for 1-click Copilot Terminal trading.'
+                  : isCopyMode
+                  ? 'Mirroring Protocol Swarm via real-time copy-trade (isolated execution, zero custody).'
+                  : 'Isolated per-wallet swarm — your strategy executes independently on Somnia.'}
                 {config?.customizedAt && <span className="font-mono ml-2 text-[10px] text-muted-foreground/70">Customized {new Date(config.customizedAt).toLocaleString()}</span>}
               </div>
             </div>
           </div>
           <div className="flex items-center gap-2">
-            <div className="hidden md:flex items-center gap-1.5 text-[10px] font-mono text-muted-foreground border border-border/30 rounded-full px-2 py-1 bg-secondary/20">
-              <span className={cn('px-2 py-0.5 rounded-full text-[10px] font-bold', isCopyMode ? 'bg-sky-500 text-white' : 'text-muted-foreground')}>COPY</span>
-              <span className={cn('px-2 py-0.5 rounded-full text-[10px] font-bold', isPersonalMode ? 'bg-amber-500 text-zinc-900' : 'text-muted-foreground')}>PERSONAL</span>
-            </div>
+            {/* Master Copy-Trading Switch */}
             <button
               type="button"
-              onClick={handleToggleMode}
+              onClick={handleToggleCopyTrade}
               disabled={isSwitching || isSaving}
-              className={cn('inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border text-xs font-bold transition-colors disabled:opacity-60 cursor-pointer', isPersonalMode ? 'bg-secondary/30 hover:bg-secondary/50 border-border/50 text-muted-foreground' : 'bg-amber-500 hover:bg-amber-400 text-zinc-900 border-amber-500')}
+              className={cn(
+                'inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border text-xs font-bold transition-colors disabled:opacity-60 cursor-pointer',
+                isCopyTradeEnabled
+                  ? 'bg-sky-500/10 hover:bg-sky-500/20 text-sky-400 border-sky-500/30'
+                  : 'bg-amber-500 hover:bg-amber-400 text-zinc-900 border-amber-500'
+              )}
+              title="Enable or pause automated background trading for your wallet"
             >
-              {isSwitching ? <Spinner size="xs" /> : isPersonalMode ? <ArrowPathIcon className="w-3.5 h-3.5" /> : <BeakerIcon className="w-3.5 h-3.5" />}
-              <span>{isPersonalMode ? 'Revert to Copy Mode' : 'Personalize My Swarm'}</span>
+              <PowerIcon className="w-3.5 h-3.5" />
+              <span>{isCopyTradeEnabled ? 'Pause Swarm Trading' : 'Enable Swarm Trading'}</span>
             </button>
+
+            {isCopyTradeEnabled && (
+              <>
+                <div className="hidden md:flex items-center gap-1.5 text-[10px] font-mono text-muted-foreground border border-border/30 rounded-full px-2 py-1 bg-secondary/20">
+                  <span className={cn('px-2 py-0.5 rounded-full text-[10px] font-bold', config?.mode === 'COPY' ? 'bg-sky-500 text-white' : 'text-muted-foreground')}>COPY</span>
+                  <span className={cn('px-2 py-0.5 rounded-full text-[10px] font-bold', config?.mode === 'PERSONAL' ? 'bg-purple-500 text-white' : 'text-muted-foreground')}>PERSONAL</span>
+                </div>
+                <button
+                  type="button"
+                  onClick={handleToggleMode}
+                  disabled={isSwitching || isSaving}
+                  className={cn(
+                    'inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border text-xs font-bold transition-colors disabled:opacity-60 cursor-pointer',
+                    config?.mode === 'PERSONAL'
+                      ? 'bg-secondary/30 hover:bg-secondary/50 border-border/50 text-muted-foreground'
+                      : 'bg-purple-600 hover:bg-purple-500 text-white border-purple-500'
+                  )}
+                >
+                  {isSwitching ? <Spinner size="xs" /> : config?.mode === 'PERSONAL' ? <ArrowPathIcon className="w-3.5 h-3.5" /> : <BeakerIcon className="w-3.5 h-3.5" />}
+                  <span>{config?.mode === 'PERSONAL' ? 'Revert to Copy Mode' : 'Personalize My Swarm'}</span>
+                </button>
+              </>
+            )}
           </div>
         </div>
         {/* KPI strip for personal swarm */}
@@ -209,8 +259,12 @@ export const PersonalSwarmCockpit: React.FC<PersonalSwarmCockpitProps> = ({
           </div>
           <div className="p-2.5 rounded-lg border bg-card/60 border-border/50 flex flex-col gap-0.5">
             <span className="text-[10px] font-mono text-muted-foreground uppercase tracking-wider">Execution Mode</span>
-            <span className="text-xs font-mono font-bold" style={{ color: isPersonalMode ? '#fbbf24' : '#7dd3fc' }}>{isPersonalMode ? 'ISOLATED SWARM' : 'COPY-TRADING'}</span>
-            <span className="text-[10px] text-muted-foreground">{isPersonalMode ? 'Independent evaluation' : 'Mirrors protocol signals'}</span>
+            <span className="text-xs font-mono font-bold" style={{ color: !isCopyTradeEnabled ? '#fbbf24' : isPersonalMode ? '#c084fc' : '#7dd3fc' }}>
+              {!isCopyTradeEnabled ? 'COPILOT ONLY (OFF)' : isPersonalMode ? 'ISOLATED SWARM' : 'COPY-TRADING'}
+            </span>
+            <span className="text-[10px] text-muted-foreground">
+              {!isCopyTradeEnabled ? 'Background swarm disabled' : isPersonalMode ? 'Independent evaluation' : 'Mirrors protocol signals'}
+            </span>
           </div>
           <div className="p-2.5 rounded-lg border bg-card/60 border-border/50 flex flex-col gap-0.5">
             <span className="text-[10px] font-mono text-muted-foreground uppercase tracking-wider">Session Status</span>
@@ -218,8 +272,20 @@ export const PersonalSwarmCockpit: React.FC<PersonalSwarmCockpitProps> = ({
             <span className="text-[10px] text-muted-foreground">{hasActiveSession ? 'On-chain authorized' : 'Delegate to trade'}</span>
           </div>
         </div>
-        {/* Copy mode explainer */}
-        {isCopyMode && (
+        {/* Copy mode / Off mode explainer */}
+        {!isCopyTradeEnabled ? (
+          <div className="mx-3.5 my-3 p-3 rounded-xl border bg-amber-500/5 border-amber-500/15 flex gap-2.5 items-start">
+            <div className="w-7 h-7 rounded-lg bg-amber-500/10 border border-amber-500/20 grid place-items-center text-amber-400 flex-shrink-0 mt-0.5">
+              <BoltIcon className="w-3.5 h-3.5" />
+            </div>
+            <div className="min-w-0">
+              <div className="text-xs font-semibold text-amber-300">Terminal Copilot Only — Swarm copy-trading is currently turned OFF</div>
+              <p className="text-[11px] leading-relaxed text-muted-foreground m-0 mt-1">
+                Your session delegation is ready for fast 1-click execution when you place trades with the AI Copilot in the Trade Terminal. The autonomous swarm will <strong>not</strong> execute any automatic trades from your wallet. Click <strong>Enable Swarm Trading</strong> if you want the bots to automatically mirror signals into your account.
+              </p>
+            </div>
+          </div>
+        ) : isCopyMode ? (
           <div className="mx-3.5 my-3 p-3 rounded-xl border bg-sky-500/5 border-sky-500/15 flex gap-2.5 items-start">
             <div className="w-7 h-7 rounded-lg bg-sky-500/10 border border-sky-500/20 grid place-items-center text-sky-400 flex-shrink-0 mt-0.5">
               <BeakerIcon className="w-3.5 h-3.5" />
@@ -231,7 +297,7 @@ export const PersonalSwarmCockpit: React.FC<PersonalSwarmCockpitProps> = ({
               </p>
             </div>
           </div>
-        )}
+        ) : null}
         {needsDelegation && (
           <div className="mx-3.5 my-3 p-3 rounded-xl border bg-amber-500/5 border-amber-500/15 flex gap-2.5 items-start">
             <ExclamationTriangleIcon className="w-4 h-4 text-amber-400 flex-shrink-0 mt-0.5" />

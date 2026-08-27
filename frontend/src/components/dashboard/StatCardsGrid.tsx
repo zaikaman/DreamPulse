@@ -114,9 +114,9 @@ export const StatCardsGrid: React.FC<StatCardsGridProps> = ({
         <div className="flex items-center gap-2">
           {perspective === 'PORTFOLIO' ? (
             <>
-              <div className="w-1.5 h-1.5 rounded-full bg-emerald-400" />
-              <span className="text-xs font-semibold text-foreground tracking-wide">
-                MY TRADER WORKSPACE & PERFORMANCE
+              <div className="w-2 h-2 rounded-full bg-emerald-400 shadow-[0_0_8px_rgba(52,211,153,0.6)]" />
+              <span className="text-xs font-bold text-foreground tracking-wider uppercase">
+                Trader Workspace
               </span>
               <Badge variant="outline" className="font-mono text-[10px] text-muted-foreground bg-secondary/40 border-border/50">
                 {wallet?.address ? `${wallet.address.slice(0, 6)}...${wallet.address.slice(-4)}` : 'WALLET'}
@@ -124,9 +124,9 @@ export const StatCardsGrid: React.FC<StatCardsGridProps> = ({
             </>
           ) : (
             <>
-              <div className="w-1.5 h-1.5 rounded-full bg-amber-400" />
-              <span className="text-xs font-semibold text-foreground tracking-wide">
-                SOMNIA PROTOCOL SWARM TELEMETRY
+              <div className="w-2 h-2 rounded-full bg-amber-400 shadow-[0_0_8px_rgba(251,191,36,0.6)]" />
+              <span className="text-xs font-bold text-foreground tracking-wider uppercase">
+                Protocol Swarm Telemetry
               </span>
               <Badge variant="outline" className="font-mono text-[10px] text-muted-foreground bg-secondary/40 border-border/50">
                 OPERATOR 0x93e3...59Cf
@@ -141,34 +141,34 @@ export const StatCardsGrid: React.FC<StatCardsGridProps> = ({
             <button
               type="button"
               className={cn(
-                "flex items-center gap-1.5 px-3 py-1 text-xs font-semibold rounded-md transition-all cursor-pointer",
+                "flex items-center gap-1.5 px-3 py-1 text-xs font-semibold rounded-md transition-all cursor-pointer whitespace-nowrap",
                 perspective === 'PORTFOLIO'
                   ? "bg-primary text-primary-foreground shadow-sm"
                   : "text-muted-foreground hover:text-foreground hover:bg-secondary/60"
               )}
               onClick={() => setPerspective('PORTFOLIO')}
             >
-              <UserIcon className="w-3 h-3" />
+              <UserIcon className="w-3 h-3 flex-shrink-0" />
               <span>My Trading Wallet</span>
             </button>
             <button
               type="button"
               className={cn(
-                "flex items-center gap-1.5 px-3 py-1 text-xs font-semibold rounded-md transition-all cursor-pointer",
+                "flex items-center gap-1.5 px-3 py-1 text-xs font-semibold rounded-md transition-all cursor-pointer whitespace-nowrap",
                 perspective === 'SWARM'
                   ? "bg-primary text-primary-foreground shadow-sm"
                   : "text-muted-foreground hover:text-foreground hover:bg-secondary/60"
               )}
               onClick={() => setPerspective('SWARM')}
             >
-              <CpuChipIcon className="w-3 h-3" />
+              <CpuChipIcon className="w-3 h-3 flex-shrink-0" />
               <span>Protocol Swarm</span>
             </button>
           </div>
         ) : (
           <div className="flex items-center gap-1.5 text-xs text-muted-foreground font-mono">
-            <LockClosedIcon className="w-3 h-3" />
-            <span>Non-Custodial Somnia Shannon Engine</span>
+            <LockClosedIcon className="w-3 h-3 text-muted-foreground/80 flex-shrink-0" />
+            <span className="whitespace-nowrap">Non-Custodial Somnia Shannon Engine</span>
           </div>
         )}
       </div>
@@ -180,54 +180,56 @@ export const StatCardsGrid: React.FC<StatCardsGridProps> = ({
             {/* User Card 1: Collateral Balance */}
             <div className="stat-card">
               <div className="stat-card-header">
-                <div className="flex items-center gap-2">
-                  <span className="stat-card-title">MY TRADING COLLATERAL</span>
+                <span className="stat-card-title truncate">Trading Collateral</span>
+                <div className="flex items-center gap-1.5 flex-shrink-0">
                   {onClaimFaucet && isCollateralZero && (
                     <button
                       type="button"
                       onClick={() => onClaimFaucet(1000)}
                       disabled={isFauceting}
-                      className="px-2 py-0.5 text-[10px] font-mono font-bold rounded bg-amber-500/20 text-amber-300 border border-amber-500/40 hover:bg-amber-500/30 cursor-pointer inline-flex items-center gap-1 transition-colors"
+                      className="px-1.5 py-0.5 text-[10px] font-mono font-bold rounded bg-amber-500/20 text-amber-300 border border-amber-500/40 hover:bg-amber-500/30 cursor-pointer inline-flex items-center gap-1 whitespace-nowrap transition-colors"
                       title="Claim 1,000 TestUSDC for DreamDEX event trading"
                     >
                       {isFauceting ? <ArrowPathIcon className="w-2.5 h-2.5 spin" /> : <CurrencyDollarIcon className="w-2.5 h-2.5" />}
-                      <span>Claim 1k tUSDC</span>
+                      <span>+1k Faucet</span>
                     </button>
                   )}
+                  <WalletIcon className="w-3.5 h-3.5 stat-card-icon text-muted-foreground/70" />
                 </div>
-                <WalletIcon className="w-3.5 h-3.5 stat-card-icon text-muted-foreground" />
               </div>
-              <div className="stat-card-value font-mono text-cyan-400">
-                {userCollateral} <span className="text-xs text-muted-foreground">tUSDC</span>
+              <div className="stat-card-value font-mono text-cyan-400 truncate">
+                {userCollateral} <span className="text-xs font-normal text-muted-foreground">tUSDC</span>
               </div>
               <div className="stat-card-footer">
-                <Badge variant="outline" className="font-mono text-[10px] text-muted-foreground bg-secondary/30 border-border/50 gap-1">
-                  <CheckCircleIcon className="w-2.5 h-2.5 text-emerald-400" />
-                  <span>{wallet?.isConnected ? 'WALLET CONNECTED' : 'NOT CONNECTED'}</span>
-                </Badge>
-                <span className="text-[11px] font-mono text-muted-foreground">Native Gas: {userNativeGas} STT</span>
+                <span className="inline-flex items-center gap-1.5 font-mono text-[11px] text-emerald-400 whitespace-nowrap">
+                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-400" />
+                  <span>{wallet?.isConnected ? 'Connected' : 'Disconnected'}</span>
+                </span>
+                <span className="font-mono text-[11px] text-muted-foreground whitespace-nowrap truncate">
+                  Gas: <span className="text-foreground font-medium">{userNativeGas} STT</span>
+                </span>
               </div>
             </div>
 
             {/* User Card 2: Personal PnL */}
             <div className="stat-card">
               <div className="stat-card-header">
-                <span className="stat-card-title">MY TOTAL PnL</span>
-                <ArrowTrendingUpIcon className="w-3.5 h-3.5 stat-card-icon text-muted-foreground" />
+                <span className="stat-card-title truncate">Total Net PnL</span>
+                <ArrowTrendingUpIcon className="w-3.5 h-3.5 stat-card-icon text-muted-foreground/70" />
               </div>
               <div className={cn(
-                "stat-card-value font-mono",
+                "stat-card-value font-mono truncate",
                 userTotalPnl > 0 ? "text-emerald-400" : userTotalPnl < 0 ? "text-rose-400" : "text-foreground"
               )}>
-                {userTotalPnl > 0 ? `+${userTotalPnl.toFixed(2)}` : userTotalPnl.toFixed(2)} USDC
+                {userTotalPnl > 0 ? `+${userTotalPnl.toFixed(2)}` : userTotalPnl.toFixed(2)} <span className="text-xs font-normal text-muted-foreground">USDC</span>
               </div>
               <div className="stat-card-footer">
-                <Badge variant="outline" className="font-mono text-[10px] text-muted-foreground bg-secondary/30 border-border/50 gap-1">
-                  <ArrowTrendingUpIcon className="w-2.5 h-2.5" />
-                  <span>{userOrdersToday > 0 ? `${userOrdersToday} FILLS` : 'READY TO TRADE'}</span>
-                </Badge>
-                <span className="text-[11px] font-mono text-muted-foreground">
-                  Realized: {(portfolio?.realizedPnl ?? 0).toFixed(2)} • Claimable: {(portfolio?.unclaimedPnl ?? 0).toFixed(2)}
+                <span className="inline-flex items-center gap-1 font-mono text-[11px] text-muted-foreground whitespace-nowrap">
+                  <ArrowTrendingUpIcon className="w-3 h-3 text-emerald-400 flex-shrink-0" />
+                  <span>{userOrdersToday > 0 ? `${userOrdersToday} fills today` : 'Ready to trade'}</span>
+                </span>
+                <span className="font-mono text-[11px] text-muted-foreground whitespace-nowrap truncate">
+                  Realized: <span className="text-foreground font-medium">${(portfolio?.realizedPnl ?? 0).toFixed(2)}</span>
                 </span>
               </div>
             </div>
@@ -239,40 +241,60 @@ export const StatCardsGrid: React.FC<StatCardsGridProps> = ({
               onClick={onOpenSessionModal}
             >
               <div className="stat-card-header">
-                <span className="stat-card-title">SESSION BUDGET</span>
-                <ShieldCheckIcon className="w-3.5 h-3.5 stat-card-icon text-muted-foreground" />
+                <span className="stat-card-title truncate">Session Budget</span>
+                <ShieldCheckIcon className="w-3.5 h-3.5 stat-card-icon text-muted-foreground/70" />
               </div>
-              <div className="stat-card-value font-mono">
+              <div className="stat-card-value font-mono truncate">
                 {activeSession?.isActive
-                  ? `${activeSession.spentToday || 0} / ${activeSession.dailyVolumeCap} tUSDC`
+                  ? (
+                    <>
+                      {activeSession.spentToday || 0} / {activeSession.dailyVolumeCap} <span className="text-xs font-normal text-muted-foreground">tUSDC</span>
+                    </>
+                  )
                   : 'DIRECT MODE'}
               </div>
               <div className="stat-card-footer">
-                <Badge variant="outline" className="font-mono text-[10px] text-muted-foreground bg-secondary/30 border-border/50 gap-1">
-                  <ShieldCheckIcon className={cn("w-2.5 h-2.5", activeSession?.isActive ? "text-emerald-400" : "text-muted-foreground")} />
-                  <span>{activeSession?.isActive ? 'ACTIVE DELEGATION' : 'DIRECT WALLET'}</span>
-                </Badge>
-                <span className="text-[11px] font-mono text-muted-foreground">
-                  {activeSession?.isActive
-                    ? `Single Cap: ${activeSession.maxTradeSize} tUSDC`
-                    : 'Configure session'}
-                </span>
+                {activeSession?.isActive ? (
+                  <>
+                    <span className="inline-flex items-center gap-1.5 font-mono text-[11px] text-emerald-400 whitespace-nowrap">
+                      <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+                      <span>Active Grant</span>
+                    </span>
+                    <span className="font-mono text-[11px] text-muted-foreground whitespace-nowrap truncate">
+                      Cap: <span className="text-foreground font-medium">{activeSession.maxTradeSize} tUSDC</span>
+                    </span>
+                  </>
+                ) : (
+                  <>
+                    <span className="inline-flex items-center gap-1.5 font-mono text-[11px] text-muted-foreground whitespace-nowrap">
+                      <ShieldCheckIcon className="w-3 h-3 flex-shrink-0 text-muted-foreground/80" />
+                      <span>Direct Wallet</span>
+                    </span>
+                    <span className="font-mono text-[11px] text-cyan-400 hover:text-cyan-300 transition-colors whitespace-nowrap cursor-pointer">
+                      Configure →
+                    </span>
+                  </>
+                )}
               </div>
             </div>
 
             {/* User Card 4: Swarm Speed & Precision */}
             <div className="stat-card">
               <div className="stat-card-header">
-                <span className="stat-card-title">SWARM EVAL SPEED</span>
-                <Squares2X2Icon className="w-3.5 h-3.5 stat-card-icon text-muted-foreground" />
+                <span className="stat-card-title truncate">Swarm Eval Speed</span>
+                <Squares2X2Icon className="w-3.5 h-3.5 stat-card-icon text-muted-foreground/70" />
               </div>
-              <div className="stat-card-value font-mono text-foreground">{latencyMs}ms TICK</div>
+              <div className="stat-card-value font-mono text-foreground truncate">
+                {latencyMs}ms <span className="text-xs font-normal text-muted-foreground">TICK</span>
+              </div>
               <div className="stat-card-footer">
-                <Badge variant="outline" className="font-mono text-[10px] text-muted-foreground bg-secondary/30 border-border/50 gap-1">
-                  <CpuChipIcon className="w-2.5 h-2.5" />
-                  <span>SUB-100MS LOOP</span>
-                </Badge>
-                <span className="text-[11px] font-mono text-muted-foreground">Black-Scholes Φ(z) normal edge</span>
+                <span className="inline-flex items-center gap-1.5 font-mono text-[11px] text-muted-foreground whitespace-nowrap">
+                  <span className="w-1.5 h-1.5 rounded-full bg-cyan-400" />
+                  <span>Sub-100ms Loop</span>
+                </span>
+                <span className="font-mono text-[11px] text-muted-foreground whitespace-nowrap truncate">
+                  Black-Scholes Φ(z)
+                </span>
               </div>
             </div>
           </>
@@ -281,71 +303,83 @@ export const StatCardsGrid: React.FC<StatCardsGridProps> = ({
             {/* Swarm Card 1: 24h Trading Volume */}
             <div className="stat-card">
               <div className="stat-card-header">
-                <span className="stat-card-title">SWARM 24H VOLUME</span>
-                <ChartBarIcon className="w-3.5 h-3.5 stat-card-icon text-muted-foreground" />
+                <span className="stat-card-title truncate">24h Swarm Volume</span>
+                <ChartBarIcon className="w-3.5 h-3.5 stat-card-icon text-muted-foreground/70" />
               </div>
-              <div className="stat-card-value font-mono text-cyan-400">
+              <div className="stat-card-value font-mono text-cyan-400 truncate">
                 ${total24hVolume.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
               </div>
               <div className="stat-card-footer">
-                <Badge variant="outline" className="font-mono text-[10px] text-muted-foreground bg-secondary/30 border-border/50 gap-1">
-                  <BoltIcon className="w-2.5 h-2.5" />
-                  <span>{totalSwarmFills > 0 ? `${totalSwarmFills} ON-CHAIN TRADES` : '8 ON-CHAIN TRADES'}</span>
-                </Badge>
-                <span className="text-[11px] font-mono text-muted-foreground">Somnia L1 High Throughput</span>
+                <span className="inline-flex items-center gap-1.5 font-mono text-[11px] text-muted-foreground whitespace-nowrap">
+                  <BoltIcon className="w-3 h-3 text-amber-400 flex-shrink-0" />
+                  <span>{totalSwarmFills > 0 ? `${totalSwarmFills} on-chain trades` : '8 on-chain trades'}</span>
+                </span>
+                <span className="font-mono text-[11px] text-muted-foreground whitespace-nowrap truncate">
+                  Somnia Shannon
+                </span>
               </div>
             </div>
 
             {/* Swarm Card 2: Active Event Contracts */}
             <div className="stat-card">
               <div className="stat-card-header">
-                <span className="stat-card-title">EVENT CONTRACTS</span>
-                <Square3Stack3DIcon className="w-3.5 h-3.5 stat-card-icon text-muted-foreground" />
+                <span className="stat-card-title truncate">Event Contracts</span>
+                <Square3Stack3DIcon className="w-3.5 h-3.5 stat-card-icon text-muted-foreground/70" />
               </div>
-              <div className="stat-card-value font-mono">{activeMarketsCount} ACTIVE</div>
+              <div className="stat-card-value font-mono truncate">
+                {activeMarketsCount} <span className="text-xs font-normal text-muted-foreground">ACTIVE</span>
+              </div>
               <div className="stat-card-footer">
-                <Badge variant="outline" className="font-mono text-[10px] text-muted-foreground bg-secondary/30 border-border/50 gap-1">
-                  <CheckCircleIcon className="w-2.5 h-2.5 text-emerald-400" />
+                <span className="inline-flex items-center gap-1.5 font-mono text-[11px] text-emerald-400 whitespace-nowrap">
+                  <CheckCircleIcon className="w-3 h-3 flex-shrink-0" />
                   <span>5m • 15m • 1h</span>
-                </Badge>
-                <span className="text-[11px] font-mono text-muted-foreground">BTC, ETH, SOL, BNB, DOGE</span>
+                </span>
+                <span className="font-mono text-[11px] text-muted-foreground whitespace-nowrap truncate">
+                  BTC • ETH • SOL
+                </span>
               </div>
             </div>
 
             {/* Swarm Card 3: Autonomous Swarm PnL */}
             <div className="stat-card">
               <div className="stat-card-header">
-                <span className="stat-card-title">SWARM REAL-TIME PnL</span>
-                <ArrowTrendingUpIcon className="w-3.5 h-3.5 stat-card-icon text-muted-foreground" />
+                <span className="stat-card-title truncate">Swarm Real-Time PnL</span>
+                <ArrowTrendingUpIcon className="w-3.5 h-3.5 stat-card-icon text-muted-foreground/70" />
               </div>
               <div className={cn(
-                "stat-card-value font-mono",
+                "stat-card-value font-mono truncate",
                 totalSwarmPnl > 0 ? "text-emerald-400" : totalSwarmPnl < 0 ? "text-rose-400" : "text-foreground"
               )}>
-                {totalSwarmPnl > 0 ? `+${totalSwarmPnl.toFixed(2)}` : totalSwarmPnl.toFixed(2)} USDC
+                {totalSwarmPnl > 0 ? `+${totalSwarmPnl.toFixed(2)}` : totalSwarmPnl.toFixed(2)} <span className="text-xs font-normal text-muted-foreground">USDC</span>
               </div>
               <div className="stat-card-footer">
-                <Badge variant="outline" className="font-mono text-[10px] text-muted-foreground bg-secondary/30 border-border/50 gap-1">
-                  <ArrowTrendingUpIcon className="w-2.5 h-2.5" />
-                  <span>{totalSwarmFills > 0 ? `${totalSwarmFills} FILLS` : 'READY TO TRADE'}</span>
-                </Badge>
-                <span className="text-[11px] font-mono text-muted-foreground">Volt, Oracle & Titan net PnL</span>
+                <span className="inline-flex items-center gap-1 font-mono text-[11px] text-muted-foreground whitespace-nowrap">
+                  <ArrowTrendingUpIcon className="w-3 h-3 text-emerald-400 flex-shrink-0" />
+                  <span>Net Realized</span>
+                </span>
+                <span className="font-mono text-[11px] text-muted-foreground whitespace-nowrap truncate">
+                  Volt • Oracle • Titan
+                </span>
               </div>
             </div>
 
             {/* Swarm Card 4: Pricing Engine Latency */}
             <div className="stat-card">
               <div className="stat-card-header">
-                <span className="stat-card-title">PRICING & REASONING SPEED</span>
-                <Squares2X2Icon className="w-3.5 h-3.5 stat-card-icon text-muted-foreground" />
+                <span className="stat-card-title truncate">Pricing Engine Latency</span>
+                <Squares2X2Icon className="w-3.5 h-3.5 stat-card-icon text-muted-foreground/70" />
               </div>
-              <div className="stat-card-value font-mono text-foreground">{latencyMs}ms TICK</div>
+              <div className="stat-card-value font-mono text-foreground truncate">
+                {latencyMs}ms <span className="text-xs font-normal text-muted-foreground">TICK</span>
+              </div>
               <div className="stat-card-footer">
-                <Badge variant="outline" className="font-mono text-[10px] text-muted-foreground bg-secondary/30 border-border/50 gap-1">
-                  <CpuChipIcon className="w-2.5 h-2.5" />
+                <span className="inline-flex items-center gap-1.5 font-mono text-[11px] text-muted-foreground whitespace-nowrap">
+                  <span className="w-1.5 h-1.5 rounded-full bg-cyan-400" />
                   <span>99.9% Φ(z)</span>
-                </Badge>
-                <span className="text-[11px] font-mono text-muted-foreground">Black-Scholes quant loop</span>
+                </span>
+                <span className="font-mono text-[11px] text-muted-foreground whitespace-nowrap truncate">
+                  Quant Loop
+                </span>
               </div>
             </div>
           </>

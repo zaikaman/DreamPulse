@@ -54,6 +54,7 @@ export interface SessionGrant {
   vaultDepositAmount?: number;
   targetPoolAddress?: `0x${string}`;
   onChainAuthorized?: boolean;
+  copyTradeEnabled?: boolean;
 }
 
 export interface AgentStrategy {

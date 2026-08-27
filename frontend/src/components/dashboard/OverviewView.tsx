@@ -11,6 +11,7 @@ import type { MarketTickData } from '../../hooks/useTelemetry.js';
 import type { WalletState } from '../../hooks/useSessionKey.js';
 import { useAgentSwarm } from '../../hooks/useAgentSwarm.js';
 import { useUserPortfolio } from '../../hooks/useUserPortfolio.js';
+import { usePersonalSwarm } from '../../hooks/usePersonalSwarm.js';
 import { useOnboarding } from '../../hooks/useOnboarding.js';
 import { StatCardsGrid } from './StatCardsGrid.js';
 import { SessionStatusBar } from '../SessionStatusBar.js';
@@ -108,6 +109,7 @@ const OverviewViewComponent: React.FC<OverviewViewProps> = ({
 
   const { detailed: swarmDetailed, summary: swarmSummary, orders } = useAgentSwarm();
   const { portfolio } = useUserPortfolio(wallet);
+  const { isCopyTradeEnabled, toggleCopyTrade } = usePersonalSwarm(wallet?.address || undefined);
 
   const {
     quests,
@@ -149,6 +151,8 @@ const OverviewViewComponent: React.FC<OverviewViewProps> = ({
           onOpenModal={onOpenSessionModal}
           onConnectWallet={onConnectWallet}
           onSwitchNetwork={onSwitchNetwork}
+          isCopyTradeEnabled={isCopyTradeEnabled}
+          onToggleCopyTrade={toggleCopyTrade}
         />
       )}
 
