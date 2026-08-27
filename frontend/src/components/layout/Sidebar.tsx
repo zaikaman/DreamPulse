@@ -38,10 +38,18 @@ interface SidebarProps {
   onConnectWallet?: () => void;
 }
 
+interface NavItem {
+  id: DashboardViewType;
+  label: string;
+  badge?: string;
+  description: string;
+  icon: React.ComponentType<{ className?: string }>;
+}
+
 export const Sidebar: React.FC<SidebarProps> = ({
   currentView,
   onSelectView,
-  markets = [],
+  markets: _markets = [],
   isCollapsed = false,
   onOpenSessionModal,
   wallet,
@@ -49,11 +57,10 @@ export const Sidebar: React.FC<SidebarProps> = ({
   onConnectWallet,
 }) => {
   // Category 1: Market Intelligence & Price Discovery
-  const marketNavItems = [
+  const marketNavItems: NavItem[] = [
     {
       id: "Overview" as DashboardViewType,
       label: "Terminal Overview",
-      badge: markets.length > 0 ? `${markets.length}` : undefined,
       description: "Macro Swarm & Live CLOB Telemetry",
       icon: Squares2X2Icon,
     },
@@ -66,7 +73,6 @@ export const Sidebar: React.FC<SidebarProps> = ({
     {
       id: "Markets" as DashboardViewType,
       label: "Markets Explorer",
-      badge: markets.length > 0 ? `${markets.length}` : undefined,
       description: "Browse 32+ Active Event Contracts",
       icon: Square3Stack3DIcon,
     },

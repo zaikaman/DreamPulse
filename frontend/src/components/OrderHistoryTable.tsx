@@ -30,6 +30,63 @@ interface OrderHistoryTableProps {
   onConnectWallet?: () => Promise<void>;
 }
 
+interface ParsedMarketInfo {
+  symbol: string;
+  assetName: string;
+  windowDuration: string;
+  strikePrice?: number;
+  settlementPrice?: number;
+  winningOutcome?: OutcomeType;
+}
+
+function parseOrderMarketDetails(order: OrderExecution): ParsedMarketInfo {
+  let symbol = order.marketSnapshot?.symbol || '';
+  let strikePrice = order.marketSnapshot?.strikePrice;
+  let settlementPrice = order.marketSnapshot?.settlementPrice;
+  let winningOutcome = order.marketSnapshot?.winningOutcome;
+  let windowDuration = order.marketSnapshot?.windowDuration || '5m';
+
+  if (!symbol && order.marketId) {
+    if (order.marketId.includes('-')) {
+      const parts = order.marketId.split('-');
+      if (parts.length >= 2) {
+        const rawSym = parts[1].toUpperCase();
+        symbol = rawSym.includes('BTC') ? 'BTC/USD' : rawSym.includes('ETH') ? 'ETH/USD' : rawSym.includes('SOL') ? 'SOL/USD' : rawSym.includes('STT') ? 'STT/USD' : `${rawSym}/USD`;
+        for (let i = 2; i < parts.length; i++) {
+          const num = Number(parts[i]);
+          if (!isNaN(num) && num >= 1 && !strikePrice) {
+            strikePrice = num;
+          }
+          if (parts[i].endsWith('m') || parts[i].endsWith('h')) {
+            windowDuration = parts[i];
+          }
+        }
+      }
+    }
+  }
+
+  if (!symbol) symbol = 'BTC/USD';
+
+  const assetName = symbol.includes('BTC') ? 'Bitcoin' : symbol.includes('ETH') ? 'Ethereum' : symbol.includes('SOL') ? 'Solana' : symbol.includes('STT') ? 'Somnia' : symbol.split('/')[0];
+
+  return {
+    symbol,
+    assetName,
+    windowDuration,
+    strikePrice,
+    settlementPrice,
+    winningOutcome,
+  };
+}
+
+function formatCurrencyAmount(price?: number): string {
+  if (price === undefined || isNaN(price)) return '—';
+  if (price >= 1000) {
+    return `$${price.toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 2 })}`;
+  }
+  return `$${price.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 4 })}`;
+}
+
 export const OrderHistoryTable: React.FC<OrderHistoryTableProps> = ({
   userAddress,
   onConnectWallet,
@@ -399,16 +456,16 @@ export const OrderHistoryTable: React.FC<OrderHistoryTableProps> = ({
           <table className="terminal-table" style={{ width: '100%', borderCollapse: 'collapse', opacity: isFetching && orders.length > 0 ? 0.55 : 1, transition: 'opacity 0.15s ease' }}>
             <thead>
               <tr style={{ background: 'rgba(255, 255, 255, 0.02)', borderBottom: '1px solid var(--border)' }}>
-                <th style={{ padding: '10px 16px', textAlign: 'left', fontSize: '10px', color: 'var(--muted-foreground)', textTransform: 'uppercase' }}>Time (UTC)</th>
-                <th style={{ padding: '10px 16px', textAlign: 'left', fontSize: '10px', color: 'var(--muted-foreground)', textTransform: 'uppercase' }}>Agent</th>
-                <th style={{ padding: '10px 16px', textAlign: 'left', fontSize: '10px', color: 'var(--muted-foreground)', textTransform: 'uppercase' }}>Market / Outcome</th>
-                <th style={{ padding: '10px 16px', textAlign: 'left', fontSize: '10px', color: 'var(--muted-foreground)', textTransform: 'uppercase' }}>Type & Side</th>
-                <th style={{ padding: '10px 16px', textAlign: 'right', fontSize: '10px', color: 'var(--muted-foreground)', textTransform: 'uppercase' }}>Price</th>
-                <th style={{ padding: '10px 16px', textAlign: 'right', fontSize: '10px', color: 'var(--muted-foreground)', textTransform: 'uppercase' }}>Lots</th>
-                <th style={{ padding: '10px 16px', textAlign: 'right', fontSize: '10px', color: 'var(--muted-foreground)', textTransform: 'uppercase' }}>Total Cost</th>
-                <th style={{ padding: '10px 16px', textAlign: 'right', fontSize: '10px', color: 'var(--muted-foreground)', textTransform: 'uppercase' }}>Realized PnL</th>
-                <th style={{ padding: '10px 16px', textAlign: 'center', fontSize: '10px', color: 'var(--muted-foreground)', textTransform: 'uppercase' }}>Status</th>
-                <th style={{ padding: '10px 16px', textAlign: 'right', fontSize: '10px', color: 'var(--muted-foreground)', textTransform: 'uppercase' }}>On-Chain Tx</th>
+                <th style={{ padding: '10px 16px', textAlign: 'left', fontSize: '10px', color: 'var(--muted-foreground)', textTransform: 'uppercase', letterSpacing: '0.04em' }}>Time (UTC)</th>
+                <th style={{ padding: '10px 16px', textAlign: 'left', fontSize: '10px', color: 'var(--muted-foreground)', textTransform: 'uppercase', letterSpacing: '0.04em' }}>Agent</th>
+                <th style={{ padding: '10px 16px', textAlign: 'left', fontSize: '10px', color: 'var(--muted-foreground)', textTransform: 'uppercase', letterSpacing: '0.04em' }}>Target Asset & Event</th>
+                <th style={{ padding: '10px 16px', textAlign: 'left', fontSize: '10px', color: 'var(--muted-foreground)', textTransform: 'uppercase', letterSpacing: '0.04em' }}>Type & Side</th>
+                <th style={{ padding: '10px 16px', textAlign: 'right', fontSize: '10px', color: 'var(--muted-foreground)', textTransform: 'uppercase', letterSpacing: '0.04em' }}>Contract Price</th>
+                <th style={{ padding: '10px 16px', textAlign: 'right', fontSize: '10px', color: 'var(--muted-foreground)', textTransform: 'uppercase', letterSpacing: '0.04em' }}>Position Lots</th>
+                <th style={{ padding: '10px 16px', textAlign: 'right', fontSize: '10px', color: 'var(--muted-foreground)', textTransform: 'uppercase', letterSpacing: '0.04em' }}>Total Cost</th>
+                <th style={{ padding: '10px 16px', textAlign: 'right', fontSize: '10px', color: 'var(--muted-foreground)', textTransform: 'uppercase', letterSpacing: '0.04em' }}>Realized PnL & Settlement</th>
+                <th style={{ padding: '10px 16px', textAlign: 'center', fontSize: '10px', color: 'var(--muted-foreground)', textTransform: 'uppercase', letterSpacing: '0.04em' }}>Status</th>
+                <th style={{ padding: '10px 16px', textAlign: 'right', fontSize: '10px', color: 'var(--muted-foreground)', textTransform: 'uppercase', letterSpacing: '0.04em' }}>On-Chain Tx</th>
               </tr>
             </thead>
             {isInitialLoading ? (
@@ -432,63 +489,219 @@ export const OrderHistoryTable: React.FC<OrderHistoryTableProps> = ({
                   </tr>
                 ) : (
                 orders.map((order) => {
-                  const timeStr = new Date(order.createdAt).toLocaleTimeString();
+                  const dateObj = new Date(order.createdAt);
+                  const timeStr = dateObj.toLocaleTimeString();
+                  const dateStr = dateObj.toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
                   const shortTx = order.txHash ? `${order.txHash.slice(0, 6)}...${order.txHash.slice(-4)}` : 'N/A';
                   const explorerUrl = order.txHash ? `https://shannon-explorer.somnia.network/tx/${order.txHash}` : '#';
+
+                  const marketInfo = parseOrderMarketDetails(order);
+
+                  // Calculate PnL & settlement display
+                  const pnl = order.pnl ?? 0;
+                  const snapClose = (order as any).marketSnapshot?.closeTimestamp ? new Date((order as any).marketSnapshot.closeTimestamp).getTime() : NaN;
+                  const isOpenBySnap = !isNaN(snapClose) && snapClose > Date.now();
+                  const ageMs = Date.now() - dateObj.getTime();
+                  let isOpenByMarketId = false;
+                  if (isNaN(snapClose) && order.marketId.includes('-')) {
+                    const parts = order.marketId.split('-');
+                    const closeMs = parts.length >= 5 ? Number(parts[4]) : NaN;
+                    if (!isNaN(closeMs)) isOpenByMarketId = closeMs > Date.now();
+                  }
+                  const isOpen = isOpenBySnap || isOpenByMarketId || (!isNaN(snapClose) ? false : ageMs < 360000);
+
+                  let pnlMainText = '0.00 tUSDC';
+                  let pnlColor = 'var(--muted-foreground)';
+                  let settlementSubText = 'Settled';
+
+                  if (pnl !== 0) {
+                    pnlMainText = pnl > 0 ? `+${pnl.toFixed(2)} tUSDC` : `${pnl.toFixed(2)} tUSDC`;
+                    pnlColor = pnl > 0 ? 'var(--trade-buy)' : 'var(--trade-sell)';
+                    if (marketInfo.settlementPrice) {
+                      settlementSubText = `Chốt @ ${formatCurrencyAmount(marketInfo.settlementPrice)}`;
+                    } else {
+                      settlementSubText = pnl > 0 ? 'Settled (Win)' : 'Settled (Loss)';
+                    }
+                  } else if (order.status !== 'FILLED') {
+                    pnlMainText = '— PENDING';
+                    pnlColor = 'var(--muted-foreground)';
+                    settlementSubText = 'Chờ khớp lệnh';
+                  } else if (isOpen) {
+                    pnlMainText = '— OPEN';
+                    pnlColor = 'var(--muted-foreground)';
+                    settlementSubText = 'Đang chạy (Live)';
+                  } else {
+                    pnlMainText = '0.00 tUSDC';
+                    pnlColor = 'var(--muted-foreground)';
+                    if (marketInfo.settlementPrice) {
+                      settlementSubText = `Chốt @ ${formatCurrencyAmount(marketInfo.settlementPrice)}`;
+                    } else {
+                      settlementSubText = 'Settled';
+                    }
+                  }
+
+                  const agentRoleMap: Record<string, string> = {
+                    Volt: 'Momentum Sniper',
+                    Oracle: 'Black-Scholes Φ(z)',
+                    Titan: 'MM Depth Ladder',
+                    Sweeper: 'Outcome Sweeper',
+                  };
+
+                  const tooltipTitle = `[Order Execution Breakdown]
+Asset: ${marketInfo.assetName} (${marketInfo.symbol}) ${marketInfo.windowDuration}
+Condition: Price > ${formatCurrencyAmount(marketInfo.strikePrice)} at Expiry
+Order: ${order.direction} ${order.lotSize.toFixed(1)} lots @ ${order.price.toFixed(2)} tUSDC
+Cost: ${order.totalCost.toFixed(2)} tUSDC (Implied: ${(order.price * 100).toFixed(0)}%)
+Settlement: ${marketInfo.settlementPrice ? `Chốt @ ${formatCurrencyAmount(marketInfo.settlementPrice)}` : (isOpen ? 'Đang mở (Pending Expiry)' : 'Đã kết thúc')}
+Realized PnL: ${pnl !== 0 ? (pnl > 0 ? `+${pnl.toFixed(2)} tUSDC (Win)` : `${pnl.toFixed(2)} tUSDC (Loss)`) : (isOpen ? 'Open in progress' : '0.00 tUSDC')}
+Agent: ${order.agentType} (${agentRoleMap[order.agentType] || 'Autonomous Swarm'})
+Tx Hash: ${order.txHash || 'N/A'}`;
+
                   return (
-                    <tr key={order.id} style={{ borderBottom: '1px solid rgba(255, 255, 255, 0.04)', transition: 'background 0.15s ease' }}>
-                      <td style={{ padding: '12px 16px', fontSize: '11px', color: 'var(--muted-foreground)', fontFamily: 'var(--font-mono)' }}>{timeStr}</td>
-                      <td style={{ padding: '12px 16px' }}>{getAgentBadge(order.agentType)}</td>
-                      <td style={{ padding: '12px 16px' }}>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                          <span style={{ fontSize: '12px', fontWeight: 600, color: 'var(--foreground)' }}>{order.marketId.slice(0, 8)}...</span>
-                          {getOutcomeBadge(order.outcome)}
+                    <tr
+                      key={order.id}
+                      title={tooltipTitle}
+                      style={{ borderBottom: '1px solid rgba(255, 255, 255, 0.04)', transition: 'background 0.15s ease' }}
+                      className="hover:bg-white/[0.02]"
+                    >
+                      {/* 1. TIME (UTC) */}
+                      <td style={{ padding: '10px 16px', fontFamily: 'var(--font-mono)' }}>
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
+                          <span style={{ fontSize: '11.5px', color: 'var(--foreground)', fontWeight: 600 }}>{timeStr}</span>
+                          <span style={{ fontSize: '9.5px', color: 'var(--muted-foreground)' }}>{dateStr}</span>
                         </div>
                       </td>
-                      <td style={{ padding: '12px 16px', fontSize: '11px', fontFamily: 'var(--font-mono)' }}>
-                        <span style={{ color: order.direction === 'BUY' ? 'var(--trade-buy)' : 'var(--trade-sell)', fontWeight: 600 }}>{order.direction}</span> <span style={{ color: 'var(--muted-foreground)' }}>({order.orderType})</span>
+
+                      {/* 2. AGENT */}
+                      <td style={{ padding: '10px 16px' }}>
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '3px' }}>
+                          <div>{getAgentBadge(order.agentType)}</div>
+                          <span style={{ fontSize: '9.5px', color: 'var(--muted-foreground)', fontFamily: 'var(--font-mono)' }}>
+                            {agentRoleMap[order.agentType] || 'Swarm'}
+                          </span>
+                        </div>
                       </td>
-                      <td style={{ padding: '12px 16px', textAlign: 'right', fontSize: '12px', fontWeight: 600, color: 'var(--foreground)', fontFamily: 'var(--font-mono)' }}>{order.price.toFixed(2)}</td>
-                      <td style={{ padding: '12px 16px', textAlign: 'right', fontSize: '12px', color: 'var(--foreground)', fontFamily: 'var(--font-mono)' }}>{order.lotSize.toFixed(1)} lots</td>
-                      <td style={{ padding: '12px 16px', textAlign: 'right', fontSize: '12px', fontWeight: 700, color: 'var(--brand-cyan)', fontFamily: 'var(--font-mono)' }}>{order.totalCost.toFixed(2)} tUSDC</td>
-                      <td style={{ padding: '12px 16px', textAlign: 'right', fontSize: '12px', fontWeight: 700, fontFamily: 'var(--font-mono)', color: (order.pnl ?? 0) > 0 ? 'var(--trade-buy)' : (order.pnl ?? 0) < 0 ? 'var(--trade-sell)' : 'var(--muted-foreground)' }} title={order.pnl !== undefined && order.pnl !== 0 ? `Realized: payout - cost per lot (${order.direction} ${order.outcome}); settled against expiry / winningOutcome` : 'Realized PnL is 0 until market expires & settles; PnL = (payout - cost) for BUY, (cost - payout) for SELL; VOID = 0.5 payout'}>
-                        {(() => {
-                          const pnl = order.pnl ?? 0;
-                          if (pnl !== 0) return pnl > 0 ? `+${pnl.toFixed(2)} tUSDC` : `${pnl.toFixed(2)} tUSDC`;
-                          if (order.status !== 'FILLED') return <span style={{ color: 'var(--muted-foreground)', fontWeight: 500, fontSize: '11px' }} title="Pending fill">— <span style={{ fontSize: '9px', opacity: 0.7 }}>PENDING</span></span>;
-                          const snapClose = (order as any).marketSnapshot?.closeTimestamp ? new Date((order as any).marketSnapshot.closeTimestamp).getTime() : NaN;
-                          const isOpenBySnap = !isNaN(snapClose) && snapClose > Date.now();
-                          const ageMs = Date.now() - new Date(order.createdAt).getTime();
-                          let isOpenByMarketId = false;
-                          if (isNaN(snapClose) && order.marketId.includes('-')) {
-                            const parts = order.marketId.split('-');
-                            const closeMs = parts.length >= 5 ? Number(parts[4]) : NaN;
-                            if (!isNaN(closeMs)) isOpenByMarketId = closeMs > Date.now();
-                          }
-                          if (isOpenBySnap || isOpenByMarketId || (!isNaN(snapClose) ? false : ageMs < 360000)) return <span style={{ color: 'var(--muted-foreground)', fontWeight: 500, fontSize: '11px' }} title="Market still open — awaiting expiry/settlement.">— <span style={{ fontSize: '9px', opacity: 0.7 }}>OPEN</span></span>;
-                          return '0.00';
-                        })()}
+
+                      {/* 3. TARGET ASSET & EVENT */}
+                      <td style={{ padding: '10px 16px' }}>
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                            <span style={{ fontSize: '13px', fontWeight: 700, color: 'var(--foreground)', letterSpacing: '-0.01em' }}>
+                              {marketInfo.symbol}
+                            </span>
+                            {marketInfo.windowDuration && (
+                              <span style={{ fontSize: '9.5px', padding: '1px 5px', borderRadius: '3px', background: 'rgba(255, 255, 255, 0.06)', color: 'var(--muted-foreground)', fontFamily: 'var(--font-mono)' }}>
+                                {marketInfo.windowDuration}
+                              </span>
+                            )}
+                            {getOutcomeBadge(order.outcome)}
+                          </div>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '4px', fontSize: '10.5px', fontFamily: 'var(--font-mono)' }}>
+                            {marketInfo.strikePrice ? (
+                              <span style={{ color: 'var(--muted-foreground)' }}>
+                                Target: <strong style={{ color: 'var(--brand-cyan)', fontWeight: 600 }}>&gt; {formatCurrencyAmount(marketInfo.strikePrice)}</strong>
+                              </span>
+                            ) : (
+                              <span style={{ color: 'var(--muted-foreground)', opacity: 0.7 }}>ID: {order.marketId.slice(0, 8)}...</span>
+                            )}
+                          </div>
+                        </div>
                       </td>
-                      <td style={{ padding: '12px 16px', textAlign: 'center' }}>
-                        <span style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', padding: '2px 6px', borderRadius: '4px', background: order.status === 'FILLED' ? 'rgba(0, 255, 102, 0.1)' : 'rgba(255, 170, 0, 0.1)', border: order.status === 'FILLED' ? '1px solid rgba(0, 255, 102, 0.25)' : '1px solid rgba(255, 170, 0, 0.25)', color: order.status === 'FILLED' ? 'var(--trade-buy)' : 'var(--trade-anomaly)', fontSize: '10px', fontWeight: 700 }}>
-                          <CheckCircleIcon className="w-2.5 h-2.5" />
-                          <span>{order.status}</span>
-                        </span>
+
+                      {/* 4. TYPE & SIDE */}
+                      <td style={{ padding: '10px 16px', fontFamily: 'var(--font-mono)' }}>
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
+                          <span style={{ color: order.direction === 'BUY' ? 'var(--trade-buy)' : 'var(--trade-sell)', fontWeight: 700, fontSize: '11.5px' }}>
+                            {order.direction}
+                          </span>
+                          <span style={{ color: 'var(--muted-foreground)', fontSize: '10px' }}>
+                            {order.orderType}
+                          </span>
+                        </div>
                       </td>
-                      <td style={{ padding: '12px 16px', textAlign: 'right' }}>
-                        {order.txHash ? (
-                          <a
-                            href={explorerUrl}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', color: 'var(--brand-cyan)', fontSize: '11px', fontFamily: 'var(--font-mono)', textDecoration: 'none' }}
-                          >
-                            <span>{shortTx}</span>
-                            <ArrowTopRightOnSquareIcon className="w-3 h-3" />
-                          </a>
-                        ) : (
-                          <span style={{ fontSize: '11px', color: 'var(--muted-foreground)' }}>-</span>
-                        )}
+
+                      {/* 5. CONTRACT PRICE */}
+                      <td style={{ padding: '10px 16px', textAlign: 'right', fontFamily: 'var(--font-mono)' }}>
+                        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '2px' }}>
+                          <span style={{ fontSize: '12px', fontWeight: 700, color: 'var(--foreground)' }}>
+                            {order.price.toFixed(2)} <span style={{ fontSize: '10px', color: 'var(--muted-foreground)', fontWeight: 400 }}>tUSDC</span>
+                          </span>
+                          <span style={{ fontSize: '10px', color: 'var(--brand-cyan)', opacity: 0.85 }}>
+                            {(order.price * 100).toFixed(0)}% Implied
+                          </span>
+                        </div>
+                      </td>
+
+                      {/* 6. POSITION LOTS */}
+                      <td style={{ padding: '10px 16px', textAlign: 'right', fontFamily: 'var(--font-mono)' }}>
+                        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '2px' }}>
+                          <span style={{ fontSize: '12px', color: 'var(--foreground)', fontWeight: 600 }}>
+                            {order.lotSize.toFixed(1)} lots
+                          </span>
+                          <span style={{ fontSize: '10px', color: 'var(--muted-foreground)' }}>
+                            {order.lotSize.toFixed(0)} contracts
+                          </span>
+                        </div>
+                      </td>
+
+                      {/* 7. TOTAL COST */}
+                      <td style={{ padding: '10px 16px', textAlign: 'right', fontFamily: 'var(--font-mono)' }}>
+                        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '2px' }}>
+                          <span style={{ fontSize: '12px', fontWeight: 700, color: 'var(--brand-cyan)' }}>
+                            {order.totalCost.toFixed(2)} tUSDC
+                          </span>
+                          <span style={{ fontSize: '9.5px', color: 'var(--muted-foreground)' }}>
+                            Max Risk
+                          </span>
+                        </div>
+                      </td>
+
+                      {/* 8. REALIZED PNL & SETTLEMENT */}
+                      <td style={{ padding: '10px 16px', textAlign: 'right', fontFamily: 'var(--font-mono)' }}>
+                        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '2px' }}>
+                          <span style={{ fontSize: '12px', fontWeight: 700, color: pnlColor }}>
+                            {pnlMainText}
+                          </span>
+                          <span style={{ fontSize: '10.5px', color: pnl > 0 ? 'var(--trade-buy)' : pnl < 0 ? 'var(--trade-sell)' : 'var(--muted-foreground)', opacity: 0.9 }}>
+                            {settlementSubText}
+                          </span>
+                        </div>
+                      </td>
+
+                      {/* 9. STATUS */}
+                      <td style={{ padding: '10px 16px', textAlign: 'center' }}>
+                        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '3px' }}>
+                          <span style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', padding: '2px 6px', borderRadius: '4px', background: order.status === 'FILLED' ? 'rgba(0, 255, 102, 0.1)' : 'rgba(255, 170, 0, 0.1)', border: order.status === 'FILLED' ? '1px solid rgba(0, 255, 102, 0.25)' : '1px solid rgba(255, 170, 0, 0.25)', color: order.status === 'FILLED' ? 'var(--trade-buy)' : 'var(--trade-anomaly)', fontSize: '10px', fontWeight: 700 }}>
+                            <CheckCircleIcon className="w-2.5 h-2.5" />
+                            <span>{order.status}</span>
+                          </span>
+                          <span style={{ fontSize: '9.5px', color: 'var(--muted-foreground)', fontFamily: 'var(--font-mono)' }}>
+                            Matched
+                          </span>
+                        </div>
+                      </td>
+
+                      {/* 10. ON-CHAIN TX */}
+                      <td style={{ padding: '10px 16px', textAlign: 'right' }}>
+                        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '2px' }}>
+                          {order.txHash ? (
+                            <a
+                              href={explorerUrl}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', color: 'var(--brand-cyan)', fontSize: '11px', fontFamily: 'var(--font-mono)', textDecoration: 'none' }}
+                              className="hover:underline"
+                            >
+                              <span>{shortTx}</span>
+                              <ArrowTopRightOnSquareIcon className="w-3 h-3" />
+                            </a>
+                          ) : (
+                            <span style={{ fontSize: '11px', color: 'var(--muted-foreground)' }}>-</span>
+                          )}
+                          <span style={{ fontSize: '9.5px', color: 'var(--muted-foreground)', fontFamily: 'var(--font-mono)' }}>
+                            Somnia 50312
+                          </span>
+                        </div>
                       </td>
                     </tr>
                   );

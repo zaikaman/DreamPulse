@@ -19,6 +19,63 @@ interface ActivePositionsDrawerProps {
   onRefresh?: () => void;
 }
 
+interface ParsedMarketInfo {
+  symbol: string;
+  assetName: string;
+  windowDuration: string;
+  strikePrice?: number;
+  settlementPrice?: number;
+  winningOutcome?: 'YES' | 'NO' | 'VOID';
+}
+
+function parseOrderMarketDetails(order: OrderExecution): ParsedMarketInfo {
+  let symbol = order.marketSnapshot?.symbol || '';
+  let strikePrice = order.marketSnapshot?.strikePrice;
+  let settlementPrice = order.marketSnapshot?.settlementPrice;
+  let winningOutcome = order.marketSnapshot?.winningOutcome;
+  let windowDuration = order.marketSnapshot?.windowDuration || '5m';
+
+  if (!symbol && order.marketId) {
+    if (order.marketId.includes('-')) {
+      const parts = order.marketId.split('-');
+      if (parts.length >= 2) {
+        const rawSym = parts[1].toUpperCase();
+        symbol = rawSym.includes('BTC') ? 'BTC/USD' : rawSym.includes('ETH') ? 'ETH/USD' : rawSym.includes('SOL') ? 'SOL/USD' : rawSym.includes('STT') ? 'STT/USD' : `${rawSym}/USD`;
+        for (let i = 2; i < parts.length; i++) {
+          const num = Number(parts[i]);
+          if (!isNaN(num) && num >= 1 && !strikePrice) {
+            strikePrice = num;
+          }
+          if (parts[i].endsWith('m') || parts[i].endsWith('h')) {
+            windowDuration = parts[i];
+          }
+        }
+      }
+    }
+  }
+
+  if (!symbol) symbol = 'BTC/USD';
+
+  const assetName = symbol.includes('BTC') ? 'Bitcoin' : symbol.includes('ETH') ? 'Ethereum' : symbol.includes('SOL') ? 'Solana' : symbol.includes('STT') ? 'Somnia' : symbol.split('/')[0];
+
+  return {
+    symbol,
+    assetName,
+    windowDuration,
+    strikePrice,
+    settlementPrice,
+    winningOutcome,
+  };
+}
+
+function formatCurrencyAmount(price?: number): string {
+  if (price === undefined || isNaN(price)) return '—';
+  if (price >= 1000) {
+    return `$${price.toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 2 })}`;
+  }
+  return `$${price.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 4 })}`;
+}
+
 export const ActivePositionsDrawer: React.FC<ActivePositionsDrawerProps> = ({
   wallet,
   currentMarket: _currentMarket,
@@ -172,7 +229,7 @@ export const ActivePositionsDrawer: React.FC<ActivePositionsDrawerProps> = ({
               <table className="w-full text-left">
                 <thead>
                   <tr className="text-[10px] text-muted-foreground uppercase border-b border-border/20">
-                    <th className="pb-1.5 pl-2">Market</th>
+                    <th className="pb-1.5 pl-2">Target Asset & Event</th>
                     <th className="pb-1.5">Outcome</th>
                     <th className="pb-1.5">Size (Lots)</th>
                     <th className="pb-1.5">Entry Price</th>
@@ -185,26 +242,53 @@ export const ActivePositionsDrawer: React.FC<ActivePositionsDrawerProps> = ({
                   {openPositions.map((pos) => {
                     const payout = pos.lotSize * 1.0;
                     const isYes = pos.outcome === 'YES';
+                    const netPotentialProfit = payout - pos.totalCost;
+                    const roiPct = pos.totalCost > 0 ? (netPotentialProfit / pos.totalCost) * 100 : 0;
+                    const marketInfo = parseOrderMarketDetails(pos);
+
+                    const tooltipText = `[Active Position Breakdown]
+Asset: ${marketInfo.assetName} (${marketInfo.symbol}) ${marketInfo.windowDuration}
+Target Condition: Price > ${formatCurrencyAmount(marketInfo.strikePrice)} at Expiry
+Position: BUY ${pos.lotSize.toFixed(1)} Lots ${pos.outcome} @ $${pos.price.toFixed(2)}
+Total Cost: $${pos.totalCost.toFixed(2)} USDC (Max Risk)
+Max Payout: $${payout.toFixed(2)} USDC (Net: +$${netPotentialProfit.toFixed(2)} | ROI: +${roiPct.toFixed(1)}%)
+Tx: ${pos.txHash || 'N/A'}`;
 
                     return (
-                      <tr key={pos.id} className="hover:bg-secondary/20 transition-colors">
-                        <td className="py-2 pl-2 font-bold text-foreground">
-                          {onSelectMarket ? (
-                            <button
-                              type="button"
-                              onClick={() => onSelectMarket(pos.marketId)}
-                              className="hover:text-brand-cyan hover:underline cursor-pointer text-left"
-                            >
-                              {pos.marketId.slice(0, 16)}...
-                            </button>
-                          ) : (
-                            <span>{pos.marketId.slice(0, 16)}...</span>
-                          )}
+                      <tr key={pos.id} title={tooltipText} className="hover:bg-secondary/20 transition-colors">
+                        <td className="py-2 pl-2">
+                          <div className="flex flex-col gap-0.5">
+                            <div className="flex items-center gap-1.5">
+                              {onSelectMarket ? (
+                                <button
+                                  type="button"
+                                  onClick={() => onSelectMarket(pos.marketId)}
+                                  className="font-bold text-foreground hover:text-brand-cyan hover:underline cursor-pointer text-left text-xs"
+                                >
+                                  {marketInfo.symbol}
+                                </button>
+                              ) : (
+                                <span className="font-bold text-foreground text-xs">{marketInfo.symbol}</span>
+                              )}
+                              {marketInfo.windowDuration && (
+                                <span className="text-[9px] px-1 py-0 rounded bg-white/5 text-muted-foreground">
+                                  {marketInfo.windowDuration}
+                                </span>
+                              )}
+                            </div>
+                            <div className="text-[10px] text-muted-foreground">
+                              {marketInfo.strikePrice ? (
+                                <span>Target: <strong className="text-brand-cyan font-semibold">&gt; {formatCurrencyAmount(marketInfo.strikePrice)}</strong></span>
+                              ) : (
+                                <span>ID: {pos.marketId.slice(0, 8)}...</span>
+                              )}
+                            </div>
+                          </div>
                         </td>
                         <td className="py-2">
                           <span
                             className={cn(
-                              "px-1.5 py-0.5 rounded text-[10px] font-bold border",
+                              "px-1.5 py-0.5 rounded text-[10px] font-bold border inline-flex items-center gap-1",
                               isYes
                                 ? "bg-emerald-500/10 text-emerald-400 border-emerald-500/30"
                                 : "bg-rose-500/10 text-rose-400 border-rose-500/30"
@@ -213,32 +297,47 @@ export const ActivePositionsDrawer: React.FC<ActivePositionsDrawerProps> = ({
                             BUY {pos.outcome}
                           </span>
                         </td>
-                        <td className="py-2 text-foreground font-semibold">
-                          {pos.lotSize.toLocaleString()}
+                        <td className="py-2">
+                          <div className="flex flex-col">
+                            <span className="text-foreground font-semibold">{pos.lotSize.toLocaleString()} lots</span>
+                            <span className="text-[9.5px] text-muted-foreground">{pos.lotSize.toFixed(0)} contracts</span>
+                          </div>
                         </td>
-                        <td className="py-2 text-muted-foreground">
-                          ${pos.price.toFixed(2)}
+                        <td className="py-2">
+                          <div className="flex flex-col">
+                            <span className="text-foreground font-medium">${pos.price.toFixed(2)}</span>
+                            <span className="text-[9.5px] text-brand-cyan opacity-80">{(pos.price * 100).toFixed(0)}% prob</span>
+                          </div>
                         </td>
-                        <td className="py-2 text-muted-foreground">
-                          ${pos.totalCost.toFixed(2)}
+                        <td className="py-2">
+                          <div className="flex flex-col">
+                            <span className="text-foreground font-medium">${pos.totalCost.toFixed(2)}</span>
+                            <span className="text-[9.5px] text-muted-foreground">Max Risk</span>
+                          </div>
                         </td>
-                        <td className="py-2 text-emerald-400 font-bold">
-                          ${payout.toFixed(2)} USDC
+                        <td className="py-2">
+                          <div className="flex flex-col">
+                            <span className="text-emerald-400 font-bold">${payout.toFixed(2)} USDC</span>
+                            <span className="text-[9.5px] text-emerald-400/80">+{roiPct.toFixed(0)}% ROI</span>
+                          </div>
                         </td>
                         <td className="py-2 pr-2 text-right">
-                          {pos.txHash ? (
-                            <a
-                              href={`https://shannon-explorer.somnia.network/tx/${pos.txHash}`}
-                              target="_blank"
-                              rel="noopener noreferrer"
-                              className="text-brand-cyan hover:underline inline-flex items-center gap-1 text-[10px]"
-                            >
-                              <span>{pos.txHash.slice(0, 6)}...</span>
-                              <ArrowTopRightOnSquareIcon className="w-2.5 h-2.5" />
-                            </a>
-                          ) : (
-                            <span className="text-muted-foreground text-[10px]">CLOB Fill</span>
-                          )}
+                          <div className="flex flex-col items-end">
+                            {pos.txHash ? (
+                              <a
+                                href={`https://shannon-explorer.somnia.network/tx/${pos.txHash}`}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="text-brand-cyan hover:underline inline-flex items-center gap-1 text-[10px]"
+                              >
+                                <span>{pos.txHash.slice(0, 6)}...</span>
+                                <ArrowTopRightOnSquareIcon className="w-2.5 h-2.5" />
+                              </a>
+                            ) : (
+                              <span className="text-muted-foreground text-[10px]">CLOB Fill</span>
+                            )}
+                            <span className="text-[9px] text-muted-foreground">Somnia 50312</span>
+                          </div>
                         </td>
                       </tr>
                     );
@@ -255,33 +354,65 @@ export const ActivePositionsDrawer: React.FC<ActivePositionsDrawerProps> = ({
               <table className="w-full text-left">
                 <thead>
                   <tr className="text-[10px] text-muted-foreground uppercase border-b border-border/20">
-                    <th className="pb-1.5 pl-2">Market</th>
-                    <th className="pb-1.5">Type</th>
-                    <th className="pb-1.5">Side</th>
+                    <th className="pb-1.5 pl-2">Target Asset & Event</th>
+                    <th className="pb-1.5">Type & Side</th>
                     <th className="pb-1.5">Limit Price</th>
-                    <th className="pb-1.5">Lots</th>
+                    <th className="pb-1.5">Lots & Size</th>
                     <th className="pb-1.5 pr-2 text-right">Status</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-border/10">
-                  {restingOrders.map((ord) => (
-                    <tr key={ord.id} className="hover:bg-secondary/20 transition-colors">
-                      <td className="py-2 pl-2 font-bold text-foreground">
-                        {ord.marketId.slice(0, 16)}...
-                      </td>
-                      <td className="py-2 text-muted-foreground">{ord.orderType}</td>
-                      <td className="py-2">
-                        <span className="text-emerald-400 font-bold">{ord.direction} {ord.outcome}</span>
-                      </td>
-                      <td className="py-2 font-mono">${ord.price.toFixed(2)}</td>
-                      <td className="py-2">{ord.lotSize}</td>
-                      <td className="py-2 pr-2 text-right">
-                        <Badge variant="outline" className="text-[9px] border-amber-500/40 text-amber-400 bg-amber-500/10">
-                          RESTING ON CLOB
-                        </Badge>
-                      </td>
-                    </tr>
-                  ))}
+                  {restingOrders.map((ord) => {
+                    const marketInfo = parseOrderMarketDetails(ord);
+                    return (
+                      <tr key={ord.id} className="hover:bg-secondary/20 transition-colors">
+                        <td className="py-2 pl-2">
+                          <div className="flex flex-col gap-0.5">
+                            <div className="flex items-center gap-1.5">
+                              <span className="font-bold text-foreground text-xs">{marketInfo.symbol}</span>
+                              {marketInfo.windowDuration && (
+                                <span className="text-[9px] px-1 py-0 rounded bg-white/5 text-muted-foreground">
+                                  {marketInfo.windowDuration}
+                                </span>
+                              )}
+                            </div>
+                            <div className="text-[10px] text-muted-foreground">
+                              {marketInfo.strikePrice ? (
+                                <span>Target: <strong className="text-brand-cyan font-semibold">&gt; {formatCurrencyAmount(marketInfo.strikePrice)}</strong></span>
+                              ) : (
+                                <span>ID: {ord.marketId.slice(0, 8)}...</span>
+                              )}
+                            </div>
+                          </div>
+                        </td>
+                        <td className="py-2">
+                          <div className="flex flex-col">
+                            <span className={cn("font-bold text-xs", ord.direction === 'BUY' ? "text-emerald-400" : "text-rose-400")}>
+                              {ord.direction} {ord.outcome}
+                            </span>
+                            <span className="text-[9.5px] text-muted-foreground">{ord.orderType}</span>
+                          </div>
+                        </td>
+                        <td className="py-2">
+                          <div className="flex flex-col">
+                            <span className="font-mono text-foreground font-semibold">${ord.price.toFixed(2)}</span>
+                            <span className="text-[9.5px] text-brand-cyan opacity-80">{(ord.price * 100).toFixed(0)}% prob</span>
+                          </div>
+                        </td>
+                        <td className="py-2">
+                          <div className="flex flex-col">
+                            <span className="text-foreground">{ord.lotSize} lots</span>
+                            <span className="text-[9.5px] text-muted-foreground">${(ord.lotSize * ord.price).toFixed(2)} total</span>
+                          </div>
+                        </td>
+                        <td className="py-2 pr-2 text-right">
+                          <Badge variant="outline" className="text-[9px] border-amber-500/40 text-amber-400 bg-amber-500/10">
+                            RESTING ON CLOB
+                          </Badge>
+                        </td>
+                      </tr>
+                    );
+                  })}
                 </tbody>
               </table>
             )
@@ -294,35 +425,99 @@ export const ActivePositionsDrawer: React.FC<ActivePositionsDrawerProps> = ({
               <table className="w-full text-left">
                 <thead>
                   <tr className="text-[10px] text-muted-foreground uppercase border-b border-border/20">
-                    <th className="pb-1.5 pl-2">Market</th>
+                    <th className="pb-1.5 pl-2">Target Asset & Event</th>
                     <th className="pb-1.5">Outcome</th>
                     <th className="pb-1.5">Lots</th>
-                    <th className="pb-1.5">Entry</th>
-                    <th className="pb-1.5">Realized PnL</th>
-                    <th className="pb-1.5 pr-2 text-right">Date</th>
+                    <th className="pb-1.5">Entry Price</th>
+                    <th className="pb-1.5">Realized PnL & Settlement</th>
+                    <th className="pb-1.5 pr-2 text-right">Date / Tx</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-border/10">
                   {settledHistory.map((hist) => {
                     const isProfitable = (hist.pnl ?? 0) >= 0;
+                    const marketInfo = parseOrderMarketDetails(hist);
+                    const pnlVal = hist.pnl ?? 0;
+
+                    const settlementSubText = marketInfo.settlementPrice
+                      ? `Chốt @ ${formatCurrencyAmount(marketInfo.settlementPrice)}`
+                      : (pnlVal > 0 ? 'Settled (Win)' : 'Settled (Loss)');
+
+                    const tooltipText = `[Settled Trade Summary]
+Asset: ${marketInfo.assetName} (${marketInfo.symbol}) ${marketInfo.windowDuration}
+Condition: Price > ${formatCurrencyAmount(marketInfo.strikePrice)} at Expiry
+Entry: ${hist.direction} ${hist.lotSize} Lots @ $${hist.price.toFixed(2)}
+Settlement: ${marketInfo.settlementPrice ? `Chốt @ ${formatCurrencyAmount(marketInfo.settlementPrice)}` : 'Resolved'}
+PnL: ${isProfitable ? '+' : ''}$${pnlVal.toFixed(2)} USDC
+Tx: ${hist.txHash || 'N/A'}`;
+
                     return (
-                      <tr key={hist.id} className="hover:bg-secondary/20 transition-colors">
-                        <td className="py-2 pl-2 text-foreground">{hist.marketId.slice(0, 16)}...</td>
-                        <td className="py-2">{hist.outcome}</td>
-                        <td className="py-2">{hist.lotSize}</td>
-                        <td className="py-2 text-muted-foreground">${hist.price.toFixed(2)}</td>
+                      <tr key={hist.id} title={tooltipText} className="hover:bg-secondary/20 transition-colors">
+                        <td className="py-2 pl-2">
+                          <div className="flex flex-col gap-0.5">
+                            <div className="flex items-center gap-1.5">
+                              <span className="font-bold text-foreground text-xs">{marketInfo.symbol}</span>
+                              {marketInfo.windowDuration && (
+                                <span className="text-[9px] px-1 py-0 rounded bg-white/5 text-muted-foreground">
+                                  {marketInfo.windowDuration}
+                                </span>
+                              )}
+                            </div>
+                            <div className="text-[10px] text-muted-foreground">
+                              {marketInfo.strikePrice ? (
+                                <span>Target: <strong className="text-brand-cyan font-semibold">&gt; {formatCurrencyAmount(marketInfo.strikePrice)}</strong></span>
+                              ) : (
+                                <span>ID: {hist.marketId.slice(0, 8)}...</span>
+                              )}
+                            </div>
+                          </div>
+                        </td>
                         <td className="py-2">
                           <span
                             className={cn(
-                              "font-bold text-[11px]",
-                              isProfitable ? "text-emerald-400" : "text-rose-400"
+                              "px-1.5 py-0.5 rounded text-[10px] font-bold border inline-flex items-center gap-1",
+                              hist.outcome === 'YES'
+                                ? "bg-emerald-500/10 text-emerald-400 border-emerald-500/30"
+                                : "bg-rose-500/10 text-rose-400 border-rose-500/30"
                             )}
                           >
-                            {isProfitable ? '+' : ''}${(hist.pnl ?? 0).toFixed(2)} USDC
+                            {hist.outcome}
                           </span>
                         </td>
-                        <td className="py-2 pr-2 text-right text-[10px] text-muted-foreground">
-                          {new Date(hist.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                        <td className="py-2 text-foreground font-semibold">{hist.lotSize}</td>
+                        <td className="py-2 text-muted-foreground">${hist.price.toFixed(2)}</td>
+                        <td className="py-2">
+                          <div className="flex flex-col">
+                            <span
+                              className={cn(
+                                "font-bold text-[11px]",
+                                isProfitable ? "text-emerald-400" : "text-rose-400"
+                              )}
+                            >
+                              {isProfitable ? '+' : ''}${pnlVal.toFixed(2)} USDC
+                            </span>
+                            <span className="text-[9.5px] text-muted-foreground">
+                              {settlementSubText}
+                            </span>
+                          </div>
+                        </td>
+                        <td className="py-2 pr-2 text-right">
+                          <div className="flex flex-col items-end">
+                            <span className="text-[10px] text-muted-foreground">
+                              {new Date(hist.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                            </span>
+                            {hist.txHash && (
+                              <a
+                                href={`https://shannon-explorer.somnia.network/tx/${hist.txHash}`}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="text-brand-cyan hover:underline inline-flex items-center gap-1 text-[9px]"
+                              >
+                                <span>{hist.txHash.slice(0, 6)}...</span>
+                                <ArrowTopRightOnSquareIcon className="w-2 h-2" />
+                              </a>
+                            )}
+                          </div>
                         </td>
                       </tr>
                     );
