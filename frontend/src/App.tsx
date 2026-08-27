@@ -22,6 +22,7 @@ import { apiClient } from './services/api.js';
 import { telemetryClient, type OrderFillData, type SweepCompleteData } from './services/telemetry-client.js';
 import { Spinner } from './components/ui/Spinner.js';
 import { useOnboarding } from './hooks/useOnboarding.js';
+import { getViewForHash, navigateToView } from './lib/navigation.js';
 
 // Lazy load heavy modules to minimize initial bundle size and accelerate TTI
 const SwarmCockpitView = React.lazy(() => import('./components/dashboard/SwarmCockpitView.js').then((m) => ({ default: m.SwarmCockpitView })));
@@ -96,10 +97,14 @@ export const App: React.FC = () => {
     setIsSessionModalOpen(true);
   }, []);
 
+  const handleNavigateView = useCallback((view: DashboardViewType) => {
+    setActiveNav(view);
+    navigateToView(view);
+  }, []);
+
   const handleForkToStudio = (agentType: AgentType, config: Record<string, any>) => {
     setForkedStrategyConfig({ agentType, config });
-    setActiveNav('Backtester');
-    window.location.hash = '#backtest';
+    handleNavigateView('Backtester');
   };
 
   const handleToggleSidebar = useCallback(() => {
@@ -126,58 +131,25 @@ export const App: React.FC = () => {
   // Navigation helper to switch to Trade Terminal with a chosen market
   const handleOpenTradeTerminal = useCallback((marketId: string) => {
     setSelectedMarketId(marketId);
-    setActiveNav('Trade Terminal');
-    window.location.hash = '#trade';
-  }, [setSelectedMarketId]);
+    handleNavigateView('Trade Terminal');
+  }, [setSelectedMarketId, handleNavigateView]);
 
   // Listen to URL hash changes
   useEffect(() => {
     const handleHash = () => {
-      const hash = window.location.hash.replace('#', '');
-      if (hash === 'terminal' || hash === 'overview') {
-        setActiveNav('Overview');
-      } else if (hash === 'radar') {
-        setActiveNav('Edge Radar');
-      } else if (hash === 'trade' || hash === 'cockpit-terminal') {
-        setActiveNav('Trade Terminal');
-      } else if (hash === 'markets' || hash === 'depth' || hash === 'catalog') {
-        setActiveNav('Markets');
-      } else if (hash === 'swarm' || hash === 'ai') {
-        setActiveNav('AI Swarm Feed');
-      } else if (hash === 'cockpit' || hash === 'swarm-cockpit') {
-        setActiveNav('Swarm Cockpit');
-      } else if (hash === 'analytics') {
-        setActiveNav('Analytics');
-      } else if (hash === 'studio') {
-        setActiveNav('Strategy Studio');
-      } else if (hash === 'backtest' || hash === 'backtester') {
-        setActiveNav('Backtester');
-      } else if (hash === 'settlement' || hash === 'sweeper') {
-        setActiveNav('Settlement');
-      } else if (hash === 'landing' || !hash) {
-        setActiveNav('Landing');
-      }
+      const targetView = getViewForHash(window.location.hash);
+      setActiveNav(targetView);
     };
     handleHash();
     window.addEventListener('hashchange', handleHash);
     return () => window.removeEventListener('hashchange', handleHash);
   }, []);
 
-  // Keyboard Shortcuts (1-6 to navigate tabs, S to sweep)
+  // Keyboard Shortcuts (1-9 to navigate tabs, S to sweep)
   useKeyboardShortcuts({
     onNavigateTab: (tab) => {
       const target = tab as DashboardViewType;
-      setActiveNav(target);
-      if (tab === 'Overview') window.location.hash = '#overview';
-      else if (tab === 'Edge Radar') window.location.hash = '#radar';
-      else if (tab === 'Markets' || tab === 'Markets & Depth') window.location.hash = '#markets';
-      else if (tab === 'Trade Terminal') window.location.hash = '#trade';
-      else if (tab === 'AI Swarm Feed') window.location.hash = '#swarm';
-      else if (tab === 'Swarm Cockpit') window.location.hash = '#cockpit';
-      else if (tab === 'Analytics') window.location.hash = '#analytics';
-      else if (tab === 'Strategy Studio') window.location.hash = '#studio';
-      else if (tab === 'Backtester') window.location.hash = '#backtest';
-      else if (tab === 'Settlement') window.location.hash = '#settlement';
+      handleNavigateView(target);
     },
     onTriggerSweep: () => {
       soundEngine.playWinChime();
@@ -241,16 +213,7 @@ export const App: React.FC = () => {
       <CinematicHero
         onEnterConsole={(view) => {
           const target = view || 'Overview';
-          setActiveNav(target);
-          if (target === 'Overview') window.location.hash = '#overview';
-          else if (target === 'Edge Radar') window.location.hash = '#radar';
-          else if (target === 'Markets & Depth') window.location.hash = '#markets';
-          else if (target === 'AI Swarm Feed') window.location.hash = '#swarm';
-          else if (target === 'Swarm Cockpit') window.location.hash = '#cockpit';
-          else if (target === 'Strategy Studio') window.location.hash = '#studio';
-          else if (target === 'Backtester') window.location.hash = '#backtest';
-          else if (target === 'Analytics') window.location.hash = '#analytics';
-          else if (target === 'Settlement') window.location.hash = '#settlement';
+          handleNavigateView(target);
         }}
         walletAddress={wallet.address}
         onConnectWallet={connectWallet}
@@ -265,19 +228,7 @@ export const App: React.FC = () => {
     <>
       <Shell
         currentView={activeNav}
-        onSelectView={(view) => {
-          setActiveNav(view);
-          if (view === 'Landing') window.location.hash = '';
-          else if (view === 'Overview') window.location.hash = '#overview';
-          else if (view === 'Edge Radar') window.location.hash = '#radar';
-          else if (view === 'Markets & Depth') window.location.hash = '#markets';
-          else if (view === 'AI Swarm Feed') window.location.hash = '#swarm';
-          else if (view === 'Swarm Cockpit') window.location.hash = '#cockpit';
-          else if (view === 'Strategy Studio') window.location.hash = '#studio';
-          else if (view === 'Backtester') window.location.hash = '#backtest';
-          else if (view === 'Analytics') window.location.hash = '#analytics';
-          else if (view === 'Settlement') window.location.hash = '#settlement';
-        }}
+        onSelectView={handleNavigateView}
         markets={markets}
         selectedMarketId={selectedMarketId}
         onSelectMarket={setSelectedMarketId}
@@ -308,15 +259,7 @@ export const App: React.FC = () => {
             onSelectMarket={setSelectedMarketId}
             onNavigateToTab={(tab) => {
               const target = tab as DashboardViewType;
-              setActiveNav(target);
-              if (tab === 'Edge Radar') window.location.hash = '#radar';
-              else if (tab === 'Markets & Depth') window.location.hash = '#markets';
-              else if (tab === 'AI Swarm Feed') window.location.hash = '#swarm';
-              else if (tab === 'Swarm Cockpit') window.location.hash = '#cockpit';
-              else if (tab === 'Strategy Studio') window.location.hash = '#studio';
-              else if (tab === 'Backtester') window.location.hash = '#backtest';
-              else if (tab === 'Analytics') window.location.hash = '#analytics';
-              else if (tab === 'Settlement') window.location.hash = '#settlement';
+              handleNavigateView(target);
             }}
             wallet={wallet}
             activeSession={activeSession}
@@ -454,22 +397,9 @@ export const App: React.FC = () => {
         markets={markets}
         onSelectMarket={(marketId) => {
           setSelectedMarketId(marketId);
-          setActiveNav('Trade Terminal');
-          window.location.hash = '#terminal';
+          handleNavigateView('Trade Terminal');
         }}
-        onNavigateView={(view) => {
-          setActiveNav(view);
-          if (view === 'Overview') window.location.hash = '#overview';
-          else if (view === 'Edge Radar') window.location.hash = '#radar';
-          else if (view === 'Markets' || view === 'Markets & Depth') window.location.hash = '#markets';
-          else if (view === 'Trade Terminal') window.location.hash = '#terminal';
-          else if (view === 'AI Swarm Feed') window.location.hash = '#swarm';
-          else if (view === 'Swarm Cockpit') window.location.hash = '#cockpit';
-          else if (view === 'Strategy Studio') window.location.hash = '#studio';
-          else if (view === 'Settlement') window.location.hash = '#settlement';
-          else if (view === 'Analytics') window.location.hash = '#analytics';
-          else if (view === 'Landing') window.location.hash = '';
-        }}
+        onNavigateView={handleNavigateView}
         onOpenSessionModal={handleOpenSessionModal}
         onOpenTour={() => openOnboarding(0)}
         onClaimFaucet={claimCollateralFaucet}
@@ -523,19 +453,7 @@ export const App: React.FC = () => {
           onConnectWallet={connectWallet}
           onSwitchNetwork={switchNetwork}
           onOpenSessionModal={handleOpenSessionModal}
-          onNavigateView={(view) => {
-            setActiveNav(view);
-            if (view === 'Overview') window.location.hash = '#overview';
-            else if (view === 'Edge Radar') window.location.hash = '#radar';
-            else if (view === 'Markets' || view === 'Markets & Depth') window.location.hash = '#markets';
-            else if (view === 'Trade Terminal') window.location.hash = '#trade';
-            else if (view === 'AI Swarm Feed') window.location.hash = '#swarm';
-            else if (view === 'Swarm Cockpit') window.location.hash = '#cockpit';
-            else if (view === 'Strategy Studio') window.location.hash = '#studio';
-            else if (view === 'Settlement') window.location.hash = '#settlement';
-            else if (view === 'Analytics') window.location.hash = '#analytics';
-            else if (view === 'Landing') window.location.hash = '';
-          }}
+          onNavigateView={handleNavigateView}
           onComplete={completeOnboarding}
         />
       </React.Suspense>

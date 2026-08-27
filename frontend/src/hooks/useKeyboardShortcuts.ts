@@ -34,22 +34,28 @@ export const useKeyboardShortcuts = ({
         onNavigateTab('Edge Radar');
       } else if (e.key === '3') {
         e.preventDefault();
-        onNavigateTab('Markets & Depth');
+        onNavigateTab('Markets');
       } else if (e.key === '4') {
         e.preventDefault();
-        onNavigateTab('AI Swarm Feed');
+        onNavigateTab('Trade Terminal');
       } else if (e.key === '5') {
         e.preventDefault();
-        onNavigateTab('Swarm Cockpit');
+        onNavigateTab('AI Swarm Feed');
       } else if (e.key === '6') {
         e.preventDefault();
-        onNavigateTab('Analytics');
-      } else if (e.key === '7' || e.key.toLowerCase() === 'b') {
+        onNavigateTab('Swarm Cockpit');
+      } else if (e.key === '7') {
         e.preventDefault();
         onNavigateTab('Strategy Studio');
       } else if (e.key === '8') {
         e.preventDefault();
+        onNavigateTab('Backtester');
+      } else if (e.key === '9') {
+        e.preventDefault();
         onNavigateTab('Settlement');
+      } else if (e.key === '0') {
+        e.preventDefault();
+        onNavigateTab('Analytics');
       } else if (e.key.toLowerCase() === 's') {
         e.preventDefault();
         if (onTriggerSweep) {

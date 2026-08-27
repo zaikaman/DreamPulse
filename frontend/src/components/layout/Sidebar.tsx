@@ -152,7 +152,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
       <nav className="space-y-0.5">
         {items.map((item) => {
           const Icon = item.icon;
-          const isActive = currentView === item.id;
+          const isActive = currentView === item.id || (item.id === 'Markets' && currentView === 'Markets & Depth');
           return (
             <button
               key={item.id}
