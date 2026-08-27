@@ -531,7 +531,7 @@ For step-by-step instructions on deploying the **Frontend to Vercel** and the **
 
 ## Verification & Test Suite (97/97 Passing)
 
-DreamPulse enforces strict quality invariants with an automated **Vitest** test suite covering quantitative mathematics, smart contract session boundaries, multi-agent evaluation logic, and API endpoints:
+DreamPulse enforces strict production-grade quality invariants with an automated **Vitest** test suite covering quantitative mathematics, smart contract session boundaries, multi-agent evaluation logic, backtesting algorithms, and API endpoints.
 
 ```bash
 # Run complete test suite across the workspace
@@ -541,21 +541,38 @@ npm test
 npm run verify
 ```
 
+### Comprehensive Test Suite Breakdown
+
+| Test File | Tests | Coverage & Verified Invariants |
+| :--- | :---: | :--- |
+| [`tests/quantitative.test.ts`](file:///d:/DreamPulse/backend/tests/quantitative.test.ts) | **20** | Abramowitz-Stegun normal CDF $\Phi(z)$, Standardized $z$-Score ($d_2$), Bayesian EWMA realized volatility, inventory-skewed reservation prices, depth VWAP, integer quantization arithmetic, and net EV edge filtering. |
+| [`tests/agents.test.ts`](file:///d:/DreamPulse/backend/tests/agents.test.ts) | **19** | Volt spot staleness sniper momentum triggers, Oracle volatility surface arb logic, Titan two-sided market maker quotes, inventory aversion bounds, self-trade prevention depth filtering, and multi-agent swarm runner execution. |
+| [`tests/market-service.test.ts`](file:///d:/DreamPulse/backend/tests/market-service.test.ts) | **15** | Somnia on-chain CLOB order book polling, GraphQL indexer query parsing, anomaly detection (spread/staleness/mispricing), Binance spot ticker ingestion, and fallback market generation. |
+| [`tests/session.test.ts`](file:///d:/DreamPulse/backend/tests/session.test.ts) | **13** | Non-custodial session registration, EIP-712 typed signature verification, single trade size caps ($20 limit), cumulative daily volume caps ($200 limit), session revocation, multi-wallet isolation, and copy-trade target filtering. |
+| [`tests/api.test.ts`](file:///d:/DreamPulse/backend/tests/api.test.ts) | **10** | Express REST API health, market lists, order book depth ladders, anomaly feeds, telemetry stream endpoints, session management routes, and order execution logs. |
+| [`tests/settlement.test.ts`](file:///d:/DreamPulse/backend/tests/settlement.test.ts) | **9** | Matured market resolution detection, automated winning share redemptions via Sweeper daemon, 100% collateral compounding into active trading balances, and multi-market batch claim aggregation. |
+| [`tests/backtest.test.ts`](file:///d:/DreamPulse/backend/tests/backtest.test.ts) | **6** | Historical backtesting engine against Binance tick data, Sortino ratio, Profit Factor, Max Drawdown underwater curve computations, fee and slippage simulations. |
+| [`tests/llm.test.ts`](file:///d:/DreamPulse/backend/tests/llm.test.ts) | **3** | Groq Qwen 2.5 multi-key round-robin rotation, fallback failover to Google Gemini, and database key-index persistence. |
+| [`tests/setup.test.ts`](file:///d:/DreamPulse/backend/tests/setup.test.ts) | **2** | Environment configuration sanity check, Somnia Shannon network (Chain ID `50312`), and contract constants validation. |
+| **Total** | **97** | **100% Passing across 9 test suites with zero failures and zero `any` types** |
+
 ### Test Suite Execution Output
 ```
+ RUN  v3.2.7 D:/DreamPulse/backend
+
  ✓ tests/setup.test.ts (2 tests)
+ ✓ tests/quantitative.test.ts (20 tests)
+ ✓ tests/settlement.test.ts (9 tests)
  ✓ tests/llm.test.ts (3 tests)
  ✓ tests/backtest.test.ts (6 tests)
- ✓ tests/quantitative.test.ts (20 tests)
  ✓ tests/agents.test.ts (19 tests)
  ✓ tests/api.test.ts (10 tests)
  ✓ tests/market-service.test.ts (15 tests)
- ✓ tests/settlement.test.ts (9 tests)
  ✓ tests/session.test.ts (13 tests)
 
  Test Files  9 passed (9)
       Tests  97 passed (97)
-   Duration  19.91s
+   Duration  14.67s
 ```
 
 ---
