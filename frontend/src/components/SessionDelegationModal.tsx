@@ -18,6 +18,7 @@ import {
   Square3Stack3DIcon,
   DocumentCheckIcon,
   ArrowLeftEndOnRectangleIcon,
+  XCircleIcon,
 } from '@heroicons/react/24/outline';
 import type { SessionGrant } from '../types/index.js';
 import type { WalletState } from '../hooks/useSessionKey.js';
@@ -302,34 +303,70 @@ export const SessionDelegationModal: React.FC<SessionDelegationModalProps> = ({
                 )}
 
               {confirmRevoke ? (
-                <div className="revoke-confirm-box" style={{ marginTop: '12px' }}>
-                  <span className="revoke-confirm-text">
-                    Are you sure? This immediately halts autonomous trading and revokes permissions.
-                  </span>
-                  <div style={{ margin: '8px 0', fontSize: '11px', display: 'flex', alignItems: 'center', gap: '6px' }}>
-                    <input
-                      type="checkbox"
-                      id="revoke-onchain-checkbox"
-                      checked={revokeOnChainOption}
-                      onChange={(e) => setRevokeOnChainOption(e.target.checked)}
-                    />
-                    <label htmlFor="revoke-onchain-checkbox" style={{ color: 'hsl(var(--foreground))', cursor: 'pointer' }}>
-                      Submit On-Chain Revocation to OperatorPermissionsRegistry
-                    </label>
+                <div className="revoke-confirm-card">
+                  <div className="revoke-confirm-header">
+                    <div className="revoke-confirm-icon-wrap">
+                      <ExclamationTriangleIcon className="w-4 h-4 text-rose-400" />
+                    </div>
+                    <div className="revoke-confirm-headings">
+                      <span className="revoke-confirm-title">Confirm Instant Revocation</span>
+                      <span className="revoke-confirm-subtitle">
+                        Halts all autonomous agent execution and resets delegation permissions immediately.
+                      </span>
+                    </div>
                   </div>
+
+                  {/* Custom Styled Interactive Checkbox Option Tile */}
+                  <div
+                    className={`revoke-option-tile ${revokeOnChainOption ? 'active' : ''}`}
+                    onClick={() => setRevokeOnChainOption(!revokeOnChainOption)}
+                    role="checkbox"
+                    aria-checked={revokeOnChainOption}
+                    tabIndex={0}
+                    onKeyDown={(e) => {
+                      if (e.key === ' ' || e.key === 'Enter') {
+                        e.preventDefault();
+                        setRevokeOnChainOption(!revokeOnChainOption);
+                      }
+                    }}
+                  >
+                    <div className={`custom-checkbox-box ${revokeOnChainOption ? 'checked' : ''}`}>
+                      {revokeOnChainOption && <CheckIcon className="w-3 h-3 text-rose-400 stroke-[3]" />}
+                    </div>
+                    <div className="revoke-option-text">
+                      <span className="revoke-option-label">
+                        Submit On-Chain Revocation to Operator Permissions Registry
+                      </span>
+                      <span className="revoke-option-hint">
+                        Broadcasts an EVM gas transaction to permanently disable on-chain operator permissions on Somnia Testnet.
+                      </span>
+                    </div>
+                  </div>
+
                   <div className="revoke-btn-group">
                     <button
                       type="button"
-                      className="btn-danger-solid"
+                      className="btn-revoke-execute"
                       onClick={handleRevoke}
                       disabled={isLoading}
                     >
-                      {isLoading ? <ArrowPathIcon className="w-3.5 h-3.5 spin" /> : 'Yes, Revoke Now'}
+                      {isLoading ? (
+                        <>
+                          <ArrowPathIcon className="w-3.5 h-3.5 spin" />
+                          <span>Revoking Permissions...</span>
+                        </>
+                      ) : (
+                        <>
+                          <XCircleIcon className="w-3.5 h-3.5" />
+                          <span>Yes, Revoke Session Now</span>
+                        </>
+                      )}
                     </button>
                     <button
                       type="button"
-                      className="btn-outline-subtle"
+                      className="btn-revoke-dismiss"
                       onClick={() => setConfirmRevoke(false)}
+                      disabled={isLoading}
                     >
                       Cancel
                     </button>
