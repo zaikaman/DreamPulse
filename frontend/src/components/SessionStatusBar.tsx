@@ -18,6 +18,7 @@ import type { SessionGrant } from '../types/index.js';
 import type { WalletState } from '../hooks/useSessionKey.js';
 import { SOMNIA_ADDRESSES } from '../services/web3.js';
 import { Spinner } from './ui/Spinner.js';
+import { Button } from './ui/button.js';
 
 interface SessionStatusBarProps {
   wallet: WalletState;
@@ -104,14 +105,14 @@ export const SessionStatusBar: React.FC<SessionStatusBarProps> = ({
             </span>
           </div>
         </div>
-        <button
-          type="button"
-          className="btn-banner-action primary"
+        <Button
+          size="sm"
           onClick={onConnectWallet}
+          className="h-7 text-xs font-semibold px-3 gap-1.5"
         >
-          <WalletIcon className="w-3 h-3" />
+          <WalletIcon className="w-3.5 h-3.5" />
           <span>Connect Wallet</span>
-        </button>
+        </Button>
       </div>
     );
   }
@@ -131,14 +132,14 @@ export const SessionStatusBar: React.FC<SessionStatusBarProps> = ({
             </span>
           </div>
         </div>
-        <button
-          type="button"
-          className="btn-banner-action warning"
+        <Button
+          size="sm"
           onClick={onSwitchNetwork}
+          className="h-7 text-xs font-semibold px-3 gap-1.5 bg-amber-500 text-black hover:bg-amber-400"
         >
-          <BoltIcon className="w-3 h-3" />
+          <BoltIcon className="w-3.5 h-3.5" />
           <span>Switch to Somnia (50312)</span>
-        </button>
+        </Button>
       </div>
     );
   }
@@ -160,14 +161,16 @@ export const SessionStatusBar: React.FC<SessionStatusBarProps> = ({
           <div className="session-banner-metrics">
             <div className="session-metric-item">
               <span className="metric-label">OPERATOR</span>
-              <div
-                className="operator-chip"
+              <Button
+                variant="ghost"
+                size="sm"
+                className="operator-chip h-auto p-0 font-normal hover:bg-transparent"
                 onClick={handleCopy}
                 title="Click to copy Somnia Delegated Operator address"
               >
                 <code>{SOMNIA_ADDRESSES.operatorAccount.slice(0, 6)}...{SOMNIA_ADDRESSES.operatorAccount.slice(-4)}</code>
                 {copied ? <CheckIcon className="w-3 h-3 copy-success-icon" /> : <DocumentDuplicateIcon className="w-3 h-3" />}
-              </div>
+              </Button>
             </div>
 
             <div className="session-metric-divider"></div>
@@ -218,15 +221,16 @@ export const SessionStatusBar: React.FC<SessionStatusBarProps> = ({
                 <div className="session-metric-item" style={{ color: 'var(--muted-foreground)', display: 'flex', alignItems: 'center', gap: '6px' }}>
                   <ExclamationTriangleIcon className="w-3 h-3 text-amber-400" />
                   <span style={{ fontSize: '11px', fontWeight: 500 }} className="font-mono text-muted-foreground">0.00 tUSDC Collateral</span>
-                  <button
-                    type="button"
+                  <Button
+                    variant="outline"
+                    size="xs"
                     onClick={() => onClaimFaucet(1000)}
                     disabled={isFauceting}
-                    className="px-2 py-0.5 text-[10px] font-mono rounded bg-secondary/80 text-foreground border border-border/60 hover:bg-secondary cursor-pointer inline-flex items-center gap-1 transition-colors ml-1"
+                    className="h-6 text-[10px] px-2 gap-1 border-border/60 bg-secondary/80 text-foreground hover:bg-secondary ml-1"
                   >
-                    {isFauceting ? <Spinner size="xs" variant="amber" /> : <CurrencyDollarIcon className="w-2.5 h-2.5" />}
+                    {isFauceting ? <Spinner size="xs" variant="amber" /> : <CurrencyDollarIcon className="w-3 h-3" />}
                     <span>Claim 1k tUSDC</span>
-                  </button>
+                  </Button>
                 </div>
               </>
             )}
@@ -234,24 +238,26 @@ export const SessionStatusBar: React.FC<SessionStatusBarProps> = ({
         </div>
 
         <div className="session-banner-actions">
-          <button
-            type="button"
-            className="btn-subtle-config"
+          <Button
+            variant="outline"
+            size="sm"
             onClick={onOpenModal}
             title="Configure Session Limits"
+            className="h-7 text-xs px-2.5 gap-1.5 border-border/60 bg-secondary/50 hover:bg-secondary text-muted-foreground hover:text-foreground"
           >
-            <AdjustmentsHorizontalIcon className="w-3 h-3" />
+            <AdjustmentsHorizontalIcon className="w-3.5 h-3.5" />
             <span>Limits</span>
-          </button>
-          <button
-            type="button"
-            className="btn-revoke-compact"
+          </Button>
+          <Button
+            variant="outline"
+            size="sm"
             onClick={onRevokeSession}
             title="Instantly Revoke Session Authorization"
+            className="h-7 text-xs px-2.5 gap-1.5 border-rose-500/30 bg-rose-500/10 text-rose-400 hover:bg-rose-500/20 hover:text-rose-300"
           >
-            <XCircleIcon className="w-3 h-3" />
+            <XCircleIcon className="w-3.5 h-3.5" />
             <span>Revoke</span>
-          </button>
+          </Button>
         </div>
       </div>
     );
@@ -275,26 +281,26 @@ export const SessionStatusBar: React.FC<SessionStatusBarProps> = ({
       </div>
       <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
         {isCollateralZero && onClaimFaucet && (
-          <button
-            type="button"
-            className="btn-banner-action"
+          <Button
+            variant="outline"
+            size="sm"
             onClick={() => onClaimFaucet(1000)}
             disabled={isFauceting}
-            style={{ background: 'rgba(245, 158, 11, 0.15)', borderColor: 'rgba(245, 158, 11, 0.4)', color: 'var(--color-anomaly)' }}
+            className="h-7 text-xs px-2.5 gap-1.5 border-amber-500/30 bg-amber-500/10 text-amber-400 hover:bg-amber-500/20"
           >
-            {isFauceting ? <Spinner size="xs" variant="amber" /> : <CurrencyDollarIcon className="w-3.5 h-3.5" />}
+            {isFauceting ? <Spinner size="xs" variant="amber" /> : <CurrencyDollarIcon className="w-3 h-3" />}
             <span>Claim 1,000 tUSDC Faucet</span>
-          </button>
+          </Button>
         )}
-        <button
-          type="button"
-          className="btn-banner-action primary"
+        <Button
+          size="sm"
           onClick={onOpenModal}
+          className="h-7 text-xs font-semibold px-3 gap-1.5"
         >
-          <KeyIcon className="w-3 h-3" />
+          <KeyIcon className="w-3.5 h-3.5" />
           <span>Authorize Session</span>
           <ChevronRightIcon className="w-3 h-3" />
-        </button>
+        </Button>
       </div>
     </div>
   );

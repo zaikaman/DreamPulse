@@ -1,8 +1,8 @@
-# DreamPulse AI ⚡
+# DreamPulse AI
 ### Autonomous Multi-Agent Trading Swarm on Somnia DreamDEX Event Contracts
 
 <p align="center">
-  <img src="./assets/logo.webp" alt="DreamPulse AI Logo" width="340" style="border-radius: 16px; box-shadow: 0 8px 32px rgba(0, 255, 204, 0.25);" />
+  <img src="./assets/logo.svg" alt="DreamPulse AI Logo" width="220" />
 </p>
 
 <p align="center">
@@ -20,30 +20,30 @@
 
 ---
 
-## 📑 Table of Contents
+## Table of Contents
 
-1. [Executive Summary](#-executive-summary)
-2. [The Core Problem & Market Opportunity](#-the-core-problem--market-opportunity)
-3. [The DreamPulse Swarm Architecture](#-the-dreampulse-swarm-architecture)
-4. [Autonomous Agent Personas](#-autonomous-agent-personas)
-5. [Mathematical & Quantitative Foundation](#-mathematical--quantitative-foundation)
-6. [Non-Custodial Session Delegation & BatchApprove.sol](#-non-custodial-session-delegation--batchapprovesol)
-7. [Strategy Studio & Institutional Backtesting](#-strategy-studio--institutional-backtesting)
-8. [Personal Swarm: Copy-Trading vs Isolated Per-Wallet Swarms](#-personal-swarm-copy-trading-vs-isolated-per-wallet-swarms)
-9. [Institutional Design System & Minimalist Terminal UI](#-institutional-design-system--minimalist-terminal-ui)
-10. [Smart Contracts & On-Chain Deployments](#-smart-contracts--on-chain-deployments)
-11. [Hackathon Judging Criteria Alignment](#-hackathon-judging-criteria-alignment)
-12. [Developer Feedback Report (Somnia & DreamDEX SDK)](#-developer-feedback-report-somnia--dreamdex-sdk)
-13. [System Architecture Diagrams](#-system-architecture-diagrams)
-14. [API & WebSocket Telemetry Protocol](#-api--websocket-telemetry-protocol)
-15. [Local Installation & Development Guide](#-local-installation--development-guide)
-16. [Verification & Test Suite (97/97 Passing)](#-verification--test-suite-9797-passing)
-17. [2–3 Minute Demo Video Walkthrough](#-23-minute-demo-video-walkthrough)
-18. [License & Acknowledgements](#-license--acknowledgements)
+1. [Executive Summary](#executive-summary)
+2. [The Core Problem & Market Opportunity](#the-core-problem--market-opportunity)
+3. [The DreamPulse Swarm Architecture](#the-dreampulse-swarm-architecture)
+4. [Autonomous Agent Personas](#autonomous-agent-personas)
+5. [Mathematical & Quantitative Foundation](#mathematical--quantitative-foundation)
+6. [Non-Custodial Session Delegation & BatchApprove.sol](#non-custodial-session-delegation--batchapprovesol)
+7. [Strategy Studio & Institutional Backtesting](#strategy-studio--institutional-backtesting)
+8. [Personal Swarm: Copy-Trading vs Isolated Per-Wallet Swarms](#personal-swarm-copy-trading-vs-isolated-per-wallet-swarms)
+9. [Institutional Design System & Minimalist Terminal UI](#institutional-design-system--minimalist-terminal-ui)
+10. [Smart Contracts & On-Chain Deployments](#smart-contracts--on-chain-deployments)
+11. [Hackathon Judging Criteria Alignment](#hackathon-judging-criteria-alignment)
+12. [Developer Feedback Report (Somnia & DreamDEX SDK)](#developer-feedback-report-somnia--dreamdex-sdk)
+13. [System Architecture Diagrams](#system-architecture-diagrams)
+14. [API & WebSocket Telemetry Protocol](#api--websocket-telemetry-protocol)
+15. [Local Installation & Development Guide](#local-installation--development-guide)
+16. [Verification & Test Suite (97/97 Passing)](#verification--test-suite-9797-passing)
+17. [2–3 Minute Demo Video Walkthrough](#23-minute-demo-video-walkthrough)
+18. [License & Acknowledgements](#license--acknowledgements)
 
 ---
 
-## 🚀 Executive Summary
+## Executive Summary
 
 **DreamPulse AI** is a decentralized, high-frequency multi-agent trading swarm engineered specifically for **DreamDEX Event Contracts** on the **Somnia Shannon Testnet** (Chain ID `50312`). 
 
@@ -58,7 +58,7 @@ Users can run the swarm directly via non-custodial session delegation using Somn
 
 ---
 
-## 🎯 The Core Problem & Market Opportunity
+## The Core Problem & Market Opportunity
 
 Prediction markets are the fastest-growing financial primitives in Web3, yet decentralized Central Limit Order Book (CLOB) prediction venues face five structural hurdles:
 
@@ -72,7 +72,7 @@ Prediction markets are the fastest-growing financial primitives in Web3, yet dec
 
 ---
 
-## 🐝 The DreamPulse Swarm Architecture
+## The DreamPulse Swarm Architecture
 
 DreamPulse replaces monolithic trading bots with an orchestrated **Multi-Agent Swarm** that operates on a high-frequency **100ms evaluation cadence**:
 
@@ -94,10 +94,10 @@ flowchart TB
         QUANT["Quantitative Model Engine\n- Abramowitz-Stegun CDF Φ(z)\n- Bayesian Shrinkage EWMA Volatility\n- Depth VWAP & Integer Quantizer"]
         
         subgraph Agents ["Four Autonomous Micro-Agents"]
-            VOLT["⚡ Volt Sniper\n(Spot Staleness Momentum)"]
-            ORACLE["🔮 Oracle Arb\n(Vol Surface Arbitrage)"]
-            TITAN["🛡️ Titan MM\n(Inventory-Skewed Liquidity)"]
-            SWEEPER["🧹 Sweeper\n(Batch Settlement Daemon)"]
+            VOLT["Volt Sniper\n(Spot Staleness Momentum)"]
+            ORACLE["Oracle Arb\n(Vol Surface Arbitrage)"]
+            TITAN["Titan MM\n(Inventory-Skewed Liquidity)"]
+            SWEEPER["Sweeper\n(Batch Settlement Daemon)"]
         end
 
         LLM["Cognitive LLM Reasoning Pool\n(Groq Qwen 2.5 Multi-Key Round-Robin + Gemini Fallback)"]
@@ -119,9 +119,9 @@ flowchart TB
 
 ---
 
-## 🤖 Autonomous Agent Personas
+## Autonomous Agent Personas
 
-### 1. ⚡ Volt (Spot Staleness Sniper)
+### 1. Volt (Spot Staleness Sniper)
 * **Strategy**: Latency & Spot Velocity Momentum Taker.
 * **Mechanism**: Ingests sub-second spot ticker price movements across underlying assets (BTC, ETH, SOL, BNB, DOGE). When a rapid spot jump ($|\Delta_{\text{1m}}| \ge \text{adaptive drift threshold}$) occurs faster than market makers adjust their quotes on the DreamDEX CLOB, Volt executes an aggressive Immediate-Or-Cancel (`IOC`) taker order.
 * **Risk Invariants**:
@@ -130,7 +130,7 @@ flowchart TB
   * Safe probability envelope: Limits taker buys strictly to the $[0.25, 0.68]$ range to maintain favorable risk-to-reward ratios.
   * Depth-aware VWAP execution: Calculates volume-weighted average price across multiple price levels to prevent self-slippage.
 
-### 2. 🔮 Oracle (Volatility Surface Arbitrageur)
+### 2. Oracle (Volatility Surface Arbitrageur)
 * **Strategy**: Mathematical Implied vs. Realized Volatility Arbitrage.
 * **Mechanism**: Continuously prices binary prediction event contracts using high-precision Black-Scholes standard normal cumulative distribution $\Phi(d_2)$. Compares theoretical fair value with the mid-market price on DreamDEX. When the net edge exceeds post-spread, post-fee thresholds ($\ge 3.5\%$), Oracle trades to exploit mispriced probability surface.
 * **Risk Invariants**:
@@ -139,7 +139,7 @@ flowchart TB
   * Gamma pin-risk lockout: Refuses execution when time remaining $< 45\text{s}$ or $> 7,200\text{s}$.
   * Minimum 8.0% Return-on-Capital hurdle ($E[\text{ROI}] \ge 8.0\%$).
 
-### 3. 🛡️ Titan (Adaptive Two-Sided Market Maker)
+### 3. Titan (Adaptive Two-Sided Market Maker)
 * **Strategy**: Continuous Bid-Ask Liquidity Provision with Dynamic Inventory Skewing.
 * **Mechanism**: Posts resting two-sided limit orders (`LIMIT`) symmetrically around theoretical fair value $\Phi(z)$ to capture the spread. To manage directional exposure, Titan dynamically skews reservation prices using super-linear gamma inventory aversion ($\gamma \cdot |\text{inv}|^{1.25}$) and order book depth imbalances.
 * **Risk Invariants**:
@@ -147,7 +147,7 @@ flowchart TB
   * Tail spread expansion: Automatically widens spreads when event probabilities enter extreme wings ($<0.30$ or $>0.70$).
   * Self-trade protection: Active maker quotes are automatically registered in memory and subtracted from depth calculations, preventing Volt and Oracle from crossing Titan's own orders.
 
-### 4. 🧹 Sweeper (Autonomous Settlement & Direct Compounder)
+### 4. Sweeper (Autonomous Settlement & Direct Compounder)
 * **Strategy**: Zero-Loss Capital Recycling & Batch Redemption.
 * **Mechanism**: Monitors all prediction contracts transitioning from `Trading` $\rightarrow$ `Resolving` $\rightarrow$ `Finalized`. Identifies unclaimed winning outcome tokens (YES/NO) and invokes the DreamDEX settlement contracts to batch-claim payouts.
 * **Risk Invariants**:
@@ -156,7 +156,7 @@ flowchart TB
 
 ---
 
-## 📐 Mathematical & Quantitative Foundation
+## Mathematical & Quantitative Foundation
 
 DreamPulse adheres strictly to deterministic precision math and floating-point protection:
 
@@ -205,7 +205,7 @@ If slippage $P_{\text{VWAP}} - P_{\text{top}} > \text{maxSlippage}$, execution i
 
 ---
 
-## 🔐 Non-Custodial Session Delegation & BatchApprove.sol
+## Non-Custodial Session Delegation & BatchApprove.sol
 
 One of the largest UX hurdles in Web3 prediction markets is that **every newly deployed binary pool contract requires separate ERC-20 token approval and operator authorization**. 
 
@@ -249,7 +249,7 @@ Agents operate strictly via Somnia's `OperatorPermissionsRegistry` using scoped 
 
 ---
 
-## 📊 Strategy Studio & Institutional Backtesting
+## Strategy Studio & Institutional Backtesting
 
 DreamPulse includes a full-featured **Strategy Studio** running an institutional-grade quantitative backtesting engine:
 
@@ -269,7 +269,7 @@ DreamPulse includes a full-featured **Strategy Studio** running an institutional
 
 ---
 
-## 🧬 Personal Swarm: Copy-Trading vs Isolated Per-Wallet Swarms
+## Personal Swarm: Copy-Trading vs Isolated Per-Wallet Swarms
 
 **Every developed feature now centers around one invariant: traders own their strategy, custody never leaves their wallet.**
 
@@ -292,7 +292,7 @@ This design preserves the original operator-as-source-of-truth while giving ever
 
 ---
 
-## 💻 Institutional Design System & Minimalist Terminal UI
+## Institutional Design System & Minimalist Terminal UI
 
 The DreamPulse frontend is crafted with a high-aesthetic, minimalist institutional quant design system built with React 18, TypeScript, Tailwind CSS, and custom glassmorphic shaders:
 
@@ -309,7 +309,7 @@ The DreamPulse frontend is crafted with a high-aesthetic, minimalist institution
 
 ---
 
-## 📜 Smart Contracts & On-Chain Deployments
+## Smart Contracts & On-Chain Deployments
 
 All DreamPulse interactions execute on the **Somnia Shannon Testnet**:
 
@@ -330,7 +330,7 @@ All DreamPulse interactions execute on the **Somnia Shannon Testnet**:
 
 ---
 
-## 🏆 Hackathon Judging Criteria Alignment
+## Hackathon Judging Criteria Alignment
 
 | Criteria & Weight | How DreamPulse AI Exceeds Expectations |
 | :--- | :--- |
@@ -342,16 +342,16 @@ All DreamPulse interactions execute on the **Somnia Shannon Testnet**:
 
 ---
 
-## 📝 Developer Feedback Report (Somnia & DreamDEX SDK)
+## Developer Feedback Report (Somnia & DreamDEX SDK)
 
 *As requested in the official Hackathon Guidelines, the DreamPulse engineering team compiled this comprehensive developer feedback report based on building against `@somnia-chain/markets-sdk` (v0.28.1) and DreamDEX documentation on Somnia Shannon Testnet.*
 
-### 🌟 What Works Exceptionally Well
+### What Works Exceptionally Well
 1. **High-Performance RPC & Finality**: Somnia's block times and sub-second confirmation enable real high-frequency on-chain trading loops that are impossible on standard Ethereum Layer 2s.
 2. **Deterministic CLOB Matching Engine**: Order execution against resting limit orders is deterministic, fast, and gas-efficient.
 3. **Clean viem/ethers Interoperability**: The `@somnia-chain/markets-sdk` integrates cleanly with standard `viem` `PublicClient` and `WalletClient` primitives.
 
-### ⚠️ Critical Friction Points & Edge Cases Encountered
+### Critical Friction Points & Edge Cases Encountered
 1. **Multi-Pool Approval Scalability**:
    * *Problem*: DreamDEX creates unique pool contract addresses for every rolling prediction window (e.g. BTC-5m, ETH-15m). Users had to approve every individual pool contract for both `TestUSDC` spending and `OperatorPermissionsRegistry` delegation.
    * *How DreamPulse Solved It*: We wrote and deployed `BatchApprove.sol` to allow 1-click batch approvals and operator delegation across dozens of active and future pool addresses in a single transaction.
@@ -371,7 +371,7 @@ All DreamPulse interactions execute on the **Somnia Shannon Testnet**:
 
 ---
 
-## 🏗️ System Architecture Diagrams
+## System Architecture Diagrams
 
 ### Real-Time Swarm Execution Cycle
 
@@ -410,7 +410,7 @@ sequenceDiagram
 
 ---
 
-## 📡 API & WebSocket Telemetry Protocol
+## API & WebSocket Telemetry Protocol
 
 The DreamPulse backend daemon exposes a comprehensive REST and WebSocket gateway:
 
@@ -451,7 +451,7 @@ Clients connect via WebSocket to receive multiplexed streaming events:
 
 ---
 
-## 🛠️ Local Installation & Development Guide
+## Local Installation & Development Guide
 
 ### Prerequisites
 * **Node.js**: `v20.0.0` or higher
@@ -529,7 +529,7 @@ For step-by-step instructions on deploying the **Frontend to Vercel** and the **
 
 ---
 
-## 🧪 Verification & Test Suite (97/97 Passing)
+## Verification & Test Suite (97/97 Passing)
 
 DreamPulse enforces strict quality invariants with an automated **Vitest** test suite covering quantitative mathematics, smart contract session boundaries, multi-agent evaluation logic, and API endpoints:
 
@@ -560,7 +560,7 @@ npm run verify
 
 ---
 
-## 🎬 2–3 Minute Demo Video Walkthrough
+## 2–3 Minute Demo Video Walkthrough
 
 A structured script demonstrating all capabilities during the hackathon judging evaluation:
 
@@ -586,7 +586,7 @@ A structured script demonstrating all capabilities during the hackathon judging 
 
 ---
 
-## 📄 License & Acknowledgements
+## License & Acknowledgements
 
 * **License**: MIT License — see [LICENSE](LICENSE) for details.
 * **Built With**:

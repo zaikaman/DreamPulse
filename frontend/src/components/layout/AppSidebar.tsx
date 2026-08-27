@@ -115,7 +115,7 @@ const AppSidebarComponent: React.FC<AppSidebarProps> = ({
           }}
         >
           <img
-            src="/assets/logo.webp"
+            src="/assets/logo.svg"
             alt="DreamPulse Logo"
             className="sidebar-brand-logo"
           />

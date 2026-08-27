@@ -50,17 +50,14 @@ export const BrandIcon: React.FC<{
         <div className="absolute inset-0 rounded-full bg-cyan-400/20 blur-md pointer-events-none scale-150" />
       )}
       <svg
-        viewBox="0 0 24 24"
+        viewBox="0 0 512 512"
         fill="currentColor"
         xmlns="http://www.w3.org/2000/svg"
         className="w-full h-full block aspect-square shrink-0 relative z-10"
       >
-        {/* Precision geometric pulse wave with diamond apex */}
-        <path
-          fillRule="evenodd"
-          clipRule="evenodd"
-          d="M12 2L2 9.5L5.5 12.5L10 8.5V17L12 19L14 17V8.5L18.5 12.5L22 9.5L12 2ZM3.5 14L2 15.5L12 22L22 15.5L20.5 14L12 19.5L3.5 14Z"
-        />
+        {/* DreamPulse Minimalist Apex & Crescent Horizon Logo */}
+        <path d="M 256 36 L 56 345 V 452 L 255 166 L 355 322 H 455 V 256 H 397 Z" />
+        <path d="M 138.0 376.0 C 166.1 436.4, 229.2 476.8, 296.0 476.0 C 364.0 475.9, 426.1 432.6, 454.0 372.0 C 417.7 403.9, 352.1 415.8, 306.0 391.0 C 254.1 365.4, 219.0 312.4, 223.0 254.0 C 195.0 294.8, 166.7 335.5, 138.0 376.0 Z" />
       </svg>
     </div>
   );

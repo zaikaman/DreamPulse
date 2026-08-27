@@ -154,7 +154,7 @@ export const CinematicHero: React.FC<CinematicHeroProps> = ({
       {/* 1. Full-Screen Ambient Trading Background Video (z-index 0) */}
       <div className="fixed inset-0 w-full h-full z-0 overflow-hidden pointer-events-none">
         <video
-          src="https://d8j0ntlcm91z4.cloudfront.net/user_38xzZboKViGWJOttwIXH07lWA1P/hf_20260809_012548_ef22562c-c0ae-4816-ad9d-f8922af4e6a7.mp4"
+          src="https://d8j0ntlcm91z4.cloudfront.net/user_38xzZboKViGWJOttwIXH07lWA1P/hf_20260406_094145_4a271a6c-3869-4f1c-8aa7-aeb0cb227994.mp4"
           autoPlay
           loop
           muted
