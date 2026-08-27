@@ -674,12 +674,30 @@ export const StrategyStudio: React.FC<StrategyStudioProps> = ({
                     <span
                       className="text-[9px] font-mono font-bold px-1.5 py-0.5 rounded border"
                       style={{
-                        background: (agent.pnl ?? 0) >= 0 ? 'rgba(52,211,153,0.1)' : 'rgba(244,63,94,0.1)',
-                        borderColor: (agent.pnl ?? 0) >= 0 ? 'rgba(52,211,153,0.25)' : 'rgba(244,63,94,0.25)',
-                        color: (agent.pnl ?? 0) >= 0 ? '#6ee7b7' : '#fda4af',
+                        background:
+                          (agent.pnl ?? 0) > 0
+                            ? 'rgba(52,211,153,0.1)'
+                            : (agent.pnl ?? 0) < 0
+                            ? 'rgba(244,63,94,0.1)'
+                            : 'hsl(var(--secondary)/0.4)',
+                        borderColor:
+                          (agent.pnl ?? 0) > 0
+                            ? 'rgba(52,211,153,0.25)'
+                            : (agent.pnl ?? 0) < 0
+                            ? 'rgba(244,63,94,0.25)'
+                            : 'hsl(var(--border)/0.4)',
+                        color:
+                          (agent.pnl ?? 0) > 0
+                            ? '#6ee7b7'
+                            : (agent.pnl ?? 0) < 0
+                            ? '#fda4af'
+                            : 'hsl(var(--muted-foreground))',
                       }}
                     >
-                      {(agent.pnl ?? 0) >= 0 ? `+${(agent.pnl ?? 0).toFixed(2)}` : (agent.pnl ?? 0).toFixed(2)} tUSDC
+                      {(agent.pnl ?? 0) > 0
+                        ? `+${(agent.pnl ?? 0).toFixed(2)}`
+                        : (agent.pnl ?? 0).toFixed(2)}{' '}
+                      tUSDC
                     </span>
                   </div>
                 </button>

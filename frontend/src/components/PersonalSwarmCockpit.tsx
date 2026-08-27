@@ -1150,16 +1150,27 @@ export const PersonalSwarmCockpit: React.FC<PersonalSwarmCockpitProps> = ({
                         </span>
                         <span
                           className="text-xs font-mono font-bold"
-                          style={{ color: (agent.pnl ?? 0) >= 0 ? '#6ee7b7' : '#fda4af' }}
+                          style={{
+                            color:
+                              (agent.pnl ?? 0) > 0
+                                ? '#6ee7b7'
+                                : (agent.pnl ?? 0) < 0
+                                ? '#fda4af'
+                                : 'hsl(var(--muted-foreground))',
+                          }}
                         >
-                          {(agent.pnl ?? 0) >= 0 ? `+${(agent.pnl ?? 0).toFixed(2)}` : (agent.pnl ?? 0).toFixed(2)}{' '}
+                          {(agent.pnl ?? 0) > 0
+                            ? `+${(agent.pnl ?? 0).toFixed(2)}`
+                            : (agent.pnl ?? 0).toFixed(2)}{' '}
                           <span className="text-[10px]">tUSDC</span>
                         </span>
                       </div>
                       <div className="p-2.5 rounded-lg border bg-secondary/30 border-border/50 flex flex-col gap-0.5">
                         <span className="text-[10px] font-mono text-muted-foreground uppercase">Win Rate & Fills</span>
                         <span className="text-xs font-mono font-bold text-foreground">
-                          {agent.tradesCount ?? 0} fills · {(agent.winRate ?? 0).toFixed(0)}% WR
+                          {(agent.tradesCount ?? 0) > 0
+                            ? `${agent.tradesCount} fills · ${(agent.winRate ?? 0).toFixed(0)}% WR`
+                            : '0 fills · —'}
                         </span>
                       </div>
                     </div>

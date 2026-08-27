@@ -1087,9 +1087,19 @@ export const StrategyStudioView: React.FC<StrategyStudioViewProps> = ({
                       <div className="flex items-center gap-1.5">
                         <span
                           className="text-[10px] font-mono font-bold"
-                          style={{ color: (agent.pnl ?? 0) >= 0 ? '#6ee7b7' : '#fda4af' }}
+                          style={{
+                            color:
+                              (agent.pnl ?? 0) > 0
+                                ? '#6ee7b7'
+                                : (agent.pnl ?? 0) < 0
+                                ? '#fda4af'
+                                : 'hsl(var(--muted-foreground))',
+                          }}
                         >
-                          {(agent.pnl ?? 0) >= 0 ? `+${(agent.pnl ?? 0).toFixed(2)}` : (agent.pnl ?? 0).toFixed(2)} tUSDC
+                          {(agent.pnl ?? 0) > 0
+                            ? `+${(agent.pnl ?? 0).toFixed(2)}`
+                            : (agent.pnl ?? 0).toFixed(2)}{' '}
+                          tUSDC
                         </span>
                         <Badge variant="outline" className="text-[9px] font-mono border-border/50 text-muted-foreground">
                           {agent.symbol} · {agent.timeframe}
@@ -1203,16 +1213,27 @@ export const StrategyStudioView: React.FC<StrategyStudioViewProps> = ({
                         </span>
                         <span
                           className="text-xs font-mono font-bold"
-                          style={{ color: (agent.pnl ?? 0) >= 0 ? '#6ee7b7' : '#fda4af' }}
+                          style={{
+                            color:
+                              (agent.pnl ?? 0) > 0
+                                ? '#6ee7b7'
+                                : (agent.pnl ?? 0) < 0
+                                ? '#fda4af'
+                                : 'hsl(var(--muted-foreground))',
+                          }}
                         >
-                          {(agent.pnl ?? 0) >= 0 ? `+${(agent.pnl ?? 0).toFixed(2)}` : (agent.pnl ?? 0).toFixed(2)}{' '}
+                          {(agent.pnl ?? 0) > 0
+                            ? `+${(agent.pnl ?? 0).toFixed(2)}`
+                            : (agent.pnl ?? 0).toFixed(2)}{' '}
                           <span className="text-[9px]">tUSDC</span>
                         </span>
                       </div>
                       <div className="p-2 rounded-lg bg-secondary/30 border border-border/40 flex flex-col gap-0.5">
                         <span className="text-[9px] font-mono text-muted-foreground uppercase">Win Rate & Fills</span>
                         <span className="text-xs font-mono font-bold text-foreground">
-                          {agent.tradesCount ?? 0} fills · {(agent.winRate ?? 0).toFixed(0)}% WR
+                          {(agent.tradesCount ?? 0) > 0
+                            ? `${agent.tradesCount} fills · ${(agent.winRate ?? 0).toFixed(0)}% WR`
+                            : '0 fills · —'}
                         </span>
                       </div>
                     </div>
