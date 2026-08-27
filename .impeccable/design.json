@@ -1,0 +1,237 @@
+{
+  "schemaVersion": 2,
+  "generatedAt": "2026-08-27T20:09:00.000Z",
+  "title": "Design System: DreamPulse AI",
+  "extensions": {
+    "colorMeta": {
+      "primary": {
+        "role": "primary",
+        "displayName": "Luminous Quantum Cyan",
+        "canonical": "#00ffcc",
+        "tonalRamp": [
+          "#003329",
+          "#006652",
+          "#00997a",
+          "#00cca3",
+          "#00ffcc",
+          "#33ffd6",
+          "#66ffe0",
+          "#99ffea"
+        ]
+      },
+      "secondary": {
+        "role": "secondary",
+        "displayName": "Electric Shannon Violet",
+        "canonical": "#7928ca",
+        "tonalRamp": [
+          "#1c0930",
+          "#3a1361",
+          "#571d92",
+          "#7928ca",
+          "#9453d5",
+          "#af7de0",
+          "#caa7eb",
+          "#e4d2f5"
+        ]
+      },
+      "tertiary": {
+        "role": "tertiary",
+        "displayName": "Amber Drift",
+        "canonical": "#ffb700",
+        "tonalRamp": [
+          "#332500",
+          "#664900",
+          "#996e00",
+          "#cc9200",
+          "#ffb700",
+          "#ffc633",
+          "#ffd466",
+          "#ffe399"
+        ]
+      },
+      "success": {
+        "role": "success",
+        "displayName": "Emerald Alpha",
+        "canonical": "#00e676",
+        "tonalRamp": [
+          "#00331a",
+          "#006634",
+          "#00994f",
+          "#00cc69",
+          "#00e676",
+          "#33eb91",
+          "#66f0ac",
+          "#99f5c8"
+        ]
+      },
+      "danger": {
+        "role": "danger",
+        "displayName": "Crimson Vega",
+        "canonical": "#ff3366",
+        "tonalRamp": [
+          "#330a14",
+          "#661429",
+          "#991e3d",
+          "#cc2952",
+          "#ff3366",
+          "#ff5c85",
+          "#ff85a3",
+          "#ffadc2"
+        ]
+      },
+      "neutral-bg": {
+        "role": "neutral",
+        "displayName": "Obsidian Core",
+        "canonical": "#060709",
+        "tonalRamp": [
+          "#060709",
+          "#0b0d12",
+          "#10131a",
+          "#181c26",
+          "#272b38",
+          "#545b6b",
+          "#8e94a0",
+          "#ffffff"
+        ]
+      }
+    },
+    "typographyMeta": {
+      "display": {
+        "displayName": "Display Hero",
+        "purpose": "Hero headline titles and landing page banners."
+      },
+      "headline": {
+        "displayName": "Section Headline",
+        "purpose": "Top-level page view headers and modal titles."
+      },
+      "title": {
+        "displayName": "Widget Title",
+        "purpose": "Panel headers, catalog names, and inspector titles."
+      },
+      "body": {
+        "displayName": "Body Sans",
+        "purpose": "Explanatory text, descriptions, and tooltips."
+      },
+      "label": {
+        "displayName": "Telemetry Monospace",
+        "purpose": "Numeric prices, percentages, edges, order books, and odds."
+      }
+    },
+    "shadows": [
+      {
+        "name": "glass-panel",
+        "value": "0 8px 32px 0 rgba(0, 0, 0, 0.45), inset 0 1px 1px 0 rgba(255, 255, 255, 0.06)",
+        "purpose": "Primary frosted glass panel depth."
+      },
+      {
+        "name": "cyan-glow",
+        "value": "0 0 16px rgba(0, 255, 204, 0.25)",
+        "purpose": "Active execution button and status indicator glow."
+      },
+      {
+        "name": "modal-shadow",
+        "value": "0 16px 48px rgba(0, 0, 0, 0.75)",
+        "purpose": "Modal dialogs and dropdown menus."
+      }
+    ],
+    "motion": [
+      {
+        "name": "ease-out-snappy",
+        "value": "cubic-bezier(0.16, 1, 0.3, 1)",
+        "purpose": "Fast UI feedback on clicks, tabs, and toggles (150ms)."
+      },
+      {
+        "name": "pulse-glow",
+        "value": "pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite",
+        "purpose": "Live streaming connection and agent evaluation heartbeat."
+      }
+    ],
+    "breakpoints": [
+      { "name": "sm", "value": "640px" },
+      { "name": "md", "value": "768px" },
+      { "name": "lg", "value": "1024px" },
+      { "name": "xl", "value": "1280px" },
+      { "name": "2xl", "value": "1536px" }
+    ]
+  },
+  "components": [
+    {
+      "name": "Primary Action Button",
+      "kind": "button",
+      "refersTo": "button-primary",
+      "description": "Primary high-signal execution and confirmation button.",
+      "html": "<button class=\"ds-btn-primary\"><span>EXECUTE ORDER</span></button>",
+      "css": ".ds-btn-primary { background: #00ffcc; color: #060709; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; font-size: 12px; font-weight: 600; padding: 8px 16px; border-radius: 6px; border: none; cursor: pointer; transition: all 0.15s ease-out; display: inline-flex; align-items: center; justify-content: center; gap: 6px; } .ds-btn-primary:hover { background: #33ffd6; box-shadow: 0 0 12px rgba(0,255,204,0.35); transform: translateY(-1px); } .ds-btn-primary:active { transform: translateY(0); }"
+    },
+    {
+      "name": "Secondary Glass Button",
+      "kind": "button",
+      "refersTo": "button-secondary",
+      "description": "Subtle glass button for secondary navigation and filter toggles.",
+      "html": "<button class=\"ds-btn-secondary\"><span>Inspect Depth</span></button>",
+      "css": ".ds-btn-secondary { background: rgba(255, 255, 255, 0.04); color: #c4c2c3; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; font-size: 12px; font-weight: 500; padding: 7px 14px; border-radius: 6px; border: 1px solid rgba(255, 255, 255, 0.12); cursor: pointer; transition: all 0.15s ease-out; } .ds-btn-secondary:hover { background: rgba(255, 255, 255, 0.08); color: #ffffff; border-color: rgba(255, 255, 255, 0.2); }"
+    },
+    {
+      "name": "Alpha Outcome Badge",
+      "kind": "chip",
+      "refersTo": "badge-success",
+      "description": "Monospaced status pill indicating trading direction and edge.",
+      "html": "<span class=\"ds-badge-alpha\">BUY YES +4.2%</span>",
+      "css": ".ds-badge-alpha { display: inline-flex; align-items: center; gap: 4px; padding: 2px 8px; border-radius: 9999px; font-family: 'JetBrains Mono', monospace; font-size: 10px; font-weight: 600; background: rgba(0, 230, 118, 0.1); color: #00e676; border: 1px solid rgba(0, 230, 118, 0.3); letter-spacing: 0.02em; }"
+    },
+    {
+      "name": "Glass Terminal Panel",
+      "kind": "card",
+      "refersTo": "terminal-panel",
+      "description": "Standard container card for widgets, charts, and telemetry grids.",
+      "html": "<div class=\"ds-panel\"><div class=\"ds-panel-header\"><span class=\"ds-panel-title\">CLOB Depth Ladder</span><span class=\"ds-panel-tag\">50312 SHANNON</span></div><div class=\"ds-panel-body\">Order book telemetry active</div></div>",
+      "css": ".ds-panel { background: rgba(16, 19, 26, 0.72); backdrop-filter: blur(16px); -webkit-backdrop-filter: blur(16px); border: 1px solid rgba(255, 255, 255, 0.08); border-radius: 10px; padding: 14px; box-shadow: 0 8px 32px rgba(0,0,0,0.3); font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; } .ds-panel-header { display: flex; align-items: center; justify-content: space-between; padding-bottom: 10px; margin-bottom: 10px; border-bottom: 1px solid rgba(255,255,255,0.06); } .ds-panel-title { font-size: 13px; font-weight: 600; color: #ffffff; } .ds-panel-tag { font-family: 'JetBrains Mono', monospace; font-size: 10px; color: #8e94a0; background: rgba(255,255,255,0.05); padding: 2px 6px; border-radius: 4px; } .ds-panel-body { font-size: 12px; color: #8e94a0; font-family: 'JetBrains Mono', monospace; }"
+    }
+  ],
+  "narrative": {
+    "northStar": "The Cyber-Quantitative Cockpit",
+    "overview": "DreamPulse AI embodies an institutional cyber-financial trading terminal engineered for high-frequency prediction markets and autonomous swarm intelligence on Somnia Shannon Testnet. The interface balances extreme data density, sub-second telemetry streams, and surgical visual clarity. High-contrast typography and monospaced tabular data sit over deep obsidian glass panels, delivering immediate scannability across multi-asset order books, probability heatmaps, and AI reasoning streams.",
+    "keyCharacteristics": [
+      "Deep obsidian glassmorphic surfaces with frosted backdrops and subtle 1px border framing.",
+      "Luminous telemetry accents reserved for high-signal alpha, execution state, and protocol attribution.",
+      "Monospace tabular figures across all numerical readouts, timestamps, odds, and order quantities.",
+      "Professional SVG iconography without playful emojis or decorative clutter."
+    ],
+    "rules": [
+      {
+        "name": "The Rarity Rule",
+        "body": "Luminous cyan and saturated signal colors are applied to <= 10% of any given viewport. High saturation is reserved exclusively for live market signals and interactive focal points; background surfaces remain strictly deep and subdued.",
+        "section": "colors"
+      },
+      {
+        "name": "The Polarity Invariant Rule",
+        "body": "Emerald (#00e676) and Crimson (#ff3366) are strictly tied to directional outcome polarity (YES vs NO, Profit vs Loss). They are never repurposed as arbitrary decorative colors.",
+        "section": "colors"
+      },
+      {
+        "name": "The Tabular Precision Rule",
+        "body": "Every numeric figure representing prices, probabilities, dollar amounts, edges, nonces, or timestamps MUST apply font-variant-numeric: tabular-nums (or font-mono) to prevent visual jitter as numbers fluctuate in real time.",
+        "section": "typography"
+      },
+      {
+        "name": "The Ghost Border Rule",
+        "body": "Panel boundaries are defined by translucent 1px borders rather than heavy contrast outlines or solid drop shadows, creating a lightweight glass cockpit feel.",
+        "section": "elevation"
+      }
+    ],
+    "dos": [
+      "Do format all financial amounts, prices, odds, percentages, and timestamps with tabular-nums in a monospace font.",
+      "Do reserve high-saturation cyan (#00ffcc) for live telemetry, active connection states, and primary user execution actions.",
+      "Do use @heroicons/react SVG icons exclusively for all UI iconography.",
+      "Do maintain clean 1px border separation between adjacent glassmorphic panels.",
+      "Do use instant procedural audio cues for trade fills and settlement sweeps."
+    ],
+    "donts": [
+      "Don't use raw emojis in any button, label, table cell, or notification banner.",
+      "Don't use bright colored background fills on full panels; keep all panel backgrounds dark obsidian.",
+      "Don't allow layout shifts when real-time numerical values update; enforce fixed column widths and tabular numbers.",
+      "Don't mix directional colors: never use green for negative delta or red for positive delta.",
+      "Don't use slow, floaty animations on trade execution buttons; keep interactive transitions snappy (<= 150ms)."
+    ]
+  }
+}
