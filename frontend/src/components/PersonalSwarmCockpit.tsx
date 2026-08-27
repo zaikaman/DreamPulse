@@ -438,10 +438,10 @@ export const PersonalSwarmCockpit: React.FC<PersonalSwarmCockpitProps> = ({
             </div>
           </div>
 
-          {/* Card 3: Fleet Realized PnL (24h) */}
+          {/* Card 3: Fleet Realized PnL */}
           <div className="p-3 rounded-xl border bg-card/70 border-border/50 flex flex-col justify-between gap-1">
             <div className="flex items-center justify-between">
-              <span className="text-[10px] font-mono text-muted-foreground uppercase tracking-wider">Fleet Realized PnL (24h)</span>
+              <span className="text-[10px] font-mono text-muted-foreground uppercase tracking-wider">Fleet Realized PnL</span>
               <SignalIcon className="w-3.5 h-3.5 text-muted-foreground/60" />
             </div>
             <div
@@ -639,7 +639,7 @@ export const PersonalSwarmCockpit: React.FC<PersonalSwarmCockpitProps> = ({
                 <div className="grid grid-cols-2 gap-2">
                   <div className="p-2.5 rounded-lg border bg-secondary/30 border-border/50 flex flex-col gap-0.5">
                     <span className="text-[10px] font-mono text-muted-foreground uppercase flex items-center gap-1">
-                      <SignalIcon className="w-3 h-3" /> 24h PnL
+                      <SignalIcon className="w-3 h-3" /> Realized PnL
                     </span>
                     <span
                       className="text-xs font-mono font-bold"
@@ -802,7 +802,7 @@ export const PersonalSwarmCockpit: React.FC<PersonalSwarmCockpitProps> = ({
                 <div className="grid grid-cols-2 gap-2">
                   <div className="p-2.5 rounded-lg border bg-secondary/30 border-border/50 flex flex-col gap-0.5">
                     <span className="text-[10px] font-mono text-muted-foreground uppercase flex items-center gap-1">
-                      <SignalIcon className="w-3 h-3" /> 24h PnL
+                      <SignalIcon className="w-3 h-3" /> Realized PnL
                     </span>
                     <span
                       className="text-xs font-mono font-bold"
@@ -965,7 +965,7 @@ export const PersonalSwarmCockpit: React.FC<PersonalSwarmCockpitProps> = ({
                 <div className="grid grid-cols-2 gap-2">
                   <div className="p-2.5 rounded-lg border bg-secondary/30 border-border/50 flex flex-col gap-0.5">
                     <span className="text-[10px] font-mono text-muted-foreground uppercase flex items-center gap-1">
-                      <SignalIcon className="w-3 h-3" /> 24h PnL
+                      <SignalIcon className="w-3 h-3" /> Realized PnL
                     </span>
                     <span
                       className="text-xs font-mono font-bold"
@@ -1146,7 +1146,7 @@ export const PersonalSwarmCockpit: React.FC<PersonalSwarmCockpitProps> = ({
                     <div className="grid grid-cols-2 gap-2">
                       <div className="p-2.5 rounded-lg border bg-secondary/30 border-border/50 flex flex-col gap-0.5">
                         <span className="text-[10px] font-mono text-muted-foreground uppercase flex items-center gap-1">
-                          <SignalIcon className="w-3 h-3" /> 24h PnL
+                          <SignalIcon className="w-3 h-3" /> Realized PnL
                         </span>
                         <span
                           className="text-xs font-mono font-bold"
