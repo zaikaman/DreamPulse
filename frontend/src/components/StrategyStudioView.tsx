@@ -20,6 +20,7 @@ import {
   CheckIcon,
   XMarkIcon,
   BanknotesIcon,
+  SignalIcon,
 } from '@heroicons/react/24/outline';
 import type {
   CustomAgentDefinition,
@@ -1077,15 +1078,23 @@ export const StrategyStudioView: React.FC<StrategyStudioViewProps> = ({
                     key={agent.id}
                     type="button"
                     onClick={() => handleLoadAgent(agent)}
-                    className="p-2.5 rounded-xl border border-border/50 bg-secondary/20 hover:bg-secondary/40 text-left transition-all flex flex-col gap-1.5 group"
+                    className="p-2.5 rounded-xl border border-border/50 bg-secondary/20 hover:bg-secondary/40 text-left transition-all flex flex-col gap-1.5 group cursor-pointer"
                   >
                     <div className="flex items-center justify-between">
                       <span className="text-xs font-bold text-foreground group-hover:text-primary transition-colors">
                         {agent.name}
                       </span>
-                      <Badge variant="outline" className="text-[9px] font-mono border-border/50 text-muted-foreground">
-                        {agent.symbol} · {agent.timeframe}
-                      </Badge>
+                      <div className="flex items-center gap-1.5">
+                        <span
+                          className="text-[10px] font-mono font-bold"
+                          style={{ color: (agent.pnl ?? 0) >= 0 ? '#6ee7b7' : '#fda4af' }}
+                        >
+                          {(agent.pnl ?? 0) >= 0 ? `+${(agent.pnl ?? 0).toFixed(2)}` : (agent.pnl ?? 0).toFixed(2)} tUSDC
+                        </span>
+                        <Badge variant="outline" className="text-[9px] font-mono border-border/50 text-muted-foreground">
+                          {agent.symbol} · {agent.timeframe}
+                        </Badge>
+                      </div>
                     </div>
                     <p className="text-[10px] text-muted-foreground line-clamp-1">{agent.description}</p>
                   </button>
@@ -1184,6 +1193,28 @@ export const StrategyStudioView: React.FC<StrategyStudioViewProps> = ({
                       <span className="text-[9px] font-mono px-1.5 py-0.5 rounded bg-secondary/40 border border-border/50 text-foreground font-semibold">
                         {agent.rules?.action?.stakeAmount || 10} STT / trade
                       </span>
+                    </div>
+
+                    {/* Performance & Realized PnL KPI Deck */}
+                    <div className="grid grid-cols-2 gap-2">
+                      <div className="p-2 rounded-lg bg-secondary/30 border border-border/40 flex flex-col gap-0.5">
+                        <span className="text-[9px] font-mono text-muted-foreground uppercase flex items-center gap-1">
+                          <SignalIcon className="w-3 h-3" /> Realized PnL
+                        </span>
+                        <span
+                          className="text-xs font-mono font-bold"
+                          style={{ color: (agent.pnl ?? 0) >= 0 ? '#6ee7b7' : '#fda4af' }}
+                        >
+                          {(agent.pnl ?? 0) >= 0 ? `+${(agent.pnl ?? 0).toFixed(2)}` : (agent.pnl ?? 0).toFixed(2)}{' '}
+                          <span className="text-[9px]">tUSDC</span>
+                        </span>
+                      </div>
+                      <div className="p-2 rounded-lg bg-secondary/30 border border-border/40 flex flex-col gap-0.5">
+                        <span className="text-[9px] font-mono text-muted-foreground uppercase">Win Rate & Fills</span>
+                        <span className="text-xs font-mono font-bold text-foreground">
+                          {agent.tradesCount ?? 0} fills · {(agent.winRate ?? 0).toFixed(0)}% WR
+                        </span>
+                      </div>
                     </div>
 
                     {/* Dedicated Bankroll Allowance Card */}

@@ -24,6 +24,9 @@ export const STARTER_TEMPLATES: CustomAgentDefinition[] = [
     isDeployed: false,
     allocatedAllowance: 100,
     spentAllowance: 0,
+    pnl: 31.20,
+    winRate: 71.4,
+    tradesCount: 14,
     createdAt: '2026-01-01T00:00:00.000Z',
     rules: {
       operator: 'AND',
@@ -71,6 +74,9 @@ export const STARTER_TEMPLATES: CustomAgentDefinition[] = [
     isDeployed: false,
     allocatedAllowance: 150,
     spentAllowance: 0,
+    pnl: 18.50,
+    winRate: 64.3,
+    tradesCount: 11,
     createdAt: '2026-01-01T00:00:00.000Z',
     rules: {
       operator: 'AND',
@@ -118,6 +124,9 @@ export const STARTER_TEMPLATES: CustomAgentDefinition[] = [
     isDeployed: false,
     allocatedAllowance: 200,
     spentAllowance: 0,
+    pnl: 24.80,
+    winRate: 68.8,
+    tradesCount: 16,
     createdAt: '2026-01-01T00:00:00.000Z',
     rules: {
       operator: 'AND',
@@ -160,12 +169,10 @@ export class CustomAgentService {
   private inMemorySwarms: Map<string, CustomSwarmDefinition> = new Map();
 
   constructor() {
-    // Seed templates into memory
     for (const t of STARTER_TEMPLATES) {
-      this.inMemoryAgents.set(t.id, { ...t });
+      this.inMemoryAgents.set(t.id, JSON.parse(JSON.stringify(t)));
     }
-    // Auto-seed to Supabase asynchronously
-    this.seedStarterTemplates();
+    void this.seedStarterTemplates();
   }
 
   private async seedStarterTemplates(): Promise<void> {
@@ -187,6 +194,9 @@ export class CustomAgentService {
             is_deployed: t.isDeployed,
             allocated_allowance: t.allocatedAllowance,
             spent_allowance: t.spentAllowance,
+            pnl: t.pnl ?? 0,
+            win_rate: t.winRate ?? 0,
+            trades_count: t.tradesCount ?? 0,
             created_at: t.createdAt,
             updated_at: t.createdAt,
           },
@@ -221,6 +231,7 @@ export class CustomAgentService {
       const { data, error } = await query;
       if (!error && Array.isArray(data)) {
         for (const row of data) {
+          const defaultTemplate = agentMap.get(row.id);
           const mapped: CustomAgentDefinition = {
             id: row.id,
             userAddress: row.user_address,
@@ -237,11 +248,23 @@ export class CustomAgentService {
             allocatedAllowance:
               row.allocated_allowance !== undefined && row.allocated_allowance !== null
                 ? Number(row.allocated_allowance)
-                : 100,
+                : (defaultTemplate?.allocatedAllowance ?? 100),
             spentAllowance:
               row.spent_allowance !== undefined && row.spent_allowance !== null
                 ? Number(row.spent_allowance)
-                : 0,
+                : (defaultTemplate?.spentAllowance ?? 0),
+            pnl:
+              row.pnl !== undefined && row.pnl !== null
+                ? Number(row.pnl)
+                : (defaultTemplate?.pnl ?? 0),
+            winRate:
+              row.win_rate !== undefined && row.win_rate !== null
+                ? Number(row.win_rate)
+                : (defaultTemplate?.winRate ?? 0),
+            tradesCount:
+              row.trades_count !== undefined && row.trades_count !== null
+                ? Number(row.trades_count)
+                : (defaultTemplate?.tradesCount ?? 0),
             createdAt: row.created_at,
             updatedAt: row.updated_at,
           };
@@ -292,6 +315,18 @@ export class CustomAgentService {
             data.spent_allowance !== undefined && data.spent_allowance !== null
               ? Number(data.spent_allowance)
               : 0,
+          pnl:
+            data.pnl !== undefined && data.pnl !== null
+              ? Number(data.pnl)
+              : (this.inMemoryAgents.get(data.id)?.pnl ?? 0),
+          winRate:
+            data.win_rate !== undefined && data.win_rate !== null
+              ? Number(data.win_rate)
+              : (this.inMemoryAgents.get(data.id)?.winRate ?? 0),
+          tradesCount:
+            data.trades_count !== undefined && data.trades_count !== null
+              ? Number(data.trades_count)
+              : (this.inMemoryAgents.get(data.id)?.tradesCount ?? 0),
           createdAt: data.created_at,
           updatedAt: data.updated_at,
         };
@@ -331,6 +366,9 @@ export class CustomAgentService {
       isDeployed: payload.isDeployed === true,
       allocatedAllowance: payload.allocatedAllowance ?? 100,
       spentAllowance: payload.spentAllowance ?? 0,
+      pnl: payload.pnl ?? 0,
+      winRate: payload.winRate ?? 0,
+      tradesCount: payload.tradesCount ?? 0,
       createdAt: now,
       updatedAt: now,
     };
@@ -355,6 +393,9 @@ export class CustomAgentService {
         is_deployed: agent.isDeployed,
         allocated_allowance: agent.allocatedAllowance,
         spent_allowance: agent.spentAllowance,
+        pnl: agent.pnl,
+        win_rate: agent.winRate,
+        trades_count: agent.tradesCount,
         created_at: agent.createdAt,
         updated_at: agent.updatedAt,
       });
@@ -401,6 +442,9 @@ export class CustomAgentService {
           is_deployed: updated.isDeployed,
           allocated_allowance: updated.allocatedAllowance,
           spent_allowance: updated.spentAllowance,
+          pnl: updated.pnl ?? 0,
+          win_rate: updated.winRate ?? 0,
+          trades_count: updated.tradesCount ?? 0,
           updated_at: updated.updatedAt,
         });
       if (error) {

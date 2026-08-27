@@ -252,6 +252,9 @@ CREATE TABLE IF NOT EXISTS public.custom_agents (
     is_deployed BOOLEAN NOT NULL DEFAULT FALSE,
     allocated_allowance NUMERIC(16, 2) NOT NULL DEFAULT 100.00,
     spent_allowance NUMERIC(16, 2) NOT NULL DEFAULT 0.00,
+    pnl NUMERIC(16, 2) NOT NULL DEFAULT 0.00,
+    win_rate NUMERIC(5, 2) NOT NULL DEFAULT 0.00,
+    trades_count INTEGER NOT NULL DEFAULT 0,
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     CONSTRAINT valid_custom_agent_address CHECK (user_address ~ '^0x[a-fA-F0-9]{40}$')

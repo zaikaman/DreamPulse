@@ -22,6 +22,7 @@ import {
   Squares2X2Icon,
   FireIcon,
   CommandLineIcon,
+  SparklesIcon,
 } from '@heroicons/react/24/outline';
 import {
   useAnalytics,
@@ -32,6 +33,7 @@ import {
 } from '../../hooks/useAnalytics.js';
 import type { WalletState } from '../../hooks/useSessionKey.js';
 import { useUserRole } from '../../hooks/useUserRole.js';
+import { useCustomAgents } from '../../hooks/useCustomAgents.js';
 import { Spinner } from '../ui/Spinner.js';
 import { Pagination } from '../ui/Pagination.js';
 import { Badge } from '../ui/badge.js';
@@ -198,6 +200,7 @@ interface AnalyticsViewProps {
 export const AnalyticsView: React.FC<AnalyticsViewProps> = ({ wallet, onConnectWallet }) => {
   const { isGuest, isOperator } = useUserRole(wallet);
   const { data, isLoading, error, range, setRange, source, setSource, refresh } = useAnalytics(wallet, '30d');
+  const { agents: customAgents } = useCustomAgents(wallet?.address || undefined);
   const [showSwarm, setShowSwarm] = useState(true);
   const [ledgerPage, setLedgerPage] = useState(1);
   const [ledgerPageSize, setLedgerPageSize] = useState(10);
@@ -547,32 +550,62 @@ export const AnalyticsView: React.FC<AnalyticsViewProps> = ({ wallet, onConnectW
                   <span className="ml-auto text-[10px] font-mono text-muted-foreground">PnL per agent ({range})</span>
                 </div>
                 <div className="p-3 flex flex-col gap-3">
-                  {(isGuest ? data?.swarmAgentBreakdown : data?.agentBreakdown)?.map((a) => {
-                    const maxAbs = Math.max(...(isGuest ? data?.swarmAgentBreakdown ?? [] : data?.agentBreakdown ?? []).map((x) => Math.abs(x.pnl)), 1);
-                    const isPos = a.pnl >= 0;
-                    const barPct = Math.min(100, (Math.abs(a.pnl) / maxAbs) * 100);
-                    const isManual = a.agentType === 'Manual';
-                    const color = isManual ? '#38bdf8' : a.agentType === 'Volt' ? '#fbbf24' : a.agentType === 'Oracle' ? '#2dd4bf' : a.agentType === 'Titan' ? '#a78bfa' : '#6ee7b7';
-                    const Icon = isManual ? CommandLineIcon : a.agentType === 'Volt' ? BoltIcon : a.agentType === 'Oracle' ? CpuChipIcon : a.agentType === 'Titan' ? ShieldCheckIcon : ChartBarIcon;
-                    const displayName = isManual ? 'MANUAL (TERMINAL)' : a.agentType.toUpperCase();
-                    return (
-                      <div key={a.agentType} className="flex flex-col gap-1.5">
-                        <div className="flex items-center justify-between">
-                          <div className="inline-flex items-center gap-1.5 text-[11px] font-bold" style={{ color }}>
-                            <Icon className="w-3.5 h-3.5" />
-                            <span>{displayName}</span>
-                            <span className="text-[10px] font-medium text-muted-foreground font-mono">{a.trades} fills • {a.winRate.toFixed(0)}% WR</span>
+                  {(() => {
+                    const baseBreakdown = (isGuest ? data?.swarmAgentBreakdown : data?.agentBreakdown) || [];
+                    // Merge active custom agents that have trades or PnL
+                    const customBreakdown = customAgents
+                      .filter((ca) => (ca.tradesCount && ca.tradesCount > 0) || (ca.pnl && ca.pnl !== 0))
+                      .map((ca) => ({
+                        agentType: `Custom: ${ca.name}`,
+                        pnl: ca.pnl ?? 0,
+                        trades: ca.tradesCount ?? 0,
+                        wins: Math.round(((ca.tradesCount ?? 0) * (ca.winRate ?? 50)) / 100),
+                        losses: (ca.tradesCount ?? 0) - Math.round(((ca.tradesCount ?? 0) * (ca.winRate ?? 50)) / 100),
+                        volume: (ca.spentAllowance && ca.spentAllowance > 0) ? ca.spentAllowance : (ca.tradesCount ?? 0) * 10,
+                        winRate: ca.winRate ?? 50,
+                      }));
+
+                    const combined = [...baseBreakdown, ...customBreakdown.filter((cb) => !baseBreakdown.some((b) => b.agentType === cb.agentType))];
+                    const maxAbs = Math.max(...combined.map((x) => Math.abs(x.pnl)), 1);
+
+                    return combined.map((a) => {
+                      const isPos = a.pnl >= 0;
+                      const barPct = Math.min(100, (Math.abs(a.pnl) / maxAbs) * 100);
+                      const isManual = a.agentType === 'Manual';
+                      const isCustom = a.agentType.startsWith('Custom:');
+                      const customObj = isCustom ? customAgents.find((ca) => a.agentType.includes(ca.name)) : null;
+                      const color = isCustom
+                        ? (customObj?.color || '#2dd4bf')
+                        : isManual
+                        ? '#38bdf8'
+                        : a.agentType === 'Volt'
+                        ? '#fbbf24'
+                        : a.agentType === 'Oracle'
+                        ? '#2dd4bf'
+                        : a.agentType === 'Titan'
+                        ? '#a78bfa'
+                        : '#6ee7b7';
+                      const Icon = isCustom ? SparklesIcon : isManual ? CommandLineIcon : a.agentType === 'Volt' ? BoltIcon : a.agentType === 'Oracle' ? CpuChipIcon : a.agentType === 'Titan' ? ShieldCheckIcon : ChartBarIcon;
+                      const displayName = isManual ? 'MANUAL (TERMINAL)' : a.agentType.toUpperCase();
+                      return (
+                        <div key={a.agentType} className="flex flex-col gap-1.5">
+                          <div className="flex items-center justify-between">
+                            <div className="inline-flex items-center gap-1.5 text-[11px] font-bold" style={{ color }}>
+                              <Icon className="w-3.5 h-3.5" />
+                              <span>{displayName}</span>
+                              <span className="text-[10px] font-medium text-muted-foreground font-mono">{a.trades} fills • {a.winRate.toFixed(0)}% WR</span>
+                            </div>
+                            <span className="text-xs font-mono font-bold" style={{ color: isPos ? 'var(--trade-yes)' : 'var(--trade-no)' }}>{isPos ? '+' : ''}{a.pnl.toFixed(2)} tUSDC</span>
                           </div>
-                          <span className="text-xs font-mono font-bold" style={{ color: isPos ? 'var(--trade-yes)' : 'var(--trade-no)' }}>{isPos ? '+' : ''}{a.pnl.toFixed(2)} tUSDC</span>
+                          <div className="h-1.5 bg-secondary/30 rounded-full overflow-hidden relative">
+                            <div className="absolute top-0 bottom-0 w-px bg-border/50 left-1/2" />
+                            <div style={{ position: 'absolute', left: isPos ? '50%' : `calc(50% - ${barPct / 2}%)`, width: `${barPct / 2}%`, height: '100%', background: isPos ? 'var(--trade-yes)' : 'var(--trade-no)', borderRadius: 999 }} />
+                          </div>
+                          <div className="flex justify-between text-[10px] font-mono text-muted-foreground"><span>{a.wins}W / {a.losses}L</span><span>Vol ${a.volume.toFixed(1)}</span></div>
                         </div>
-                        <div className="h-1.5 bg-secondary/30 rounded-full overflow-hidden relative">
-                          <div className="absolute top-0 bottom-0 w-px bg-border/50 left-1/2" />
-                          <div style={{ position: 'absolute', left: isPos ? '50%' : `calc(50% - ${barPct / 2}%)`, width: `${barPct / 2}%`, height: '100%', background: isPos ? 'var(--trade-yes)' : 'var(--trade-no)', borderRadius: 999 }} />
-                        </div>
-                        <div className="flex justify-between text-[10px] font-mono text-muted-foreground"><span>{a.wins}W / {a.losses}L</span><span>Vol ${a.volume.toFixed(1)}</span></div>
-                      </div>
-                    );
-                  })}
+                      );
+                    });
+                  })()}
                 </div>
               </div>
             </div>

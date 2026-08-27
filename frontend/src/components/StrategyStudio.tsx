@@ -671,6 +671,16 @@ export const StrategyStudio: React.FC<StrategyStudioProps> = ({
                     <span className="text-[9px] font-mono font-semibold px-1.5 py-0.5 rounded bg-secondary/50 border border-border/50 text-foreground">
                       {agent.rules?.action?.direction || 'CALL'} · {agent.rules?.action?.durationSec || 60}s
                     </span>
+                    <span
+                      className="text-[9px] font-mono font-bold px-1.5 py-0.5 rounded border"
+                      style={{
+                        background: (agent.pnl ?? 0) >= 0 ? 'rgba(52,211,153,0.1)' : 'rgba(244,63,94,0.1)',
+                        borderColor: (agent.pnl ?? 0) >= 0 ? 'rgba(52,211,153,0.25)' : 'rgba(244,63,94,0.25)',
+                        color: (agent.pnl ?? 0) >= 0 ? '#6ee7b7' : '#fda4af',
+                      }}
+                    >
+                      {(agent.pnl ?? 0) >= 0 ? `+${(agent.pnl ?? 0).toFixed(2)}` : (agent.pnl ?? 0).toFixed(2)} tUSDC
+                    </span>
                   </div>
                 </button>
               );

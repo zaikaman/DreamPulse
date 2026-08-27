@@ -280,6 +280,9 @@ export interface CustomAgentDefinition {
   isDeployed?: boolean;
   allocatedAllowance?: number;
   spentAllowance?: number;
+  pnl?: number;
+  winRate?: number;
+  tradesCount?: number;
   createdAt: string;
   updatedAt?: string;
 }

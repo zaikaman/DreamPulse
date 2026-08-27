@@ -212,8 +212,8 @@ export const PersonalSwarmCockpit: React.FC<PersonalSwarmCockpitProps> = ({
   const voltPnl = status?.volt.pnl ?? 0;
   const oraclePnl = status?.oracle.pnl ?? 0;
   const titanPnl = status?.titan.pnl ?? 0;
-  const totalPersonalPnl = Number((voltPnl + oraclePnl + titanPnl).toFixed(2));
-  const totalPersonalFills = (status?.volt.tradesToday ?? 0) + (status?.oracle.tradesToday ?? 0) + (status?.titan.tradesToday ?? 0);
+  const totalCorePnl = voltPnl + oraclePnl + titanPnl;
+  const totalCoreFills = (status?.volt.tradesToday ?? 0) + (status?.oracle.tradesToday ?? 0) + (status?.titan.tradesToday ?? 0);
 
   // Fleet Metric Aggregations
   const activeCoreCount = (config?.voltEnabled ? 1 : 0) + (config?.oracleEnabled ? 1 : 0) + (config?.titanEnabled ? 1 : 0);
@@ -225,6 +225,17 @@ export const PersonalSwarmCockpit: React.FC<PersonalSwarmCockpitProps> = ({
     () => deployedCustomAgents.reduce((sum, a) => sum + (a.allocatedAllowance || 100), 0),
     [deployedCustomAgents]
   );
+  const totalCustomPnl = useMemo(
+    () => deployedCustomAgents.reduce((sum, a) => sum + (a.pnl ?? 0), 0),
+    [deployedCustomAgents]
+  );
+  const totalCustomFills = useMemo(
+    () => deployedCustomAgents.reduce((sum, a) => sum + (a.tradesCount ?? 0), 0),
+    [deployedCustomAgents]
+  );
+
+  const totalFleetPnl = Number((totalCorePnl + totalCustomPnl).toFixed(2));
+  const totalFleetFills = totalCoreFills + totalCustomFills;
   const totalCoreAllocated = isCopyTradeEnabled ? (activeCoreCount > 0 ? activeCoreCount * 100 : 0) : 0;
   const totalFleetAllocated = totalCoreAllocated + totalCustomAllocated;
 
@@ -435,13 +446,13 @@ export const PersonalSwarmCockpit: React.FC<PersonalSwarmCockpitProps> = ({
             </div>
             <div
               className="text-base font-mono font-bold truncate"
-              style={{ color: totalPersonalPnl >= 0 ? '#6ee7b7' : '#fda4af' }}
+              style={{ color: totalFleetPnl >= 0 ? '#6ee7b7' : '#fda4af' }}
             >
-              {totalPersonalPnl >= 0 ? `+${totalPersonalPnl.toFixed(2)}` : totalPersonalPnl.toFixed(2)}{' '}
+              {totalFleetPnl >= 0 ? `+${totalFleetPnl.toFixed(2)}` : totalFleetPnl.toFixed(2)}{' '}
               <span className="text-xs font-normal text-muted-foreground">tUSDC</span>
             </div>
             <div className="text-[10px] text-muted-foreground font-mono truncate">
-              {totalPersonalFills} on-chain contract executions
+              {totalFleetFills} on-chain contract executions
             </div>
           </div>
 
@@ -1129,6 +1140,28 @@ export const PersonalSwarmCockpit: React.FC<PersonalSwarmCockpitProps> = ({
                         )}
                         <span>{agent.isDeployed ? 'PAUSE' : 'DEPLOY'}</span>
                       </button>
+                    </div>
+
+                    {/* Custom Agent Realized PnL & Performance KPI Grid */}
+                    <div className="grid grid-cols-2 gap-2">
+                      <div className="p-2.5 rounded-lg border bg-secondary/30 border-border/50 flex flex-col gap-0.5">
+                        <span className="text-[10px] font-mono text-muted-foreground uppercase flex items-center gap-1">
+                          <SignalIcon className="w-3 h-3" /> 24h PnL
+                        </span>
+                        <span
+                          className="text-xs font-mono font-bold"
+                          style={{ color: (agent.pnl ?? 0) >= 0 ? '#6ee7b7' : '#fda4af' }}
+                        >
+                          {(agent.pnl ?? 0) >= 0 ? `+${(agent.pnl ?? 0).toFixed(2)}` : (agent.pnl ?? 0).toFixed(2)}{' '}
+                          <span className="text-[10px]">tUSDC</span>
+                        </span>
+                      </div>
+                      <div className="p-2.5 rounded-lg border bg-secondary/30 border-border/50 flex flex-col gap-0.5">
+                        <span className="text-[10px] font-mono text-muted-foreground uppercase">Win Rate & Fills</span>
+                        <span className="text-xs font-mono font-bold text-foreground">
+                          {agent.tradesCount ?? 0} fills · {(agent.winRate ?? 0).toFixed(0)}% WR
+                        </span>
+                      </div>
                     </div>
 
                     <p className="text-[11px] text-muted-foreground leading-relaxed line-clamp-2 m-0">
