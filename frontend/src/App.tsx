@@ -315,6 +315,7 @@ export const App: React.FC = () => {
             isDebugEnabled={isDebugEnabled}
             onToggleDebug={toggleDebugThoughts}
             isConnected={isConnected}
+            userAddress={wallet.address || undefined}
           />
         ) : activeNav === 'Swarm Cockpit' ? (
           <React.Suspense fallback={<div className="glass-card" style={{ minHeight: '340px', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: '12px' }}><Spinner size="lg" /><span style={{ fontSize: '13px', color: 'var(--muted-foreground)' }}>Loading Swarm Cockpit...</span></div>}>

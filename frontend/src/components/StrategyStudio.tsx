@@ -19,12 +19,15 @@ import {
   ChevronUpIcon,
   WalletIcon,
   KeyIcon,
+  RocketLaunchIcon,
+  BanknotesIcon,
 } from '@heroicons/react/24/outline';
 import type { AgentType, SessionGrant, CustomAgentDefinition, CustomAgentRules } from '../types/index.js';
 import type { WalletState } from '../hooks/useSessionKey.js';
 import { useBacktest } from '../hooks/useBacktest.js';
 import { useCustomAgents } from '../hooks/useCustomAgents.js';
 import { useUserRole } from '../hooks/useUserRole.js';
+import { soundEngine } from '../services/audio.js';
 import { StrategyStudioSkeleton } from './ui/Skeleton.js';
 import { Spinner } from './ui/Spinner.js';
 import { Badge } from './ui/badge.js';
@@ -94,10 +97,14 @@ export const StrategyStudio: React.FC<StrategyStudioProps> = ({
     }
     return 'PROTOCOL';
   });
-  const { agents: customAgents } = useCustomAgents(wallet.address || undefined);
+  const { agents: customAgents, createAgent, deployAgent } = useCustomAgents(wallet.address || undefined);
   const [selectedCustomAgentId, setSelectedCustomAgentId] = useState<string>(() => {
     return initialConfig?.customAgentId || '';
   });
+
+  const [deploymentAllowance, setDeploymentAllowance] = useState<number>(100);
+  const [isDeployingToFleet, setIsDeployingToFleet] = useState<boolean>(false);
+  const [fleetDeploySuccessMsg, setFleetDeploySuccessMsg] = useState<string | null>(null);
 
   const activeCustomAgent = useMemo(() => {
     if (selectedCustomAgentId) {
@@ -362,6 +369,67 @@ export const StrategyStudio: React.FC<StrategyStudioProps> = ({
         setDeployedSuccess(true);
         setTimeout(() => setDeployedSuccess(false), 4000);
       }
+    }
+  };
+
+  const handleDeployToFleet = async () => {
+    if (isGuest) {
+      if (onConnectWallet) await onConnectWallet();
+      return;
+    }
+    if (!wallet.address) return;
+    setIsDeployingToFleet(true);
+    try {
+      if (agentCategory === 'CUSTOM' && activeCustomAgent) {
+        if (
+          activeCustomAgent.id &&
+          activeCustomAgent.id !== 'draft-preview' &&
+          !activeCustomAgent.id.startsWith('draft-') &&
+          customAgents.some((a) => a.id === activeCustomAgent.id)
+        ) {
+          await deployAgent(activeCustomAgent.id, deploymentAllowance);
+        } else {
+          await createAgent({
+            name: activeCustomAgent.name || `${symbol.split('/')[0]} Custom Strategy`,
+            description: activeCustomAgent.description || 'Deployed from Backtester Lab',
+            symbol: activeCustomAgent.symbol || symbol,
+            timeframe: activeCustomAgent.timeframe || timeframe,
+            strategyType: activeCustomAgent.strategyType || 'CUSTOM',
+            rules: activeCustomAgent.rules,
+            color: activeCustomAgent.color || '#2dd4bf',
+            icon: activeCustomAgent.icon || 'BoltIcon',
+            isDeployed: true,
+            allocatedAllowance: deploymentAllowance,
+          });
+        }
+        soundEngine.playWinChime();
+        setFleetDeploySuccessMsg(`Successfully deployed to Fleet Command ($${deploymentAllowance} tUSDC)!`);
+        setTimeout(() => {
+          window.location.hash = '#cockpit';
+        }, 900);
+      } else {
+        const personalConfig: Record<string, any> = {};
+        if (selectedAgent === 'Volt') personalConfig.driftThreshold = driftThreshold;
+        if (selectedAgent === 'Volt' || selectedAgent === 'Oracle') personalConfig.minEdge = minEdge;
+        if (selectedAgent === 'Oracle') personalConfig.confidenceThreshold = confidenceThreshold;
+        if (selectedAgent === 'Titan') {
+          personalConfig.targetSpread = targetSpread;
+          personalConfig.inventoryAversion = inventoryAversion;
+        }
+        personalConfig.lotSize = lotSize;
+        const { apiClient } = await import('../services/api.js');
+        await apiClient.updatePersonalAgentConfig(wallet.address, selectedAgent, personalConfig);
+        await apiClient.setPersonalSwarmMode(wallet.address, 'PERSONAL').catch(() => {});
+        soundEngine.playWinChime();
+        setFleetDeploySuccessMsg(`Successfully updated and deployed ${selectedAgent} in Fleet Command!`);
+        setTimeout(() => {
+          window.location.hash = '#cockpit';
+        }, 900);
+      }
+    } catch (e: any) {
+      console.warn('[StrategyStudio] deploy to fleet failed', e);
+    } finally {
+      setIsDeployingToFleet(false);
     }
   };
 
@@ -787,6 +855,101 @@ export const StrategyStudio: React.FC<StrategyStudioProps> = ({
           </div>
         </div>
       ) : null}
+
+      {/* ---------- High-Impact Fleet Deployment Action Card ---------- */}
+      {currentResult && (
+        <div className="terminal-panel p-4 border border-primary/40 bg-gradient-to-r from-primary/10 via-secondary/20 to-card/60 rounded-xl flex flex-col md:flex-row items-start md:items-center justify-between gap-4 shadow-lg">
+          <div className="flex items-start gap-3.5 min-w-0">
+            <div className="w-10 h-10 rounded-xl bg-primary/20 border border-primary/40 text-primary grid place-items-center flex-shrink-0 mt-0.5">
+              <RocketLaunchIcon className="w-5 h-5" />
+            </div>
+            <div>
+              <div className="flex items-center gap-2 flex-wrap">
+                <h3 className="text-sm font-bold text-foreground">
+                  Satisfied with this strategy's historical metrics?
+                </h3>
+                <Badge variant="outline" className="text-[9px] font-mono border-primary/40 text-primary bg-primary/10">
+                  Fleet Command Bridge
+                </Badge>
+              </div>
+              <p className="text-xs text-muted-foreground mt-0.5 max-w-xl leading-relaxed">
+                Instantly deploy this configuration to your active running fleet with a dedicated tUSDC bankroll allowance. Autonomous evaluation begins immediately on Somnia CLOB.
+              </p>
+            </div>
+          </div>
+
+          <div className="flex flex-col sm:flex-row items-start sm:items-center gap-3 w-full md:w-auto">
+            {/* Allowance Preset Buttons */}
+            <div className="flex items-center gap-1.5 p-1 rounded-lg bg-background/80 border border-border/60">
+              <span className="text-[10px] font-mono text-muted-foreground pl-1.5 pr-1 flex items-center gap-1">
+                <BanknotesIcon className="w-3.5 h-3.5 text-emerald-400" />
+                <span>Allowance:</span>
+              </span>
+              {[50, 100, 250, 500].map((amt) => (
+                <button
+                  key={amt}
+                  type="button"
+                  onClick={() => setDeploymentAllowance(amt)}
+                  className={cn(
+                    'px-2 py-0.5 rounded text-xs font-mono font-bold transition-all cursor-pointer',
+                    deploymentAllowance === amt
+                      ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/40'
+                      : 'text-muted-foreground hover:text-foreground'
+                  )}
+                >
+                  ${amt}
+                </button>
+              ))}
+              <div className="flex items-center gap-1 border-l border-border/40 pl-1.5">
+                <input
+                  type="number"
+                  min={10}
+                  max={10000}
+                  value={deploymentAllowance}
+                  onChange={(e) => setDeploymentAllowance(Math.max(1, Number(e.target.value)))}
+                  className="w-16 px-1 py-0.5 rounded bg-secondary/40 border border-border/60 text-xs font-mono font-bold text-foreground text-right"
+                />
+                <span className="text-[10px] font-mono text-muted-foreground pr-1">tUSDC</span>
+              </div>
+            </div>
+
+            {/* Deployment Actions */}
+            <div className="flex items-center gap-2 w-full sm:w-auto">
+              <button
+                type="button"
+                onClick={handleDeployToFleet}
+                disabled={isDeployingToFleet || Boolean(fleetDeploySuccessMsg)}
+                className="flex-1 sm:flex-none inline-flex items-center justify-center gap-2 px-4 py-2 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-zinc-950 text-xs font-bold transition-all cursor-pointer disabled:opacity-60 shadow-md whitespace-nowrap"
+              >
+                {isDeployingToFleet ? (
+                  <Spinner size="xs" />
+                ) : fleetDeploySuccessMsg ? (
+                  <CheckCircleIcon className="w-4 h-4 text-zinc-950" />
+                ) : (
+                  <RocketLaunchIcon className="w-4 h-4" />
+                )}
+                <span>
+                  {fleetDeploySuccessMsg
+                    ? 'Deployed! Redirecting...'
+                    : `Deploy to Active Fleet ($${deploymentAllowance} tUSDC)`}
+                </span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => {
+                  window.location.hash = '#studio';
+                }}
+                className="inline-flex items-center justify-center gap-1.5 px-3 py-2 rounded-xl border border-border/60 bg-secondary/40 hover:bg-secondary/70 text-xs font-bold text-muted-foreground hover:text-foreground transition-all cursor-pointer whitespace-nowrap"
+                title="Open Strategy Studio to customize indicator rules and logic capsules"
+              >
+                <AdjustmentsHorizontalIcon className="w-3.5 h-3.5" />
+                <span className="hidden sm:inline">Edit in Studio</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* ---------- 3. Chart Deck ---------- */}
       {currentResult && (

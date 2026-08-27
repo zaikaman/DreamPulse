@@ -71,6 +71,28 @@ export class UserSwarmService {
 
   constructor() {
     this.loadFromDb().catch(() => {});
+    this.initRealtime();
+  }
+
+  private initRealtime(): void {
+    if (!isPersistenceEnabled()) return;
+    try {
+      supabase
+        .channel('public:user_swarm_configs')
+        .on(
+          'postgres_changes',
+          { event: '*', schema: 'public', table: 'user_swarm_configs' },
+          (payload: { eventType: string; new: any }) => {
+            if (payload.new && payload.new.user_address) {
+              const rec = toRecord(payload.new);
+              this.cache.set(rec.userAddress.toLowerCase(), rec);
+            }
+          }
+        )
+        .subscribe();
+    } catch (err: any) {
+      console.warn('[UserSwarmService] Realtime subscription warning:', err?.message || err);
+    }
   }
 
   private async loadFromDb(): Promise<void> {
@@ -88,6 +110,40 @@ export class UserSwarmService {
   private normalizeAddress(addr: string): Address {
     if (!addr || !isAddress(addr)) throw new Error(`Invalid address: ${addr}`);
     return getAddress(addr) as Address;
+  }
+
+  public async getOrFetchConfig(userAddress: string): Promise<PersonalSwarmConfig> {
+    const normalized = this.normalizeAddress(userAddress);
+    const key = normalized.toLowerCase();
+    const existing = this.cache.get(key);
+    if (existing) {
+      return {
+        ...existing,
+        voltConfig: { ...existing.voltConfig },
+        oracleConfig: { ...existing.oracleConfig },
+        titanConfig: { ...existing.titanConfig },
+      };
+    }
+    if (isPersistenceEnabled()) {
+      try {
+        const { data, error } = await supabase
+          .from('user_swarm_configs')
+          .select('*')
+          .ilike('user_address', normalized)
+          .limit(1);
+        if (!error && data && data.length > 0) {
+          const rec = toRecord(data[0]);
+          this.cache.set(key, rec);
+          return {
+            ...rec,
+            voltConfig: { ...rec.voltConfig },
+            oracleConfig: { ...rec.oracleConfig },
+            titanConfig: { ...rec.titanConfig },
+          };
+        }
+      } catch {}
+    }
+    return this.getConfig(userAddress);
   }
 
   public getConfig(userAddress: string): PersonalSwarmConfig {
@@ -242,6 +298,20 @@ export class UserSwarmService {
 
     this.cache.set(key, next);
     await this.persistConfig(next);
+
+    // Sync copy_trade_enabled with active sessions in Supabase
+    if (typeof updates.copyTradeEnabled === 'boolean' && isPersistenceEnabled()) {
+      try {
+        await supabase
+          .from('sessions')
+          .update({ copy_trade_enabled: updates.copyTradeEnabled, updated_at: now })
+          .ilike('user_address', normalized)
+          .eq('is_active', true);
+      } catch (err: any) {
+        console.warn('[UserSwarmService] Sync with sessions table notice:', err?.message || err);
+      }
+    }
+
     return { ...next };
   }
 

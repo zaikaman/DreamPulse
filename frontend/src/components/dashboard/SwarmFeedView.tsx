@@ -3,6 +3,7 @@ import { BoltIcon, CpuChipIcon, ShieldCheckIcon, SparklesIcon } from '@heroicons
 import type { AgentThoughtLog } from '../../types/index.js';
 import { AgentThoughtFeed } from '../AgentThoughtFeed.js';
 import { useAgentSwarm } from '../../hooks/useAgentSwarm.js';
+import { useCustomAgents } from '../../hooks/useCustomAgents.js';
 import { Badge } from '../ui/badge.js';
 
 interface SwarmFeedViewProps {
@@ -11,6 +12,7 @@ interface SwarmFeedViewProps {
   isDebugEnabled?: boolean;
   onToggleDebug?: (enable?: boolean) => void;
   isConnected: boolean;
+  userAddress?: string;
 }
 
 export const SwarmFeedView: React.FC<SwarmFeedViewProps> = ({
@@ -19,8 +21,10 @@ export const SwarmFeedView: React.FC<SwarmFeedViewProps> = ({
   isDebugEnabled = false,
   onToggleDebug,
   isConnected,
+  userAddress,
 }) => {
-  const { summary } = useAgentSwarm();
+  const { summary } = useAgentSwarm(userAddress);
+  const { agents: customAgents } = useCustomAgents(userAddress);
 
   const agents = [
     {
@@ -112,8 +116,11 @@ export const SwarmFeedView: React.FC<SwarmFeedViewProps> = ({
           isDebugEnabled={isDebugEnabled}
           onToggleDebug={onToggleDebug}
           isConnected={isConnected}
+          customAgents={customAgents}
         />
       </div>
     </div>
   );
 };
+
+export default SwarmFeedView;

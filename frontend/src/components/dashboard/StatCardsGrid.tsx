@@ -53,6 +53,7 @@ export const StatCardsGrid: React.FC<StatCardsGridProps> = ({
   isFauceting = false,
   onClaimFaucet,
   onOpenSessionModal,
+  onNavigateToTab,
 }) => {
   const isConnected = !!wallet?.isConnected && !!wallet?.address;
   const isOperator =
@@ -341,24 +342,31 @@ export const StatCardsGrid: React.FC<StatCardsGridProps> = ({
             </div>
 
             {/* Swarm Card 3: Autonomous Swarm PnL */}
-            <div className="stat-card">
+            <div
+              className="stat-card hover:border-border transition-colors cursor-pointer"
+              onClick={() => {
+                if (onNavigateToTab) onNavigateToTab('Swarm Cockpit');
+                else window.location.hash = '#cockpit';
+              }}
+              title="Open Autonomous Fleet Command"
+            >
               <div className="stat-card-header">
-                <span className="stat-card-title truncate">Swarm Real-Time PnL</span>
+                <span className="stat-card-title truncate">Active Fleet PnL</span>
                 <ArrowTrendingUpIcon className="w-3.5 h-3.5 stat-card-icon text-muted-foreground/70" />
               </div>
               <div className={cn(
                 "stat-card-value font-mono truncate",
                 totalSwarmPnl > 0 ? "text-emerald-400" : totalSwarmPnl < 0 ? "text-rose-400" : "text-foreground"
               )}>
-                {totalSwarmPnl > 0 ? `+${totalSwarmPnl.toFixed(2)}` : totalSwarmPnl.toFixed(2)} <span className="text-xs font-normal text-muted-foreground">USDC</span>
+                {totalSwarmPnl > 0 ? `+${totalSwarmPnl.toFixed(2)}` : totalSwarmPnl.toFixed(2)} <span className="text-xs font-normal text-muted-foreground">tUSDC</span>
               </div>
               <div className="stat-card-footer">
                 <span className="inline-flex items-center gap-1 font-mono text-[11px] text-muted-foreground whitespace-nowrap">
                   <ArrowTrendingUpIcon className="w-3 h-3 text-emerald-400 flex-shrink-0" />
-                  <span>Net Realized</span>
+                  <span>Fleet Realized</span>
                 </span>
-                <span className="font-mono text-[11px] text-muted-foreground whitespace-nowrap truncate">
-                  Volt • Oracle • Titan
+                <span className="font-mono text-[11px] text-cyan-400 hover:underline whitespace-nowrap truncate">
+                  Fleet Cockpit →
                 </span>
               </div>
             </div>

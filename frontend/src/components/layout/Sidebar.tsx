@@ -68,11 +68,11 @@ export const Sidebar: React.FC<SidebarProps> = ({
     onSelectView(viewId);
     onCloseMobile?.();
   };
-  // Category 1: Market Intelligence & Price Discovery
+  // Category 1: Trading & Markets
   const marketNavItems: NavItem[] = [
     {
       id: "Overview" as DashboardViewType,
-      label: "Terminal Overview",
+      label: "Overview",
       description: "Macro Swarm & Live CLOB Telemetry",
       icon: Squares2X2Icon,
     },
@@ -84,61 +84,62 @@ export const Sidebar: React.FC<SidebarProps> = ({
     },
     {
       id: "Markets" as DashboardViewType,
-      label: "Markets Explorer",
-      description: "Browse 32+ Active Event Contracts",
+      label: "Markets & Depth",
+      description: "Browse Active Event Contracts",
       icon: Square3Stack3DIcon,
     },
     {
       id: "Trade Terminal" as DashboardViewType,
       label: "Trade Terminal",
-      description: "CLOB Depth Ladder & Trader Cockpit",
+      description: "CLOB Depth Ladder & Pro Execution",
       icon: AdjustmentsHorizontalIcon,
     },
   ];
 
-  // Category 2: Quantitative AI Swarm
-  const swarmNavItems = [
-    {
-      id: "AI Swarm Feed" as DashboardViewType,
-      label: "Live Swarm Feed",
-      description: "Real-time Multi-Agent Reasoning",
-      icon: CpuChipIcon,
-    },
+  // Category 2: Autonomous Agents & AI
+  const swarmNavItems: NavItem[] = [
     {
       id: "Swarm Cockpit" as DashboardViewType,
-      label: "Swarm Cockpit",
-      description: "Risk Guardrails & Swarm Controls",
-      icon: AdjustmentsHorizontalIcon,
+      label: "Fleet Cockpit",
+      description: "Autonomous Fleet Command & Live Bots",
+      badge: "Fleet",
+      icon: BoltIcon,
     },
     {
       id: "Strategy Studio" as DashboardViewType,
       label: "Strategy Studio",
-      description: "No-Code Agent & Swarm Builder",
+      description: "Visual No-Code Builder & Library",
       badge: "No-Code",
       icon: SparklesIcon,
     },
-  ];
-
-  // Category 3: Strategy, Settlement & Performance
-  const executionNavItems = [
     {
       id: "Backtester" as DashboardViewType,
       label: "Backtester",
-      description: "Quant Replay & Strategy Simulation",
+      description: "Quantitative Replay & Simulation Lab",
       badge: "Lab",
       icon: ChartBarIcon,
+    },
+    {
+      id: "AI Swarm Feed" as DashboardViewType,
+      label: "AI Swarm Feed",
+      description: "Real-time Multi-Agent Thought Stream",
+      icon: CpuChipIcon,
+    },
+  ];
+
+  // Category 3: Portfolio & Settlement
+  const executionNavItems: NavItem[] = [
+    {
+      id: "Analytics" as DashboardViewType,
+      label: "Analytics",
+      description: "Sharpe, Sortino & Realized PnL",
+      icon: ChartPieIcon,
     },
     {
       id: "Settlement" as DashboardViewType,
       label: "Settlement Sweeper",
       description: "Batch Outcome Claims & Compounder",
       icon: CheckCircleIcon,
-    },
-    {
-      id: "Analytics" as DashboardViewType,
-      label: "Portfolio Analytics",
-      description: "Sharpe, Sortino & PnL Replay",
-      icon: ChartPieIcon,
     },
   ];
 
@@ -259,9 +260,9 @@ export const Sidebar: React.FC<SidebarProps> = ({
 
         {/* Categorized Navigation */}
         <div className="space-y-2 pt-1">
-          {renderNavGroup("Market Intelligence", marketNavItems)}
-          {renderNavGroup("Quantitative Swarm", swarmNavItems)}
-          {renderNavGroup("Execution & Studio", executionNavItems)}
+          {renderNavGroup("Trading & Markets", marketNavItems)}
+          {renderNavGroup("Autonomous Agents & AI", swarmNavItems)}
+          {renderNavGroup("Portfolio & Settlement", executionNavItems)}
         </div>
       </div>
 

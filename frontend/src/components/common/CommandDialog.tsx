@@ -145,10 +145,10 @@ export const CommandDialog: React.FC<CommandDialogProps> = ({
       },
       {
         id: "Swarm Cockpit",
-        label: "Swarm Cockpit",
-        desc: "Risk Guardrails & Autonomous Swarm Controls",
-        icon: AdjustmentsHorizontalIcon,
-        keywords: "swarm cockpit risk guardrails autonomous execution controls parameters kill switch stop loss",
+        label: "Fleet Cockpit",
+        desc: "Autonomous Fleet Command, Risk Guardrails & Multi-Agent Bankrolls",
+        icon: BoltIcon,
+        keywords: "fleet cockpit swarm risk guardrails autonomous execution controls parameters kill switch allowance bankroll custom agents",
       },
       {
         id: "Strategy Studio",

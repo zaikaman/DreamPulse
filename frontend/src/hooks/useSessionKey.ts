@@ -191,6 +191,7 @@ export function useSessionKey(): UseSessionKeyReturn {
           vaultDepositAmount: s.vaultDepositAmount,
           targetPoolAddress: s.targetPoolAddress,
           onChainAuthorized: s.onChainAuthorized === true,
+          copyTradeEnabled: Boolean(s.copyTradeEnabled),
         };
 
         if (new Date(grant.expiresAt).getTime() > Date.now() && grant.isActive) {
@@ -229,6 +230,7 @@ export function useSessionKey(): UseSessionKeyReturn {
               vaultDepositAmount: row.vault_deposit_amount,
               targetPoolAddress: row.target_pool_address,
               onChainAuthorized: row.on_chain_authorized === true,
+              copyTradeEnabled: row.copy_trade_enabled === true,
             };
           }
         }
@@ -622,6 +624,11 @@ export function useSessionKey(): UseSessionKeyReturn {
                 spentToday: Number(row.spent_today || 0),
                 expiresAt: row.expires_at,
                 isActive: row.is_active,
+                onChainTxHash: row.on_chain_tx_hash,
+                vaultDepositAmount: row.vault_deposit_amount,
+                targetPoolAddress: row.target_pool_address,
+                onChainAuthorized: row.on_chain_authorized === true,
+                copyTradeEnabled: row.copy_trade_enabled === true,
               };
               setActiveSession(updated);
               localStorage.setItem(LOCAL_SESSION_KEY, JSON.stringify(updated));

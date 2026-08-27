@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { apiClient } from '../services/api.js';
+import { supabase } from '../services/supabase.js';
 import type { AgentType, PersonalSwarmConfig, PersonalSwarmStatus } from '../types/index.js';
 
 export interface UsePersonalSwarmReturn {
@@ -51,6 +52,47 @@ export const usePersonalSwarm = (userAddress?: string): UsePersonalSwarmReturn =
   useEffect(() => {
     fetchAll();
   }, [fetchAll]);
+
+  // Realtime subscription for user_swarm_configs table in Supabase
+  useEffect(() => {
+    if (!userAddress) return;
+    const targetAddr = userAddress.toLowerCase();
+    const channel = supabase
+      .channel(`public:user_swarm_configs:${targetAddr}`)
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'user_swarm_configs',
+        },
+        (payload: { eventType: string; new: any }) => {
+          if (payload.new && payload.new.user_address && payload.new.user_address.toLowerCase() === targetAddr) {
+            const row = payload.new;
+            setConfig({
+              userAddress: row.user_address,
+              mode: row.mode || 'COPY',
+              copyTradeEnabled: row.copy_trade_enabled === true,
+              voltEnabled: row.volt_enabled ?? true,
+              oracleEnabled: row.oracle_enabled ?? true,
+              titanEnabled: row.titan_enabled ?? true,
+              sweeperEnabled: row.sweeper_enabled ?? true,
+              voltConfig: row.volt_config || { driftThreshold: 0.002, minEdge: 0.03, lotSize: 5, maxTradeSize: 20 },
+              oracleConfig: row.oracle_config || { minEdge: 0.035, lotSize: 5, maxTradeSize: 20 },
+              titanConfig: row.titan_config || { targetSpread: 0.04, inventoryAversion: 0.015, lotSize: 2 },
+              customizedAt: row.customized_at || undefined,
+              createdAt: row.created_at,
+              updatedAt: row.updated_at,
+            });
+          }
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [userAddress]);
 
   const setMode = useCallback(
     async (mode: 'COPY' | 'PERSONAL'): Promise<boolean> => {

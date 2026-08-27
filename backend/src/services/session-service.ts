@@ -75,6 +75,45 @@ export class SessionService {
       .catch((err) => {
         console.warn('[SessionService] Initial DB load warning (using in-memory cache):', err.message);
       });
+    this.initRealtime();
+  }
+
+  private initRealtime(): void {
+    if (!isSessionPersistenceEnabled()) return;
+    try {
+      supabase
+        .channel('public:sessions_backend')
+        .on(
+          'postgres_changes',
+          { event: '*', schema: 'public', table: 'sessions' },
+          (payload: { eventType: string; new: any }) => {
+            if (payload.new && payload.new.id && payload.new.user_address) {
+              const row = payload.new;
+              const now = Date.now();
+              const expiresTimestamp = new Date(row.expires_at).getTime();
+              const isActive = row.is_active && expiresTimestamp > now;
+              const userKey = row.user_address.toLowerCase();
+
+              const existing = this.sessions.get(row.id);
+              if (existing) {
+                existing.isActive = isActive;
+                existing.spentToday = Number(row.spent_today || 0);
+                existing.onChainAuthorized = row.on_chain_authorized === true;
+                existing.copyTradeEnabled = row.copy_trade_enabled === true || userSwarmService.isCopyTradeEnabled(row.user_address);
+                existing.updatedAt = row.updated_at || new Date().toISOString();
+                if (!isActive && this.userToActiveSessionId.get(userKey) === row.id) {
+                  this.userToActiveSessionId.delete(userKey);
+                } else if (isActive) {
+                  this.userToActiveSessionId.set(userKey, row.id);
+                }
+              }
+            }
+          }
+        )
+        .subscribe();
+    } catch (err: any) {
+      console.warn('[SessionService] Realtime subscription warning:', err?.message || err);
+    }
   }
 
   /**
@@ -126,6 +165,7 @@ export class SessionService {
         vaultDepositAmount: row.vault_deposit_amount ? Number(row.vault_deposit_amount) : undefined,
         targetPoolAddress: row.target_pool_address ? (getAddress(row.target_pool_address) as Address) : undefined,
         onChainAuthorized: row.on_chain_authorized === true,
+        copyTradeEnabled: row.copy_trade_enabled === true || userSwarmService.isCopyTradeEnabled(row.user_address),
         createdAt: row.created_at,
         updatedAt: row.updated_at,
       };

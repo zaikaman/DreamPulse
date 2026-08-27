@@ -1146,14 +1146,21 @@ export const StrategyStudioView: React.FC<StrategyStudioViewProps> = ({
                       </div>
                       <div className="flex items-center gap-1.5 flex-shrink-0">
                         {agent.isDeployed ? (
-                          <span className="px-2 py-0.5 rounded-full text-[9px] font-mono font-bold bg-emerald-500/15 border border-emerald-500/40 text-emerald-400 flex items-center gap-1">
+                          <button
+                            type="button"
+                            onClick={() => {
+                              window.location.hash = '#cockpit';
+                            }}
+                            className="px-2 py-0.5 rounded-full text-[9px] font-mono font-bold bg-emerald-500/15 hover:bg-emerald-500/25 border border-emerald-500/40 text-emerald-400 flex items-center gap-1 cursor-pointer transition-colors"
+                            title="View in Fleet Command Cockpit"
+                          >
                             <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
-                            DEPLOYED
-                          </span>
+                            <span>DEPLOYED IN FLEET</span>
+                          </button>
                         ) : (
                           <span className="px-2 py-0.5 rounded-full text-[9px] font-mono font-semibold bg-secondary/60 border border-border/60 text-muted-foreground flex items-center gap-1">
                             <span className="w-1.5 h-1.5 rounded-full bg-muted-foreground/50" />
-                            PAUSED
+                            <span>DRAFT BLUEPRINT</span>
                           </span>
                         )}
                         <Badge variant="outline" className="text-[9px] font-mono border-border text-foreground">

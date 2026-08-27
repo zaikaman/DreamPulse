@@ -1,14 +1,16 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import {
   ChevronDownIcon,
   EyeIcon,
   EyeSlashIcon,
   SparklesIcon,
+  BoltIcon,
 } from '@heroicons/react/24/outline';
 import type { Market, SessionGrant, AgentThoughtLog } from '../../types/index.js';
 import type { MarketTickData, DepthUpdateData } from '../../hooks/useTelemetry.js';
 import type { WalletState } from '../../hooks/useSessionKey.js';
 import { useMarketCountdown } from '../../hooks/useMarketCountdown.js';
+import { useCustomAgents } from '../../hooks/useCustomAgents.js';
 import { EventContractChart } from './EventContractChart.js';
 import { OrderBookDepth } from '../OrderBookDepth.js';
 import { TraderCockpitTicket, type LadderPrefillData } from './TraderCockpitTicket.js';
@@ -51,11 +53,21 @@ export const TradeTerminalView: React.FC<TradeTerminalViewProps> = ({
   const [isDropdownOpen, setIsDropdownOpen] = useState<boolean>(false);
   const [isBookVisible, setIsBookVisible] = useState<boolean>(false);
 
+  const { agents: customAgents } = useCustomAgents(wallet.address || undefined);
+
   // Active contract telemetry
   const market = selectedMarket || markets[0] || null;
   const tick = market ? liveTicks.get(market.id) : undefined;
   const spot = currentSpotPrices[market?.symbol || 'BTC/USD'] || tick?.spotPrice || market?.strikePrice || 79664.46;
   const strike = market?.strikePrice || 79613.4;
+
+  const activeCustomForSymbol = useMemo(() => {
+    if (!market) return [];
+    const baseSymbol = market.symbol.split('/')[0];
+    return customAgents.filter((a) => a.isDeployed && a.symbol.includes(baseSymbol));
+  }, [customAgents, market?.symbol]);
+
+  const fleetMonitoringCount = 2 + activeCustomForSymbol.length; // Volt + Oracle (+ Custom)
 
   // Continuous smooth fallback probability centered on strike
   const smoothFallbackProb = strike > 0 
@@ -160,6 +172,19 @@ export const TradeTerminalView: React.FC<TradeTerminalViewProps> = ({
               <SparklesIcon className="w-3.5 h-3.5 text-purple-400" />
               <span>AI Edge: +{(Math.abs(edge) * 100).toFixed(1)}%</span>
             </div>
+
+            {/* Fleet Monitoring Status Pill */}
+            <button
+              type="button"
+              onClick={() => {
+                window.location.hash = '#cockpit';
+              }}
+              className="hidden md:inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full border border-amber-500/30 bg-amber-500/10 hover:bg-amber-500/20 text-amber-400 text-[11px] font-mono transition-colors cursor-pointer"
+              title="View autonomous fleet agents executing on this market in Swarm Cockpit"
+            >
+              <BoltIcon className="w-3 h-3 text-amber-400" />
+              <span>{fleetMonitoringCount} Fleet Agents Active</span>
+            </button>
 
             {/* Show Book Toggle */}
             <button

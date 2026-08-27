@@ -53,12 +53,14 @@ export const SessionStatusBar: React.FC<SessionStatusBarProps> = ({
   const [isTogglingCopy, setIsTogglingCopy] = useState<boolean>(false);
 
   useEffect(() => {
-    if (activeSession) {
-      setLocalCopyEnabled(activeSession.copyTradeEnabled ?? false);
+    if (activeSession && typeof activeSession.copyTradeEnabled === 'boolean') {
+      setLocalCopyEnabled(activeSession.copyTradeEnabled);
     }
-  }, [activeSession]);
+  }, [activeSession?.copyTradeEnabled]);
 
-  const activeCopyTrade = isCopyTradeEnabled ?? localCopyEnabled ?? activeSession?.copyTradeEnabled ?? false;
+  const activeCopyTrade = isCopyTradeEnabled !== undefined
+    ? isCopyTradeEnabled
+    : (localCopyEnabled ?? activeSession?.copyTradeEnabled ?? false);
 
   const collateralNum = parseFloat(wallet.balanceCollateral || '0');
   const isCollateralZero = isConnected && isCorrectNetwork && collateralNum === 0;

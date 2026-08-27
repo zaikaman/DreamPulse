@@ -17,7 +17,7 @@ import {
   FireIcon,
   XMarkIcon,
 } from '@heroicons/react/24/outline';
-import type { AgentThoughtLog } from '../types/index.js';
+import type { AgentThoughtLog, CustomAgentDefinition } from '../types/index.js';
 import { AgentThoughtFeedSkeleton } from './ui/Skeleton.js';
 import { Pagination } from './ui/Pagination.js';
 
@@ -28,6 +28,7 @@ interface AgentThoughtFeedProps {
   onToggleDebug?: (enable?: boolean) => void;
   isConnected: boolean;
   isLoading?: boolean;
+  customAgents?: CustomAgentDefinition[];
 }
 
 export const AgentThoughtFeed: React.FC<AgentThoughtFeedProps> = ({
@@ -37,6 +38,7 @@ export const AgentThoughtFeed: React.FC<AgentThoughtFeedProps> = ({
   onToggleDebug,
   isConnected,
   isLoading = false,
+  customAgents = [],
 }) => {
   const [selectedFilter, setSelectedFilter] = useState<string>('ALL');
   const [searchQuery, setSearchQuery] = useState<string>('');
@@ -92,6 +94,16 @@ export const AgentThoughtFeed: React.FC<AgentThoughtFeedProps> = ({
         if (t.confidence < 0.8) return false;
       } else if (selectedFilter === 'DEBUG_TRACE') {
         if (t.isExecution) return false;
+      } else if (selectedFilter.startsWith('CUSTOM_')) {
+        const customId = selectedFilter.replace('CUSTOM_', '');
+        const targetAgent = customAgents.find((c) => c.id === customId);
+        const nameMatch = targetAgent?.name.toLowerCase() || '';
+        if (
+          t.agentType.toLowerCase() !== nameMatch &&
+          !t.reasoningText.toLowerCase().includes(nameMatch)
+        ) {
+          return false;
+        }
       } else if (selectedFilter !== 'ALL') {
         if (t.agentType.toLowerCase() !== selectedFilter.toLowerCase()) return false;
       }
@@ -149,7 +161,8 @@ export const AgentThoughtFeed: React.FC<AgentThoughtFeedProps> = ({
   }, [filteredThoughts, currentPage, pageSize]);
 
   const getAgentTheme = (agent: string) => {
-    switch (agent.toLowerCase()) {
+    const cleanAgent = (agent || '').toLowerCase().trim();
+    switch (cleanAgent) {
       case 'volt':
         return {
           color: '#fbbf24',
@@ -186,7 +199,20 @@ export const AgentThoughtFeed: React.FC<AgentThoughtFeedProps> = ({
           role: 'Settlement Sweeper',
           Icon: SparklesIcon,
         };
-      default:
+      default: {
+        const match = customAgents.find(
+          (c) => c.name.toLowerCase() === cleanAgent || c.id.toLowerCase() === cleanAgent
+        );
+        if (match) {
+          return {
+            color: match.color || '#38bdf8',
+            bg: `${match.color || '#38bdf8'}12`,
+            border: `${match.color || '#38bdf8'}30`,
+            glow: 'none',
+            role: `Custom ${match.strategyType || 'Strategy'}`,
+            Icon: SparklesIcon,
+          };
+        }
         return {
           color: 'hsl(var(--muted-foreground))',
           bg: 'hsl(var(--secondary) / 0.4)',
@@ -195,6 +221,7 @@ export const AgentThoughtFeed: React.FC<AgentThoughtFeedProps> = ({
           role: 'Autonomous Agent',
           Icon: CpuChipIcon,
         };
+      }
     }
   };
 
@@ -335,7 +362,13 @@ export const AgentThoughtFeed: React.FC<AgentThoughtFeedProps> = ({
           { id: 'Oracle', label: 'Oracle (Arb)', Icon: CpuChipIcon },
           { id: 'Titan', label: 'Titan (MM)', Icon: ShieldCheckIcon },
           { id: 'Sweeper', label: 'Sweeper', Icon: SparklesIcon },
-        ].map((tab) => {
+          ...customAgents.map((ca) => ({
+            id: `CUSTOM_${ca.id}`,
+            label: `Custom: ${ca.name}`,
+            Icon: SparklesIcon,
+            color: ca.color,
+          })),
+        ].map((tab: any) => {
           const TabIcon = tab.Icon;
           const isActive = selectedFilter === tab.id;
           return (
@@ -343,9 +376,10 @@ export const AgentThoughtFeed: React.FC<AgentThoughtFeedProps> = ({
               key={tab.id}
               type="button"
               onClick={() => setSelectedFilter(tab.id)}
-              className={`inline-flex items-center gap-1.5 px-3 py-1 text-[11px] font-mono font-medium rounded-full border whitespace-nowrap transition-colors ${isActive ? 'bg-secondary text-foreground border-border' : 'bg-transparent text-muted-foreground border-transparent hover:text-foreground hover:bg-secondary/40'}`}
+              className={`inline-flex items-center gap-1.5 px-3 py-1 text-[11px] font-mono font-medium rounded-full border whitespace-nowrap transition-colors cursor-pointer ${isActive ? 'bg-secondary text-foreground border-border' : 'bg-transparent text-muted-foreground border-transparent hover:text-foreground hover:bg-secondary/40'}`}
+              style={tab.color && isActive ? { borderColor: `${tab.color}60`, color: tab.color } : {}}
             >
-              <TabIcon className="w-3 h-3" />
+              <TabIcon className="w-3 h-3" style={tab.color ? { color: tab.color } : {}} />
               <span>{tab.label}</span>
             </button>
           );

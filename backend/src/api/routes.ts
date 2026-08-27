@@ -565,13 +565,13 @@ apiRouter.get('/agents/logs', (req: Request, res: Response) => {
 // ------------------------------------------------------------------------------
 // 3b. Personal Swarm — Per-Wallet Isolated Strategy (COPY vs PERSONAL)
 // ------------------------------------------------------------------------------
-apiRouter.get('/swarm/my-config', (req: Request, res: Response) => {
+apiRouter.get('/swarm/my-config', async (req: Request, res: Response) => {
   try {
     const userAddress = (req.query.userAddress as string) || (req.headers['x-user-address'] as string);
     if (!userAddress || !isAddress(userAddress)) {
       return res.status(400).json({ success: false, error: 'Missing or invalid userAddress' });
     }
-    const cfg = userSwarmService.getConfig(userAddress);
+    const cfg = await userSwarmService.getOrFetchConfig(userAddress);
     return res.json({ success: true, config: cfg });
   } catch (err: any) {
     return res.status(400).json({ success: false, error: err.message });
