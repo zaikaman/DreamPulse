@@ -1,22 +1,19 @@
 import React from 'react';
 import {
-  Gauge,
-  Crosshair,
-  ListOrdered,
-  Brain,
-  Cpu,
-  LineChart,
-  Sparkles,
-  BookOpen,
-  ChevronsLeft,
-  ChevronsRight,
-  Bot,
-  Eye,
-  Wallet,
-  ShieldCheck,
-  LogOut,
-  BarChart3,
-} from 'lucide-react';
+  Squares2X2Icon,
+  ViewfinderCircleIcon,
+  QueueListIcon,
+  CpuChipIcon,
+  ChartBarIcon,
+  SparklesIcon,
+  BookOpenIcon,
+  ChevronDoubleLeftIcon,
+  ChevronDoubleRightIcon,
+  EyeIcon,
+  WalletIcon,
+  ShieldCheckIcon,
+  ArrowLeftEndOnRectangleIcon,
+} from '@heroicons/react/24/outline';
 import type { SessionGrant } from '../../types/index.js';
 import type { WalletState } from '../../hooks/useSessionKey.js';
 import { useUserRole } from '../../hooks/useUserRole.js';
@@ -52,31 +49,31 @@ const AppSidebarComponent: React.FC<AppSidebarProps> = ({
     {
       id: 'Overview',
       label: 'Mission Control',
-      Icon: Gauge,
+      Icon: Squares2X2Icon,
       badge: 'Live',
     },
     {
       id: 'Edge Radar',
       label: 'Edge Radar & Heatmap',
-      Icon: Crosshair,
+      Icon: ViewfinderCircleIcon,
       badge: 'Scanner',
     },
     {
       id: 'Markets & Depth',
       label: 'Markets & Order Book',
-      Icon: ListOrdered,
+      Icon: QueueListIcon,
       badge: `${activeMarketsCount} Live`,
     },
     {
       id: 'AI Swarm Feed',
       label: 'AI Reasoning Stream',
-      Icon: Brain,
+      Icon: CpuChipIcon,
       badge: '4 Agents',
     },
     {
       id: 'Swarm Cockpit',
       label: 'Swarm Transparency',
-      Icon: Cpu,
+      Icon: CpuChipIcon,
       badge: isOperator ? 'Admin' : 'Public',
     },
   ];
@@ -85,23 +82,23 @@ const AppSidebarComponent: React.FC<AppSidebarProps> = ({
     {
       id: 'Analytics',
       label: 'Analytics & Ledger',
-      Icon: BarChart3,
+      Icon: ChartBarIcon,
     },
     {
       id: 'Strategy Studio',
       label: 'Strategy & Bot Studio',
-      Icon: LineChart,
+      Icon: ChartBarIcon,
     },
     {
       id: 'Settlement',
       label: 'Settlement Sweeper',
-      Icon: Sparkles,
+      Icon: SparklesIcon,
       badge: isTrader ? 'My Payouts' : undefined,
     },
     {
       id: 'Docs',
       label: 'Documentation & SDK',
-      Icon: BookOpen,
+      Icon: BookOpenIcon,
     },
   ];
 
@@ -138,7 +135,7 @@ const AppSidebarComponent: React.FC<AppSidebarProps> = ({
             onClick={onToggleCollapse}
             title="Collapse Sidebar"
           >
-            <ChevronsLeft size={14} />
+            <ChevronDoubleLeftIcon className="size-3.5" />
           </button>
         )}
       </div>
@@ -158,7 +155,7 @@ const AppSidebarComponent: React.FC<AppSidebarProps> = ({
                 onClick={() => onSelectTab(item.id)}
                 title={collapsed ? item.label : undefined}
               >
-                <Icon size={16} className="sidebar-nav-icon" />
+                <Icon className="size-4 sidebar-nav-icon" />
                 {!collapsed && <span className="sidebar-nav-label">{item.label}</span>}
                 {!collapsed && item.badge && (
                   <span
@@ -185,7 +182,7 @@ const AppSidebarComponent: React.FC<AppSidebarProps> = ({
                 onClick={() => onSelectTab(item.id)}
                 title={collapsed ? item.label : undefined}
               >
-                <Icon size={16} className="sidebar-nav-icon" />
+                <Icon className="size-4 sidebar-nav-icon" />
                 {!collapsed && <span className="sidebar-nav-label">{item.label}</span>}
                 {!collapsed && item.badge && (
                   <span className="sidebar-nav-badge">{item.badge}</span>
@@ -215,15 +212,15 @@ const AppSidebarComponent: React.FC<AppSidebarProps> = ({
             }}
           >
             {isOperator ? (
-              <Bot size={15} />
+              <CpuChipIcon className="size-4" />
             ) : isTrader ? (
               activeSession?.isActive ? (
-                <ShieldCheck size={15} />
+                <ShieldCheckIcon className="size-4" />
               ) : (
-                <Wallet size={15} />
+                <WalletIcon className="size-4" />
               )
             ) : (
-              <Eye size={15} />
+              <EyeIcon className="size-4" />
             )}
           </div>
           {!collapsed ? (
@@ -247,7 +244,7 @@ const AppSidebarComponent: React.FC<AppSidebarProps> = ({
                         marginTop: '2px',
                       }}
                     >
-                      <Wallet size={11} />
+                      <WalletIcon className="size-3" />
                       <span>Connect Wallet</span>
                     </button>
                   )}
@@ -295,7 +292,7 @@ const AppSidebarComponent: React.FC<AppSidebarProps> = ({
                         onMouseEnter={(e) => (e.currentTarget.style.color = 'var(--trade-no)')}
                         onMouseLeave={(e) => (e.currentTarget.style.color = 'var(--muted-foreground)')}
                       >
-                        <LogOut size={12} />
+                        <ArrowLeftEndOnRectangleIcon className="size-3" />
                       </button>
                     )}
                   </div>
@@ -328,7 +325,7 @@ const AppSidebarComponent: React.FC<AppSidebarProps> = ({
                         onMouseEnter={(e) => (e.currentTarget.style.color = 'var(--trade-no)')}
                         onMouseLeave={(e) => (e.currentTarget.style.color = 'var(--muted-foreground)')}
                       >
-                        <LogOut size={12} />
+                        <ArrowLeftEndOnRectangleIcon className="size-3" />
                       </button>
                     )}
                   </div>
@@ -343,7 +340,7 @@ const AppSidebarComponent: React.FC<AppSidebarProps> = ({
               onClick={onToggleCollapse}
               title="Expand Sidebar"
             >
-              <ChevronsRight size={14} />
+              <ChevronDoubleRightIcon className="size-3.5" />
             </button>
           )}
         </div>

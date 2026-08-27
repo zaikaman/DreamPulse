@@ -1,23 +1,23 @@
 import React, { useState, useEffect } from "react";
 import {
-  Brain,
-  Clock,
-  Zap,
-  Activity,
-  TrendingUp,
-  Shield,
-  Key,
-  Lock,
-  Coins,
-  Play,
-  ArrowRight,
-  ChevronLeft,
-  ChevronRight,
-  Compass,
-  Wallet,
-  Menu,
-  X,
-} from "lucide-react";
+  CpuChipIcon,
+  ClockIcon,
+  BoltIcon,
+  ChartBarIcon,
+  ArrowTrendingUpIcon,
+  ShieldCheckIcon,
+  KeyIcon,
+  LockClosedIcon,
+  CurrencyDollarIcon,
+  PlayIcon,
+  ArrowRightIcon,
+  ChevronLeftIcon,
+  ChevronRightIcon,
+  RocketLaunchIcon,
+  WalletIcon,
+  Bars3Icon,
+  XMarkIcon,
+} from "@heroicons/react/24/outline";
 import { BrandLogo } from "../common/BrandLogo";
 
 export type DashboardViewType =
@@ -51,9 +51,9 @@ interface HeroSlide {
 
 const HERO_SLIDES: HeroSlide[] = [
   {
-    badge1: { icon: Brain, label: "99.9% Black-Scholes Precision" },
-    badge2: { icon: Clock, label: "Sub-100ms Swarm Loop" },
-    badge3: { icon: Zap, label: "Somnia Shannon Testnet L1" },
+    badge1: { icon: CpuChipIcon, label: "99.9% Black-Scholes Precision" },
+    badge2: { icon: ClockIcon, label: "Sub-100ms Swarm Loop" },
+    badge3: { icon: BoltIcon, label: "Somnia Shannon Testnet L1" },
     title: "Autonomous Swarm. Engineered For Somnia.",
     description:
       "Multi-agent quantitative intelligence, real-time Φ(z) normal distribution edge radar, and non-custodial session key trading engineered for DreamDEX Event Contracts.",
@@ -63,9 +63,9 @@ const HERO_SLIDES: HeroSlide[] = [
     secondaryTargetView: "Edge Radar",
   },
   {
-    badge1: { icon: Activity, label: "Microsecond CLOB Streaming" },
-    badge2: { icon: TrendingUp, label: "Live Order Book Depth" },
-    badge3: { icon: Shield, label: "0.05% Spread Arbitrage" },
+    badge1: { icon: ChartBarIcon, label: "Microsecond CLOB Streaming" },
+    badge2: { icon: ArrowTrendingUpIcon, label: "Live Order Book Depth" },
+    badge3: { icon: ShieldCheckIcon, label: "0.05% Spread Arbitrage" },
     title: "Real-Time Φ(z) Edge Radar. Unassailable Alpha.",
     description:
       "Continuous Black-Scholes pricing models scan binary event outcome distributions in real-time to detect mispricings, spread anomalies, and order book volatility.",
@@ -75,9 +75,9 @@ const HERO_SLIDES: HeroSlide[] = [
     secondaryTargetView: "AI Swarm Feed",
   },
   {
-    badge1: { icon: Key, label: "EIP-712 Scoped Delegation" },
-    badge2: { icon: Lock, label: "Non-Custodial Vault Safety" },
-    badge3: { icon: Coins, label: "Automated Settlement Sweeper" },
+    badge1: { icon: KeyIcon, label: "EIP-712 Scoped Delegation" },
+    badge2: { icon: LockClosedIcon, label: "Non-Custodial Vault Safety" },
+    badge3: { icon: CurrencyDollarIcon, label: "Automated Settlement Sweeper" },
     title: "Non-Custodial Session Keys. Zero Gas Drag.",
     description:
       "Grant cryptographically scoped trading permissions to local AI agents without sharing private keys, featuring automated batch settlement sweeps and collateral compounding.",
@@ -213,7 +213,7 @@ export const CinematicHero: React.FC<CinematicHeroProps> = ({
                 style={{ animationDelay: "350ms" }}
               >
                 <span>Launch Terminal</span>
-                <Compass className="size-4" />
+                <RocketLaunchIcon className="size-4" />
               </button>
             </>
           ) : (
@@ -224,7 +224,7 @@ export const CinematicHero: React.FC<CinematicHeroProps> = ({
                 className="hidden sm:flex animate-blur-fade-up liquid-glass items-center gap-1.5 rounded-full px-4 py-2 text-sm text-white/90 hover:text-white transition-all cursor-pointer hover:bg-white/5 active:scale-95"
                 style={{ animationDelay: "320ms" }}
               >
-                <Wallet className="size-4 text-white/80" />
+                <WalletIcon className="size-4 text-white/80" />
                 <span>Connect Wallet</span>
               </button>
 
@@ -235,7 +235,7 @@ export const CinematicHero: React.FC<CinematicHeroProps> = ({
                 style={{ animationDelay: "350ms" }}
               >
                 <span>Launch Terminal</span>
-                <Compass className="size-4" />
+                <RocketLaunchIcon className="size-4" />
               </button>
             </>
           )}
@@ -248,12 +248,12 @@ export const CinematicHero: React.FC<CinematicHeroProps> = ({
             aria-label="Toggle Navigation Menu"
           >
             <div className="relative size-[18px] flex items-center justify-center">
-              <Menu
+              <Bars3Icon
                 className={`size-[18px] absolute transition-all duration-300 ease-out ${
                   isMobileMenuOpen ? "rotate-90 opacity-0 scale-50" : "rotate-0 opacity-100 scale-100"
                 }`}
               />
-              <X
+              <XMarkIcon
                 className={`size-[18px] absolute transition-all duration-300 ease-out ${
                   isMobileMenuOpen ? "rotate-0 opacity-100 scale-100" : "-rotate-90 opacity-0 scale-50"
                 }`}
@@ -283,7 +283,7 @@ export const CinematicHero: React.FC<CinematicHeroProps> = ({
               style={{ transitionDelay: `${idx * 40}ms` }}
             >
               <span>{link.label}</span>
-              <ArrowRight className="size-4 text-gray-500" />
+              <ArrowRightIcon className="size-4 text-gray-500" />
             </button>
           ))}
 
@@ -295,7 +295,7 @@ export const CinematicHero: React.FC<CinematicHeroProps> = ({
               }}
               className="w-full bg-white text-black rounded-full py-2.5 px-4 text-xs font-semibold flex items-center justify-center gap-2 hover:bg-gray-200 cursor-pointer"
             >
-              <Compass className="size-4" />
+              <RocketLaunchIcon className="size-4" />
               <span>Launch Cyber-Terminal</span>
             </button>
 
@@ -307,7 +307,7 @@ export const CinematicHero: React.FC<CinematicHeroProps> = ({
                 }}
                 className="w-full liquid-glass rounded-full py-2.5 px-4 text-xs font-medium flex items-center justify-center gap-2 text-white hover:bg-white/5 cursor-pointer"
               >
-                <Wallet className="size-4" />
+                <WalletIcon className="size-4" />
                 <span>Connect Web3 Wallet</span>
               </button>
             )}
@@ -366,7 +366,7 @@ export const CinematicHero: React.FC<CinematicHeroProps> = ({
                 className="animate-blur-fade-up bg-white text-black hover:bg-gray-200 transition-all rounded-full font-medium px-6 sm:px-8 py-2.5 sm:py-3 text-sm sm:text-base flex items-center gap-2.5 shadow-xl hover:shadow-white/20 active:scale-95 cursor-pointer"
                 style={{ animationDelay: "600ms" }}
               >
-                <Play className="size-[18px] fill-black text-black" />
+                <PlayIcon className="size-[18px] fill-black text-black" />
                 <span>{slide.primaryCtaText}</span>
               </button>
 
@@ -376,7 +376,7 @@ export const CinematicHero: React.FC<CinematicHeroProps> = ({
                 style={{ animationDelay: "700ms" }}
               >
                 <span>{slide.secondaryCtaText}</span>
-                <ArrowRight className="size-4" />
+                <ArrowRightIcon className="size-4" />
               </button>
             </div>
           </div>
@@ -412,7 +412,7 @@ export const CinematicHero: React.FC<CinematicHeroProps> = ({
                 style={{ animationDelay: "800ms" }}
                 aria-label="Previous Slide"
               >
-                <ChevronLeft className="size-4" />
+                <ChevronLeftIcon className="size-4" />
                 <span>Previous</span>
               </button>
 
@@ -423,7 +423,7 @@ export const CinematicHero: React.FC<CinematicHeroProps> = ({
                 aria-label="Next Slide"
               >
                 <span>Next</span>
-                <ChevronRight className="size-4" />
+                <ChevronRightIcon className="size-4" />
               </button>
             </div>
           </div>

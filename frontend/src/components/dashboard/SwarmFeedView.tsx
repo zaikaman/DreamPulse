@@ -1,8 +1,9 @@
 import React from 'react';
-import { Zap, Brain, Shield, Sparkles } from 'lucide-react';
+import { BoltIcon, CpuChipIcon, ShieldCheckIcon, SparklesIcon } from '@heroicons/react/24/outline';
 import type { AgentThoughtLog } from '../../types/index.js';
 import { AgentThoughtFeed } from '../AgentThoughtFeed.js';
 import { useAgentSwarm } from '../../hooks/useAgentSwarm.js';
+import { Badge } from '../ui/badge.js';
 
 interface SwarmFeedViewProps {
   agentThoughts: AgentThoughtLog[];
@@ -25,8 +26,10 @@ export const SwarmFeedView: React.FC<SwarmFeedViewProps> = ({
     {
       name: 'Volt',
       role: 'Expiry Sniper',
-      Icon: Zap,
+      Icon: BoltIcon,
       color: '#f59e0b',
+      bg: 'rgba(245,158,11,0.06)',
+      border: 'rgba(245,158,11,0.14)',
       status: `Active (${summary.volt.evalLatencyMs || 2}ms latency)`,
       trades: summary.volt.tradesToday,
       pnl: summary.volt.pnl,
@@ -34,8 +37,10 @@ export const SwarmFeedView: React.FC<SwarmFeedViewProps> = ({
     {
       name: 'Oracle',
       role: 'Vol Surface Arbitrage',
-      Icon: Brain,
-      color: '#00ffcc',
+      Icon: CpuChipIcon,
+      color: '#2dd4bf',
+      bg: 'rgba(45,212,191,0.06)',
+      border: 'rgba(45,212,191,0.14)',
       status: `Active (Φ(z) skew)`,
       trades: summary.oracle.tradesToday,
       pnl: summary.oracle.pnl,
@@ -43,8 +48,10 @@ export const SwarmFeedView: React.FC<SwarmFeedViewProps> = ({
     {
       name: 'Titan',
       role: 'Two-Sided Market Maker',
-      Icon: Shield,
-      color: '#a855f7',
+      Icon: ShieldCheckIcon,
+      color: '#a78bfa',
+      bg: 'rgba(167,139,250,0.06)',
+      border: 'rgba(167,139,250,0.14)',
       status: `Active (${summary.titan.activeQuotes || 4} quotes)`,
       trades: summary.titan.activeQuotes,
       pnl: summary.titan.spreadCaptured,
@@ -52,8 +59,10 @@ export const SwarmFeedView: React.FC<SwarmFeedViewProps> = ({
     {
       name: 'Sweeper',
       role: 'Settlement & Wallet Sweeper',
-      Icon: Sparkles,
-      color: '#10b981',
+      Icon: SparklesIcon,
+      color: '#34d399',
+      bg: 'rgba(52,211,153,0.06)',
+      border: 'rgba(52,211,153,0.14)',
       status: 'Monitoring expiries',
       trades: summary.sweeper.totalClaimed && !summary.sweeper.totalClaimed.startsWith('0.00') && !summary.sweeper.totalClaimed.startsWith('+0.00') ? 1 : 0,
       pnl: summary.sweeper.totalClaimed,
@@ -61,37 +70,32 @@ export const SwarmFeedView: React.FC<SwarmFeedViewProps> = ({
   ];
 
   return (
-    <div className="full-height-view" style={{ gap: '16px' }}>
-      {/* Agent Swarm Overview Header */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '16px', flexShrink: 0 }}>
+    <div className="flex flex-col gap-4 h-full min-h-0 flex-1 overflow-hidden">
+      {/* Agent Swarm Overview Header — Minimalist (aligns with Overview / Edge Radar) */}
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 flex-shrink-0">
         {agents.map((ag) => {
           const Icon = ag.Icon;
           return (
             <div
               key={ag.name}
-              style={{
-                background: 'var(--card)',
-                border: '1px solid var(--border)',
-                borderRadius: 'var(--radius-md)',
-                padding: '14px 16px',
-                display: 'flex',
-                flexDirection: 'column',
-                gap: '4px',
-              }}
+              className="terminal-panel p-3.5 flex flex-col justify-between relative overflow-hidden"
             >
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                  <Icon size={16} style={{ color: ag.color }} />
-                  <span style={{ fontWeight: 700, fontSize: '14px' }}>{ag.name}</span>
+              <div className="absolute top-0 left-0 right-0 h-[2.5px]" style={{ background: ag.color, opacity: 0.85 }} />
+              <div className="flex items-center justify-between mb-2">
+                <div className="flex items-center gap-2">
+                  <div className="size-7 rounded-lg grid place-items-center border bg-secondary/30 border-border/50 text-muted-foreground">
+                    <Icon className="size-3.5" />
+                  </div>
+                  <span className="text-sm font-semibold text-foreground tracking-tight">{ag.name}</span>
                 </div>
-                <span className="stat-pill-tag tag-green" style={{ fontSize: '9px' }}>
+                <Badge variant="outline" className="text-[10px] font-mono px-1.5 py-0 bg-secondary/30 border-border/40 text-muted-foreground">
                   LIVE
-                </span>
+                </Badge>
               </div>
-              <span style={{ fontSize: '11px', color: 'var(--muted-foreground)' }}>{ag.role}</span>
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: '4px', fontSize: '11px' }}>
-                <span style={{ color: 'var(--muted-foreground)' }}>{ag.status}</span>
-                <span style={{ fontFamily: 'var(--font-mono)', fontWeight: 600, color: ag.color }}>
+              <span className="text-[11px] font-mono text-muted-foreground">{ag.role}</span>
+              <div className="flex items-center justify-between mt-3 pt-2 border-t border-border/30">
+                <span className="text-[11px] font-mono text-muted-foreground">{ag.status}</span>
+                <span className="text-[11px] font-mono font-medium text-muted-foreground">
                   {ag.trades} trades
                 </span>
               </div>
@@ -101,7 +105,7 @@ export const SwarmFeedView: React.FC<SwarmFeedViewProps> = ({
       </div>
 
       {/* Full-Page Live Streaming AI Thought Stream (Fills 100% of remaining space) */}
-      <div style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column' }}>
+      <div className="flex-1 min-h-0 flex flex-col overflow-hidden">
         <AgentThoughtFeed
           thoughts={agentThoughts}
           debugThoughts={debugThoughts}

@@ -1,8 +1,10 @@
 import React, { useState } from 'react';
-import { Crosshair, Zap, Coins } from 'lucide-react';
+import { ViewfinderCircleIcon, BoltIcon } from '@heroicons/react/24/outline';
 import type { Market } from '../types/index.js';
 import type { MarketTickData } from '../hooks/useTelemetry.js';
 import { EdgeRadarHeatmapSkeleton } from './ui/Skeleton.js';
+import { Badge } from './ui/badge.js';
+import { cn } from '../lib/utils.js';
 
 interface EdgeRadarHeatmapProps {
   markets: Market[];
@@ -29,37 +31,6 @@ const EdgeRadarHeatmapComponent: React.FC<EdgeRadarHeatmapProps> = ({
   const symbols = discoveredSymbols.length > 0 ? discoveredSymbols : ['BTC/USD', 'ETH/USD', 'SOL/USD', 'BNB/USD', 'DOGE/USD'];
   const windows: Array<'5m' | '15m' | '1h'> = ['5m', '15m', '1h'];
 
-  const getHeatmapColor = (edgePct: number) => {
-    if (Math.abs(edgePct) < 0.01) {
-      return {
-        bg: 'rgba(255, 255, 255, 0.03)',
-        border: 'rgba(255, 255, 255, 0.08)',
-        glow: 'none',
-        textColor: 'var(--text-muted)',
-      };
-    }
-
-    if (edgePct > 0) {
-      // YES Underpriced (positive edge) -> Emerald
-      const intensity = Math.min(1, edgePct / 0.15);
-      return {
-        bg: `rgba(0, 230, 118, ${0.12 + intensity * 0.28})`,
-        border: `rgba(0, 230, 118, ${0.35 + intensity * 0.45})`,
-        glow: `0 0 16px rgba(0, 230, 118, ${0.25 + intensity * 0.35})`,
-        textColor: '#00e676',
-      };
-    } else {
-      // NO Underpriced (negative edge) -> Ruby / Magenta
-      const intensity = Math.min(1, Math.abs(edgePct) / 0.15);
-      return {
-        bg: `rgba(255, 51, 102, ${0.12 + intensity * 0.28})`,
-        border: `rgba(255, 51, 102, ${0.35 + intensity * 0.45})`,
-        glow: `0 0 16px rgba(255, 51, 102, ${0.25 + intensity * 0.35})`,
-        textColor: '#ff3366',
-      };
-    }
-  };
-
   // Find most severe anomaly
   const highestAnomaly = markets.reduce((max, m) => {
     const tick = liveTicks.get(m.id);
@@ -67,68 +38,92 @@ const EdgeRadarHeatmapComponent: React.FC<EdgeRadarHeatmapProps> = ({
     return edge > max ? edge : max;
   }, 0);
 
+  // Active contract for the persistent bottom telemetry bar (no layout shift)
+  const activeInspectionMarket =
+    (hoveredMarketId ? markets.find((m) => m.id === hoveredMarketId) : undefined) ||
+    (selectedMarketId ? markets.find((m) => m.id === selectedMarketId) : markets[0]);
+
+  const inspectionTick = activeInspectionMarket ? liveTicks.get(activeInspectionMarket.id) : undefined;
+  const inspectionImplied = inspectionTick?.impliedProb ?? activeInspectionMarket?.impliedProbYes ?? 0.5;
+  const inspectionFair = inspectionTick?.fairValue ?? activeInspectionMarket?.fairValueYes ?? 0.5;
+  const inspectionEdge = inspectionTick?.edge ?? activeInspectionMarket?.edgePercentage ?? 0;
+
   return (
-    <div className="terminal-panel edge-radar-panel">
-      <div className="terminal-panel-header">
-        <div className="panel-title">
-          <Crosshair size={16} />
-          <span>Edge Radar & Discrepancy Heatmap</span>
+    <div className="terminal-panel p-4">
+      {/* Panel Header */}
+      <div className="flex items-center justify-between pb-3 mb-3 border-b border-border/40 flex-wrap gap-2">
+        <div className="flex items-center gap-2">
+          <ViewfinderCircleIcon className="size-4 text-muted-foreground" />
+          <span className="text-xs font-semibold text-foreground tracking-wide">
+            REAL-TIME Φ(z) MISPRICING MATRIX
+          </span>
           {highestAnomaly >= 0.03 && (
-            <span className="badge badge-anomaly">
-              <Zap size={11} />
-              {(highestAnomaly * 100).toFixed(1)}% MAX ARB
-            </span>
+            <Badge variant="outline" className="font-mono text-[10px] bg-amber-500/10 text-amber-300 border-amber-500/30 gap-1">
+              <BoltIcon className="size-2.5" />
+              <span>{(highestAnomaly * 100).toFixed(1)}% MAX ARB</span>
+            </Badge>
           )}
         </div>
 
-        <div className="radar-legend">
-          <div className="legend-item">
-            <span className="legend-box legend-yes"></span>
-            <span>YES Edge (&gt;0)</span>
+        {/* Minimalist Legend */}
+        <div className="flex items-center gap-4 text-[11px] font-mono text-muted-foreground">
+          <div className="flex items-center gap-1.5">
+            <span className="size-1.5 rounded-full bg-emerald-400" />
+            <span>YES Alpha (&gt;0)</span>
           </div>
-          <div className="legend-item">
-            <span className="legend-box legend-no"></span>
-            <span>NO Edge (&lt;0)</span>
+          <div className="flex items-center gap-1.5">
+            <span className="size-1.5 rounded-full bg-rose-400" />
+            <span>NO Alpha (&lt;0)</span>
+          </div>
+          <div className="flex items-center gap-1.5">
+            <span className="size-1.5 rounded-full bg-muted-foreground/50" />
+            <span>Neutral</span>
           </div>
         </div>
       </div>
 
       {/* Heatmap Matrix Table */}
-      <div className="heatmap-grid-container">
-        <div className="heatmap-matrix">
-          {/* Header row: timeframes */}
-          <div className="matrix-row header-row">
-            <div className="matrix-cell symbol-header">ASSET</div>
+      <div className="overflow-x-auto">
+        <div className="min-w-[620px] flex flex-col gap-2">
+          {/* Header Row */}
+          <div className="grid grid-cols-[100px_repeat(3,1fr)] gap-2.5 px-1 text-[11px] font-mono text-muted-foreground font-medium uppercase tracking-wider">
+            <div>Asset</div>
             {windows.map((win) => (
-              <div key={win} className="matrix-cell win-header">
-                {win} EXPIRY
+              <div key={win} className="text-center">
+                {win} Horizon
               </div>
             ))}
           </div>
 
           {/* Asset Rows */}
           {symbols.map((sym) => (
-            <div key={sym} className="matrix-row asset-row">
-              <div className="matrix-cell sym-label">
-                <Coins size={14} style={{ marginRight: '6px', color: 'var(--brand-cyan)' }} />
-                <span>{sym}</span>
+            <div key={sym} className="grid grid-cols-[100px_repeat(3,1fr)] gap-2.5 items-stretch">
+              {/* Asset Symbol Tag */}
+              <div className="flex items-center justify-between px-3 py-2 rounded-lg bg-secondary/30 border border-border/40">
+                <span className="font-mono text-xs font-bold text-foreground">
+                  {sym.replace('/USD', '')}
+                </span>
+                <span className="font-mono text-[10px] text-muted-foreground">USD</span>
               </div>
 
+              {/* Window Horizon Cells */}
               {windows.map((win) => {
-                // Find all markets matching symbol and window
                 const matchingMarkets = markets.filter(
-                  (m) => m.symbol === sym && m.windowDuration === win,
+                  (m) => m.symbol === sym && m.windowDuration === win
                 );
 
                 if (matchingMarkets.length === 0) {
                   return (
-                    <div key={win} className="matrix-cell empty-cell">
-                      <span className="text-dim">--</span>
+                    <div
+                      key={win}
+                      className="flex items-center justify-center p-2.5 rounded-lg border border-border/20 bg-secondary/10 min-h-[72px]"
+                    >
+                      <span className="font-mono text-xs text-muted-foreground/30">—</span>
                     </div>
                   );
                 }
 
-                // Focus on At-The-Money / highest edge contract in this cell
+                // Focus on highest edge contract in this cell
                 const bestMarket = matchingMarkets.reduce((best, cur) => {
                   const edgeBest = Math.abs(liveTicks.get(best.id)?.edge ?? best.edgePercentage);
                   const edgeCur = Math.abs(liveTicks.get(cur.id)?.edge ?? cur.edgePercentage);
@@ -142,35 +137,50 @@ const EdgeRadarHeatmapComponent: React.FC<EdgeRadarHeatmapProps> = ({
                 const isSelected = bestMarket.id === selectedMarketId;
                 const isAnomaly = Math.abs(edge) >= 0.03;
 
-                const styleProps = getHeatmapColor(edge);
-
                 return (
                   <div
                     key={win}
-                    className={`matrix-cell data-cell ${isSelected ? 'selected-cell' : ''} ${isAnomaly ? 'radar-pulse' : ''}`}
-                    style={{
-                      backgroundColor: styleProps.bg,
-                      borderColor: styleProps.border,
-                      boxShadow: styleProps.glow,
-                    }}
                     onClick={() => onSelectMarket(bestMarket.id)}
                     onMouseEnter={() => setHoveredMarketId(bestMarket.id)}
                     onMouseLeave={() => setHoveredMarketId(null)}
+                    className={cn(
+                      "group relative flex flex-col justify-between p-2.5 rounded-lg border transition-all cursor-pointer min-h-[72px]",
+                      isSelected
+                        ? "border-border bg-secondary/60 shadow-xs ring-1 ring-border"
+                        : "border-border/40 bg-secondary/20 hover:bg-secondary/40 hover:border-border/70"
+                    )}
                   >
-                    <div className="cell-content">
-                      <div className="cell-strike tabular-num">${bestMarket.strikePrice.toLocaleString()}</div>
-                      <div className="cell-edge tabular-num" style={{ color: styleProps.textColor }}>
+                    {/* Top Row: Strike price & Edge Delta */}
+                    <div className="flex items-center justify-between gap-1">
+                      <span className="font-mono text-xs font-semibold text-foreground">
+                        ${bestMarket.strikePrice.toLocaleString()}
+                      </span>
+                      <span
+                        className={cn(
+                          "font-mono text-[11px] font-bold px-1.5 py-0.5 rounded border leading-none",
+                          Math.abs(edge) < 0.01
+                            ? "bg-secondary/40 text-muted-foreground border-border/40"
+                            : edge > 0
+                            ? "bg-emerald-500/10 text-emerald-400 border-emerald-500/20"
+                            : "bg-rose-500/10 text-rose-400 border-rose-500/20"
+                        )}
+                      >
                         {edge >= 0 ? '+' : ''}{(edge * 100).toFixed(1)}%
-                      </div>
-                      <div className="cell-probs tabular-num text-dim">
-                        {(impliedProb * 100).toFixed(0)}% vs {(fairValue * 100).toFixed(0)}%
-                      </div>
+                      </span>
                     </div>
 
+                    {/* Bottom Row: Implied vs Fair Distribution */}
+                    <div className="flex items-center justify-between text-[10px] font-mono text-muted-foreground mt-1">
+                      <span>Mid: {(impliedProb * 100).toFixed(0)}%</span>
+                      <span>Φ(z): {(fairValue * 100).toFixed(0)}%</span>
+                    </div>
+
+                    {/* Subtle Anomaly Indicator */}
                     {isAnomaly && (
-                      <div className="anomaly-beacon-dot">
-                        <span className="beacon-ring"></span>
-                      </div>
+                      <div
+                        className="absolute top-1.5 right-1.5 size-1.5 rounded-full bg-amber-400/80"
+                        title="Statistical Anomaly (>=3% edge)"
+                      />
                     )}
                   </div>
                 );
@@ -178,39 +188,36 @@ const EdgeRadarHeatmapComponent: React.FC<EdgeRadarHeatmapProps> = ({
             </div>
           ))}
         </div>
+      </div>
 
-        {/* Hover Inspection Quick Card */}
-        {hoveredMarketId && (() => {
-          const hoveredMarket = markets.find((m) => m.id === hoveredMarketId);
-          if (!hoveredMarket) return null;
-          const tick = liveTicks.get(hoveredMarket.id);
-          const edge = tick?.edge ?? hoveredMarket.edgePercentage;
-          const fair = tick?.fairValue ?? hoveredMarket.fairValueYes;
-          const implied = tick?.impliedProb ?? hoveredMarket.impliedProbYes;
-
-          return (
-            <div className="heatmap-hover-tooltip">
-              <div className="hover-stat">
-                <span className="h-label">MARKET:</span>
-                <span className="h-val">{hoveredMarket.symbol} {hoveredMarket.windowDuration} (${hoveredMarket.strikePrice.toLocaleString()})</span>
-              </div>
-              <div className="hover-stat">
-                <span className="h-label">CLOB MID:</span>
-                <span className="h-val tabular-num">{(implied * 100).toFixed(1)}%</span>
-              </div>
-              <div className="hover-stat">
-                <span className="h-label">BLACK-SCHOLES Φ(z):</span>
-                <span className="h-val tabular-num text-cyan">{(fair * 100).toFixed(1)}%</span>
-              </div>
-              <div className="hover-stat">
-                <span className="h-label">DISCREPANCY:</span>
-                <span className={`h-val tabular-num ${edge >= 0 ? 'text-yes' : 'text-no'}`}>
-                  {edge >= 0 ? '+' : ''}{(edge * 100).toFixed(2)}%
-                </span>
-              </div>
+      {/* Bottom Inspection Telemetry Bar (Persistent, No Layout Shift) */}
+      <div className="mt-3 pt-3 border-t border-border/40 flex items-center justify-between flex-wrap gap-2 text-xs font-mono min-h-[32px]">
+        {activeInspectionMarket ? (
+          <>
+            <div className="flex items-center gap-2 flex-wrap">
+              <span className="text-muted-foreground text-[11px]">INSPECTOR:</span>
+              <span className="font-semibold text-foreground">{activeInspectionMarket.symbol}</span>
+              <Badge variant="outline" className="text-[10px] px-1.5 py-0 text-muted-foreground border-border/50">
+                {activeInspectionMarket.windowDuration}
+              </Badge>
+              <span className="text-muted-foreground">Strike: ${activeInspectionMarket.strikePrice.toLocaleString()}</span>
             </div>
-          );
-        })()}
+            <div className="flex items-center gap-4 text-muted-foreground text-[11px] flex-wrap">
+              <span>CLOB Mid: <strong className="text-foreground">{(inspectionImplied * 100).toFixed(1)}%</strong></span>
+              <span>Φ(z) Fair: <strong className="text-foreground">{(inspectionFair * 100).toFixed(1)}%</strong></span>
+              <span>
+                Edge Delta:{' '}
+                <strong className={inspectionEdge >= 0 ? "text-emerald-400" : "text-rose-400"}>
+                  {inspectionEdge >= 0 ? '+' : ''}{(inspectionEdge * 100).toFixed(2)}%
+                </strong>
+              </span>
+            </div>
+          </>
+        ) : (
+          <div className="text-muted-foreground text-[11px]">
+            Select or hover any contract cell to inspect real-time mathematical distribution & depth.
+          </div>
+        )}
       </div>
     </div>
   );

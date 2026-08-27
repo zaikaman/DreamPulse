@@ -627,122 +627,14 @@
 
 .legend-box.legend-yes {
   background: var(--color-yes);
-  box-shadow: 0 0 6px var(--color-yes-glow);
 }
 
 .legend-box.legend-no {
   background: var(--color-no);
-  box-shadow: 0 0 6px var(--color-no-glow);
 }
 
 .heatmap-grid-container {
   width: 100%;
-}
-
-.heatmap-matrix {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-}
-
-.matrix-row {
-  display: grid;
-  grid-template-columns: 110px repeat(3, 1fr);
-  gap: 8px;
-}
-
-.matrix-cell {
-  border-radius: 8px;
-  padding: 10px 12px;
-  display: flex;
-  flex-direction: column;
-  justify-content: center;
-  position: relative;
-}
-
-.header-row .matrix-cell {
-  background: transparent;
-  padding: 4px 12px;
-  font-family: var(--font-mono);
-  font-size: 11px;
-  font-weight: 600;
-  color: var(--text-muted);
-  text-align: center;
-}
-
-.sym-label {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  font-weight: 700;
-  font-size: 13px;
-  color: var(--text-primary);
-  background: var(--bg-surface-1);
-  border: 1px solid var(--border-subtle);
-}
-
-.data-cell {
-  border: 1px solid var(--border-subtle);
-  cursor: pointer;
-  transition: all 0.2s ease;
-  min-height: 72px;
-}
-
-.data-cell:hover {
-  transform: scale(1.02);
-  z-index: 5;
-}
-
-.data-cell.selected-cell {
-  border-color: var(--accent-cyan) !important;
-  box-shadow: 0 0 16px var(--accent-cyan-glow) !important;
-}
-
-.cell-content {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-}
-
-.cell-strike {
-  font-size: 12px;
-  font-weight: 600;
-  color: var(--text-primary);
-}
-
-.cell-edge {
-  font-size: 13px;
-  font-weight: 700;
-}
-
-.cell-probs {
-  font-size: 10px;
-}
-
-.anomaly-beacon-dot {
-  position: absolute;
-  top: 6px;
-  right: 6px;
-  width: 6px;
-  height: 6px;
-  border-radius: 50%;
-  background: var(--color-anomaly);
-}
-
-.beacon-ring {
-  position: absolute;
-  top: -3px;
-  left: -3px;
-  width: 12px;
-  height: 12px;
-  border-radius: 50%;
-  border: 1px solid var(--color-anomaly);
-  animation: beaconPulse 1.5s infinite ease-out;
-}
-
-@keyframes beaconPulse {
-  0% { transform: scale(0.6); opacity: 1; }
-  100% { transform: scale(2.2); opacity: 0; }
 }
 
 /* ------------------------------------------------------------------------------

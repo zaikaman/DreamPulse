@@ -1,18 +1,18 @@
 import React, { useState, useEffect } from "react";
 import {
-  Search,
-  LayoutDashboard,
-  Radar,
-  Layers,
-  Bot,
-  SlidersHorizontal,
-  Code2,
-  CheckCircle2,
-  PieChart,
-  Coins,
-  ShieldCheck,
-  Zap,
-} from "lucide-react";
+  MagnifyingGlassIcon,
+  Squares2X2Icon,
+  ViewfinderCircleIcon,
+  Square3Stack3DIcon,
+  CpuChipIcon,
+  AdjustmentsHorizontalIcon,
+  CommandLineIcon,
+  CheckCircleIcon,
+  ChartPieIcon,
+  CurrencyDollarIcon,
+  ShieldCheckIcon,
+  BoltIcon,
+} from "@heroicons/react/24/outline";
 import { Dialog, DialogContent } from "../ui/dialog";
 import type { DashboardViewType } from "../landing/CinematicHero";
 import type { Market } from "../../types/index";
@@ -66,17 +66,17 @@ export const CommandDialog: React.FC<CommandDialogProps> = ({
   };
 
   const platformViews = [
-    { id: "Overview" as DashboardViewType, label: "Terminal Overview", icon: LayoutDashboard, desc: "Live CLOB & Macro Swarm" },
-    { id: "Edge Radar" as DashboardViewType, label: "Edge Radar", icon: Radar, desc: "Φ(z) Normal Distribution Heatmap" },
-    { id: "Markets & Depth" as DashboardViewType, label: "Markets & Depth", icon: Layers, desc: "Order Book Depth Chart" },
-    { id: "AI Swarm Feed" as DashboardViewType, label: "AI Swarm Feed", icon: Bot, desc: "Multi-Agent Chain-of-Thought" },
-    { id: "Swarm Cockpit" as DashboardViewType, label: "Swarm Cockpit", icon: SlidersHorizontal, desc: "Autonomous Execution Controls" },
+    { id: "Overview" as DashboardViewType, label: "Terminal Overview", icon: Squares2X2Icon, desc: "Live CLOB & Macro Swarm" },
+    { id: "Edge Radar" as DashboardViewType, label: "Edge Radar", icon: ViewfinderCircleIcon, desc: "Φ(z) Normal Distribution Heatmap" },
+    { id: "Markets & Depth" as DashboardViewType, label: "Markets & Depth", icon: Square3Stack3DIcon, desc: "Order Book Depth Chart" },
+    { id: "AI Swarm Feed" as DashboardViewType, label: "AI Swarm Feed", icon: CpuChipIcon, desc: "Multi-Agent Chain-of-Thought" },
+    { id: "Swarm Cockpit" as DashboardViewType, label: "Swarm Cockpit", icon: AdjustmentsHorizontalIcon, desc: "Autonomous Execution Controls" },
   ];
 
   const executionViews = [
-    { id: "Strategy Studio" as DashboardViewType, label: "Strategy Studio", icon: Code2, desc: "Quant Backtester & Custom Alpha" },
-    { id: "Settlement" as DashboardViewType, label: "Settlement Sweeper", icon: CheckCircle2, desc: "Batch Claim & Auto-Compound" },
-    { id: "Analytics" as DashboardViewType, label: "Portfolio Analytics", icon: PieChart, desc: "Performance & Risk Ratios" },
+    { id: "Strategy Studio" as DashboardViewType, label: "Strategy Studio", icon: CommandLineIcon, desc: "Quant Backtester & Custom Alpha" },
+    { id: "Settlement" as DashboardViewType, label: "Settlement Sweeper", icon: CheckCircleIcon, desc: "Batch Claim & Auto-Compound" },
+    { id: "Analytics" as DashboardViewType, label: "Portfolio Analytics", icon: ChartPieIcon, desc: "Performance & Risk Ratios" },
   ];
 
   return (
@@ -87,7 +87,7 @@ export const CommandDialog: React.FC<CommandDialogProps> = ({
       >
         {/* Search Input Bar */}
         <div className="flex items-center border-b border-border px-3 py-2.5">
-          <Search className="size-4 text-muted-foreground mr-2 shrink-0" />
+          <MagnifyingGlassIcon className="size-4 text-muted-foreground mr-2 shrink-0" />
           <input
             autoFocus
             type="text"
@@ -121,7 +121,7 @@ export const CommandDialog: React.FC<CommandDialogProps> = ({
                     }}
                     className="flex items-center gap-2 p-2 rounded-lg border border-border/60 bg-card/40 hover:bg-card/90 transition-colors text-left text-xs cursor-pointer"
                   >
-                    <ShieldCheck className="size-4 text-emerald-400 shrink-0" />
+                    <ShieldCheckIcon className="size-4 text-emerald-400 shrink-0" />
                     <div className="truncate">
                       <div className="font-medium text-foreground">Session Key</div>
                       <div className="text-[10px] text-muted-foreground">Manage delegation</div>
@@ -136,7 +136,7 @@ export const CommandDialog: React.FC<CommandDialogProps> = ({
                     }}
                     className="flex items-center gap-2 p-2 rounded-lg border border-border/60 bg-card/40 hover:bg-card/90 transition-colors text-left text-xs cursor-pointer"
                   >
-                    <Coins className="size-4 text-cyan-400 shrink-0" />
+                    <CurrencyDollarIcon className="size-4 text-cyan-400 shrink-0" />
                     <div className="truncate">
                       <div className="font-medium text-foreground">Claim Faucet</div>
                       <div className="text-[10px] text-muted-foreground">+1,000 tUSDC</div>
@@ -165,7 +165,7 @@ export const CommandDialog: React.FC<CommandDialogProps> = ({
                   className="flex items-center justify-between p-2 rounded-lg hover:bg-muted/70 transition-colors cursor-pointer group"
                 >
                   <div className="flex items-center gap-2.5 truncate">
-                    <Zap className="size-4 text-cyan-400 shrink-0" />
+                    <BoltIcon className="size-4 text-cyan-400 shrink-0" />
                     <div className="truncate">
                       <div className="text-xs font-medium text-foreground truncate">
                         {market.symbol} &gt; ${market.strikePrice?.toLocaleString()}

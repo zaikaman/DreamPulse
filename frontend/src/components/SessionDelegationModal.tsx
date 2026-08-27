@@ -1,23 +1,23 @@
 import React, { useState } from 'react';
 import {
-  ShieldCheck,
-  KeyRound,
-  Lock,
-  Zap,
-  Clock,
-  Sliders,
-  AlertTriangle,
-  X,
-  CheckCircle2,
-  ExternalLink,
-  Loader2,
-  Copy,
-  Check,
-  Coins,
-  Layers,
-  FileCheck2,
-  LogOut,
-} from 'lucide-react';
+  ShieldCheckIcon,
+  KeyIcon,
+  LockClosedIcon,
+  BoltIcon,
+  ClockIcon,
+  AdjustmentsHorizontalIcon,
+  ExclamationTriangleIcon,
+  XMarkIcon,
+  CheckCircleIcon,
+  ArrowTopRightOnSquareIcon,
+  ArrowPathIcon,
+  DocumentDuplicateIcon,
+  CheckIcon,
+  CurrencyDollarIcon,
+  Square3Stack3DIcon,
+  DocumentCheckIcon,
+  ArrowLeftEndOnRectangleIcon,
+} from '@heroicons/react/24/outline';
 import type { SessionGrant } from '../types/index.js';
 import type { WalletState } from '../hooks/useSessionKey.js';
 import { SOMNIA_ADDRESSES } from '../services/web3.js';
@@ -149,156 +149,138 @@ export const SessionDelegationModal: React.FC<SessionDelegationModalProps> = ({
       >
         {/* Modal Header */}
         <div className="modal-header">
-          <div className="modal-title-group">
-            <div className="modal-icon-badge">
-              <KeyRound size={18} className="modal-badge-icon" />
+          <div className="modal-title-row">
+            <div className="modal-title-badge">
+              <KeyIcon className="size-4.5 modal-badge-icon" />
             </div>
             <div>
-              <h2 id="session-modal-title" className="modal-title">
-                Non-Custodial Session Delegation
+              <h2 id="session-modal-title" className="modal-heading">
+                {false ? 'Reconfigure Session Limits' : 'Non-Custodial Session Delegation'}
               </h2>
-              <p className="modal-subtitle">
-                Somnia OperatorPermissionsRegistry • On-Chain Approval & EIP-712 Guardrails
-              </p>
+              <span className="modal-subheading">
+                EIP-712 cryptographic authorization for autonomous swarm execution
+              </span>
             </div>
           </div>
           <button
             type="button"
             className="modal-close-btn"
             onClick={onClose}
-            aria-label="Close modal"
+            aria-label="Close delegation modal"
           >
-            <X size={18} />
+            <XMarkIcon className="size-4.5" />
           </button>
         </div>
 
-        {/* Modal Body */}
-        <div className="modal-body">
-          {/* Collateral & Gas Clarity Banner */}
-          <div
-            className="collateral-clarity-banner"
-            style={{
-              padding: '12px 14px',
-              marginBottom: '14px',
-              borderRadius: '8px',
-              background:
-                parseFloat(wallet.balanceCollateral || '0') === 0
-                  ? 'rgba(245, 158, 11, 0.08)'
-                  : 'rgba(16, 185, 129, 0.06)',
-              border: `1px solid ${
-                parseFloat(wallet.balanceCollateral || '0') === 0
-                  ? 'rgba(245, 158, 11, 0.3)'
-                  : 'rgba(16, 185, 129, 0.2)'
-              }`,
-            }}
-          >
-            <div
-              style={{
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'space-between',
-                flexWrap: 'wrap',
-                gap: '10px',
-              }}
-            >
-              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                {parseFloat(wallet.balanceCollateral || '0') === 0 ? (
-                  <AlertTriangle size={16} style={{ color: 'var(--color-anomaly)' }} />
-                ) : (
-                  <CheckCircle2 size={16} style={{ color: 'var(--color-yes)' }} />
-                )}
-                <div>
-                  <div style={{ fontWeight: 600, fontSize: '12px', color: 'var(--foreground)' }}>
-                    {parseFloat(wallet.balanceCollateral || '0') === 0
-                      ? 'Collateral Required: 0.00 tUSDC Detected'
-                      : `Trading Collateral: ${wallet.balanceCollateral} tUSDC Available`}
-                  </div>
-                  <div style={{ fontSize: '11px', color: 'var(--muted-foreground)' }}>
-                    <strong>STT</strong> is native gas ({wallet.balanceSTT || '0.00'} STT). DreamDEX CLOB trades require <strong>tUSDC</strong> collateral.
-                  </div>
-                </div>
-              </div>
-
-              {onClaimFaucet && parseFloat(wallet.balanceCollateral || '0') === 0 && (
-                <button
-                  type="button"
-                  className="btn-faucet-action"
-                  onClick={() => onClaimFaucet(1000)}
-                  disabled={isFauceting}
-                  style={{
-                    background: 'var(--trade-anomaly)',
-                    color: '#000',
-                    fontWeight: 700,
-                    fontSize: '11px',
-                    padding: '6px 12px',
-                    borderRadius: '6px',
-                    border: 'none',
-                    cursor: 'pointer',
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: '6px',
-                  }}
-                >
-                  {isFauceting ? <Loader2 size={12} className="spin" /> : <Coins size={12} />}
-                  <span>Claim 1,000 tUSDC Faucet</span>
-                </button>
-              )}
-            </div>
-          </div>
-
-          {/* Active Session Notice if already authorized */}
+        <div className="modal-scroll-content">
+          {/* Top Session State Card if active */}
           {activeSession && activeSession.isActive && (
-            <div className="active-session-banner">
-              <div className="active-session-header">
-                <div className="status-indicator-live">
-                  <span className="live-dot-green"></span>
-                  <span className="active-session-text">Session Active & On-Chain Authorized</span>
+            <div className="modal-status-card">
+              <div className="modal-status-top">
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  <div className="live-dot-green"></div>
+                  <span className="modal-status-title">ACTIVE SESSION DELEGATED</span>
                 </div>
-                <span className="active-session-expiry">
-                  Expires: {new Date(activeSession.expiresAt).toLocaleTimeString()} (
-                  {new Date(activeSession.expiresAt).toLocaleDateString()})
-                </span>
+                <span className="modal-status-badge">NON-CUSTODIAL</span>
               </div>
 
-              {/* On-Chain Permissions Badge */}
-              <div className="onchain-status-row" style={{ marginTop: '8px', fontSize: '11px', display: 'flex', gap: '8px', alignItems: 'center' }}>
-                <span style={{ color: 'var(--brand-cyan)', display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
-                  <ShieldCheck size={13} />
-                  <span>On-Chain Permitted: <code>0x80054449</code> (placeOrderFor) + <code>0xe37b444b</code> (cancelOrderFor)</span>
-                </span>
+              {/* Collateral balance check inside active session */}
+              <div
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'space-between',
+                  background: parseFloat(wallet.balanceCollateral || '0') === 0 ? 'rgba(245, 158, 11, 0.1)' : 'rgba(0, 255, 102, 0.06)',
+                  border: `1px solid ${parseFloat(wallet.balanceCollateral || '0') === 0 ? 'rgba(245, 158, 11, 0.3)' : 'rgba(0, 255, 102, 0.2)'}`,
+                  borderRadius: '6px',
+                  padding: '8px 12px',
+                  margin: '10px 0',
+                }}
+              >
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  {parseFloat(wallet.balanceCollateral || '0') === 0 ? (
+                    <ExclamationTriangleIcon className="size-4" style={{ color: 'var(--color-anomaly)' }} />
+                  ) : (
+                    <CheckCircleIcon className="size-4" style={{ color: 'var(--color-yes)' }} />
+                  )}
+                  <div>
+                    <div style={{ fontSize: '11px', fontWeight: 600, color: 'var(--foreground)' }}>
+                      Trading Collateral: <span className="tabular-num">{wallet.balanceCollateral || '0.00'} tUSDC</span>
+                    </div>
+                    <div style={{ fontSize: '10px', color: 'var(--muted-foreground)' }}>
+                      {parseFloat(wallet.balanceCollateral || '0') === 0
+                        ? 'Zero collateral will cause autonomous transactions to revert. Claim faucet below.'
+                        : 'Collateral is ready for automated multi-agent order book execution.'}
+                    </div>
+                  </div>
+                </div>
+                {onClaimFaucet && (
+                  <button
+                    type="button"
+                    onClick={async () => {
+                      if (!onClaimFaucet) return;
+                      await onClaimFaucet(1000);
+                    }}
+                    disabled={isFauceting}
+                    style={{
+                      background: 'rgba(0, 240, 255, 0.15)',
+                      border: '1px solid rgba(0, 240, 255, 0.4)',
+                      color: 'var(--brand-cyan)',
+                      borderRadius: '5px',
+                      padding: '4px 10px',
+                      fontSize: '11px',
+                      fontWeight: 600,
+                      cursor: isFauceting ? 'not-allowed' : 'pointer',
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: '4px',
+                    }}
+                  >
+                    {isFauceting ? <ArrowPathIcon className="size-3 spin" /> : <CurrencyDollarIcon className="size-3" />}
+                    <span>+1,000 tUSDC Faucet</span>
+                  </button>
+                )}
+              </div>
+
+              {/* Direct Payout Guarantee Highlight */}
+              <div
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'space-between',
+                  background: 'rgba(0, 255, 102, 0.08)',
+                  border: '1px solid rgba(0, 255, 102, 0.25)',
+                  borderRadius: '6px',
+                  padding: '8px 12px',
+                  margin: '8px 0',
+                }}
+              >
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  <ShieldCheckIcon className="size-3.5" style={{ color: 'var(--trade-buy)' }} />
+                  <div style={{ fontSize: '11px', color: 'var(--foreground)' }}>
+                    <span style={{ fontWeight: 700, color: 'var(--trade-buy)' }}>100% Direct Wallet Payout: </span>
+                    <span>All winnings & settlements are sent directly to your connected wallet</span>
+                  </div>
+                </div>
                 {activeSession.onChainTxHash && (
                   <a
                     href={`https://shannon-explorer.somnia.network/tx/${activeSession.onChainTxHash}`}
                     target="_blank"
-                    rel="noreferrer"
-                    style={{ color: 'var(--brand-cyan)', textDecoration: 'underline', display: 'inline-flex', alignItems: 'center', gap: '2px', marginLeft: 'auto' }}
+                    rel="noopener noreferrer"
+                    style={{ fontSize: '10.5px', color: 'var(--brand-cyan)', display: 'inline-flex', alignItems: 'center', gap: '3px', textDecoration: 'none' }}
                   >
-                    <span>Tx Hash</span>
-                    <ExternalLink size={10} />
+                    <span>Explorer</span>
+                    <ArrowTopRightOnSquareIcon className="size-2.5" />
                   </a>
                 )}
               </div>
 
-              <div className="active-session-stats-row" style={{ marginTop: '10px' }}>
-                <div className="stat-pill">
-                  <span className="stat-pill-label">Max / Trade:</span>
-                  <span className="stat-pill-value">{activeSession.maxTradeSize} tUSDC</span>
-                </div>
-                <div className="stat-pill">
-                  <span className="stat-pill-label">24h Daily Cap:</span>
-                  <span className="stat-pill-value">{activeSession.dailyVolumeCap} tUSDC</span>
-                </div>
-                <div className="stat-pill">
-                  <span className="stat-pill-label">Spent Today:</span>
-                  <span className="stat-pill-value">{activeSession.spentToday.toFixed(2)} tUSDC</span>
-                </div>
                 {activeSession.vaultDepositAmount !== undefined && activeSession.vaultDepositAmount > 0 && (
                   <div className="stat-pill">
                     <span className="stat-pill-label">Vault Capital:</span>
                     <span className="stat-pill-value">{activeSession.vaultDepositAmount} tUSDC</span>
                   </div>
                 )}
-              </div>
 
               {confirmRevoke ? (
                 <div className="revoke-confirm-box" style={{ marginTop: '12px' }}>
@@ -323,7 +305,7 @@ export const SessionDelegationModal: React.FC<SessionDelegationModalProps> = ({
                       onClick={handleRevoke}
                       disabled={isLoading}
                     >
-                      {isLoading ? <Loader2 size={13} className="spin" /> : 'Yes, Revoke Now'}
+                      {isLoading ? <ArrowPathIcon className="size-3.5 spin" /> : 'Yes, Revoke Now'}
                     </button>
                     <button
                       type="button"
@@ -359,7 +341,7 @@ export const SessionDelegationModal: React.FC<SessionDelegationModalProps> = ({
                       onMouseEnter={(e) => (e.currentTarget.style.color = 'var(--trade-no)')}
                       onMouseLeave={(e) => (e.currentTarget.style.color = 'var(--muted-foreground)')}
                     >
-                      <LogOut size={12} />
+                      <ArrowLeftEndOnRectangleIcon className="size-3" />
                       <span>Disconnect Wallet</span>
                     </button>
                   ) : <div />}
@@ -388,7 +370,7 @@ export const SessionDelegationModal: React.FC<SessionDelegationModalProps> = ({
               }}
             >
               <div style={{ display: 'flex', alignItems: 'flex-start', gap: '10px' }}>
-                <AlertTriangle size={16} style={{ color: '#ef4444', flexShrink: 0, marginTop: '2px' }} />
+                <ExclamationTriangleIcon className="size-4 text-red-500 shrink-0 mt-0.5" />
                 <div style={{ flex: 1 }}>
                   <div style={{ fontWeight: 700, fontSize: '12px', color: '#ef4444', marginBottom: '4px' }}>
                     Action Required: Operator TestUSDC Authorization
@@ -420,7 +402,7 @@ export const SessionDelegationModal: React.FC<SessionDelegationModalProps> = ({
                         gap: '6px',
                       }}
                     >
-                      {isFixingAllowance ? <Spinner size="xs" variant="white" /> : <CheckCircle2 size={12} />}
+                      {isFixingAllowance ? <Spinner size="xs" variant="white" /> : <CheckCircleIcon className="size-3" />}
                       Authorize Operator
                     </button>
                     <button
@@ -449,13 +431,13 @@ export const SessionDelegationModal: React.FC<SessionDelegationModalProps> = ({
           {/* 3-Step Onboarding Architecture Banner */}
           <div className="safety-guarantees-card" style={{ padding: '12px 14px', marginBottom: '14px' }}>
             <div className="safety-card-title" style={{ marginBottom: '10px' }}>
-              <Layers size={15} className="safety-icon-cyan" />
+              <Square3Stack3DIcon className="size-4 safety-icon-cyan" />
               <span>3-Step Autonomous Copy-Trading Setup</span>
             </div>
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '8px', fontSize: '11px' }}>
               <div style={{ background: 'rgba(255, 255, 255, 0.03)', padding: '8px', borderRadius: '6px', border: '1px solid rgba(255, 255, 255, 0.06)' }}>
                 <strong style={{ display: 'flex', alignItems: 'center', gap: '4px', color: 'var(--brand-cyan)' }}>
-                  <Coins size={12} />
+                  <CurrencyDollarIcon className="size-3" />
                   <span>1. Mint Collateral</span>
                 </strong>
                 <p style={{ margin: '4px 0 0 0', color: 'var(--muted-foreground)', lineHeight: 1.3 }}>
@@ -464,7 +446,7 @@ export const SessionDelegationModal: React.FC<SessionDelegationModalProps> = ({
               </div>
               <div style={{ background: 'rgba(255, 255, 255, 0.03)', padding: '8px', borderRadius: '6px', border: '1px solid rgba(255, 255, 255, 0.06)' }}>
                 <strong style={{ display: 'flex', alignItems: 'center', gap: '4px', color: 'var(--brand-cyan)' }}>
-                  <ShieldCheck size={12} />
+                  <ShieldCheckIcon className="size-3" />
                   <span>2. On-Chain Auth</span>
                 </strong>
                 <p style={{ margin: '4px 0 0 0', color: 'var(--muted-foreground)', lineHeight: 1.3 }}>
@@ -473,7 +455,7 @@ export const SessionDelegationModal: React.FC<SessionDelegationModalProps> = ({
               </div>
               <div style={{ background: 'rgba(255, 255, 255, 0.03)', padding: '8px', borderRadius: '6px', border: '1px solid rgba(255, 255, 255, 0.06)' }}>
                 <strong style={{ display: 'flex', alignItems: 'center', gap: '4px', color: 'var(--brand-cyan)' }}>
-                  <FileCheck2 size={12} />
+                  <DocumentCheckIcon className="size-3" />
                   <span>3. EIP-712 Caps</span>
                 </strong>
                 <p style={{ margin: '4px 0 0 0', color: 'var(--muted-foreground)', lineHeight: 1.3 }}>
@@ -489,9 +471,9 @@ export const SessionDelegationModal: React.FC<SessionDelegationModalProps> = ({
             <div className="operator-address-chip" onClick={handleCopyOperator} title="Click to copy operator address">
               <code>{SOMNIA_ADDRESSES.operatorAccount}</code>
               {copiedOperator ? (
-                <Check size={12} style={{ color: 'var(--color-yes)' }} />
+                <CheckIcon className="size-3" style={{ color: 'var(--color-yes)' }} />
               ) : (
-                <Copy size={12} />
+                <DocumentDuplicateIcon className="size-3" />
               )}
             </div>
             <a
@@ -501,7 +483,7 @@ export const SessionDelegationModal: React.FC<SessionDelegationModalProps> = ({
               className="operator-explorer-link"
               title="View Delegated Operator on Somnia Explorer"
             >
-              <ExternalLink size={12} />
+              <ArrowTopRightOnSquareIcon className="size-3" />
             </a>
           </div>
 
@@ -513,7 +495,7 @@ export const SessionDelegationModal: React.FC<SessionDelegationModalProps> = ({
             <div className="config-group">
               <div className="config-header-row">
                 <label htmlFor="deposit-amount-slider" className="config-label" style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
-                  <Coins size={13} style={{ color: 'var(--brand-cyan)' }} />
+                  <CurrencyDollarIcon className="size-3.5" style={{ color: 'var(--brand-cyan)' }} />
                   <span>Working Capital Vault Deposit</span>
                 </label>
                 <span className="config-value-badge">{depositAmount} tUSDC</span>
@@ -627,7 +609,7 @@ export const SessionDelegationModal: React.FC<SessionDelegationModalProps> = ({
                     className={`duration-card ${durationHours === opt.hours ? 'active' : ''}`}
                     onClick={() => setDurationHours(opt.hours)}
                   >
-                    <Clock size={13} />
+                    <ClockIcon className="size-3.5" />
                     <span>{opt.label}</span>
                   </button>
                 ))}
@@ -638,33 +620,33 @@ export const SessionDelegationModal: React.FC<SessionDelegationModalProps> = ({
           {/* Zero-Custody Safety Guarantees */}
           <div className="safety-guarantees-card">
             <div className="safety-card-title">
-              <ShieldCheck size={16} className="safety-icon-cyan" />
+              <ShieldCheckIcon className="size-4 safety-icon-cyan" />
               <span>Mathematical Zero-Withdrawal Invariant</span>
             </div>
             <div className="safety-grid">
               <div className="safety-item">
-                <Lock size={14} className="safety-mini-icon" />
+                <LockClosedIcon className="size-3.5 safety-mini-icon" />
                 <div>
                   <strong>Zero Fund Access</strong>
                   <p>The operator key cannot transfer, withdraw, or approve ERC20 balances.</p>
                 </div>
               </div>
               <div className="safety-item">
-                <Zap size={14} className="safety-mini-icon" />
+                <BoltIcon className="size-3.5 safety-mini-icon" />
                 <div>
                   <strong>Direct Settlement</strong>
                   <p>All position payouts settle directly to your connected wallet.</p>
                 </div>
               </div>
               <div className="safety-item">
-                <Clock size={14} className="safety-mini-icon" />
+                <ClockIcon className="size-3.5 safety-mini-icon" />
                 <div>
                   <strong>Hard Time Expiry</strong>
                   <p>Session automatically dissolves when duration expires.</p>
                 </div>
               </div>
               <div className="safety-item">
-                <Sliders size={14} className="safety-mini-icon" />
+                <AdjustmentsHorizontalIcon className="size-3.5 safety-mini-icon" />
                 <div>
                   <strong>Enforced Caps</strong>
                   <p>Trades exceeding your single or daily limits are rejected on-chain.</p>
@@ -676,7 +658,7 @@ export const SessionDelegationModal: React.FC<SessionDelegationModalProps> = ({
           {/* Error Alert */}
           {error && (
             <div className="error-alert-box">
-              <AlertTriangle size={15} className="error-icon" />
+              <ExclamationTriangleIcon className="size-4 error-icon" />
               <span>{error}</span>
             </div>
           )}
@@ -698,7 +680,7 @@ export const SessionDelegationModal: React.FC<SessionDelegationModalProps> = ({
                 </>
               ) : (
                 <>
-                  <KeyRound size={15} />
+                  <KeyIcon className="size-4" />
                   <span>Connect Web3 Wallet</span>
                 </>
               )}
@@ -717,7 +699,7 @@ export const SessionDelegationModal: React.FC<SessionDelegationModalProps> = ({
                 </>
               ) : (
                 <>
-                  <Zap size={15} />
+                  <BoltIcon className="size-4" />
                   <span>Switch to Somnia Shannon (50312)</span>
                 </>
               )}
@@ -736,7 +718,7 @@ export const SessionDelegationModal: React.FC<SessionDelegationModalProps> = ({
                 </>
               ) : (
                 <>
-                  <CheckCircle2 size={15} />
+                  <CheckCircleIcon className="size-4" />
                   <span>
                     {activeSession?.isActive
                       ? 'Update Session & On-Chain Permissions'

@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { Sparkles, CheckCircle2, X } from 'lucide-react';
+import { SparklesIcon, CheckCircleIcon, XMarkIcon } from '@heroicons/react/24/outline';
 
 interface ClaimCelebrationProps {
   isOpen: boolean;
@@ -100,7 +100,7 @@ export const ClaimCelebration: React.FC<ClaimCelebrationProps> = ({
             cursor: 'pointer',
           }}
         >
-          <X size={16} />
+          <XMarkIcon className="size-4" />
         </button>
 
         <div
@@ -117,7 +117,7 @@ export const ClaimCelebration: React.FC<ClaimCelebrationProps> = ({
             color: 'var(--trade-buy)',
           }}
         >
-          <Sparkles size={24} />
+          <SparklesIcon className="size-6" />
         </div>
 
         <h3 style={{ fontSize: '18px', fontWeight: 700, margin: '0 0 6px 0', color: 'var(--foreground)' }}>
@@ -147,7 +147,7 @@ export const ClaimCelebration: React.FC<ClaimCelebrationProps> = ({
               gap: '4px',
             }}
           >
-            <CheckCircle2 size={12} />
+            <CheckCircleIcon className="size-3" />
             <span>View Somnia Shannon Tx: {shortTx}</span>
           </a>
         )}

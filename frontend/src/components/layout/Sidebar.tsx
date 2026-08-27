@@ -1,18 +1,18 @@
 import React from "react";
 import {
-  LayoutDashboard,
-  Radar,
-  Layers,
-  Bot,
-  SlidersHorizontal,
-  Code2,
-  Sparkles,
-  PieChart,
-  CheckCircle2,
-  Coins,
-  Shield,
-  Zap,
-} from "lucide-react";
+  Squares2X2Icon,
+  ViewfinderCircleIcon,
+  Square3Stack3DIcon,
+  CpuChipIcon,
+  AdjustmentsHorizontalIcon,
+  CommandLineIcon,
+  SparklesIcon,
+  ChartPieIcon,
+  CheckCircleIcon,
+  CurrencyDollarIcon,
+  ShieldCheckIcon,
+  BoltIcon,
+} from "@heroicons/react/24/outline";
 import { BrandLogo, BrandIcon } from "../common/BrandLogo";
 import { Button } from "../ui/button";
 import { Badge } from "../ui/badge";
@@ -55,19 +55,19 @@ export const Sidebar: React.FC<SidebarProps> = ({
       label: "Terminal Overview",
       badge: markets.length > 0 ? `${markets.length}` : undefined,
       description: "Macro Swarm & Live CLOB Telemetry",
-      icon: LayoutDashboard,
+      icon: Squares2X2Icon,
     },
     {
       id: "Edge Radar" as DashboardViewType,
       label: "Edge Radar",
       description: "Black-Scholes Φ(z) Mispricings",
-      icon: Radar,
+      icon: ViewfinderCircleIcon,
     },
     {
       id: "Markets & Depth" as DashboardViewType,
       label: "Order Book & Depth",
       description: "Microsecond CLOB Ladders & Fills",
-      icon: Layers,
+      icon: Square3Stack3DIcon,
     },
   ];
 
@@ -77,13 +77,13 @@ export const Sidebar: React.FC<SidebarProps> = ({
       id: "AI Swarm Feed" as DashboardViewType,
       label: "Live Swarm Feed",
       description: "Real-time Multi-Agent Reasoning",
-      icon: Bot,
+      icon: CpuChipIcon,
     },
     {
       id: "Swarm Cockpit" as DashboardViewType,
       label: "Swarm Cockpit",
       description: "Risk Guardrails & Swarm Controls",
-      icon: SlidersHorizontal,
+      icon: AdjustmentsHorizontalIcon,
     },
   ];
 
@@ -93,19 +93,19 @@ export const Sidebar: React.FC<SidebarProps> = ({
       id: "Strategy Studio" as DashboardViewType,
       label: "Strategy Studio",
       description: "Quant Backtester & Formula Studio",
-      icon: Code2,
+      icon: CommandLineIcon,
     },
     {
       id: "Settlement" as DashboardViewType,
       label: "Settlement Sweeper",
       description: "Batch Outcome Claims & Compounder",
-      icon: CheckCircle2,
+      icon: CheckCircleIcon,
     },
     {
       id: "Analytics" as DashboardViewType,
       label: "Portfolio Analytics",
       description: "Sharpe, Sortino & PnL Replay",
-      icon: PieChart,
+      icon: ChartPieIcon,
     },
   ];
 
@@ -185,7 +185,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
               onClick={() => onOpenSessionModal?.()}
               className="w-full flex items-center justify-center gap-2 rounded-lg bg-primary text-primary-foreground h-9 px-3 text-xs font-medium hover:bg-primary/90 transition-colors shadow-2xs cursor-pointer"
             >
-              <Sparkles className="size-3.5" />
+              <SparklesIcon className="size-3.5" />
               <span>{activeSession ? "Session Active" : "Delegate Session"}</span>
             </button>
           </div>
@@ -197,7 +197,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
               className="size-9 rounded-lg shadow-2xs"
               title={activeSession ? "Session Active" : "Delegate Session"}
             >
-              <Sparkles className="size-4" />
+              <SparklesIcon className="size-4" />
             </Button>
           </div>
         )}
@@ -216,7 +216,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
           <div className="rounded-xl border border-border/50 bg-card/40 backdrop-blur-md p-2.5 space-y-1 text-xs shadow-2xs">
             <div className="flex items-center justify-between">
               <span className="font-semibold text-foreground text-xs flex items-center gap-1.5">
-                <Zap className="size-3 text-foreground/70" />
+                <BoltIcon className="size-3 text-foreground/70" />
                 Somnia L1
               </span>
               <Badge
@@ -255,7 +255,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
             </div>
             {!isCollapsed && activeSession && (
               <span title="Session Key Active">
-                <Shield className="size-3 text-emerald-400 shrink-0" />
+                <ShieldCheckIcon className="size-3 text-emerald-400 shrink-0" />
               </span>
             )}
           </div>
@@ -267,7 +267,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
               onClick={onConnectWallet}
               className="w-full gap-1.5 text-xs font-normal text-muted-foreground hover:text-foreground"
             >
-              <Coins className="size-3.5" />
+              <CurrencyDollarIcon className="size-3.5" />
               <span>Connect Wallet</span>
             </Button>
           )

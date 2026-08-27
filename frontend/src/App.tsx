@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { GitBranch, ArrowRight } from 'lucide-react';
+import { CommandLineIcon, ArrowRightIcon } from '@heroicons/react/24/outline';
 import './styles/landing.css';
 import './styles/terminal.css';
 import './styles/dashboard.css';
@@ -348,7 +348,7 @@ export const App: React.FC = () => {
           </React.Suspense>
         ) : (
           <div className="glass-card p-8 rounded-xl text-center flex flex-col items-center justify-center">
-            <GitBranch className="size-9 text-cyan-400 mb-4" />
+            <CommandLineIcon className="size-9 text-cyan-400 mb-4" />
             <h2 className="text-lg font-bold mb-2">{activeNav} Module</h2>
             <p className="text-muted-foreground text-xs max-w-sm">
               Configured for upcoming protocol phases. You can explore the live <strong>Terminal</strong> anytime.
@@ -362,7 +362,7 @@ export const App: React.FC = () => {
               }}
             >
               <span>Back to Terminal</span>
-              <ArrowRight className="size-3.5" />
+              <ArrowRightIcon className="size-3.5" />
             </button>
           </div>
         )}

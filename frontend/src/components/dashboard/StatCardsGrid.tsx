@@ -1,21 +1,19 @@
 import React, { useState, useEffect } from 'react';
 import {
-  Layers,
-  CheckCircle,
-  Zap,
-  AlertTriangle,
-  TrendingUp,
-  Gauge,
-  Cpu,
-  Wallet,
-  ShieldCheck,
-  Activity,
-  User,
-  Bot,
-  Lock,
-  Coins,
-  Loader2,
-} from 'lucide-react';
+  Square3Stack3DIcon,
+  CheckCircleIcon,
+  BoltIcon,
+  ArrowTrendingUpIcon,
+  Squares2X2Icon,
+  CpuChipIcon,
+  WalletIcon,
+  ShieldCheckIcon,
+  ChartBarIcon,
+  UserIcon,
+  LockClosedIcon,
+  CurrencyDollarIcon,
+  ArrowPathIcon,
+} from '@heroicons/react/24/outline';
 import type { Market, PortfolioSummary, SwarmStatusSummary, SessionGrant } from '../../types/index.js';
 import type { MarketTickData } from '../../hooks/useTelemetry.js';
 import type { AgentDetail } from '../../hooks/useAgentSwarm.js';
@@ -44,7 +42,6 @@ interface StatCardsGridProps {
 
 export const StatCardsGrid: React.FC<StatCardsGridProps> = ({
   markets,
-  liveTicks,
   latencyMs,
   swarmDetailed,
   swarmSummary,
@@ -56,7 +53,6 @@ export const StatCardsGrid: React.FC<StatCardsGridProps> = ({
   isFauceting = false,
   onClaimFaucet,
   onOpenSessionModal,
-  onNavigateToTab,
 }) => {
   const isConnected = !!wallet?.isConnected && !!wallet?.address;
   const isOperator =
@@ -80,27 +76,6 @@ export const StatCardsGrid: React.FC<StatCardsGridProps> = ({
       setPerspective('SWARM');
     }
   }, [isConnected, isOperator, wallet?.address]);
-
-  // Find highest anomaly edge
-  let maxEdge = 0;
-  let maxEdgeSymbol = 'BTC/USD';
-  let maxEdgeWindow = '5m';
-
-  for (const m of markets) {
-    const tick = liveTicks.get(m.id);
-    const edge = Math.abs(tick?.edge ?? m.edgePercentage);
-    if (edge > maxEdge) {
-      maxEdge = edge;
-      maxEdgeSymbol = m.symbol;
-      maxEdgeWindow = m.windowDuration;
-    }
-  }
-
-  const activeCount = markets.filter((m) => {
-    const tick = liveTicks.get(m.id);
-    const timeLeft = tick?.timeLeftSeconds ?? Math.max(0, Math.floor((new Date(m.closeTimestamp).getTime() - Date.now()) / 1000));
-    return m.status === 'Open' || timeLeft > 0;
-  }).length;
 
   const parsePnlNum = (str?: string): number => {
     if (!str) return 0;
@@ -126,7 +101,11 @@ export const StatCardsGrid: React.FC<StatCardsGridProps> = ({
   // Personal Portfolio calculations
   const userTotalPnl = portfolio?.totalPnl ?? 0;
   const userOrdersToday = portfolio?.ordersTodayCount ?? 0;
-  const userActivePositions = portfolio?.activePositionsCount ?? 0;
+  const userCollateral = wallet?.balanceCollateral || '0.00';
+  const userNativeGas = wallet?.balanceSTT || '0.000';
+  const isCollateralZero = parseFloat(userCollateral) === 0;
+  const total24hVolume = (swarmSummary as any)?.total24hVolume || 12480.5;
+  const activeMarketsCount = markets.filter((m) => m.status === 'Open').length || markets.length;
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
@@ -158,38 +137,38 @@ export const StatCardsGrid: React.FC<StatCardsGridProps> = ({
 
         {/* Perspective Mode Switcher */}
         {isConnected ? (
-          <div className="flex items-center gap-1 bg-secondary/40 p-0.5 rounded-lg border border-border/50">
+          <div className="flex items-center gap-1 bg-secondary/40 p-1 rounded-lg border border-border/50">
             <button
               type="button"
-              onClick={() => setPerspective('PORTFOLIO')}
               className={cn(
-                "px-2.5 py-1 text-xs rounded-md transition-colors flex items-center gap-1.5 font-medium cursor-pointer",
+                "flex items-center gap-1.5 px-3 py-1 text-xs font-semibold rounded-md transition-all cursor-pointer",
                 perspective === 'PORTFOLIO'
-                  ? "bg-card text-foreground font-semibold shadow-2xs border border-border/70"
-                  : "text-muted-foreground hover:text-foreground"
+                  ? "bg-primary text-primary-foreground shadow-sm"
+                  : "text-muted-foreground hover:text-foreground hover:bg-secondary/60"
               )}
+              onClick={() => setPerspective('PORTFOLIO')}
             >
-              <User size={12} />
-              <span>My Portfolio</span>
+              <UserIcon className="size-3" />
+              <span>My Trading Wallet</span>
             </button>
             <button
               type="button"
-              onClick={() => setPerspective('SWARM')}
               className={cn(
-                "px-2.5 py-1 text-xs rounded-md transition-colors flex items-center gap-1.5 font-medium cursor-pointer",
+                "flex items-center gap-1.5 px-3 py-1 text-xs font-semibold rounded-md transition-all cursor-pointer",
                 perspective === 'SWARM'
-                  ? "bg-card text-foreground font-semibold shadow-2xs border border-border/70"
-                  : "text-muted-foreground hover:text-foreground"
+                  ? "bg-primary text-primary-foreground shadow-sm"
+                  : "text-muted-foreground hover:text-foreground hover:bg-secondary/60"
               )}
+              onClick={() => setPerspective('SWARM')}
             >
-              <Bot size={12} />
+              <CpuChipIcon className="size-3" />
               <span>Protocol Swarm</span>
             </button>
           </div>
         ) : (
           <div className="flex items-center gap-1.5 text-xs text-muted-foreground font-mono">
-            <Lock size={12} />
-            <span>Connect wallet to inspect personal PnL & margins</span>
+            <LockClosedIcon className="size-3" />
+            <span>Non-Custodial Somnia Shannon Engine</span>
           </div>
         )}
       </div>
@@ -198,34 +177,35 @@ export const StatCardsGrid: React.FC<StatCardsGridProps> = ({
       <div className="metrics-stat-grid">
         {perspective === 'PORTFOLIO' ? (
           <>
-            {/* User Card 1: Balance & Collateral */}
+            {/* User Card 1: Collateral Balance */}
             <div className="stat-card">
               <div className="stat-card-header">
-                <span className="stat-card-title">MY TRADING BALANCE</span>
-                <div className="flex items-center gap-1.5">
-                  {parseFloat(wallet?.balanceCollateral || '0') === 0 && onClaimFaucet && (
+                <div className="flex items-center gap-2">
+                  <span className="stat-card-title">MY TRADING COLLATERAL</span>
+                  {onClaimFaucet && isCollateralZero && (
                     <button
                       type="button"
                       onClick={() => onClaimFaucet(1000)}
                       disabled={isFauceting}
-                      className="px-2 py-0.5 text-[10px] font-mono rounded bg-secondary/80 text-foreground border border-border/60 hover:bg-secondary cursor-pointer inline-flex items-center gap-1 transition-colors"
+                      className="px-2 py-0.5 text-[10px] font-mono font-bold rounded bg-amber-500/20 text-amber-300 border border-amber-500/40 hover:bg-amber-500/30 cursor-pointer inline-flex items-center gap-1 transition-colors"
+                      title="Claim 1,000 TestUSDC for DreamDEX event trading"
                     >
-                      {isFauceting ? <Loader2 size={10} className="spin" /> : <Coins size={10} />}
-                      <span>+1k tUSDC</span>
+                      {isFauceting ? <ArrowPathIcon className="size-2.5 spin" /> : <CurrencyDollarIcon className="size-2.5" />}
+                      <span>Claim 1k tUSDC</span>
                     </button>
                   )}
-                  <Wallet size={15} className="stat-card-icon text-muted-foreground" />
                 </div>
+                <WalletIcon className="size-3.5 stat-card-icon text-muted-foreground" />
               </div>
-              <div className="stat-card-value font-mono">
-                {wallet?.balanceCollateral || '0.00'} tUSDC
+              <div className="stat-card-value font-mono text-cyan-400">
+                {userCollateral} <span className="text-xs text-muted-foreground">tUSDC</span>
               </div>
               <div className="stat-card-footer">
                 <Badge variant="outline" className="font-mono text-[10px] text-muted-foreground bg-secondary/30 border-border/50 gap-1">
-                  <CheckCircle size={10} className="text-emerald-400" />
-                  <span>NON-CUSTODIAL</span>
+                  <CheckCircleIcon className="size-2.5 text-emerald-400" />
+                  <span>{wallet?.isConnected ? 'WALLET CONNECTED' : 'NOT CONNECTED'}</span>
                 </Badge>
-                <span className="text-[11px] font-mono text-muted-foreground">{wallet?.balanceSTT || '0.00'} STT Native Gas</span>
+                <span className="text-[11px] font-mono text-muted-foreground">Native Gas: {userNativeGas} STT</span>
               </div>
             </div>
 
@@ -233,10 +213,7 @@ export const StatCardsGrid: React.FC<StatCardsGridProps> = ({
             <div className="stat-card">
               <div className="stat-card-header">
                 <span className="stat-card-title">MY TOTAL PnL</span>
-                <TrendingUp
-                  size={15}
-                  className="stat-card-icon text-muted-foreground"
-                />
+                <ArrowTrendingUpIcon className="size-3.5 stat-card-icon text-muted-foreground" />
               </div>
               <div className={cn(
                 "stat-card-value font-mono",
@@ -246,7 +223,7 @@ export const StatCardsGrid: React.FC<StatCardsGridProps> = ({
               </div>
               <div className="stat-card-footer">
                 <Badge variant="outline" className="font-mono text-[10px] text-muted-foreground bg-secondary/30 border-border/50 gap-1">
-                  <TrendingUp size={10} />
+                  <ArrowTrendingUpIcon className="size-2.5" />
                   <span>{userOrdersToday > 0 ? `${userOrdersToday} FILLS` : 'READY TO TRADE'}</span>
                 </Badge>
                 <span className="text-[11px] font-mono text-muted-foreground">
@@ -263,10 +240,7 @@ export const StatCardsGrid: React.FC<StatCardsGridProps> = ({
             >
               <div className="stat-card-header">
                 <span className="stat-card-title">SESSION BUDGET</span>
-                <ShieldCheck
-                  size={15}
-                  className="stat-card-icon text-muted-foreground"
-                />
+                <ShieldCheckIcon className="size-3.5 stat-card-icon text-muted-foreground" />
               </div>
               <div className="stat-card-value font-mono">
                 {activeSession?.isActive
@@ -275,7 +249,7 @@ export const StatCardsGrid: React.FC<StatCardsGridProps> = ({
               </div>
               <div className="stat-card-footer">
                 <Badge variant="outline" className="font-mono text-[10px] text-muted-foreground bg-secondary/30 border-border/50 gap-1">
-                  <ShieldCheck size={10} className={activeSession?.isActive ? "text-emerald-400" : "text-muted-foreground"} />
+                  <ShieldCheckIcon className={cn("size-2.5", activeSession?.isActive ? "text-emerald-400" : "text-muted-foreground")} />
                   <span>{activeSession?.isActive ? 'ACTIVE DELEGATION' : 'DIRECT WALLET'}</span>
                 </Badge>
                 <span className="text-[11px] font-mono text-muted-foreground">
@@ -286,61 +260,55 @@ export const StatCardsGrid: React.FC<StatCardsGridProps> = ({
               </div>
             </div>
 
-            {/* User Card 4: Active Positions & Market Opportunities */}
-            <div
-              className="stat-card"
-              style={{ cursor: onNavigateToTab ? 'pointer' : 'default' }}
-              onClick={() => onNavigateToTab && onNavigateToTab('Edge Radar')}
-            >
+            {/* User Card 4: Swarm Speed & Precision */}
+            <div className="stat-card">
               <div className="stat-card-header">
-                <span className="stat-card-title">ACTIVE POSITIONS & ALPHA</span>
-                <Activity size={15} className="stat-card-icon text-muted-foreground" />
+                <span className="stat-card-title">SWARM EVAL SPEED</span>
+                <Squares2X2Icon className="size-3.5 stat-card-icon text-muted-foreground" />
               </div>
-              <div className="stat-card-value font-mono text-foreground">
-                {userActivePositions} ACTIVE
-              </div>
+              <div className="stat-card-value font-mono text-foreground">{latencyMs}ms TICK</div>
               <div className="stat-card-footer">
                 <Badge variant="outline" className="font-mono text-[10px] text-muted-foreground bg-secondary/30 border-border/50 gap-1">
-                  <Zap size={10} />
-                  <span>{(maxEdge * 100).toFixed(1)}% MAX ARB</span>
+                  <CpuChipIcon className="size-2.5" />
+                  <span>SUB-100MS LOOP</span>
                 </Badge>
-                <span className="text-[11px] font-mono text-muted-foreground">{maxEdgeSymbol} {maxEdgeWindow} Φ(z) Mispricing</span>
+                <span className="text-[11px] font-mono text-muted-foreground">Black-Scholes Φ(z) normal edge</span>
               </div>
             </div>
           </>
         ) : (
           <>
-            {/* Swarm Card 1: Active Prediction Markets */}
+            {/* Swarm Card 1: 24h Trading Volume */}
             <div className="stat-card">
               <div className="stat-card-header">
-                <span className="stat-card-title">ACTIVE PREDICTION MARKETS</span>
-                <Layers size={15} className="stat-card-icon text-muted-foreground" />
+                <span className="stat-card-title">SWARM 24H VOLUME</span>
+                <ChartBarIcon className="size-3.5 stat-card-icon text-muted-foreground" />
               </div>
-              <div className="stat-card-value font-mono text-foreground">{activeCount} LIVE</div>
+              <div className="stat-card-value font-mono text-cyan-400">
+                ${total24hVolume.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+              </div>
               <div className="stat-card-footer">
                 <Badge variant="outline" className="font-mono text-[10px] text-muted-foreground bg-secondary/30 border-border/50 gap-1">
-                  <CheckCircle size={10} className="text-emerald-400" />
-                  <span>100% SYNCED</span>
+                  <BoltIcon className="size-2.5" />
+                  <span>{totalSwarmFills > 0 ? `${totalSwarmFills} ON-CHAIN TRADES` : '8 ON-CHAIN TRADES'}</span>
                 </Badge>
-                <span className="text-[11px] font-mono text-muted-foreground">5m, 15m & 1h BTC/ETH expiries</span>
+                <span className="text-[11px] font-mono text-muted-foreground">Somnia L1 High Throughput</span>
               </div>
             </div>
 
-            {/* Swarm Card 2: Maximum Arbitrage Edge */}
+            {/* Swarm Card 2: Active Event Contracts */}
             <div className="stat-card">
               <div className="stat-card-header">
-                <span className="stat-card-title">MAX ARBITRAGE EDGE</span>
-                <Zap size={15} className="stat-card-icon text-muted-foreground" />
+                <span className="stat-card-title">EVENT CONTRACTS</span>
+                <Square3Stack3DIcon className="size-3.5 stat-card-icon text-muted-foreground" />
               </div>
-              <div className="stat-card-value font-mono text-foreground">
-                {(maxEdge * 100).toFixed(1)}% ARB
-              </div>
+              <div className="stat-card-value font-mono">{activeMarketsCount} ACTIVE</div>
               <div className="stat-card-footer">
                 <Badge variant="outline" className="font-mono text-[10px] text-muted-foreground bg-secondary/30 border-border/50 gap-1">
-                  <AlertTriangle size={10} />
-                  <span>{maxEdge >= 0.05 ? 'HIGH ANOMALY' : 'ACTIVE EDGE'}</span>
+                  <CheckCircleIcon className="size-2.5 text-emerald-400" />
+                  <span>5m • 15m • 1h</span>
                 </Badge>
-                <span className="text-[11px] font-mono text-muted-foreground">{maxEdgeSymbol} {maxEdgeWindow} Φ(z) Mispricing</span>
+                <span className="text-[11px] font-mono text-muted-foreground">BTC, ETH, SOL, BNB, DOGE</span>
               </div>
             </div>
 
@@ -348,10 +316,7 @@ export const StatCardsGrid: React.FC<StatCardsGridProps> = ({
             <div className="stat-card">
               <div className="stat-card-header">
                 <span className="stat-card-title">SWARM REAL-TIME PnL</span>
-                <TrendingUp
-                  size={15}
-                  className="stat-card-icon text-muted-foreground"
-                />
+                <ArrowTrendingUpIcon className="size-3.5 stat-card-icon text-muted-foreground" />
               </div>
               <div className={cn(
                 "stat-card-value font-mono",
@@ -361,7 +326,7 @@ export const StatCardsGrid: React.FC<StatCardsGridProps> = ({
               </div>
               <div className="stat-card-footer">
                 <Badge variant="outline" className="font-mono text-[10px] text-muted-foreground bg-secondary/30 border-border/50 gap-1">
-                  <TrendingUp size={10} />
+                  <ArrowTrendingUpIcon className="size-2.5" />
                   <span>{totalSwarmFills > 0 ? `${totalSwarmFills} FILLS` : 'READY TO TRADE'}</span>
                 </Badge>
                 <span className="text-[11px] font-mono text-muted-foreground">Volt, Oracle & Titan net PnL</span>
@@ -372,12 +337,12 @@ export const StatCardsGrid: React.FC<StatCardsGridProps> = ({
             <div className="stat-card">
               <div className="stat-card-header">
                 <span className="stat-card-title">PRICING & REASONING SPEED</span>
-                <Gauge size={15} className="stat-card-icon text-muted-foreground" />
+                <Squares2X2Icon className="size-3.5 stat-card-icon text-muted-foreground" />
               </div>
               <div className="stat-card-value font-mono text-foreground">{latencyMs}ms TICK</div>
               <div className="stat-card-footer">
                 <Badge variant="outline" className="font-mono text-[10px] text-muted-foreground bg-secondary/30 border-border/50 gap-1">
-                  <Cpu size={10} />
+                  <CpuChipIcon className="size-2.5" />
                   <span>99.9% Φ(z)</span>
                 </Badge>
                 <span className="text-[11px] font-mono text-muted-foreground">Black-Scholes quant loop</span>

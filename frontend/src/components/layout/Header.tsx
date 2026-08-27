@@ -1,17 +1,17 @@
 import React from "react";
 import {
-  PanelLeft,
-  Search,
-  Zap,
-  Activity,
-  Wallet,
-  Coins,
-  ShieldCheck,
-  ChevronDown,
-  ExternalLink,
-  LogOut,
-  Sparkles,
-} from "lucide-react";
+  Bars3Icon,
+  MagnifyingGlassIcon,
+  BoltIcon,
+  ChartBarIcon,
+  WalletIcon,
+  CurrencyDollarIcon,
+  ShieldCheckIcon,
+  ChevronDownIcon,
+  ArrowTopRightOnSquareIcon,
+  ArrowLeftEndOnRectangleIcon,
+  SparklesIcon,
+} from "@heroicons/react/24/outline";
 import { Button } from "../ui/button";
 import { Separator } from "../ui/separator";
 import {
@@ -82,7 +82,7 @@ export const Header: React.FC<HeaderProps> = ({
             className="text-muted-foreground hover:text-foreground cursor-pointer"
             title="Toggle sidebar (⌘B / Ctrl+B)"
           >
-            <PanelLeft className="size-4" />
+            <Bars3Icon className="size-4" />
           </Button>
           <Separator orientation="vertical" className="h-4 mx-1 border-border/50" />
           <button
@@ -90,7 +90,7 @@ export const Header: React.FC<HeaderProps> = ({
             className="flex items-center gap-2 rounded-lg border border-border/60 bg-muted/30 backdrop-blur-sm px-3 py-1 text-xs text-muted-foreground hover:border-foreground/30 hover:text-foreground transition-colors w-44 sm:w-60 cursor-pointer"
             title="Quick search markets, navigation, commands (⌘K / Ctrl+K)"
           >
-            <Search className="size-3.5" />
+            <MagnifyingGlassIcon className="size-3.5" />
             <span className="flex-1 text-left truncate">Search markets, actions...</span>
             <kbd className="pointer-events-none hidden sm:inline-flex h-4 items-center gap-0.5 rounded border border-border/60 bg-muted/60 px-1.5 font-mono text-[9px] font-medium text-muted-foreground">
               ⌘K
@@ -141,7 +141,7 @@ export const Header: React.FC<HeaderProps> = ({
         <div className="flex items-center gap-2">
           {/* Somnia Shannon Testnet Badge */}
           <div className="hidden lg:flex items-center gap-1.5 rounded-lg border border-border/60 bg-muted/30 px-2.5 py-1 text-[11px] text-muted-foreground font-mono">
-            <Zap className="size-3 text-cyan-400" />
+            <BoltIcon className="size-3 text-cyan-400" />
             <span>Somnia 50312</span>
             <span className="size-1.5 rounded-full bg-emerald-400"></span>
           </div>
@@ -154,7 +154,7 @@ export const Header: React.FC<HeaderProps> = ({
                 className="hidden sm:flex items-center gap-1.5 rounded-lg border border-emerald-500/30 bg-emerald-500/10 px-2.5 py-1 text-[11px] text-emerald-400 font-mono hover:bg-emerald-500/20 transition-colors cursor-pointer"
                 title="Session Key active and delegated"
               >
-                <ShieldCheck className="size-3 text-emerald-400" />
+                <ShieldCheckIcon className="size-3 text-emerald-400" />
                 <span>Session Active</span>
               </button>
             ) : (
@@ -163,7 +163,7 @@ export const Header: React.FC<HeaderProps> = ({
                 className="hidden sm:flex items-center gap-1.5 rounded-lg border border-amber-500/30 bg-amber-500/10 px-2.5 py-1 text-[11px] text-amber-400 font-mono hover:bg-amber-500/20 transition-colors cursor-pointer"
                 title="Delegate session key for zero-popup trading"
               >
-                <Sparkles className="size-3 text-amber-400" />
+                <SparklesIcon className="size-3 text-amber-400" />
                 <span>Delegate Session</span>
               </button>
             )
@@ -176,7 +176,7 @@ export const Header: React.FC<HeaderProps> = ({
                 <button className="flex items-center gap-2 rounded-lg border border-border/70 bg-card/60 backdrop-blur-md px-2.5 py-1 text-xs text-foreground hover:bg-card transition-colors cursor-pointer shadow-xs">
                   <div className="size-2 rounded-full bg-emerald-400" />
                   <span className="font-mono text-xs">{formatAddress(wallet.address)}</span>
-                  <ChevronDown className="size-3 text-muted-foreground" />
+                  <ChevronDownIcon className="size-3 text-muted-foreground" />
                 </button>
               </DropdownMenuTrigger>
 
@@ -208,20 +208,20 @@ export const Header: React.FC<HeaderProps> = ({
                   disabled={isFauceting}
                   className="gap-2 cursor-pointer"
                 >
-                  <Coins className="size-3.5 text-cyan-400" />
+                  <CurrencyDollarIcon className="size-3.5 text-cyan-400" />
                   <span>{isFauceting ? "Claiming Faucet..." : "Claim 1,000 tUSDC Faucet"}</span>
                 </DropdownMenuItem>
 
                 {/* Session Delegation */}
                 <DropdownMenuItem onClick={onOpenSessionModal} className="gap-2 cursor-pointer">
-                  <ShieldCheck className="size-3.5 text-emerald-400" />
+                  <ShieldCheckIcon className="size-3.5 text-emerald-400" />
                   <span>{activeSession ? "Manage Session Key" : "Create Session Key"}</span>
                 </DropdownMenuItem>
 
                 {/* Switch Network if incorrect */}
                 {!wallet.isCorrectNetwork && (
                   <DropdownMenuItem onClick={onSwitchNetwork} className="gap-2 text-amber-400 cursor-pointer">
-                    <Activity className="size-3.5" />
+                    <ChartBarIcon className="size-3.5" />
                     <span>Switch to Somnia Testnet</span>
                   </DropdownMenuItem>
                 )}
@@ -236,7 +236,7 @@ export const Header: React.FC<HeaderProps> = ({
                   }}
                   className="gap-2 cursor-pointer text-xs"
                 >
-                  <ExternalLink className="size-3.5" />
+                  <ArrowTopRightOnSquareIcon className="size-3.5" />
                   <span>View in Shannon Explorer</span>
                 </DropdownMenuItem>
 
@@ -246,7 +246,7 @@ export const Header: React.FC<HeaderProps> = ({
                   onClick={onDisconnectWallet}
                   className="gap-2 text-destructive focus:text-destructive cursor-pointer"
                 >
-                  <LogOut className="size-3.5" />
+                  <ArrowLeftEndOnRectangleIcon className="size-3.5" />
                   <span>Disconnect Wallet</span>
                 </DropdownMenuItem>
               </DropdownMenuContent>
@@ -257,7 +257,7 @@ export const Header: React.FC<HeaderProps> = ({
               onClick={onConnectWallet}
               className="gap-1.5 shadow-sm"
             >
-              <Wallet className="size-3.5" />
+              <WalletIcon className="size-3.5" />
               <span>Connect Wallet</span>
             </Button>
           )}

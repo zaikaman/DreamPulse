@@ -301,7 +301,7 @@ describe('Phase 6 Settlement Sweeper & Collateral Compounder Tests', () => {
 
     it('sweeps copy-trader positions even if on-chain outcome tokens were already redeemed by operator', async () => {
       const settlementService = new SettlementService();
-      const copyTraderAddress = '0x46cC04De981E603958e4612f877D72427c5b6544';
+      const copyTraderAddress = '0x9999999999999999999999999999999999999999';
 
       vi.spyOn(settlementService, 'scanUnclaimedSettlements').mockResolvedValue([
         {

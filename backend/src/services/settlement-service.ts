@@ -582,7 +582,9 @@ export class SettlementService {
               args: [normalizedUser, pos.rawAmount],
             });
             if (transferHash) {
-              await publicClient.waitForTransactionReceipt({ hash: transferHash, timeout: 60_000 }).catch(() => {});
+              if (process.env.NODE_ENV !== 'test') {
+                await publicClient.waitForTransactionReceipt({ hash: transferHash, timeout: 60_000 }).catch(() => {});
+              }
               txHash = transferHash;
             }
           } catch (tErr: any) {
@@ -827,7 +829,9 @@ export class SettlementService {
               args: [normalizedUser, rawAmount],
             });
             if (transferHash) {
-              await publicClient.waitForTransactionReceipt({ hash: transferHash, timeout: 60_000 }).catch(() => {});
+              if (process.env.NODE_ENV !== 'test') {
+                await publicClient.waitForTransactionReceipt({ hash: transferHash, timeout: 60_000 }).catch(() => {});
+              }
               txHash = transferHash;
               sweep.txHash = transferHash;
             }

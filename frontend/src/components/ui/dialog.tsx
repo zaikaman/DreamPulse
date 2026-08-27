@@ -2,7 +2,7 @@ import * as React from "react";
 import * as DialogPrimitive from "@radix-ui/react-dialog";
 import { cn } from "../../lib/utils";
 import { Button } from "./button";
-import { X } from "lucide-react";
+import { XMarkIcon } from "@heroicons/react/24/outline";
 
 const Dialog = DialogPrimitive.Root;
 const DialogTrigger = DialogPrimitive.Trigger;
@@ -48,7 +48,7 @@ const DialogContent = React.forwardRef<
             size="icon-sm"
             className="absolute right-3 top-3 rounded-md opacity-70 transition-opacity hover:opacity-100 focus:outline-none"
           >
-            <X className="h-4 w-4" />
+            <XMarkIcon className="h-4 w-4" />
             <span className="sr-only">Close</span>
           </Button>
         </DialogPrimitive.Close>

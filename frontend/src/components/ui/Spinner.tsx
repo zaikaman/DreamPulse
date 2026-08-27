@@ -1,5 +1,5 @@
 import React from 'react';
-import { Loader2 } from 'lucide-react';
+import { ArrowPathIcon } from '@heroicons/react/24/outline';
 
 export interface SpinnerProps extends React.HTMLAttributes<HTMLSpanElement> {
   size?: 'xs' | 'sm' | 'md' | 'lg' | 'xl' | number;
@@ -51,8 +51,9 @@ export const Spinner: React.FC<SpinnerProps> = ({
       aria-label="Loading"
       {...props}
     >
-      <Loader2
-        size={pixelSize}
+      <ArrowPathIcon
+        width={pixelSize}
+        height={pixelSize}
         style={{
           animation: 'dreampulse-spin 0.85s linear infinite',
           transformOrigin: 'center center',

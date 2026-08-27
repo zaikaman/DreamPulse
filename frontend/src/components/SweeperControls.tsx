@@ -1,19 +1,19 @@
 import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import {
-  Sparkles,
-  RefreshCw,
-  ExternalLink,
-  Layers,
-  ArrowUpRight,
-  ArrowDownRight,
-  ShieldCheck,
-  Wallet,
-  Eye,
-  Bot,
-  User,
-  Search,
-  X,
-} from 'lucide-react';
+  SparklesIcon,
+  ArrowPathIcon,
+  ArrowTopRightOnSquareIcon,
+  Square3Stack3DIcon,
+  ArrowUpRightIcon,
+  ArrowDownRightIcon,
+  ShieldCheckIcon,
+  WalletIcon,
+  EyeIcon,
+  CpuChipIcon,
+  UserIcon,
+  MagnifyingGlassIcon,
+  XMarkIcon,
+} from '@heroicons/react/24/outline';
 import { apiClient } from '../services/api.js';
 import { SOMNIA_ADDRESSES } from '../services/web3.js';
 import type { SettlementSweep } from '../types/index.js';
@@ -21,6 +21,8 @@ import { telemetryClient, type SweepCompleteData, type PnlUpdateData } from '../
 import { ClaimCelebration } from './ClaimCelebration.js';
 import { Spinner } from './ui/Spinner.js';
 import { Pagination } from './ui/Pagination.js';
+import { Badge } from './ui/badge.js';
+import { cn } from '../lib/utils.js';
 
 interface SweeperControlsProps {
   userAddress?: string;
@@ -42,12 +44,9 @@ export const SweeperControls: React.FC<SweeperControlsProps> = ({
   onRefreshPortfolio,
   onConnectWallet,
 }) => {
-  // Derive strictly from prop — no internal mutable scope that can race.
-  // When user is connected we show personal settlements; otherwise protocol (swarm).
   const activeAddress = (userAddress ?? SOMNIA_ADDRESSES.operatorAccount).toLowerCase();
   const isViewingSelf = !!userAddress;
 
-  // Hydrate initial state from localStorage cache for instant 0ms mount
   const initialCache = (() => {
     try {
       const raw = localStorage.getItem(`${SWEEPER_SUMMARY_CACHE_KEY}${activeAddress}`);
@@ -73,45 +72,34 @@ export const SweeperControls: React.FC<SweeperControlsProps> = ({
   const [totalClaimedAllTime, setTotalClaimedAllTime] = useState<number>(initialCache?.totalClaimedAllTime || 0);
   const [claimableMarketsCount, setClaimableMarketsCount] = useState<number>(initialCache?.claimableMarketsCount || 0);
 
-  // Table Filter & Pagination States
   const [selectedOutcome, setSelectedOutcome] = useState<'ALL' | 'YES' | 'NO'>('ALL');
   const [searchQuery, setSearchQuery] = useState<string>('');
   const [currentPage, setCurrentPage] = useState<number>(1);
   const [pageSize, setPageSize] = useState<number>(10);
 
-  // Filtered sweep history
   const filteredHistory = useMemo(() => {
     return history.filter((sweep) => {
-      if (selectedOutcome !== 'ALL' && sweep.winningOutcome !== selectedOutcome) {
-        return false;
-      }
+      if (selectedOutcome !== 'ALL' && sweep.winningOutcome !== selectedOutcome) return false;
       if (searchQuery.trim()) {
         const q = searchQuery.trim().toLowerCase();
         const matchesMarket = (sweep.marketId || '').toLowerCase().includes(q);
         const matchesTx = (sweep.txHash || '').toLowerCase().includes(q);
         const matchesToken = (sweep.payoutToken || '').toLowerCase().includes(q);
-        if (!matchesMarket && !matchesTx && !matchesToken) {
-          return false;
-        }
+        if (!matchesMarket && !matchesTx && !matchesToken) return false;
       }
       return true;
     });
   }, [history, selectedOutcome, searchQuery]);
 
-  // Reset to page 1 whenever filters or address change
   useEffect(() => {
     setCurrentPage(1);
   }, [selectedOutcome, searchQuery, activeAddress]);
 
-  // Clamp current page when filtered history length shrinks
   const totalPages = Math.max(1, Math.ceil(filteredHistory.length / pageSize));
   useEffect(() => {
-    if (currentPage > totalPages) {
-      setCurrentPage(totalPages);
-    }
+    if (currentPage > totalPages) setCurrentPage(totalPages);
   }, [totalPages, currentPage]);
 
-  // Paginated slice
   const paginatedHistory = useMemo(() => {
     const start = (currentPage - 1) * pageSize;
     return filteredHistory.slice(start, start + pageSize);
@@ -119,17 +107,8 @@ export const SweeperControls: React.FC<SweeperControlsProps> = ({
 
   const isFiltered = selectedOutcome !== 'ALL' || searchQuery.trim().length > 0;
 
-  // Celebration modal state
-  const [celebrationState, setCelebrationState] = useState<{
-    isOpen: boolean;
-    amount: string;
-    txHash?: string;
-  }>({
-    isOpen: false,
-    amount: '',
-  });
+  const [celebrationState, setCelebrationState] = useState<{ isOpen: boolean; amount: string; txHash?: string }>({ isOpen: false, amount: '' });
 
-  // Monotonically increasing request id — stale fetches that resolve out-of-order are ignored.
   const requestIdRef = useRef(0);
 
   const fetchSweeperData = useCallback(async () => {
@@ -140,38 +119,22 @@ export const SweeperControls: React.FC<SweeperControlsProps> = ({
         apiClient.getSweeperSummary(addr).catch(() => null),
         apiClient.getSweepHistory(addr).catch(() => null),
       ]);
-
-      // If a newer request started while we were in-flight, this response is stale — drop it.
       if (reqId !== requestIdRef.current) return;
-
       if (summaryRes?.success && summaryRes.data) {
         const uAmount = summaryRes.data.unclaimedAmount || 0;
         const tClaimed = summaryRes.data.totalClaimedAllTime || 0;
         const cCount = summaryRes.data.claimableMarketsCount || 0;
-
         setUnclaimedAmount(uAmount);
         setTotalClaimedAllTime(tClaimed);
         setClaimableMarketsCount(cCount);
-
         try {
-          localStorage.setItem(
-            `${SWEEPER_SUMMARY_CACHE_KEY}${addr}`,
-            JSON.stringify({
-              unclaimedAmount: uAmount,
-              totalClaimedAllTime: tClaimed,
-              claimableMarketsCount: cCount,
-            }),
-          );
+          localStorage.setItem(`${SWEEPER_SUMMARY_CACHE_KEY}${addr}`, JSON.stringify({ unclaimedAmount: uAmount, totalClaimedAllTime: tClaimed, claimableMarketsCount: cCount }));
         } catch {}
       }
-
       if (historyRes?.success && Array.isArray(historyRes.data)) {
         setHistory(historyRes.data);
         try {
-          localStorage.setItem(
-            `${SWEEPER_HISTORY_CACHE_KEY}${addr}`,
-            JSON.stringify(historyRes.data),
-          );
+          localStorage.setItem(`${SWEEPER_HISTORY_CACHE_KEY}${addr}`, JSON.stringify(historyRes.data));
         } catch {}
       }
     } catch (err: any) {
@@ -183,10 +146,7 @@ export const SweeperControls: React.FC<SweeperControlsProps> = ({
   }, [activeAddress]);
 
   useEffect(() => {
-    // Invalidate any in-flight fetch for the previous address before starting new one.
     requestIdRef.current++;
-    
-    // Hydrate from localStorage for the active address immediately
     try {
       const rawSummary = localStorage.getItem(`${SWEEPER_SUMMARY_CACHE_KEY}${activeAddress}`);
       const rawHistory = localStorage.getItem(`${SWEEPER_HISTORY_CACHE_KEY}${activeAddress}`);
@@ -203,14 +163,9 @@ export const SweeperControls: React.FC<SweeperControlsProps> = ({
         setClaimableMarketsCount(0);
         setIsLoading(true);
       }
-      if (rawHistory) {
-        setHistory(JSON.parse(rawHistory));
-      }
+      if (rawHistory) setHistory(JSON.parse(rawHistory));
     } catch {}
-
     fetchSweeperData();
-
-    // 1. WebSocket event triggers for instant unclaimed & sweep history updates
     let debounceTimer: number | null = null;
     const scheduleRefresh = (delay = 200) => {
       if (debounceTimer) window.clearTimeout(debounceTimer);
@@ -219,22 +174,11 @@ export const SweeperControls: React.FC<SweeperControlsProps> = ({
         if (onRefreshPortfolio) onRefreshPortfolio();
       }, delay);
     };
-
     const unsubSweep = telemetryClient.on('sweep_completed', (sweep: SweepCompleteData) => {
-      if (!sweep.userAddress || sweep.userAddress.toLowerCase() === activeAddress.toLowerCase()) {
-        scheduleRefresh(150);
-      }
+      if (!sweep.userAddress || sweep.userAddress.toLowerCase() === activeAddress.toLowerCase()) scheduleRefresh(150);
     });
-
-    const unsubPnl = telemetryClient.on('pnl_update', (_pnl: PnlUpdateData) => {
-      scheduleRefresh(300);
-    });
-
-    // 2. Periodic 25-second background fallback
-    const interval = setInterval(() => {
-      fetchSweeperData();
-    }, 25000);
-
+    const unsubPnl = telemetryClient.on('pnl_update', (_pnl: PnlUpdateData) => scheduleRefresh(300));
+    const interval = setInterval(() => fetchSweeperData(), 25000);
     return () => {
       if (debounceTimer) window.clearTimeout(debounceTimer);
       clearInterval(interval);
@@ -249,16 +193,10 @@ export const SweeperControls: React.FC<SweeperControlsProps> = ({
     try {
       const res = await apiClient.triggerSweep(activeAddress, false);
       if (res.success) {
-        setCelebrationState({
-          isOpen: true,
-          amount: res.totalClaimedAmount,
-          txHash: res.txHash,
-        });
-
+        setCelebrationState({ isOpen: true, amount: res.totalClaimedAmount, txHash: res.txHash });
         const claimedNum = parseFloat(res.totalClaimedAmount.replace(/[^0-9.]/g, '')) || 0;
         setTotalClaimedAllTime((prev) => Number((prev + claimedNum).toFixed(2)));
         setUnclaimedAmount(0);
-
         await fetchSweeperData();
         if (onRefreshPortfolio) onRefreshPortfolio();
       }
@@ -270,395 +208,202 @@ export const SweeperControls: React.FC<SweeperControlsProps> = ({
   };
 
   return (
-    <div className="sweeper-controls-container" style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
-      {/* Watch-Only / Identity Banner */}
+    <div className="flex flex-col gap-3.5 pb-8">
+      {/* ---------- Watch-Only Identity Banner ---------- */}
       {!userAddress && (
-        <div
-          style={{
-            background: 'rgba(0, 240, 255, 0.04)',
-            border: '1px solid rgba(0, 240, 255, 0.2)',
-            borderRadius: '8px',
-            padding: '12px 16px',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'space-between',
-            gap: '12px',
-            flexWrap: 'wrap',
-          }}
-        >
-          <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-            <Eye size={16} style={{ color: 'var(--brand-cyan)' }} />
-            <div style={{ fontSize: '12px', color: 'var(--muted-foreground)' }}>
-              Viewing <strong>Protocol Autonomous Sweeper</strong> in public telemetry mode. Connect your wallet to inspect your personal settlement redemptions.
+        <div className="flex items-center justify-between gap-3 px-4 py-3 rounded-xl border bg-secondary/20 backdrop-blur-sm" style={{ borderColor: 'hsl(var(--border)/0.6)' }}>
+          <div className="flex items-center gap-3 min-w-0">
+            <div className="size-8 rounded-lg bg-secondary/30 border border-border/50 grid place-items-center text-muted-foreground flex-shrink-0">
+              <EyeIcon className="size-4" />
+            </div>
+            <div className="text-xs text-muted-foreground min-w-0">
+              Viewing <strong className="text-foreground">Protocol Autonomous Sweeper</strong> in public telemetry mode. Connect your wallet to inspect your personal settlement redemptions.
             </div>
           </div>
           {onConnectWallet && (
-            <button
-              type="button"
-              className="btn-glow"
-              onClick={onConnectWallet}
-              style={{ fontSize: '11.5px', padding: '6px 12px' }}
-            >
-              <Wallet size={12} />
+            <button type="button" onClick={onConnectWallet} className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border bg-primary text-primary-foreground text-xs font-bold hover:bg-primary/90 transition-colors flex-shrink-0">
+              <WalletIcon className="size-3.5" />
               <span>Connect Wallet</span>
             </button>
           )}
         </div>
       )}
 
-      {/* 1. Sweeper Controls Banner */}
-      <div className="terminal-panel" style={{ padding: '20px' }}>
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '14px' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-            <div
-              style={{
-                width: '36px',
-                height: '36px',
-                borderRadius: '8px',
-                background: 'rgba(0, 255, 102, 0.12)',
-                border: '1px solid rgba(0, 255, 102, 0.3)',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                color: 'var(--trade-buy)',
-              }}
-            >
-              <Sparkles size={20} />
+      {/* ---------- 1. Sweeper Controls Header + Stats ---------- */}
+      <div className="terminal-panel p-0 overflow-hidden">
+        {/* Header Bar */}
+        <div className="flex items-center justify-between gap-4 px-4 py-3 border-b border-border/40 flex-wrap">
+          <div className="flex items-center gap-3 min-w-0">
+            <div className="size-8 rounded-lg grid place-items-center border bg-secondary/30 border-border/50 text-muted-foreground flex-shrink-0">
+              <SparklesIcon className="size-4" />
             </div>
-            <div>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                <h2 style={{ fontSize: '18px', fontWeight: 700, margin: 0, color: 'var(--foreground)' }}>
+            <div className="min-w-0">
+              <div className="flex items-center gap-2 flex-wrap">
+                <h2 className="text-sm font-bold tracking-tight text-foreground leading-none">
                   {isViewingSelf ? 'My Settlement Sweeper & Direct Wallet Payouts' : 'Autonomous Protocol Sweeper'}
                 </h2>
-                <span className="stat-pill-tag tag-green">
+                <Badge variant="outline" className="font-mono text-[10px] px-1.5 py-0 bg-secondary/30 border-border/40 text-muted-foreground hidden sm:inline-flex">
                   100% DIRECT PAYOUT
-                </span>
+                </Badge>
               </div>
-              <p style={{ margin: '2px 0 0 0', fontSize: '12px', color: 'var(--muted-foreground)' }}>
-                {isViewingSelf
-                  ? 'Automatically claims binary contract payouts & transfers 100% of winnings directly to your wallet.'
-                  : 'Automated on-chain engine sweeping resolved Somnia event contracts & executing direct payout settlements.'}
+              <p className="text-[11px] text-muted-foreground mt-1 hidden sm:block">
+                {isViewingSelf ? 'Automatically claims binary contract payouts & transfers 100% of winnings directly to your wallet.' : 'Automated on-chain engine sweeping resolved Somnia event contracts & executing direct payout settlements.'}
               </p>
             </div>
           </div>
-
-          <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
-            {/* Scope Badge */}
-            <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '11px', color: 'var(--muted-foreground)' }}>
-              {isViewingSelf ? <User size={13} style={{ color: 'var(--brand-cyan)' }} /> : <Bot size={13} style={{ color: 'var(--trade-buy)' }} />}
+          <div className="flex items-center gap-2 flex-wrap flex-shrink-0">
+            <div className="hidden md:flex items-center gap-1.5 text-[11px] font-mono text-muted-foreground">
+              {isViewingSelf ? <UserIcon className="size-3.5 text-muted-foreground" /> : <CpuChipIcon className="size-3.5 text-muted-foreground" />}
               <span>{isViewingSelf ? 'Personal Account:' : 'Protocol Account:'}</span>
-              <code style={{ color: isViewingSelf ? 'var(--brand-cyan)' : 'var(--trade-buy)', fontFamily: 'var(--font-mono)' }}>
-                ({activeAddress ? `${activeAddress.slice(0, 6)}...${activeAddress.slice(-4)}` : '0x...'})
-              </code>
+              <code className="text-[11px] text-foreground">({activeAddress ? `${activeAddress.slice(0, 6)}...${activeAddress.slice(-4)}` : '0x...'})</code>
             </div>
-
-            {/* Direct Payout Badge */}
-            <div
-              style={{
-                display: 'flex',
-                alignItems: 'center',
-                gap: '6px',
-                padding: '4px 10px',
-                borderRadius: '6px',
-                background: 'rgba(0, 255, 102, 0.08)',
-                border: '1px solid rgba(0, 255, 102, 0.25)',
-                fontSize: '11px',
-                color: 'var(--trade-buy)',
-                fontWeight: 600,
-              }}
-            >
-              <ShieldCheck size={13} />
+            <Badge variant="outline" className="gap-1 font-mono text-[10px] bg-secondary/30 border-border/50 text-muted-foreground hidden lg:inline-flex">
+              <ShieldCheckIcon className="size-3" />
               <span>100% Direct Wallet Payout</span>
-            </div>
-
-            {/* Sweep Action Button */}
+            </Badge>
             {userAddress ? (
-              <button
-                type="button"
-                onClick={handleManualSweep}
-                disabled={isSweeping || unclaimedAmount <= 0}
-                className="btn-primary"
-                style={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: '6px',
-                  padding: '6px 14px',
-                  fontSize: '12px',
-                  opacity: unclaimedAmount <= 0 ? 0.6 : 1,
-                }}
-              >
-                {isSweeping ? <Spinner size="xs" variant="amber" /> : <RefreshCw size={13} />}
-                <span>{isSweeping ? 'Sweeping Payouts...' : unclaimedAmount > 0 ? `Sweep ${unclaimedAmount.toFixed(2)} tUSDC` : 'Sweep Now'}</span>
+              <button type="button" onClick={handleManualSweep} disabled={isSweeping || unclaimedAmount <= 0} className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg border text-xs font-bold transition-colors disabled:opacity-50 disabled:cursor-not-allowed bg-primary text-primary-foreground border-border hover:bg-primary/90">
+                {isSweeping ? <Spinner size="xs" variant="cyan" /> : <ArrowPathIcon className="size-3.5" />}
+                <span>{isSweeping ? 'Sweeping…' : unclaimedAmount > 0 ? `Sweep ${unclaimedAmount.toFixed(2)} tUSDC` : 'Sweep Now'}</span>
               </button>
             ) : (
-              <button
-                type="button"
-                onClick={onConnectWallet}
-                className="btn-header-wallet"
-                style={{ fontSize: '11px', padding: '6px 12px' }}
-              >
-                <Wallet size={12} />
+              <button type="button" onClick={onConnectWallet} className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border bg-secondary/30 border-border/50 text-xs font-medium text-muted-foreground hover:text-foreground hover:bg-secondary/50 transition-colors">
+                <WalletIcon className="size-3.5" />
                 <span>Connect to Sweep</span>
               </button>
             )}
           </div>
         </div>
 
-        {/* 3 Settlement Stats Cards */}
+        {/* Stats Grid */}
         {isLoading && history.length === 0 ? (
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '12px', marginTop: '16px' }}>
+          <div className="p-3.5 grid grid-cols-1 md:grid-cols-3 gap-3">
             {[1, 2, 3].map((i) => (
-              <div key={`sw-skel-${i}`} style={{ background: 'rgba(255, 255, 255, 0.02)', padding: '14px 18px', borderRadius: '8px', border: '1px solid var(--border)', display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                  <span style={{ width: '100px', height: '11px', background: 'rgba(255,255,255,0.06)', borderRadius: '4px' }} className="dreampulse-skeleton skeleton-shimmer" />
-                  <span style={{ width: '50px', height: '14px', background: 'rgba(255,255,255,0.06)', borderRadius: '4px' }} className="dreampulse-skeleton skeleton-shimmer" />
+              <div key={`sw-skel-${i}`} className="terminal-panel p-3.5 flex flex-col gap-2 bg-secondary/10">
+                <div className="flex justify-between items-center">
+                  <span className="w-[110px] h-3 bg-secondary/40 rounded skeleton-shimmer" />
+                  <span className="w-14 h-4 bg-secondary/40 rounded skeleton-shimmer" />
                 </div>
-                <span style={{ width: '120px', height: '22px', background: 'rgba(255,255,255,0.06)', borderRadius: '4px' }} className="dreampulse-skeleton skeleton-shimmer" />
+                <span className="w-28 h-6 bg-secondary/40 rounded skeleton-shimmer mt-1" />
               </div>
             ))}
           </div>
         ) : (
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '12px', marginTop: '16px' }}>
-            {/* Card 1: Pending Unclaimed */}
-            <div style={{ background: 'rgba(255, 255, 255, 0.02)', padding: '14px 18px', borderRadius: '8px', border: '1px solid var(--border)' }}>
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '4px' }}>
-                <span style={{ fontSize: '11px', color: 'var(--muted-foreground)' }}>
-                  {isViewingSelf ? 'Pending Personal Unclaimed' : 'Pending Protocol Unclaimed'}
-                </span>
-                {unclaimedAmount > 0 && (
-                  <span style={{ fontSize: '9px', background: 'rgba(0, 240, 255, 0.15)', color: 'var(--brand-cyan)', padding: '1px 5px', borderRadius: '4px', fontWeight: 700 }}>
-                    {claimableMarketsCount} MARKETS READY
-                  </span>
+          <div className="p-3.5 grid grid-cols-1 md:grid-cols-3 gap-3">
+            {/* Pending */}
+            <div className="terminal-panel p-3.5 flex flex-col justify-between">
+              <div className="flex items-center justify-between">
+                <span className="text-[10px] font-mono font-semibold tracking-wider text-muted-foreground uppercase">{isViewingSelf ? 'Pending Personal Unclaimed' : 'Pending Protocol Unclaimed'}</span>
+                {unclaimedAmount > 0 ? (
+                  <Badge variant="outline" className="text-[10px] font-mono px-1.5 py-0 bg-amber-500/10 text-amber-400 border-amber-500/20">{claimableMarketsCount} MARKETS READY</Badge>
+                ) : (
+                  <span className="size-2 rounded-full bg-muted-foreground/30" />
                 )}
               </div>
-              <div style={{ fontSize: '20px', fontWeight: 700, color: unclaimedAmount > 0 ? 'var(--brand-cyan)' : 'var(--foreground)', fontFamily: 'var(--font-mono)' }}>
-                {unclaimedAmount.toFixed(2)} tUSDC
+              <div className="text-xl font-mono font-bold mt-2" style={{ color: unclaimedAmount > 0 ? '#fbbf24' : 'var(--foreground)' }}>
+                {unclaimedAmount.toFixed(2)} <span className="text-xs font-semibold">tUSDC</span>
               </div>
+              <div className="text-[10px] font-mono text-muted-foreground mt-1">{unclaimedAmount > 0 ? `${claimableMarketsCount} claimable markets` : 'No pending claims — sweeper idle'}</div>
             </div>
-
-            {/* Card 2: Total Claimed All-Time */}
-            <div style={{ background: 'rgba(0, 255, 102, 0.04)', padding: '14px 18px', borderRadius: '8px', border: '1px solid rgba(0, 255, 102, 0.2)' }}>
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '4px' }}>
-                <span style={{ fontSize: '11px', color: 'var(--trade-buy)' }}>Total Paid Out to Wallet</span>
-                <span style={{ fontSize: '9px', background: 'rgba(0, 255, 102, 0.15)', color: 'var(--trade-buy)', padding: '1px 5px', borderRadius: '4px', fontWeight: 700 }}>
-                  WALLET
-                </span>
+            {/* Total Paid Out */}
+            <div className="terminal-panel p-3.5 flex flex-col justify-between relative overflow-hidden">
+              <div className="absolute top-0 left-0 right-0 h-[2.5px] bg-emerald-500/60" />
+              <div className="flex items-center justify-between">
+                <span className="text-[10px] font-mono font-semibold tracking-wider text-muted-foreground uppercase">Total Paid Out to Wallet</span>
+                <Badge variant="outline" className="text-[10px] font-mono px-1.5 py-0 bg-secondary/30 border-border/40 text-muted-foreground">WALLET</Badge>
               </div>
-              <div style={{ fontSize: '20px', fontWeight: 700, color: 'var(--trade-buy)', fontFamily: 'var(--font-mono)' }}>
-                +{totalClaimedAllTime.toFixed(2)} tUSDC
+              <div className="text-xl font-mono font-bold mt-2" style={{ color: totalClaimedAllTime > 0 ? '#6ee7b7' : 'var(--muted-foreground)' }}>
+                +{totalClaimedAllTime.toFixed(2)} <span className="text-xs font-semibold">tUSDC</span>
               </div>
+              <div className="text-[10px] font-mono text-muted-foreground mt-1">{history.length} settlements • verified on-chain</div>
             </div>
-
-            {/* Card 3: Total Successful Settlements */}
-            <div style={{ background: 'rgba(0, 240, 255, 0.04)', padding: '14px 18px', borderRadius: '8px', border: '1px solid rgba(0, 240, 255, 0.2)' }}>
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '4px' }}>
-                <span style={{ fontSize: '11px', color: 'var(--brand-cyan)' }}>Settlement Claims</span>
-                <span style={{ fontSize: '9px', background: 'rgba(0, 240, 255, 0.15)', color: 'var(--brand-cyan)', padding: '1px 5px', borderRadius: '4px', fontWeight: 700 }}>
-                  {history.length} COMPLETED
-                </span>
+            {/* Sweeps */}
+            <div className="terminal-panel p-3.5 flex flex-col justify-between">
+              <div className="flex items-center justify-between">
+                <span className="text-[10px] font-mono font-semibold tracking-wider text-muted-foreground uppercase">Settlement Claims</span>
+                <Badge variant="outline" className="text-[10px] font-mono px-1.5 py-0 bg-secondary/30 border-border/40 text-muted-foreground">{history.length} COMPLETED</Badge>
               </div>
-              <div style={{ fontSize: '20px', fontWeight: 700, color: 'var(--brand-cyan)', fontFamily: 'var(--font-mono)' }}>
-                {history.length} Sweeps
+              <div className="text-xl font-mono font-bold mt-2 text-foreground">
+                {history.length} <span className="text-sm font-semibold">Sweeps</span>
               </div>
+              <div className="text-[10px] font-mono text-muted-foreground mt-1">Automated batch claims • 100% direct payout</div>
             </div>
           </div>
         )}
       </div>
 
-      {/* 2. Redemption History Table with Search & Pagination */}
-      <div className="terminal-panel" style={{ padding: '0', overflow: 'hidden' }}>
-        <div
-          className="terminal-panel-header"
-          style={{
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'space-between',
-            padding: '14px 20px',
-            borderBottom: '1px solid var(--border)',
-            flexWrap: 'wrap',
-            gap: '12px',
-          }}
-        >
-          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-            <Layers size={16} style={{ color: 'var(--trade-buy)' }} />
-            <h3 style={{ fontSize: '14px', fontWeight: 700, margin: 0, color: 'var(--foreground)' }}>
+      {/* ---------- 2. Redemption History Table ---------- */}
+      <div className="terminal-panel p-0 overflow-hidden">
+        <div className="flex items-center justify-between gap-3 px-4 py-3 border-b border-border/40 flex-wrap">
+          <div className="flex items-center gap-2 min-w-0">
+            <div className="size-7 rounded-lg grid place-items-center border bg-secondary/30 border-border/50 text-muted-foreground flex-shrink-0">
+              <Square3Stack3DIcon className="size-3.5" />
+            </div>
+            <h3 className="text-xs font-bold tracking-tight text-foreground whitespace-nowrap">
               {isViewingSelf ? 'My Settlement Redemption History' : 'Protocol Settlement Redemption History'}
             </h3>
-            <span
-              style={{
-                fontSize: '11px',
-                color: 'var(--muted-foreground)',
-                fontFamily: 'var(--font-mono)',
-                marginLeft: '4px',
-              }}
-            >
+            <Badge variant="outline" className="font-mono text-[10px] px-1.5 py-0 bg-secondary/30 border-border/40 text-muted-foreground">
               ({filteredHistory.length}{isFiltered ? ` of ${history.length}` : ''} confirmed)
-            </span>
+            </Badge>
           </div>
-
-          {/* Search & Outcome Filter Controls */}
-          <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
-            {/* Search Input */}
-            <div
-              style={{
-                position: 'relative',
-                display: 'flex',
-                alignItems: 'center',
-                background: 'rgba(255, 255, 255, 0.03)',
-                border: '1px solid var(--border)',
-                borderRadius: '6px',
-                padding: '4px 8px',
-                gap: '6px',
-                width: '200px',
-              }}
-            >
-              <Search size={13} style={{ color: 'var(--muted-foreground)', flexShrink: 0 }} />
-              <input
-                type="text"
-                placeholder="Search market / tx..."
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                style={{
-                  background: 'transparent',
-                  border: 'none',
-                  outline: 'none',
-                  color: 'var(--foreground)',
-                  fontSize: '11px',
-                  width: '100%',
-                  fontFamily: 'var(--font-mono)',
-                }}
-              />
+          <div className="flex items-center gap-2 flex-wrap">
+            {/* Search */}
+            <div className="relative flex items-center">
+              <MagnifyingGlassIcon className="size-3.5 absolute left-2.5 text-muted-foreground pointer-events-none" />
+              <input type="text" placeholder="Search market / tx..." value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} className="h-7 pl-7 pr-7 text-xs font-mono rounded-lg border border-border/50 bg-secondary/30 text-foreground placeholder:text-muted-foreground/60 focus:outline-none focus:border-border focus:bg-secondary/40 w-[190px] transition-colors" />
               {searchQuery && (
-                <button
-                  type="button"
-                  onClick={() => setSearchQuery('')}
-                  style={{
-                    background: 'transparent',
-                    border: 'none',
-                    padding: 0,
-                    cursor: 'pointer',
-                    color: 'var(--muted-foreground)',
-                    display: 'flex',
-                    alignItems: 'center',
-                  }}
-                >
-                  <X size={12} />
+                <button type="button" onClick={() => setSearchQuery('')} className="absolute right-2 text-muted-foreground hover:text-foreground">
+                  <XMarkIcon className="size-3" />
                 </button>
               )}
             </div>
-
-            {/* Outcome Filter Pills */}
-            <div
-              style={{
-                display: 'flex',
-                gap: '2px',
-                background: 'rgba(255, 255, 255, 0.03)',
-                padding: '2px',
-                borderRadius: '6px',
-                border: '1px solid var(--border)',
-              }}
-            >
-              {(['ALL', 'YES', 'NO'] as const).map((outcome) => {
-                const isActive = selectedOutcome === outcome;
-                return (
-                  <button
-                    key={outcome}
-                    type="button"
-                    onClick={() => setSelectedOutcome(outcome)}
-                    style={{
-                      padding: '3px 8px',
-                      fontSize: '11px',
-                      fontFamily: 'var(--font-mono)',
-                      fontWeight: isActive ? 700 : 500,
-                      background: isActive
-                        ? outcome === 'YES'
-                          ? 'rgba(0, 255, 102, 0.18)'
-                          : outcome === 'NO'
-                          ? 'rgba(255, 51, 102, 0.18)'
-                          : 'rgba(0, 240, 255, 0.15)'
-                        : 'transparent',
-                      border: isActive
-                        ? `1px solid ${
-                            outcome === 'YES'
-                              ? 'var(--trade-buy)'
-                              : outcome === 'NO'
-                              ? 'var(--trade-sell)'
-                              : 'var(--brand-cyan)'
-                          }`
-                        : '1px solid transparent',
-                      color: isActive
-                        ? outcome === 'YES'
-                          ? 'var(--trade-buy)'
-                          : outcome === 'NO'
-                          ? 'var(--trade-sell)'
-                          : 'var(--brand-cyan)'
-                        : 'var(--muted-foreground)',
-                      borderRadius: '4px',
-                      cursor: 'pointer',
-                      transition: 'all 0.15s ease',
-                    }}
-                  >
-                    {outcome}
-                  </button>
-                );
-              })}
+            {/* Outcome filter */}
+            <div className="flex items-center gap-1 bg-secondary/30 p-0.5 rounded-lg border border-border/40">
+              {(['ALL', 'YES', 'NO'] as const).map((outcome) => (
+                <button
+                  key={outcome}
+                  type="button"
+                  onClick={() => setSelectedOutcome(outcome)}
+                  className={cn('px-2.5 py-1 rounded-md text-[11px] font-semibold transition-colors', selectedOutcome === outcome ? 'bg-primary text-primary-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground hover:bg-secondary/50')}
+                >
+                  {outcome}
+                </button>
+              ))}
             </div>
           </div>
         </div>
 
-        <div style={{ overflowX: 'auto' }}>
-          <table className="terminal-table" style={{ width: '100%', borderCollapse: 'collapse' }}>
-            <thead>
-              <tr style={{ background: 'rgba(255, 255, 255, 0.02)', borderBottom: '1px solid var(--border)' }}>
-                <th style={{ padding: '10px 16px', textAlign: 'left', fontSize: '10px', color: 'var(--muted-foreground)', textTransform: 'uppercase' }}>
-                  Timestamp
-                </th>
-                <th style={{ padding: '10px 16px', textAlign: 'left', fontSize: '10px', color: 'var(--muted-foreground)', textTransform: 'uppercase' }}>
-                  Market Contract
-                </th>
-                <th style={{ padding: '10px 16px', textAlign: 'left', fontSize: '10px', color: 'var(--muted-foreground)', textTransform: 'uppercase' }}>
-                  Winning Leg
-                </th>
-                <th style={{ padding: '10px 16px', textAlign: 'right', fontSize: '10px', color: 'var(--muted-foreground)', textTransform: 'uppercase' }}>
-                  Claimed Payout
-                </th>
-                <th style={{ padding: '10px 16px', textAlign: 'center', fontSize: '10px', color: 'var(--muted-foreground)', textTransform: 'uppercase' }}>
-                  Payout Type
-                </th>
-                <th style={{ padding: '10px 16px', textAlign: 'right', fontSize: '10px', color: 'var(--muted-foreground)', textTransform: 'uppercase' }}>
-                  Somnia Shannon Tx
-                </th>
+        <div className="overflow-x-auto">
+          <table className="w-full border-collapse text-xs">
+            <thead className="sticky top-0 z-10 bg-[#111114] border-b border-border/60">
+              <tr className="text-[10px] font-mono text-muted-foreground uppercase tracking-wider">
+                <th className="px-3 py-2.5 text-left font-semibold">Timestamp</th>
+                <th className="px-3 py-2.5 text-left font-semibold">Market Contract</th>
+                <th className="px-3 py-2.5 text-left font-semibold">Winning Leg</th>
+                <th className="px-3 py-2.5 text-right font-semibold">Claimed Payout</th>
+                <th className="px-3 py-2.5 text-center font-semibold">Payout Type</th>
+                <th className="px-3 py-2.5 text-right font-semibold">Somnia Shannon Tx</th>
               </tr>
             </thead>
-            <tbody>
+            <tbody className="divide-y divide-border/20">
               {isLoading && history.length === 0 ? (
                 [1, 2, 3, 4, 5].map((i) => (
-                  <tr key={`sweep-skel-${i}`} style={{ borderBottom: '1px solid rgba(255, 255, 255, 0.04)' }}>
-                    <td style={{ padding: '12px 16px' }}><span style={{ width: '110px', height: '12px', background: 'rgba(255,255,255,0.06)', borderRadius: '4px', display: 'inline-block' }} className="dreampulse-skeleton skeleton-shimmer" /></td>
-                    <td style={{ padding: '12px 16px' }}><span style={{ width: '80px', height: '13px', background: 'rgba(255,255,255,0.06)', borderRadius: '4px', display: 'inline-block' }} className="dreampulse-skeleton skeleton-shimmer" /></td>
-                    <td style={{ padding: '12px 16px' }}><span style={{ width: '55px', height: '18px', background: 'rgba(255,255,255,0.06)', borderRadius: '4px', display: 'inline-block' }} className="dreampulse-skeleton skeleton-shimmer" /></td>
-                    <td style={{ padding: '12px 16px', textAlign: 'right' }}><span style={{ width: '75px', height: '13px', background: 'rgba(255,255,255,0.06)', borderRadius: '4px', display: 'inline-block', marginLeft: 'auto' }} className="dreampulse-skeleton skeleton-shimmer" /></td>
-                    <td style={{ padding: '12px 16px', textAlign: 'center' }}><span style={{ width: '70px', height: '16px', background: 'rgba(255,255,255,0.06)', borderRadius: '4px', display: 'inline-block', margin: '0 auto' }} className="dreampulse-skeleton skeleton-shimmer" /></td>
-                    <td style={{ padding: '12px 16px', textAlign: 'right' }}><span style={{ width: '60px', height: '12px', background: 'rgba(255,255,255,0.06)', borderRadius: '4px', display: 'inline-block', marginLeft: 'auto' }} className="dreampulse-skeleton skeleton-shimmer" /></td>
+                  <tr key={`sweep-skel-${i}`} className="hover:bg-secondary/10">
+                    <td className="px-3 py-3"><span className="w-[110px] h-3 bg-secondary/40 rounded skeleton-shimmer inline-block" /></td>
+                    <td className="px-3 py-3"><span className="w-20 h-3 bg-secondary/40 rounded skeleton-shimmer inline-block" /></td>
+                    <td className="px-3 py-3"><span className="w-12 h-5 bg-secondary/40 rounded skeleton-shimmer inline-block" /></td>
+                    <td className="px-3 py-3 text-right"><span className="w-16 h-3 bg-secondary/40 rounded skeleton-shimmer inline-block ml-auto" /></td>
+                    <td className="px-3 py-3 text-center"><span className="w-20 h-5 bg-secondary/40 rounded skeleton-shimmer inline-block" /></td>
+                    <td className="px-3 py-3 text-right"><span className="w-20 h-3 bg-secondary/40 rounded skeleton-shimmer inline-block ml-auto" /></td>
                   </tr>
                 ))
               ) : filteredHistory.length === 0 ? (
                 <tr>
-                  <td colSpan={6} style={{ textAlign: 'center', padding: '36px', color: 'var(--muted-foreground)', fontSize: '12px' }}>
+                  <td colSpan={6} className="text-center py-10 text-muted-foreground text-xs">
                     {isFiltered ? (
-                      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '8px' }}>
+                      <div className="flex flex-col items-center gap-2">
                         <span>No settlement claims match the current filter criteria.</span>
-                        <button
-                          type="button"
-                          className="btn-secondary"
-                          style={{ fontSize: '11px', padding: '4px 10px' }}
-                          onClick={() => {
-                            setSelectedOutcome('ALL');
-                            setSearchQuery('');
-                          }}
-                        >
-                          Reset Filters
-                        </button>
+                        <button type="button" onClick={() => { setSelectedOutcome('ALL'); setSearchQuery(''); }} className="px-2.5 py-1 rounded-md border bg-secondary/30 border-border/50 text-[11px] font-medium hover:bg-secondary/50">Reset Filters</button>
                       </div>
                     ) : isViewingSelf ? (
                       'No personal settlement claims recorded yet for this wallet.'
@@ -672,79 +417,33 @@ export const SweeperControls: React.FC<SweeperControlsProps> = ({
                   const timeStr = new Date(sweep.claimedAt).toLocaleString();
                   const shortTx = sweep.txHash ? `${sweep.txHash.slice(0, 6)}...${sweep.txHash.slice(-4)}` : 'N/A';
                   const explorerUrl = sweep.txHash ? `https://shannon-explorer.somnia.network/tx/${sweep.txHash}` : '#';
-
                   return (
-                    <tr key={sweep.id} style={{ borderBottom: '1px solid rgba(255, 255, 255, 0.04)', transition: 'background 0.15s ease' }}>
-                      <td style={{ padding: '12px 16px', fontSize: '11px', color: 'var(--muted-foreground)', fontFamily: 'var(--font-mono)' }}>
-                        {timeStr}
-                      </td>
-                      <td style={{ padding: '12px 16px', fontSize: '12px', fontWeight: 600, color: 'var(--foreground)' }}>
-                        {sweep.marketId.slice(0, 10)}...
-                      </td>
-                      <td style={{ padding: '12px 16px' }}>
-                        <span
-                          style={{
-                            display: 'inline-flex',
-                            alignItems: 'center',
-                            gap: '3px',
-                            padding: '2px 6px',
-                            borderRadius: '4px',
-                            background: sweep.winningOutcome === 'YES' ? 'rgba(0, 255, 102, 0.12)' : 'rgba(255, 51, 102, 0.12)',
-                            border: `1px solid ${sweep.winningOutcome === 'YES' ? 'rgba(0, 255, 102, 0.3)' : 'rgba(255, 51, 102, 0.3)'}`,
-                            color: sweep.winningOutcome === 'YES' ? 'var(--trade-buy)' : 'var(--trade-sell)',
-                            fontSize: '11px',
-                            fontWeight: 700,
-                            fontFamily: 'var(--font-mono)',
-                          }}
-                        >
-                          {sweep.winningOutcome === 'YES' ? <ArrowUpRight size={11} /> : <ArrowDownRight size={11} />}
-                          <span>{sweep.winningOutcome}</span>
+                    <tr key={sweep.id} className="hover:bg-secondary/20 transition-colors">
+                      <td className="px-3 py-2.5 font-mono text-[11px] text-muted-foreground">{timeStr}</td>
+                      <td className="px-3 py-2.5 font-semibold text-foreground font-mono text-xs">{sweep.marketId.slice(0, 10)}...</td>
+                      <td className="px-3 py-2.5">
+                        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[11px] font-bold font-mono border" style={{ background: sweep.winningOutcome === 'YES' ? 'rgba(52,211,153,0.08)' : 'rgba(244,63,94,0.08)', borderColor: sweep.winningOutcome === 'YES' ? 'rgba(52,211,153,0.18)' : 'rgba(244,63,94,0.18)', color: sweep.winningOutcome === 'YES' ? '#6ee7b7' : '#fda4af' }}>
+                          {sweep.winningOutcome === 'YES' ? <ArrowUpRightIcon className="size-3" /> : <ArrowDownRightIcon className="size-3" />}
+                          {sweep.winningOutcome}
                         </span>
                       </td>
-                      <td style={{ padding: '12px 16px', textAlign: 'right', fontSize: '13px', fontWeight: 700, color: 'var(--trade-buy)', fontFamily: 'var(--font-mono)' }}>
+                      <td className="px-3 py-2.5 text-right font-mono font-bold text-xs" style={{ color: '#6ee7b7' }}>
                         +{sweep.claimableAmount.toFixed(2)} tUSDC
                       </td>
-                      <td style={{ padding: '12px 16px', textAlign: 'center' }}>
-                        <span
-                          style={{
-                            display: 'inline-flex',
-                            alignItems: 'center',
-                            gap: '4px',
-                            padding: '2px 8px',
-                            borderRadius: '4px',
-                            background: 'rgba(0, 255, 102, 0.08)',
-                            color: 'var(--trade-buy)',
-                            fontSize: '10px',
-                            fontWeight: 600,
-                          }}
-                        >
-                          <Wallet size={11} />
+                      <td className="px-3 py-2.5 text-center">
+                        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-semibold border bg-secondary/30 border-border/50 text-muted-foreground">
+                          <WalletIcon className="size-3" />
                           <span>Direct Payout</span>
                         </span>
                       </td>
-                      <td style={{ padding: '12px 16px', textAlign: 'right' }}>
+                      <td className="px-3 py-2.5 text-right">
                         {sweep.txHash && sweep.txHash.startsWith('0x') && sweep.txHash.length === 66 ? (
-                          <a
-                            href={explorerUrl}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            style={{
-                              display: 'inline-flex',
-                              alignItems: 'center',
-                              gap: '4px',
-                              color: 'var(--brand-cyan)',
-                              fontSize: '11px',
-                              fontFamily: 'var(--font-mono)',
-                              textDecoration: 'none',
-                            }}
-                          >
+                          <a href={explorerUrl} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 text-[11px] font-mono text-cyan-400 hover:text-cyan-300">
                             <span>{shortTx}</span>
-                            <ExternalLink size={11} />
+                            <ArrowTopRightOnSquareIcon className="size-3" />
                           </a>
                         ) : (
-                          <span style={{ fontSize: '11px', color: 'var(--muted-foreground)', fontFamily: 'var(--font-mono)' }}>
-                            Direct Transfer
-                          </span>
+                          <span className="text-[11px] font-mono text-muted-foreground">Direct Transfer</span>
                         )}
                       </td>
                     </tr>
@@ -755,26 +454,10 @@ export const SweeperControls: React.FC<SweeperControlsProps> = ({
           </table>
         </div>
 
-        {/* Pagination Bar */}
-        <Pagination
-          currentPage={currentPage}
-          totalItems={filteredHistory.length}
-          pageSize={pageSize}
-          onPageChange={setCurrentPage}
-          onPageSizeChange={setPageSize}
-          pageSizeOptions={[10, 25, 50, 100]}
-          itemLabel="sweeps"
-          isLoading={isLoading}
-        />
+        <Pagination currentPage={currentPage} totalItems={filteredHistory.length} pageSize={pageSize} onPageChange={setCurrentPage} onPageSizeChange={setPageSize} pageSizeOptions={[10, 25, 50, 100]} itemLabel="sweeps" isLoading={isLoading} />
       </div>
 
-      {/* Confetti Celebration Modal */}
-      <ClaimCelebration
-        isOpen={celebrationState.isOpen}
-        onClose={() => setCelebrationState((prev) => ({ ...prev, isOpen: false }))}
-        claimedAmount={celebrationState.amount}
-        txHash={celebrationState.txHash}
-      />
+      <ClaimCelebration isOpen={celebrationState.isOpen} onClose={() => setCelebrationState((prev) => ({ ...prev, isOpen: false }))} claimedAmount={celebrationState.amount} txHash={celebrationState.txHash} />
     </div>
   );
 };

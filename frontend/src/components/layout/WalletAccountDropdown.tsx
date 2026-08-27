@@ -1,16 +1,16 @@
 import React, { useState, useRef, useEffect } from 'react';
 import {
-  ShieldCheck,
-  KeyRound,
-  Copy,
-  Check,
-  ExternalLink,
-  LogOut,
-  Sliders,
-  Coins,
-  ChevronDown,
-  Zap,
-} from 'lucide-react';
+  ShieldCheckIcon,
+  KeyIcon,
+  DocumentDuplicateIcon,
+  CheckIcon,
+  ArrowTopRightOnSquareIcon,
+  ArrowLeftEndOnRectangleIcon,
+  AdjustmentsHorizontalIcon,
+  CurrencyDollarIcon,
+  ChevronDownIcon,
+  BoltIcon,
+} from '@heroicons/react/24/outline';
 import type { WalletState } from '../../hooks/useSessionKey.js';
 import type { SessionGrant } from '../../types/index.js';
 import { Spinner } from '../ui/Spinner.js';
@@ -99,7 +99,7 @@ export const WalletAccountDropdown: React.FC<WalletAccountDropdownProps> = ({
       >
         {isSessionActive ? (
           <>
-            <ShieldCheck size={13} style={{ color: 'var(--brand-cyan)' }} />
+            <ShieldCheckIcon className="size-3.5" style={{ color: 'var(--brand-cyan)' }} />
             <span className="tabular-num" style={{ fontWeight: 600 }}>
               {wallet.address?.slice(0, 5)}...{wallet.address?.slice(-3)}
             </span>
@@ -107,15 +107,15 @@ export const WalletAccountDropdown: React.FC<WalletAccountDropdownProps> = ({
           </>
         ) : (
           <>
-            <KeyRound size={13} style={{ color: 'var(--brand-cyan)' }} />
+            <KeyIcon className="size-3.5" style={{ color: 'var(--brand-cyan)' }} />
             <span className="tabular-num" style={{ fontWeight: 600 }}>
               {wallet.address?.slice(0, 5)}...{wallet.address?.slice(-3)}
             </span>
             <span className="header-session-badge delegate">DIRECT</span>
           </>
         )}
-        <ChevronDown
-          size={12}
+        <ChevronDownIcon
+          className="size-3"
           style={{
             color: 'var(--muted-foreground)',
             transition: 'transform 0.2s ease',
@@ -214,7 +214,7 @@ export const WalletAccountDropdown: React.FC<WalletAccountDropdownProps> = ({
                     alignItems: 'center',
                   }}
                 >
-                  {copied ? <Check size={13} /> : <Copy size={13} />}
+                  {copied ? <CheckIcon className="size-3.5" /> : <DocumentDuplicateIcon className="size-3.5" />}
                 </button>
                 <a
                   href={explorerUrl}
@@ -228,7 +228,7 @@ export const WalletAccountDropdown: React.FC<WalletAccountDropdownProps> = ({
                     alignItems: 'center',
                   }}
                 >
-                  <ExternalLink size={13} />
+                  <ArrowTopRightOnSquareIcon className="size-3.5" />
                 </a>
               </div>
             </div>
@@ -252,7 +252,7 @@ export const WalletAccountDropdown: React.FC<WalletAccountDropdownProps> = ({
                   gap: '6px',
                 }}
               >
-                <Zap size={12} />
+                <BoltIcon className="size-3" />
                 <span>Switch to Somnia Testnet (50312)</span>
               </button>
             )}
@@ -297,7 +297,7 @@ export const WalletAccountDropdown: React.FC<WalletAccountDropdownProps> = ({
                   }}
                   title="Claim 1,000 TestUSDC for DreamDEX event trading"
                 >
-                  {isFauceting ? <Spinner size="xs" variant="cyan" /> : <Coins size={11} />}
+                  {isFauceting ? <Spinner size="xs" variant="cyan" /> : <CurrencyDollarIcon className="size-3" />}
                   <span>+1k Faucet</span>
                 </button>
               )}
@@ -330,9 +330,9 @@ export const WalletAccountDropdown: React.FC<WalletAccountDropdownProps> = ({
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
                 {isSessionActive ? (
-                  <ShieldCheck size={14} style={{ color: 'var(--trade-yes)' }} />
+                  <ShieldCheckIcon className="size-3.5" style={{ color: 'var(--trade-yes)' }} />
                 ) : (
-                  <KeyRound size={14} style={{ color: 'var(--brand-cyan)' }} />
+                  <KeyIcon className="size-3.5" style={{ color: 'var(--brand-cyan)' }} />
                 )}
                 <span style={{ fontSize: '11px', fontWeight: 600, color: isSessionActive ? 'var(--trade-yes)' : 'var(--foreground)' }}>
                   {isSessionActive ? 'Session Delegation Active' : 'Direct Wallet Mode'}
@@ -367,7 +367,7 @@ export const WalletAccountDropdown: React.FC<WalletAccountDropdownProps> = ({
                 transition: 'all 0.15s ease',
               }}
             >
-              <Sliders size={12} style={{ color: 'var(--brand-cyan)' }} />
+              <AdjustmentsHorizontalIcon className="size-3" style={{ color: 'var(--brand-cyan)' }} />
               <span>{isSessionActive ? 'Update Session & Risk Limits' : 'Configure Non-Custodial Session'}</span>
             </button>
           </div>
@@ -394,7 +394,7 @@ export const WalletAccountDropdown: React.FC<WalletAccountDropdownProps> = ({
                 transition: 'all 0.15s ease',
               }}
             >
-              <LogOut size={12} />
+              <ArrowLeftEndOnRectangleIcon className="size-3" />
               <span>Disconnect Wallet</span>
             </button>
           </div>

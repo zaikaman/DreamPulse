@@ -1,22 +1,21 @@
 import React, { useState, useMemo, useEffect, useRef } from 'react';
 import {
-  Terminal,
-  Play,
-  Pause,
-  Zap,
-  Brain,
-  Shield,
-  Sparkles,
-  Cpu,
-  Search,
-  TrendingUp,
-  Activity,
-  Filter,
-  ExternalLink,
-  CheckCircle2,
-  Radio,
-  Flame,
-} from 'lucide-react';
+  CommandLineIcon,
+  PlayIcon,
+  PauseIcon,
+  BoltIcon,
+  CpuChipIcon,
+  ShieldCheckIcon,
+  SparklesIcon,
+  MagnifyingGlassIcon,
+  ArrowTrendingUpIcon,
+  ChartBarIcon,
+  FunnelIcon,
+  ArrowTopRightOnSquareIcon,
+  CheckCircleIcon,
+  SignalIcon,
+  FireIcon,
+} from '@heroicons/react/24/outline';
 import type { AgentThoughtLog } from '../types/index.js';
 import { AgentThoughtFeedSkeleton } from './ui/Skeleton.js';
 import { Pagination } from './ui/Pagination.js';
@@ -152,66 +151,66 @@ export const AgentThoughtFeed: React.FC<AgentThoughtFeedProps> = ({
     switch (agent.toLowerCase()) {
       case 'volt':
         return {
-          color: '#f59e0b',
-          bg: 'rgba(245, 158, 11, 0.12)',
-          border: 'rgba(245, 158, 11, 0.35)',
-          glow: '0 0 10px rgba(245, 158, 11, 0.25)',
+          color: '#fbbf24',
+          bg: 'rgba(245,158,11,0.07)',
+          border: 'rgba(245,158,11,0.16)',
+          glow: 'none',
           role: 'Sub-Second Expiry Sniper',
-          Icon: Zap,
+          Icon: BoltIcon,
         };
       case 'oracle':
         return {
-          color: '#00ffcc',
-          bg: 'rgba(0, 255, 204, 0.12)',
-          border: 'rgba(0, 255, 204, 0.35)',
-          glow: '0 0 10px rgba(0, 255, 204, 0.25)',
+          color: '#2dd4bf',
+          bg: 'rgba(45,212,191,0.07)',
+          border: 'rgba(45,212,191,0.16)',
+          glow: 'none',
           role: 'Vol Surface Arbitrage',
-          Icon: Brain,
+          Icon: CpuChipIcon,
         };
       case 'titan':
         return {
-          color: '#a855f7',
-          bg: 'rgba(168, 85, 247, 0.12)',
-          border: 'rgba(168, 85, 247, 0.35)',
-          glow: '0 0 10px rgba(168, 85, 247, 0.25)',
+          color: '#a78bfa',
+          bg: 'rgba(167,139,250,0.07)',
+          border: 'rgba(167,139,250,0.16)',
+          glow: 'none',
           role: 'Two-Sided CLOB Maker',
-          Icon: Shield,
+          Icon: ShieldCheckIcon,
         };
       case 'sweeper':
         return {
-          color: '#10b981',
-          bg: 'rgba(16, 185, 129, 0.12)',
-          border: 'rgba(16, 185, 129, 0.35)',
-          glow: '0 0 10px rgba(16, 185, 129, 0.25)',
+          color: '#34d399',
+          bg: 'rgba(52,211,153,0.07)',
+          border: 'rgba(52,211,153,0.16)',
+          glow: 'none',
           role: 'Settlement Sweeper',
-          Icon: Sparkles,
+          Icon: SparklesIcon,
         };
       default:
         return {
-          color: '#38bdf8',
-          bg: 'rgba(56, 189, 248, 0.12)',
-          border: 'rgba(56, 189, 248, 0.35)',
-          glow: '0 0 10px rgba(56, 189, 248, 0.25)',
+          color: 'hsl(var(--muted-foreground))',
+          bg: 'hsl(var(--secondary) / 0.4)',
+          border: 'hsl(var(--border) / 0.5)',
+          glow: 'none',
           role: 'Autonomous Agent',
-          Icon: Cpu,
+          Icon: CpuChipIcon,
         };
     }
   };
 
   const getActionBadgeStyle = (action: string) => {
     if (action.includes('BUY_YES') || action.includes('TAKER_BUY')) {
-      return { background: 'rgba(16, 185, 129, 0.15)', color: '#34d399', border: '1px solid rgba(16, 185, 129, 0.3)' };
+      return { background: 'rgba(52,211,153,0.08)', color: '#6ee7b7', border: '1px solid rgba(52,211,153,0.18)' };
     }
     if (action.includes('BUY_NO') || action.includes('TAKER_SELL')) {
-      return { background: 'rgba(239, 68, 68, 0.15)', color: '#f87171', border: '1px solid rgba(239, 68, 68, 0.3)' };
+      return { background: 'rgba(251,113,133,0.08)', color: '#fda4af', border: '1px solid rgba(251,113,133,0.18)' };
     }
     if (action.includes('LIMIT_QUOTE') || action.includes('QUOTE')) {
-      return { background: 'rgba(59, 130, 246, 0.15)', color: '#60a5fa', border: '1px solid rgba(59, 130, 246, 0.3)' };
+      return { background: 'rgba(96,165,250,0.08)', color: '#93c5fd', border: '1px solid rgba(96,165,250,0.18)' };
     }
     if (action.includes('SWEEP') || action.includes('CLAIM')) {
-      return { background: 'rgba(168, 85, 247, 0.15)', color: '#c084fc', border: '1px solid rgba(168, 85, 247, 0.3)' };
+      return { background: 'rgba(167,139,250,0.08)', color: '#c4b5fd', border: '1px solid rgba(167,139,250,0.18)' };
     }
-    return { background: '#27272a', color: '#a1a1aa', border: '1px solid #3f3f46' };
+    return { background: 'hsl(var(--secondary) / 0.4)', color: 'hsl(var(--muted-foreground))', border: '1px solid hsl(var(--border) / 0.5)' };
   };
 
   const getRelativeTime = (isoString: string) => {
@@ -221,135 +220,119 @@ export const AgentThoughtFeed: React.FC<AgentThoughtFeedProps> = ({
     if (diffSec < 60) return `${diffSec}s ago`;
     const diffMin = Math.floor(diffSec / 60);
     if (diffMin < 60) return `${diffMin}m ago`;
-    return `${Math.floor(diffMin / 60)}h ago`;
+    return new Date(isoString).toLocaleTimeString();
   };
 
   return (
-    <div className="terminal-panel thought-feed-panel" style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
-      {/* 1. Header Toolbar */}
-      <div className="terminal-panel-header" style={{ flexWrap: 'wrap', gap: '10px', padding: '12px 16px' }}>
-        <div className="panel-title" style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-          <Terminal size={17} style={{ color: '#00ffcc' }} />
-          <span style={{ fontWeight: 700, fontSize: '14px', letterSpacing: '-0.01em' }}>
-            Live Swarm Intelligence
-          </span>
-          <span className={`badge ${isConnected ? 'badge-yes' : 'badge-no'}`} style={{ fontSize: '10px', padding: '2px 8px' }}>
-            <span className="live-dot"></span>
-            {isConnected ? 'PROD STREAM' : 'DISCONNECTED'}
-          </span>
-          <span
-            style={{
-              fontSize: '11px',
-              fontFamily: 'var(--font-mono)',
-              padding: '2px 8px',
-              borderRadius: '999px',
-              background: isPaused ? 'rgba(245, 158, 11, 0.18)' : 'rgba(16, 185, 129, 0.15)',
-              color: isPaused ? '#fbbf24' : '#34d399',
-              border: isPaused ? '1px solid rgba(245, 158, 11, 0.4)' : '1px solid rgba(16, 185, 129, 0.3)',
-              display: 'inline-flex',
-              alignItems: 'center',
-              gap: '5px',
-            }}
-          >
-            {isPaused ? <Pause size={10} /> : <Activity size={10} />}
-            {isPaused ? (isHovered ? 'PAUSED (HOVERING)' : 'STREAM PAUSED') : 'STREAMING'}
-          </span>
+    <div
+      className="terminal-panel thought-feed-panel"
+      onMouseEnter={() => setIsHovered(true)}
+      onMouseLeave={() => setIsHovered(false)}
+      style={{
+        display: 'flex',
+        flexDirection: 'column',
+        height: '100%',
+        padding: 0,
+        overflow: 'hidden',
+      }}
+    >
+      {/* 1. Header Toolbar — Minimal (aligns with Overview / Edge Radar) */}
+      <div
+        className="terminal-panel-header"
+        style={{
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          padding: '12px 16px',
+          borderBottom: '1px solid hsl(var(--border) / 0.5)',
+          background: 'transparent',
+          flexWrap: 'wrap',
+          gap: '10px',
+          marginBottom: 0,
+        }}
+      >
+        <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+          <CommandLineIcon className="size-4 text-muted-foreground" />
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+            <h3 className="text-xs font-semibold text-foreground tracking-wide m-0">
+              AI SWARM REASONING FEED
+            </h3>
+            <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full border border-border/50 bg-secondary/40 text-[10px] font-mono font-medium text-muted-foreground">
+              <span className={`size-1.5 rounded-full ${isPaused ? 'bg-amber-400' : isConnected ? 'bg-emerald-400' : 'bg-muted-foreground'}`} />
+              <span>{isPaused ? (isPausedManual ? 'PAUSED' : 'HOVER PAUSED') : isConnected ? 'LIVE' : 'OFFLINE'}</span>
+            </span>
+          </div>
         </div>
 
-        {/* Action Controls & Search */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginLeft: 'auto', flexWrap: 'wrap' }}>
-          {/* Debug Mode Opt-In Toggle */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
           {onToggleDebug && (
             <button
+              id="btn-toggle-thought-debug"
               type="button"
               onClick={() => onToggleDebug()}
-              title={isDebugEnabled ? 'Disable Evaluation Debug Stream' : 'Enable Raw Evaluation Trace Stream'}
-              style={{
-                display: 'inline-flex',
-                alignItems: 'center',
-                gap: '6px',
-                padding: '4px 10px',
-                borderRadius: '6px',
-                fontSize: '11px',
-                fontWeight: 600,
-                fontFamily: 'var(--font-mono)',
-                cursor: 'pointer',
-                background: isDebugEnabled ? 'rgba(0, 240, 255, 0.15)' : 'rgba(255, 255, 255, 0.04)',
-                border: isDebugEnabled ? '1px solid rgba(0, 240, 255, 0.4)' : '1px solid var(--border)',
-                color: isDebugEnabled ? '#00ffcc' : 'var(--muted-foreground)',
-                transition: 'all 0.15s ease',
-              }}
+              title={isDebugEnabled ? "Showing sub-second evaluation loops + trade reasoning" : "Filter to confirmed on-chain trade reasons only"}
+              className={`inline-flex items-center gap-1.5 px-2.5 py-1 text-[11px] font-mono font-medium rounded-md border transition-colors ${isDebugEnabled ? 'bg-secondary text-foreground border-border' : 'bg-secondary/40 text-muted-foreground border-border/50 hover:text-foreground hover:bg-secondary/60'}`}
             >
-              <Cpu size={12} style={{ color: isDebugEnabled ? '#00ffcc' : 'var(--muted-foreground)' }} />
-              <span>DEBUG TRACE: {isDebugEnabled ? 'ON' : 'OFF'}</span>
-              {isDebugEnabled && <span style={{ width: '6px', height: '6px', borderRadius: '50%', background: '#00ffcc' }}></span>}
+              <CpuChipIcon className="size-3" />
+              <span>{isDebugEnabled ? 'All Loops' : 'Executions Only'}</span>
             </button>
           )}
 
-          {/* Keyword Search */}
-          <div style={{ position: 'relative', display: 'flex', alignItems: 'center' }}>
-            <Search size={13} style={{ position: 'absolute', left: '8px', color: 'var(--muted-foreground)' }} />
+          <div className="relative flex items-center">
+            <MagnifyingGlassIcon className="size-3.5 absolute left-2.5 text-muted-foreground" />
             <input
+              id="input-search-thoughts"
               type="text"
-              placeholder="Search trades, tx, tickers..."
+              placeholder="Filter thoughts..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              style={{
-                background: '#121214',
-                border: '1px solid var(--border)',
-                borderRadius: '6px',
-                padding: '4px 8px 4px 26px',
-                fontSize: '11.5px',
-                color: '#f4f4f5',
-                width: '180px',
-                outline: 'none',
-              }}
+              className="bg-secondary/30 border border-border/50 rounded-md pl-8 pr-7 py-1 text-xs font-mono text-foreground placeholder:text-muted-foreground/60 outline-none w-[170px] focus:border-border focus:bg-secondary/50 transition-colors"
             />
+            {searchQuery && (
+              <button
+                type="button"
+                onClick={() => setSearchQuery('')}
+                className="absolute right-2 bg-transparent border-none text-muted-foreground hover:text-foreground cursor-pointer text-xs"
+              >
+                ×
+              </button>
+            )}
           </div>
 
-          {/* Pause / Resume Button */}
           <button
+            id="btn-pause-thought-stream"
             type="button"
-            className={`thought-filter-btn ${isPausedManual ? 'active' : ''}`}
             onClick={() => setIsPausedManual(!isPausedManual)}
-            title={isPausedManual ? 'Resume Live Stream' : 'Pause Stream'}
-            style={{
-              display: 'inline-flex',
-              alignItems: 'center',
-              gap: '5px',
-              padding: '4px 10px',
-              background: isPausedManual ? 'rgba(245, 158, 11, 0.2)' : 'rgba(255, 255, 255, 0.05)',
-              border: '1px solid var(--border)',
-              borderRadius: '6px',
-            }}
+            title={isPausedManual ? 'Resume streaming' : 'Pause autoscroll to inspect'}
+            className={`inline-flex items-center gap-1.5 px-2.5 py-1 text-[11px] font-mono font-medium rounded-md border transition-colors ${isPausedManual ? 'bg-secondary text-foreground border-border' : 'bg-secondary/40 text-muted-foreground border-border/50 hover:text-foreground hover:bg-secondary/60'}`}
           >
-            {isPausedManual ? <Play size={11} style={{ color: '#fbbf24' }} /> : <Pause size={11} />}
-            <span style={{ fontSize: '11px', fontWeight: 600 }}>{isPausedManual ? 'RESUME' : 'PAUSE'}</span>
+            {isPausedManual ? <PlayIcon className="size-3" /> : <PauseIcon className="size-3" />}
+            <span>{isPausedManual ? 'Resume' : 'Pause'}</span>
           </button>
         </div>
       </div>
 
-      {/* 2. Filter Navigation Bar */}
+      {/* 2. Filter Navigation Bar — Minimal */}
       <div
         style={{
           display: 'flex',
           alignItems: 'center',
           gap: '6px',
           padding: '8px 16px',
-          borderBottom: '1px solid var(--border)',
-          background: 'rgba(0, 0, 0, 0.25)',
+          borderBottom: '1px solid hsl(var(--border) / 0.5)',
+          background: 'transparent',
           overflowX: 'auto',
         }}
       >
-        <Filter size={13} style={{ color: 'var(--muted-foreground)', marginRight: '4px', flexShrink: 0 }} />
+        <FunnelIcon className="size-3.5 text-muted-foreground mr-1 flex-shrink-0" />
         {[
-          { id: 'ALL', label: `Executions (${thoughts.length})`, Icon: Zap },
-          { id: 'HIGH_CONVICTION', label: 'High Conviction (≥80%)', Icon: Flame },
-          ...(isDebugEnabled ? [{ id: 'DEBUG_TRACE', label: `Eval Traces (${debugThoughts.length})`, Icon: Cpu }] : []),
-          { id: 'Volt', label: 'Volt (Sniper)', Icon: Zap },
-          { id: 'Oracle', label: 'Oracle (Arb)', Icon: Brain },
-          { id: 'Titan', label: 'Titan (MM)', Icon: Shield },
-          { id: 'Sweeper', label: 'Sweeper', Icon: Sparkles },
+          { id: 'ALL', label: `Executions (${thoughts.length})`, Icon: BoltIcon },
+          { id: 'HIGH_CONVICTION', label: 'High Conviction (≥80%)', Icon: FireIcon },
+          ...(isDebugEnabled ? [{ id: 'DEBUG_TRACE', label: `Eval Traces (${debugThoughts.length})`, Icon: CpuChipIcon }] : []),
+          { id: 'Volt', label: 'Volt (Sniper)', Icon: BoltIcon },
+          { id: 'Oracle', label: 'Oracle (Arb)', Icon: CpuChipIcon },
+          { id: 'Titan', label: 'Titan (MM)', Icon: ShieldCheckIcon },
+          { id: 'Sweeper', label: 'Sweeper', Icon: SparklesIcon },
         ].map((tab) => {
           const TabIcon = tab.Icon;
           const isActive = selectedFilter === tab.id;
@@ -357,35 +340,25 @@ export const AgentThoughtFeed: React.FC<AgentThoughtFeedProps> = ({
             <button
               key={tab.id}
               type="button"
-              className={`thought-filter-btn ${isActive ? 'active' : ''}`}
               onClick={() => setSelectedFilter(tab.id)}
-              style={{
-                fontSize: '11px',
-                padding: '4px 10px',
-                whiteSpace: 'nowrap',
-                borderRadius: '6px',
-                fontWeight: isActive ? 700 : 500,
-                display: 'inline-flex',
-                alignItems: 'center',
-                gap: '5px',
-              }}
+              className={`inline-flex items-center gap-1.5 px-3 py-1 text-[11px] font-mono font-medium rounded-full border whitespace-nowrap transition-colors ${isActive ? 'bg-secondary text-foreground border-border' : 'bg-transparent text-muted-foreground border-transparent hover:text-foreground hover:bg-secondary/40'}`}
             >
-              <TabIcon size={12} />
+              <TabIcon className="size-3" />
               <span>{tab.label}</span>
             </button>
           );
         })}
       </div>
 
-      {/* 3. Executive Swarm Consensus Digest Strip */}
+      {/* 3. Executive Swarm Consensus Digest Strip — Minimal */}
       <div
         style={{
           display: 'grid',
           gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))',
-          gap: '10px',
+          gap: '8px',
           padding: '12px 16px',
-          background: '#0d0d10',
-          borderBottom: '1px solid var(--border)',
+          background: 'transparent',
+          borderBottom: '1px solid hsl(var(--border) / 0.5)',
         }}
       >
         {['VOLT', 'ORACLE', 'TITAN', 'SWEEPER'].map((agentKey) => {
@@ -396,38 +369,21 @@ export const AgentThoughtFeed: React.FC<AgentThoughtFeedProps> = ({
           return (
             <div
               key={agentKey}
-              style={{
-                background: '#16161a',
-                border: `1px solid ${theme.border}`,
-                borderRadius: '8px',
-                padding: '10px 12px',
-                display: 'flex',
-                flexDirection: 'column',
-                gap: '5px',
-                boxShadow: theme.glow,
-              }}
+              className="rounded-lg flex flex-col gap-1.5 p-3 relative overflow-hidden bg-secondary/20 border border-border/40"
             >
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                  <Icon size={14} style={{ color: theme.color }} />
-                  <span style={{ fontWeight: 700, fontSize: '12px', color: theme.color }}>{agentKey}</span>
+              <div className="absolute top-0 left-0 right-0 h-[2px]" style={{ background: theme.color, opacity: 0.7 }} />
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-1.5">
+                  <Icon className="size-3.5 text-muted-foreground" />
+                  <span className="font-mono text-xs font-semibold text-foreground">
+                    {agentKey}
+                  </span>
                 </div>
-                <span style={{ fontSize: '9.5px', color: 'var(--muted-foreground)', fontFamily: 'var(--font-mono)' }}>
+                <span className="text-[10px] font-mono text-muted-foreground">
                   {theme.role}
                 </span>
               </div>
-              <p
-                style={{
-                  margin: 0,
-                  fontSize: '11px',
-                  color: '#d4d4d8',
-                  lineHeight: 1.3,
-                  display: '-webkit-box',
-                  WebkitLineClamp: 2,
-                  WebkitBoxOrient: 'vertical',
-                  overflow: 'hidden',
-                }}
-              >
+              <p className="m-0 text-[11px] leading-[1.4] text-muted-foreground line-clamp-2">
                 {latestThought ? latestThought.reasoningText : 'Actively monitoring CLOB depth & risk invariants...'}
               </p>
             </div>
@@ -453,27 +409,17 @@ export const AgentThoughtFeed: React.FC<AgentThoughtFeedProps> = ({
         {(isLoading || (!isConnected && thoughts.length === 0)) && filteredThoughts.length === 0 ? (
           <AgentThoughtFeedSkeleton />
         ) : filteredThoughts.length === 0 ? (
-          <div
-            style={{
-              padding: '48px 24px',
-              textAlign: 'center',
-              display: 'flex',
-              flexDirection: 'column',
-              alignItems: 'center',
-              gap: '12px',
-              color: 'var(--muted-foreground)',
-            }}
-          >
-            <Activity size={28} style={{ color: '#00ffcc', opacity: 0.6 }} />
+          <div className="py-12 px-6 text-center flex flex-col items-center gap-3 text-muted-foreground">
+            <ChartBarIcon className="size-7 text-muted-foreground/40" />
             <div>
-              <p style={{ fontWeight: 600, fontSize: '13px', margin: '0 0 4px 0', color: '#f4f4f5' }}>
+              <p className="font-semibold text-[13px] mb-1 text-foreground">
                 {searchQuery
                   ? `No events match "${searchQuery}"`
                   : selectedFilter === 'DEBUG_TRACE'
                   ? 'Awaiting new evaluation cycles...'
                   : 'Awaiting high-conviction on-chain trade executions...'}
               </p>
-              <p style={{ fontSize: '12px', margin: 0 }}>
+              <p className="text-xs text-muted-foreground m-0">
                 {searchQuery
                   ? 'Try clearing your search query or selecting a different filter tab.'
                   : selectedFilter === 'DEBUG_TRACE'
@@ -495,206 +441,96 @@ export const AgentThoughtFeed: React.FC<AgentThoughtFeedProps> = ({
             return (
               <div
                 key={thought.id}
-                className="thought-card"
+                className="rounded-lg bg-card/40 hover:bg-card/60 transition-colors p-3 flex flex-col gap-2"
                 style={{
-                  background: isExec ? '#131316' : 'rgba(18, 18, 22, 0.7)',
-                  border: isExec ? `1px solid ${theme.border}` : '1px dashed var(--border)',
-                  borderLeft: `3px solid ${theme.color}`,
-                  borderRadius: '8px',
-                  padding: '12px 14px',
-                  display: 'flex',
-                  flexDirection: 'column',
-                  gap: '8px',
-                  transition: 'all 0.15s ease',
+                  border: '1px solid hsl(var(--border) / 0.5)',
+                  borderLeft: `2px solid ${theme.border}`,
                 }}
               >
-                {/* Header Row */}
-                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '6px' }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
-                    {/* Agent Pill */}
-                    <div
-                      style={{
-                        display: 'inline-flex',
-                        alignItems: 'center',
-                        gap: '5px',
-                        padding: '3px 8px',
-                        borderRadius: '4px',
-                        background: theme.bg,
-                        border: `1px solid ${theme.border}`,
-                        color: theme.color,
-                        fontWeight: 700,
-                        fontSize: '11px',
-                        fontFamily: 'var(--font-mono)',
-                      }}
+                {/* Header Row — Minimal with subtle agent accent */}
+                <div className="flex items-center justify-between flex-wrap gap-2">
+                  <div className="flex items-center gap-1.5 flex-wrap">
+                    <span
+                      className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-md border text-[10px] font-mono font-semibold"
+                      style={{ background: theme.bg, borderColor: theme.border, color: theme.color }}
                     >
-                      <Icon size={12} />
+                      <Icon className="size-3" style={{ color: theme.color }} />
                       <span>{thought.agentType.toUpperCase()}</span>
-                    </div>
+                    </span>
 
-                    {/* Execution / Debug Status Badge */}
                     {isExec ? (
-                      <span
-                        style={{
-                          display: 'inline-flex',
-                          alignItems: 'center',
-                          gap: '4px',
-                          fontSize: '10px',
-                          fontWeight: 700,
-                          padding: '2px 6px',
-                          borderRadius: '4px',
-                          background: 'rgba(16, 185, 129, 0.2)',
-                          color: '#34d399',
-                          border: '1px solid rgba(16, 185, 129, 0.4)',
-                        }}
-                      >
-                        <CheckCircle2 size={11} />
+                      <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md border text-[10px] font-mono font-medium" style={{ background: 'rgba(52,211,153,0.08)', borderColor: 'rgba(52,211,153,0.18)', color: '#6ee7b7' }}>
+                        <CheckCircleIcon className="size-2.5" style={{ color: '#6ee7b7' }} />
                         <span>EXECUTED</span>
                       </span>
                     ) : (
-                      <span
-                        style={{
-                          display: 'inline-flex',
-                          alignItems: 'center',
-                          gap: '4px',
-                          fontSize: '9.5px',
-                          fontFamily: 'var(--font-mono)',
-                          padding: '2px 6px',
-                          borderRadius: '4px',
-                          background: 'rgba(0, 240, 255, 0.08)',
-                          color: 'var(--brand-cyan)',
-                          border: '1px solid rgba(0, 240, 255, 0.25)',
-                        }}
-                      >
-                        <Radio size={10} />
-                        <span>EVAL TRACE</span>
+                      <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md border border-border/30 bg-secondary/20 text-[10px] font-mono text-muted-foreground">
+                        <SignalIcon className="size-2.5" />
+                        <span>EVAL</span>
                       </span>
                     )}
 
-                    {/* Action Pill */}
                     <span
-                      style={{
-                        fontSize: '10.5px',
-                        fontFamily: 'var(--font-mono)',
-                        fontWeight: 600,
-                        padding: '2px 6px',
-                        borderRadius: '4px',
-                        ...actionStyle,
-                      }}
+                      className="inline-flex items-center px-2 py-0.5 rounded-md border text-[10px] font-mono font-medium"
+                      style={actionStyle}
                     >
                       {thought.actionTaken}
                     </span>
 
-                    {/* Price / Outcome / Size Tags if available */}
                     {thought.price !== undefined && (
-                      <span
-                        style={{
-                          fontSize: '10.5px',
-                          fontFamily: 'var(--font-mono)',
-                          background: 'rgba(255, 255, 255, 0.06)',
-                          padding: '2px 6px',
-                          borderRadius: '4px',
-                          color: '#e4e4e7',
-                        }}
-                      >
+                      <span className="text-[10px] font-mono bg-secondary/30 border border-border/30 px-1.5 py-0.5 rounded-md text-muted-foreground">
                         @ {thought.price.toFixed(2)} {thought.outcome || ''}
                       </span>
                     )}
 
-                    {/* Trigger Event Badge */}
                     {thought.triggerEvent && (
-                      <span
-                        style={{
-                          fontSize: '10px',
-                          color: 'var(--muted-foreground)',
-                          background: '#1f1f23',
-                          padding: '2px 6px',
-                          borderRadius: '4px',
-                          border: '1px solid #2e2e33',
-                        }}
-                      >
+                      <span className="text-[10px] font-mono text-muted-foreground bg-secondary/20 border border-border/30 px-1.5 py-0.5 rounded-md">
                         {thought.triggerEvent}
                       </span>
                     )}
 
-                    {/* Repeat Count Indicator */}
                     {(thought as any).repeatCount > 1 && (
-                      <span
-                        style={{
-                          fontSize: '9.5px',
-                          fontFamily: 'var(--font-mono)',
-                          fontWeight: 700,
-                          color: '#a1a1aa',
-                          background: 'rgba(255, 255, 255, 0.08)',
-                          border: '1px solid rgba(255, 255, 255, 0.15)',
-                          padding: '1px 5px',
-                          borderRadius: '10px',
-                        }}
-                      >
+                      <span className="text-[10px] font-mono font-medium text-muted-foreground bg-secondary/30 border border-border/30 px-1.5 py-0.5 rounded-full">
                         {(thought as any).repeatCount}x
                       </span>
                     )}
                   </div>
 
-                  {/* Right: Confidence, Explorer Tx & Timestamps */}
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
-                    {/* Explorer Tx Link */}
+                  <div className="flex items-center gap-2 flex-wrap">
                     {thought.txHash && thought.txHash !== '0x0000000000000000000000000000000000000000000000000000000000000000' && (
                       <a
                         href={`https://shannon-explorer.somnia.network/tx/${thought.txHash}`}
                         target="_blank"
                         rel="noreferrer"
-                        style={{
-                          display: 'inline-flex',
-                          alignItems: 'center',
-                          gap: '4px',
-                          fontSize: '10.5px',
-                          fontFamily: 'var(--font-mono)',
-                          color: '#00ffcc',
-                          textDecoration: 'none',
-                          background: 'rgba(0, 255, 204, 0.1)',
-                          border: '1px solid rgba(0, 255, 204, 0.3)',
-                          padding: '2px 6px',
-                          borderRadius: '4px',
-                        }}
+                        className="inline-flex items-center gap-1 text-[10px] font-mono border px-1.5 py-0.5 rounded-md transition-colors no-underline"
+                        style={{ background: 'rgba(45,212,191,0.07)', borderColor: 'rgba(45,212,191,0.16)', color: '#5eead4' }}
                       >
                         <span>Tx: {thought.txHash.slice(0, 6)}...{thought.txHash.slice(-4)}</span>
-                        <ExternalLink size={10} />
+                        <ArrowTopRightOnSquareIcon className="size-2.5" />
                       </a>
                     )}
 
-                    <div
-                      style={{
-                        display: 'inline-flex',
-                        alignItems: 'center',
-                        gap: '4px',
-                        fontSize: '11px',
-                        fontFamily: 'var(--font-mono)',
-                        color: confidencePct >= 80 ? '#00ffcc' : '#f59e0b',
-                        background: 'rgba(0, 255, 204, 0.08)',
-                        padding: '2px 6px',
-                        borderRadius: '4px',
-                      }}
-                    >
-                      <TrendingUp size={11} />
-                      <span>{confidencePct}% Conviction</span>
-                    </div>
-
                     <span
-                      style={{
-                        fontSize: '10.5px',
-                        fontFamily: 'var(--font-mono)',
-                        color: 'var(--muted-foreground)',
-                      }}
+                      className="inline-flex items-center gap-1 text-[10px] font-mono border px-1.5 py-0.5 rounded-md"
+                      style={
+                        confidencePct >= 80
+                          ? { background: 'rgba(52,211,153,0.07)', borderColor: 'rgba(52,211,153,0.16)', color: '#6ee7b7' }
+                          : { background: 'rgba(251,191,36,0.07)', borderColor: 'rgba(251,191,36,0.16)', color: '#fcd34d' }
+                      }
                     >
+                      <ArrowTrendingUpIcon className="size-3" style={{ color: confidencePct >= 80 ? '#6ee7b7' : '#fcd34d' }} />
+                      <span>{confidencePct}%</span>
+                    </span>
+
+                    <span className="text-[10px] font-mono text-muted-foreground/70">
                       {relTime} ({timeString})
                     </span>
                   </div>
                 </div>
 
-                {/* Reasoning Body */}
-                <div style={{ fontSize: '12.5px', color: '#e4e4e7', lineHeight: 1.45, letterSpacing: '0.01em' }}>
-                  <p style={{ margin: 0 }}>{thought.reasoningText}</p>
-                </div>
+                <p className="m-0 text-xs leading-relaxed text-muted-foreground line-clamp-3">
+                  {thought.reasoningText}
+                </p>
               </div>
             );
           })

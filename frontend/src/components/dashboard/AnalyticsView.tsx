@@ -1,44 +1,42 @@
 import React, { useMemo, useState, useEffect } from 'react';
 import {
-  TrendingUp,
-  TrendingDown,
-  Activity,
-  BarChart3,
-  PieChart,
-  Calendar,
-  Download,
-  Wallet,
-  Bot,
-  Eye,
-  Target,
-  Layers,
-  ArrowUpRight,
-  ArrowDownRight,
-  Zap,
-  Shield,
-  Brain,
-  Timer,
-  Award,
-  AlertTriangle,
-  RefreshCw,
-  LineChart,
-  Gauge,
-  Flame,
-} from 'lucide-react';
+  ArrowTrendingUpIcon,
+  ArrowTrendingDownIcon,
+  ChartBarIcon,
+  ChartBarSquareIcon,
+  ChartPieIcon,
+  CalendarIcon,
+  ArrowDownTrayIcon,
+  WalletIcon,
+  CpuChipIcon,
+  EyeIcon,
+  ViewfinderCircleIcon,
+  Square3Stack3DIcon,
+  BoltIcon,
+  ShieldCheckIcon,
+  ClockIcon,
+  TrophyIcon,
+  ExclamationTriangleIcon,
+  ArrowPathIcon,
+  PresentationChartLineIcon,
+  Squares2X2Icon,
+  FireIcon,
+} from '@heroicons/react/24/outline';
 import { useAnalytics, type AnalyticsRange, type EquityPoint, type DailyBar } from '../../hooks/useAnalytics.js';
 import type { WalletState } from '../../hooks/useSessionKey.js';
 import { useUserRole } from '../../hooks/useUserRole.js';
 import { Spinner } from '../ui/Spinner.js';
 import { Pagination } from '../ui/Pagination.js';
+import { Badge } from '../ui/badge.js';
+import { cn } from '../../lib/utils.js';
 
-// ---------- Small SVG Chart Helpers ----------
+// ---------- Small SVG Chart Helpers (unchanged) ----------
 
-const EquityCurveChart: React.FC<{ user: EquityPoint[]; swarm: EquityPoint[]; height?: number }> = ({ user, swarm, height = 220 }) => {
+const EquityCurveChart: React.FC<{ user: EquityPoint[]; swarm: EquityPoint[]; height?: number }> = ({ user, swarm, height = 200 }) => {
   const width = 800;
   const padding = { top: 16, right: 16, bottom: 28, left: 48 };
   const innerW = width - padding.left - padding.right;
   const innerH = height - padding.top - padding.bottom;
-
   const all = [...user, ...swarm];
   if (all.length === 0) {
     return (
@@ -50,23 +48,16 @@ const EquityCurveChart: React.FC<{ user: EquityPoint[]; swarm: EquityPoint[]; he
   const min = Math.min(0, ...all.map((p) => p.cumulativePnl));
   const max = Math.max(1, ...all.map((p) => p.cumulativePnl));
   const range = max - min || 1;
-
   const toPath = (pts: EquityPoint[]) => {
     if (pts.length === 0) return '';
-    return pts
-      .map((p, i) => {
-        const x = padding.left + i * (innerW / Math.max(1, pts.length - 1 || 1));
-        const y = padding.top + innerH - ((p.cumulativePnl - min) / range) * innerH;
-        return `${i === 0 ? 'M' : 'L'} ${x} ${y}`;
-      })
-      .join(' ');
+    return pts.map((p, i) => {
+      const x = padding.left + i * (innerW / Math.max(1, pts.length - 1 || 1));
+      const y = padding.top + innerH - ((p.cumulativePnl - min) / range) * innerH;
+      return `${i === 0 ? 'M' : 'L'} ${x} ${y}`;
+    }).join(' ');
   };
-
-  // For swarm, map its own index spacing to same x scale as user (aligned by date)
-  // We assume both arrays share same daily dates (service generates same date range)
   const userPath = toPath(user);
   const swarmPath = toPath(swarm);
-
   const yTicks = 4;
   const yLabels: { y: number; v: number }[] = [];
   for (let i = 0; i <= yTicks; i++) {
@@ -74,104 +65,55 @@ const EquityCurveChart: React.FC<{ user: EquityPoint[]; swarm: EquityPoint[]; he
     const y = padding.top + innerH - ((v - min) / range) * innerH;
     yLabels.push({ y, v });
   }
-
-  // Zero line
   const zeroY = padding.top + innerH - ((0 - min) / range) * innerH;
-
   return (
     <div style={{ width: '100%', overflowX: 'auto' }}>
       <svg viewBox={`0 0 ${width} ${height}`} style={{ width: '100%', height, display: 'block' }}>
-        {/* grid */}
         {yLabels.map((t, idx) => (
           <g key={idx}>
-            <line x1={padding.left} x2={width - padding.right} y1={t.y} y2={t.y} stroke="rgba(255,255,255,0.06)" strokeWidth={1} strokeDasharray={idx === 0 || idx === yTicks ? '0' : '3 3'} />
+            <line x1={padding.left} x2={width - padding.right} y1={t.y} y2={t.y} stroke="hsl(var(--secondary) / 0.25)" strokeWidth={1} strokeDasharray={idx === 0 || idx === yTicks ? '0' : '3 3'} />
             <text x={padding.left - 8} y={t.y + 3} textAnchor="end" fontSize={10} fill="#a1a1aa" fontFamily="var(--font-mono)">
               {t.v >= 0 ? `+${t.v.toFixed(0)}` : t.v.toFixed(0)}
             </text>
           </g>
         ))}
-        {/* zero line highlight */}
         <line x1={padding.left} x2={width - padding.right} y1={zeroY} y2={zeroY} stroke="rgba(255,255,255,0.12)" strokeWidth={1} />
-        {/* swarm area fill */}
-        {swarm.length > 1 && (
-          <path
-            d={`${swarmPath} L ${padding.left + innerW} ${zeroY} L ${padding.left} ${zeroY} Z`}
-            fill="rgba(245,158,11,0.08)"
-            stroke="none"
-          />
-        )}
-        {/* user area fill */}
-        {user.length > 1 && (
-          <path
-            d={`${userPath} L ${padding.left + innerW} ${zeroY} L ${padding.left} ${zeroY} Z`}
-            fill="rgba(0,255,204,0.08)"
-            stroke="none"
-          />
-        )}
-        {/* lines */}
-        {swarm.length > 1 && <path d={swarmPath} fill="none" stroke="#f59e0b" strokeWidth={1.8} strokeLinejoin="round" strokeLinecap="round" strokeDasharray="6 4" opacity={0.9} />}
-        {user.length > 1 && <path d={userPath} fill="none" stroke="#00ffcc" strokeWidth={2.2} strokeLinejoin="round" strokeLinecap="round" />}
-        {/* dots for last point */}
-        {user.length > 0 && (() => {
-          const last = user[user.length - 1];
-          const x = padding.left + (user.length - 1) * (innerW / Math.max(1, user.length - 1));
-          const y = padding.top + innerH - ((last.cumulativePnl - min) / range) * innerH;
-          return <circle cx={x} cy={y} r={3.5} fill="#00ffcc" stroke="#09090b" strokeWidth={2} />;
-        })()}
-        {swarm.length > 0 && user.length > 0 && (() => {
-          const last = swarm[swarm.length - 1];
-          const x = padding.left + (swarm.length - 1) * (innerW / Math.max(1, swarm.length - 1));
-          const y = padding.top + innerH - ((last.cumulativePnl - min) / range) * innerH;
-          return <circle cx={x} cy={y} r={3} fill="#f59e0b" stroke="#09090b" strokeWidth={1.5} />;
-        })()}
-        {/* x labels (sparse) */}
+        {swarm.length > 1 && <path d={`${swarmPath} L ${padding.left + innerW} ${zeroY} L ${padding.left} ${zeroY} Z`} fill="rgba(245,158,11,0.08)" stroke="none" />}
+        {user.length > 1 && <path d={`${userPath} L ${padding.left + innerW} ${zeroY} L ${padding.left} ${zeroY} Z`} fill="rgba(0,255,204,0.08)" stroke="none" />}
+        {swarm.length > 1 && <path d={swarmPath} fill="none" stroke="#fbbf24" strokeWidth={1.8} strokeLinejoin="round" strokeLinecap="round" strokeDasharray="6 4" opacity={0.9} />}
+        {user.length > 1 && <path d={userPath} fill="none" stroke="#2dd4bf" strokeWidth={2.2} strokeLinejoin="round" strokeLinecap="round" />}
+        {user.length > 0 && (() => { const last = user[user.length - 1]; const x = padding.left + (user.length - 1) * (innerW / Math.max(1, user.length - 1)); const y = padding.top + innerH - ((last.cumulativePnl - min) / range) * innerH; return <circle cx={x} cy={y} r={3.5} fill="#2dd4bf" stroke="#09090b" strokeWidth={2} />; })()}
+        {swarm.length > 0 && user.length > 0 && (() => { const last = swarm[swarm.length - 1]; const x = padding.left + (swarm.length - 1) * (innerW / Math.max(1, swarm.length - 1)); const y = padding.top + innerH - ((last.cumulativePnl - min) / range) * innerH; return <circle cx={x} cy={y} r={3} fill="#fbbf24" stroke="#09090b" strokeWidth={1.5} />; })()}
         {user.map((p, i) => {
           if (user.length > 14 && i % Math.ceil(user.length / 6) !== 0) return null;
           const x = padding.left + i * (innerW / Math.max(1, user.length - 1));
-          return (
-            <text key={p.date} x={x} y={height - 6} textAnchor="middle" fontSize={9} fill="#71717a" fontFamily="var(--font-mono)">
-              {p.date.slice(5)}
-            </text>
-          );
+          return <text key={p.date} x={x} y={height - 6} textAnchor="middle" fontSize={9} fill="#a1a1aa" fontFamily="var(--font-mono)">{p.date.slice(5)}</text>;
         })}
       </svg>
     </div>
   );
 };
 
-const DailyPnlBars: React.FC<{ data: DailyBar[]; height?: number }> = ({ data, height = 180 }) => {
+const DailyPnlBars: React.FC<{ data: DailyBar[]; height?: number }> = ({ data, height = 170 }) => {
   const width = 800;
   const padding = { top: 12, right: 12, bottom: 28, left: 48 };
   const innerW = width - padding.left - padding.right;
   const innerH = height - padding.top - padding.bottom;
-
-  if (data.length === 0) {
-    return <div style={{ height, display: 'grid', placeItems: 'center', color: 'var(--muted-foreground)', fontSize: 12 }}>No daily PnL yet.</div>;
-  }
+  if (data.length === 0) return <div style={{ height, display: 'grid', placeItems: 'center', color: 'var(--muted-foreground)', fontSize: 12 }}>No daily PnL yet.</div>;
   const maxAbs = Math.max(...data.map((d) => Math.abs(d.pnl)), 1);
   const yMax = maxAbs * 1.15 || 1;
   const barW = Math.max(2, innerW / data.length - 2);
   const zeroY = padding.top + innerH / 2;
-
-  // scale: top = +yMax, bottom = -yMax
-  const yScale = (v: number) => {
-    // v in [-yMax, yMax] -> y in [top, bottom]
-    return padding.top + innerH / 2 - (v / yMax) * (innerH / 2 - 4);
-  };
-
+  const yScale = (v: number) => padding.top + innerH / 2 - (v / yMax) * (innerH / 2 - 4);
   return (
     <div style={{ width: '100%', overflowX: 'auto' }}>
       <svg viewBox={`0 0 ${width} ${height}`} style={{ width: '100%', height, display: 'block' }}>
-        {/* grid */}
         {[yMax, yMax / 2, 0, -yMax / 2, -yMax].map((v, idx) => (
           <g key={idx}>
-            <line x1={padding.left} x2={width - padding.right} y1={yScale(v)} y2={yScale(v)} stroke="rgba(255,255,255,0.06)" strokeWidth={1} strokeDasharray={v === 0 ? '0' : '3 3'} />
-            <text x={padding.left - 8} y={yScale(v) + 3} textAnchor="end" fontSize={10} fill="#a1a1aa" fontFamily="var(--font-mono)">
-              {v >= 0 ? `+${v.toFixed(0)}` : v.toFixed(0)}
-            </text>
+            <line x1={padding.left} x2={width - padding.right} y1={yScale(v)} y2={yScale(v)} stroke="hsl(var(--secondary) / 0.25)" strokeWidth={1} strokeDasharray={v === 0 ? '0' : '3 3'} />
+            <text x={padding.left - 8} y={yScale(v) + 3} textAnchor="end" fontSize={10} fill="#a1a1aa" fontFamily="var(--font-mono)">{v >= 0 ? `+${v.toFixed(0)}` : v.toFixed(0)}</text>
           </g>
         ))}
-        {/* zero line */}
         <line x1={padding.left} x2={width - padding.right} y1={zeroY} y2={zeroY} stroke="rgba(255,255,255,0.14)" strokeWidth={1} />
         {data.map((d, i) => {
           const x = padding.left + i * (innerW / data.length) + 1;
@@ -181,38 +123,28 @@ const DailyPnlBars: React.FC<{ data: DailyBar[]; height?: number }> = ({ data, h
           const safeH = Math.max(1.5, h);
           return (
             <g key={d.date}>
-              <rect x={x} y={y} width={barW} height={safeH} rx={2} fill={isPos ? '#10b981' : '#f43f5e'} opacity={0.9} />
-              {Math.abs(d.pnl) > yMax * 0.12 && (
-                <text x={x + barW / 2} y={isPos ? y - 4 : y + safeH + 10} textAnchor="middle" fontSize={8} fill={isPos ? '#10b981' : '#f43f5e'} fontFamily="var(--font-mono)" fontWeight={700}>
-                  {d.pnl > 0 ? `+${d.pnl.toFixed(1)}` : d.pnl.toFixed(1)}
-                </text>
-              )}
+              <rect x={x} y={y} width={barW} height={safeH} rx={2} fill={isPos ? '#6ee7b7' : '#fda4af'} opacity={0.9} />
+              {Math.abs(d.pnl) > yMax * 0.12 && <text x={x + barW / 2} y={isPos ? y - 4 : y + safeH + 10} textAnchor="middle" fontSize={8} fill={isPos ? '#6ee7b7' : '#fda4af'} fontFamily="var(--font-mono)" fontWeight={700}>{d.pnl > 0 ? `+${d.pnl.toFixed(1)}` : d.pnl.toFixed(1)}</text>}
             </g>
           );
         })}
-        {/* x labels sparse */}
         {data.map((p, i) => {
           if (data.length > 14 && i % Math.ceil(data.length / 6) !== 0) return null;
           const x = padding.left + i * (innerW / data.length) + barW / 2;
-          return (
-            <text key={p.date} x={x} y={height - 6} textAnchor="middle" fontSize={9} fill="#71717a" fontFamily="var(--font-mono)">
-              {p.date.slice(5)}
-            </text>
-          );
+          return <text key={p.date} x={x} y={height - 6} textAnchor="middle" fontSize={9} fill="#a1a1aa" fontFamily="var(--font-mono)">{p.date.slice(5)}</text>;
         })}
       </svg>
     </div>
   );
 };
 
-const Donut: React.FC<{ data: { label: string; value: number; color: string }[]; size?: number }> = ({ data, size = 140 }) => {
+const Donut: React.FC<{ data: { label: string; value: number; color: string }[]; size?: number }> = ({ data, size = 130 }) => {
   const total = data.reduce((a, b) => a + Math.abs(b.value), 0) || 1;
   let acc = 0;
   const r = size / 2 - 12;
   const cx = size / 2;
   const cy = size / 2;
   const strokeW = 14;
-
   const segments = data.map((d) => {
     const val = Math.abs(d.value);
     const pct = val / total;
@@ -220,7 +152,6 @@ const Donut: React.FC<{ data: { label: string; value: number; color: string }[];
     const start = acc;
     const end = acc + angle;
     acc = end;
-    // SVG arc
     const large = angle > 180 ? 1 : 0;
     const rad = (deg: number) => (deg - 90) * (Math.PI / 180);
     const x1 = cx + r * Math.cos(rad(start));
@@ -230,28 +161,18 @@ const Donut: React.FC<{ data: { label: string; value: number; color: string }[];
     const dPath = `M ${x1} ${y1} A ${r} ${r} 0 ${large} 1 ${x2} ${y2}`;
     return { ...d, pct, dPath };
   });
-
   return (
-    <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
+    <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
       <svg width={size} height={size} style={{ flexShrink: 0 }}>
-        <circle cx={cx} cy={cy} r={r} fill="none" stroke="rgba(255,255,255,0.06)" strokeWidth={strokeW} />
-        {segments.map((s, i) => (
-          <path key={i} d={s.dPath} fill="none" stroke={s.color} strokeWidth={strokeW} strokeLinecap="round" />
-        ))}
-        <text x={cx} y={cy - 4} textAnchor="middle" fontSize={14} fontWeight={800} fill="#fafafa" fontFamily="var(--font-mono)">
-          {total.toFixed(0)}
-        </text>
-        <text x={cx} y={cy + 10} textAnchor="middle" fontSize={9} fill="#a1a1aa" fontFamily="var(--font-mono)">
-          TRADES
-        </text>
+        <circle cx={cx} cy={cy} r={r} fill="none" stroke="hsl(var(--secondary) / 0.25)" strokeWidth={strokeW} />
+        {segments.map((s, i) => <path key={i} d={s.dPath} fill="none" stroke={s.color} strokeWidth={strokeW} strokeLinecap="round" />)}
+        <text x={cx} y={cy - 4} textAnchor="middle" fontSize={14} fontWeight={800} fill="#fafafa" fontFamily="var(--font-mono)">{total.toFixed(0)}</text>
+        <text x={cx} y={cy + 10} textAnchor="middle" fontSize={9} fill="#a1a1aa" fontFamily="var(--font-mono)">TRADES</text>
       </svg>
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 8, flex: 1 }}>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 6, flex: 1 }}>
         {segments.map((s, i) => (
           <div key={i} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-              <span style={{ width: 10, height: 10, borderRadius: 3, background: s.color, display: 'inline-block' }} />
-              <span style={{ fontSize: 11, color: '#d4d4d8', fontWeight: 600 }}>{s.label}</span>
-            </div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}><span style={{ width: 8, height: 8, borderRadius: 3, background: s.color, display: 'inline-block' }} /><span style={{ fontSize: 11, color: '#d4d4d8', fontWeight: 600 }}>{s.label}</span></div>
             <span style={{ fontSize: 11, color: '#a1a1aa', fontFamily: 'var(--font-mono)' }}>{(s.pct * 100).toFixed(1)}%</span>
           </div>
         ))}
@@ -260,7 +181,7 @@ const Donut: React.FC<{ data: { label: string; value: number; color: string }[];
   );
 };
 
-// ---------- Main View ----------
+// ---------- Main View (concise, tabbed, inline-scroll) ----------
 
 interface AnalyticsViewProps {
   wallet: WalletState;
@@ -273,40 +194,18 @@ export const AnalyticsView: React.FC<AnalyticsViewProps> = ({ wallet, onConnectW
   const [showSwarm, setShowSwarm] = useState(true);
   const [ledgerPage, setLedgerPage] = useState(1);
   const [ledgerPageSize, setLedgerPageSize] = useState(10);
+  const [activeTab, setActiveTab] = useState<'equity' | 'daily' | 'dist' | 'ledger'>('equity');
 
   const rangeOptions: { id: AnalyticsRange; label: string }[] = [
-    { id: '24h', label: '24H' },
-    { id: '7d', label: '7D' },
-    { id: '30d', label: '30D' },
-    { id: '90d', label: '90D' },
-    { id: 'ALL', label: 'ALL' },
+    { id: '24h', label: '24H' }, { id: '7d', label: '7D' }, { id: '30d', label: '30D' }, { id: '90d', label: '90D' }, { id: 'ALL', label: 'ALL' },
   ];
 
   const summary = data?.summary;
-
-  // Ledger pagination (newest first)
-  const ledgerRows = useMemo(() => {
-    if (!data?.ledger) return [];
-    return [...data.ledger].reverse();
-  }, [data?.ledger]);
-
+  const ledgerRows = useMemo(() => (!data?.ledger ? [] : [...data.ledger].reverse()), [data?.ledger]);
   const totalLedgerPages = Math.max(1, Math.ceil(ledgerRows.length / ledgerPageSize));
-
-  // Reset/clamp ledgerPage on range or pageSize change
-  useEffect(() => {
-    setLedgerPage(1);
-  }, [range]);
-
-  useEffect(() => {
-    if (ledgerPage > totalLedgerPages) {
-      setLedgerPage(totalLedgerPages);
-    }
-  }, [totalLedgerPages, ledgerPage]);
-
-  const pagedLedger = useMemo(() => {
-    const start = (ledgerPage - 1) * ledgerPageSize;
-    return ledgerRows.slice(start, start + ledgerPageSize);
-  }, [ledgerRows, ledgerPage, ledgerPageSize]);
+  useEffect(() => { setLedgerPage(1); }, [range]);
+  useEffect(() => { if (ledgerPage > totalLedgerPages) setLedgerPage(totalLedgerPages); }, [totalLedgerPages, ledgerPage]);
+  const pagedLedger = useMemo(() => { const start = (ledgerPage - 1) * ledgerPageSize; return ledgerRows.slice(start, start + ledgerPageSize); }, [ledgerRows, ledgerPage, ledgerPageSize]);
 
   const exportCsv = () => {
     if (!data) return;
@@ -314,38 +213,29 @@ export const AnalyticsView: React.FC<AnalyticsViewProps> = ({ wallet, onConnectW
     const rows = data.ledger.map((r) => `${r.date},${r.startBalance},${r.endBalance},${r.dailyPnl},${r.trades},${r.wins},${r.losses},${r.volume}`).join('\n');
     const blob = new Blob([header + rows], { type: 'text/csv' });
     const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `dreampulse-analytics-${data.range}-${new Date().toISOString().slice(0, 10)}.csv`;
-    a.click();
-    URL.revokeObjectURL(url);
+    const a = document.createElement('a'); a.href = url; a.download = `dreampulse-analytics-${data.range}-${new Date().toISOString().slice(0, 10)}.csv`; a.click(); URL.revokeObjectURL(url);
   };
 
   if (isLoading && !data) {
     return (
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-        <div className="terminal-panel" style={{ padding: 24, display: 'flex', alignItems: 'center', gap: 12, justifyContent: 'center' }}>
+      <div className="flex flex-col gap-3 h-full">
+        <div className="terminal-panel p-4 flex items-center gap-3 justify-center">
           <Spinner size="sm" variant="cyan" />
-          <span style={{ fontSize: 13, color: 'var(--muted-foreground)' }}>Aggregating transparent on-chain ledger & swarm telemetry…</span>
+          <span className="text-xs text-muted-foreground">Aggregating transparent on-chain ledger & swarm telemetry…</span>
         </div>
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: 12 }}>
-          {[1, 2, 3, 4, 5, 6, 7, 8].map((i) => (
-            <div key={i} className="terminal-panel" style={{ height: 92, background: '#111114', border: '1px solid var(--border)', borderRadius: 12 }} />
-          ))}
+        <div className="grid grid-cols-4 gap-3">
+          {[1, 2, 3, 4].map((i) => <div key={i} className="terminal-panel h-[84px]" />)}
         </div>
       </div>
     );
   }
-
   if (error && !data) {
     return (
-      <div className="terminal-panel" style={{ padding: 24, textAlign: 'center' }}>
-        <AlertTriangle size={28} style={{ color: '#f59e0b', margin: '0 auto 12px' }} />
-        <div style={{ fontSize: 13, color: '#fafafa', fontWeight: 600, marginBottom: 6 }}>Analytics temporarily unavailable</div>
-        <div style={{ fontSize: 12, color: 'var(--muted-foreground)', marginBottom: 14 }}>{error}</div>
-        <button type="button" className="btn-glow" onClick={() => refresh()}>
-          <RefreshCw size={14} /> <span>Retry</span>
-        </button>
+      <div className="terminal-panel p-6 text-center">
+        <ExclamationTriangleIcon className="size-7 text-amber-400 mx-auto mb-3" />
+        <div className="text-sm font-bold text-foreground mb-1">Analytics temporarily unavailable</div>
+        <div className="text-xs text-muted-foreground mb-3">{error}</div>
+        <button type="button" className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border bg-secondary/30 text-xs" onClick={() => refresh()}><ArrowPathIcon className="size-3.5" /> Retry</button>
       </div>
     );
   }
@@ -353,568 +243,310 @@ export const AnalyticsView: React.FC<AnalyticsViewProps> = ({ wallet, onConnectW
   const userCurve = data?.equityCurve || [];
   const swarmCurve = data?.swarmEquityCurve || [];
   const dailyBars = data?.dailyBars || [];
-
   const isUserPositive = (summary?.totalPnl ?? 0) >= 0;
   const swarmTotal = swarmCurve.length ? swarmCurve[swarmCurve.length - 1].cumulativePnl : 0;
   const isSwarmPositive = swarmTotal >= 0;
   const delta = (summary?.totalPnl ?? 0) - swarmTotal;
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 16, paddingBottom: 32 }}>
-      {/* Header Controls */}
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 12 }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-          <div style={{ width: 36, height: 36, borderRadius: 10, background: 'rgba(0,255,204,0.10)', border: '1px solid rgba(0,255,204,0.25)', display: 'grid', placeItems: 'center', color: 'var(--brand-cyan)' }}>
-            <LineChart size={18} />
+    <div className="flex flex-col gap-3 pb-4">
+      {/* Header */}
+      <div className="flex items-center justify-between gap-3 flex-wrap flex-shrink-0">
+        <div className="flex items-center gap-3">
+          <div className="size-8 rounded-lg grid place-items-center border bg-secondary/30 border-border/50 text-muted-foreground">
+            <PresentationChartLineIcon className="size-4" />
           </div>
           <div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-              <h2 style={{ margin: 0, fontSize: 16, fontWeight: 800, color: '#fafafa', letterSpacing: '-0.02em' }}>Analytics & Balance Transparency</h2>
-              <span className="stat-pill-tag tag-cyan" style={{ fontSize: 10, padding: '2px 6px' }}>LIVE LEDGER</span>
-            </div>
-            <div style={{ fontSize: 11, color: 'var(--muted-foreground)', marginTop: 2 }}>
-              Verifiable per-settlement PnL • User vs Operator swarm equity • <span style={{ color: 'var(--brand-cyan)', fontFamily: 'var(--font-mono)', fontSize: 10 }}>{data?.generatedAt ? new Date(data.generatedAt).toLocaleString() : ''}</span>
+            <div className="flex items-center gap-2 flex-wrap">
+              <h2 className="text-sm font-bold tracking-tight text-foreground">Analytics & Balance Transparency</h2>
+              <Badge variant="outline" className="font-mono text-[10px] px-1.5 py-0 bg-secondary/30 border-border/40 text-muted-foreground">LIVE LEDGER</Badge>
+              <span className="text-[10px] font-mono text-muted-foreground hidden sm:inline">Verifiable per-settlement PnL • {data?.generatedAt ? new Date(data.generatedAt).toLocaleTimeString() : ''}</span>
             </div>
           </div>
         </div>
-
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
-          <div style={{ display: 'inline-flex', padding: 3, background: '#141417', border: '1px solid var(--border)', borderRadius: 8, gap: 2 }}>
+        <div className="flex items-center gap-2 flex-wrap">
+          <div className="flex items-center gap-1 bg-secondary/30 p-0.5 rounded-lg border border-border/40">
             {rangeOptions.map((r) => (
-              <button
-                key={r.id}
-                type="button"
-                onClick={() => {
-                  setRange(r.id);
-                  setLedgerPage(1);
-                }}
-                style={{
-                  padding: '5px 10px',
-                  borderRadius: 6,
-                  fontSize: 11,
-                  fontWeight: range === r.id ? 700 : 500,
-                  fontFamily: 'var(--font-mono)',
-                  background: range === r.id ? '#27272a' : 'transparent',
-                  color: range === r.id ? '#fff' : '#a1a1aa',
-                  border: range === r.id ? '1px solid var(--border)' : '1px solid transparent',
-                  cursor: 'pointer',
-                }}
-              >
+              <button key={r.id} type="button" onClick={() => { setRange(r.id); setLedgerPage(1); }} className={cn('px-2.5 py-1 rounded-md text-[11px] font-semibold transition-colors', range === r.id ? 'bg-primary text-primary-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground')}>
                 {r.label}
               </button>
             ))}
           </div>
-          <button type="button" className="btn-secondary" onClick={() => refresh()} style={{ padding: '6px 10px', fontSize: 11 }}>
-            <RefreshCw size={12} /> <span>Refresh</span>
-          </button>
-          <button type="button" className="btn-secondary" onClick={exportCsv} style={{ padding: '6px 10px', fontSize: 11 }}>
-            <Download size={12} /> <span>Export CSV</span>
-          </button>
+          <button type="button" onClick={() => refresh()} className="size-7 grid place-items-center rounded-lg border bg-secondary/30 border-border/50 text-muted-foreground hover:text-foreground"><ArrowPathIcon className="size-3.5" /></button>
+          <button type="button" onClick={exportCsv} className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border bg-secondary/30 border-border/50 text-xs font-medium text-muted-foreground hover:text-foreground"><ArrowDownTrayIcon className="size-3.5" /> Export</button>
         </div>
       </div>
 
-      {/* Guest Banner */}
+      {/* Guest banner */}
       {isGuest && (
-        <div
-          style={{
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'space-between',
-            gap: 12,
-            padding: '10px 14px',
-            background: 'rgba(0,255,204,0.06)',
-            border: '1px solid rgba(0,255,204,0.18)',
-            borderRadius: 10,
-          }}
-        >
-          <div style={{ display: 'flex', alignItems: 'center', gap: 10, color: '#d4d4d8', fontSize: 12 }}>
-            <Eye size={16} style={{ color: 'var(--brand-cyan)' }} />
-            <span>
-              <strong style={{ color: '#fafafa' }}>Watch-Only Mode:</strong> Showing <strong>Protocol Swarm (Operator 0x93e3…59Cf)</strong> verified performance. Connect wallet to overlay your personal equity curve vs the swarm.
-            </span>
+        <div className="flex items-center justify-between gap-3 px-3 py-2.5 rounded-xl border bg-secondary/20 border-border/50 flex-shrink-0">
+          <div className="flex items-center gap-2.5 text-xs text-muted-foreground">
+            <EyeIcon className="size-4 text-muted-foreground" />
+            <span><strong className="text-foreground">Watch-Only:</strong> Showing <strong className="text-foreground">Protocol Swarm (Operator)</strong> verified. Connect to overlay your curve.</span>
           </div>
-          {onConnectWallet && (
-            <button type="button" className="btn-glow" onClick={onConnectWallet} style={{ padding: '6px 12px', fontSize: 11, whiteSpace: 'nowrap' }}>
-              <Wallet size={12} /> Connect Wallet
-            </button>
-          )}
+          {onConnectWallet && <button type="button" onClick={onConnectWallet} className="inline-flex items-center gap-1.5 px-3 py-1 rounded-lg bg-primary text-primary-foreground text-xs font-bold"><WalletIcon className="size-3.5" /> Connect</button>}
         </div>
       )}
 
-      {/* KPI Grid — 8 cards */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: 12 }}>
-        {/* Total PnL */}
-        <div className="terminal-panel" style={{ padding: '14px 16px', gap: 6 }}>
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-            <span style={{ fontSize: 10, fontWeight: 700, color: 'var(--muted-foreground)', letterSpacing: '0.06em' }}>{isGuest ? 'SWARM TOTAL PnL' : 'YOUR TOTAL PnL'}</span>
-            {isUserPositive ? <TrendingUp size={14} style={{ color: 'var(--trade-yes)' }} /> : <TrendingDown size={14} style={{ color: 'var(--trade-no)' }} />}
-          </div>
-          <div style={{ fontSize: 22, fontWeight: 800, fontFamily: 'var(--font-mono)', color: isUserPositive ? 'var(--trade-yes)' : 'var(--trade-no)' }}>
-            {isUserPositive ? '+' : ''}
-            {(summary?.totalPnl ?? 0).toFixed(2)} <span style={{ fontSize: 11, color: 'var(--muted-foreground)', fontWeight: 600 }}>tUSDC</span>
-          </div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 11, color: 'var(--muted-foreground)' }}>
-            <span className={`stat-pill-tag ${isUserPositive ? 'tag-green' : ''}`} style={isUserPositive ? {} : { background: 'rgba(244,63,94,0.10)', color: 'var(--trade-no)', border: '1px solid rgba(244,63,94,0.25)' }}>
-              {summary?.totalTrades ?? 0} fills
-            </span>
-            <span>Realized {(summary?.realizedPnl ?? 0).toFixed(2)}</span>
-          </div>
+      {/* KPI Grid — compact 4-col, 2 rows */}
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 flex-shrink-0">
+        <div className="terminal-panel p-3 flex flex-col gap-1.5">
+          <div className="flex items-center justify-between"><span className="text-[10px] font-mono font-semibold tracking-wider text-muted-foreground uppercase">{isGuest ? 'SWARM TOTAL PnL' : 'YOUR TOTAL PnL'}</span><ArrowTrendingUpIcon className="size-3.5 text-muted-foreground/60" /></div>
+          <div className="text-lg font-mono font-bold" style={{ color: isUserPositive ? 'var(--trade-yes)' : 'var(--trade-no)' }}>{isUserPositive ? '+' : ''}{(summary?.totalPnl ?? 0).toFixed(2)} <span className="text-[10px] text-muted-foreground">tUSDC</span></div>
+          <div className="flex items-center gap-1.5 text-[11px] font-mono text-muted-foreground"><span className="px-1.5 py-0.5 rounded border bg-secondary/30 border-border/40 text-[10px]">{summary?.totalTrades ?? 0} fills</span> Realized {(summary?.realizedPnl ?? 0).toFixed(1)}</div>
         </div>
-
-        {/* Unclaimed */}
-        <div className="terminal-panel" style={{ padding: '14px 16px' }}>
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-            <span style={{ fontSize: 10, fontWeight: 700, color: 'var(--muted-foreground)', letterSpacing: '0.06em' }}>UNCLAIMED (ON-CHAIN)</span>
-            <Layers size={14} style={{ color: '#f59e0b' }} />
-          </div>
-          <div style={{ fontSize: 22, fontWeight: 800, fontFamily: 'var(--font-mono)', color: '#f59e0b' }}>{(summary?.unclaimedPnl ?? 0).toFixed(2)} <span style={{ fontSize: 11, color: 'var(--muted-foreground)' }}>tUSDC</span></div>
-          <div style={{ fontSize: 11, color: 'var(--muted-foreground)' }}>Claimable: {data?.symbolBreakdown?.length ?? 0} markets • Sweeper auto-claims</div>
+        <div className="terminal-panel p-3 flex flex-col gap-1.5">
+          <div className="flex items-center justify-between"><span className="text-[10px] font-mono font-semibold tracking-wider text-muted-foreground uppercase">UNCLAIMED (ON-CHAIN)</span><Square3Stack3DIcon className="size-3.5 text-muted-foreground/60" /></div>
+          <div className="text-lg font-mono font-bold text-amber-400">{(summary?.unclaimedPnl ?? 0).toFixed(2)} <span className="text-[10px] text-muted-foreground">tUSDC</span></div>
+          <div className="text-[11px] text-muted-foreground">{data?.symbolBreakdown?.length ?? 0} markets • Sweeper auto-claims</div>
         </div>
-
-        {/* Win Rate */}
-        <div className="terminal-panel" style={{ padding: '14px 16px' }}>
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-            <span style={{ fontSize: 10, fontWeight: 700, color: 'var(--muted-foreground)', letterSpacing: '0.06em' }}>WIN RATE</span>
-            <Target size={14} style={{ color: 'var(--brand-cyan)' }} />
-          </div>
-          <div style={{ fontSize: 22, fontWeight: 800, fontFamily: 'var(--font-mono)', color: '#fafafa' }}>{(summary?.winRate ?? 0).toFixed(1)}%</div>
-          <div style={{ fontSize: 11, color: 'var(--muted-foreground)' }}>
-            {summary?.totalWins ?? 0}W / {summary?.totalLosses ?? 0}L • PF {summary?.profitFactor ?? 0}
-          </div>
+        <div className="terminal-panel p-3 flex flex-col gap-1.5">
+          <div className="flex items-center justify-between"><span className="text-[10px] font-mono font-semibold tracking-wider text-muted-foreground uppercase">WIN RATE</span><ViewfinderCircleIcon className="size-3.5 text-muted-foreground/60" /></div>
+          <div className="text-lg font-mono font-bold text-foreground">{(summary?.winRate ?? 0).toFixed(1)}%</div>
+          <div className="text-[11px] text-muted-foreground">{summary?.totalWins ?? 0}W / {summary?.totalLosses ?? 0}L • PF {summary?.profitFactor ?? 0}</div>
         </div>
-
-        {/* Volume */}
-        <div className="terminal-panel" style={{ padding: '14px 16px' }}>
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-            <span style={{ fontSize: 10, fontWeight: 700, color: 'var(--muted-foreground)', letterSpacing: '0.06em' }}>TOTAL VOLUME</span>
-            <BarChart3 size={14} style={{ color: '#a855f7' }} />
-          </div>
-          <div style={{ fontSize: 22, fontWeight: 800, fontFamily: 'var(--font-mono)', color: '#fafafa' }}>{(summary?.totalVolume ?? 0).toFixed(2)} <span style={{ fontSize: 11, color: 'var(--muted-foreground)' }}>tUSDC</span></div>
-          <div style={{ fontSize: 11, color: 'var(--muted-foreground)' }}>Avg {(summary && summary.totalTrades ? (summary.totalVolume / summary.totalTrades).toFixed(2) : '0.00')} per fill</div>
+        <div className="terminal-panel p-3 flex flex-col gap-1.5">
+          <div className="flex items-center justify-between"><span className="text-[10px] font-mono font-semibold tracking-wider text-muted-foreground uppercase">TOTAL VOLUME</span><ChartBarSquareIcon className="size-3.5 text-muted-foreground/60" /></div>
+          <div className="text-lg font-mono font-bold text-foreground">{(summary?.totalVolume ?? 0).toFixed(1)} <span className="text-[10px] text-muted-foreground">tUSDC</span></div>
+          <div className="text-[11px] text-muted-foreground">Avg {summary?.totalTrades ? (summary.totalVolume / summary.totalTrades).toFixed(2) : '0.00'} / fill</div>
         </div>
-
-        {/* Profit Factor & Expectancy */}
-        <div className="terminal-panel" style={{ padding: '14px 16px' }}>
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-            <span style={{ fontSize: 10, fontWeight: 700, color: 'var(--muted-foreground)', letterSpacing: '0.06em' }}>PROFIT FACTOR</span>
-            <Award size={14} style={{ color: '#f59e0b' }} />
-          </div>
-          <div style={{ fontSize: 22, fontWeight: 800, fontFamily: 'var(--font-mono)', color: (summary?.profitFactor ?? 0) >= 1 ? 'var(--trade-yes)' : 'var(--trade-no)' }}>{summary?.profitFactor === 99.99 ? '∞' : (summary?.profitFactor ?? 0).toFixed(2)}</div>
-          <div style={{ fontSize: 11, color: 'var(--muted-foreground)' }}>Expectancy {(summary?.expectancy ?? 0).toFixed(2)} • Payoff {(summary?.payoffRatio ?? 0).toFixed(2)}</div>
+        <div className="terminal-panel p-3 flex flex-col gap-1.5">
+          <div className="flex items-center justify-between"><span className="text-[10px] font-mono font-semibold tracking-wider text-muted-foreground uppercase">PROFIT FACTOR</span><TrophyIcon className="size-3.5 text-muted-foreground/60" /></div>
+          <div className="text-lg font-mono font-bold" style={{ color: (summary?.profitFactor ?? 0) >= 1 ? 'var(--trade-yes)' : 'var(--trade-no)' }}>{summary?.profitFactor === 99.99 ? '∞' : (summary?.profitFactor ?? 0).toFixed(2)}</div>
+          <div className="text-[11px] text-muted-foreground">Expectancy {(summary?.expectancy ?? 0).toFixed(2)}</div>
         </div>
-
-        {/* Max Drawdown */}
-        <div className="terminal-panel" style={{ padding: '14px 16px' }}>
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-            <span style={{ fontSize: 10, fontWeight: 700, color: 'var(--muted-foreground)', letterSpacing: '0.06em' }}>MAX DRAWDOWN</span>
-            <AlertTriangle size={14} style={{ color: 'var(--trade-no)' }} />
-          </div>
-          <div style={{ fontSize: 22, fontWeight: 800, fontFamily: 'var(--font-mono)', color: 'var(--trade-no)' }}>{(summary?.maxDrawdown ?? 0).toFixed(2)}</div>
-          <div style={{ fontSize: 11, color: 'var(--muted-foreground)' }}>{(summary?.maxDrawdownPct ?? 0).toFixed(1)}% of peak • Sharpe {summary?.sharpeApprox ?? 0}</div>
+        <div className="terminal-panel p-3 flex flex-col gap-1.5">
+          <div className="flex items-center justify-between"><span className="text-[10px] font-mono font-semibold tracking-wider text-muted-foreground uppercase">MAX DRAWDOWN</span><ExclamationTriangleIcon className="size-3.5 text-muted-foreground/60" /></div>
+          <div className="text-lg font-mono font-bold text-rose-400">{(summary?.maxDrawdown ?? 0).toFixed(2)}</div>
+          <div className="text-[11px] text-muted-foreground">{(summary?.maxDrawdownPct ?? 0).toFixed(1)}% • Sharpe {summary?.sharpeApprox ?? 0}</div>
         </div>
-
-        {/* Swarm Comparison */}
-        <div className="terminal-panel" style={{ padding: '14px 16px', background: 'rgba(245,158,11,0.04)', borderColor: 'rgba(245,158,11,0.18)' }}>
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-            <span style={{ fontSize: 10, fontWeight: 700, color: '#f59e0b', letterSpacing: '0.06em' }}>SWARM EQUITY</span>
-            <Bot size={14} style={{ color: '#f59e0b' }} />
-          </div>
-          <div style={{ fontSize: 22, fontWeight: 800, fontFamily: 'var(--font-mono)', color: isSwarmPositive ? 'var(--trade-yes)' : 'var(--trade-no)' }}>
-            {isSwarmPositive ? '+' : ''}
-            {swarmTotal.toFixed(2)} <span style={{ fontSize: 11, color: 'var(--muted-foreground)' }}>tUSDC</span>
-          </div>
-          <div style={{ fontSize: 11, color: delta >= 0 ? 'var(--trade-yes)' : 'var(--trade-no)', fontWeight: 600, fontFamily: 'var(--font-mono)' }}>
-            {isGuest ? 'Protocol verified PnL' : delta >= 0 ? `You +${delta.toFixed(2)} vs swarm` : `Swarm +${Math.abs(delta).toFixed(2)} vs you`}
-          </div>
+        <div className="terminal-panel p-3 flex flex-col gap-1.5 relative overflow-hidden">
+          <div className="absolute top-0 left-0 right-0 h-[2px] bg-amber-500/50" />
+          <div className="flex items-center justify-between"><span className="text-[10px] font-mono font-semibold tracking-wider text-muted-foreground uppercase">SWARM EQUITY</span><CpuChipIcon className="size-3.5 text-muted-foreground/60" /></div>
+          <div className="text-lg font-mono font-bold" style={{ color: isSwarmPositive ? 'var(--trade-yes)' : 'var(--trade-no)' }}>{isSwarmPositive ? '+' : ''}{swarmTotal.toFixed(2)} <span className="text-[10px] text-muted-foreground">tUSDC</span></div>
+          <div className="text-[11px] font-mono font-semibold" style={{ color: delta >= 0 ? 'var(--trade-yes)' : 'var(--trade-no)' }}>{isGuest ? 'Protocol verified' : delta >= 0 ? `You +${delta.toFixed(1)}` : `Swarm +${Math.abs(delta).toFixed(1)}`}</div>
         </div>
-
-        {/* Streak & Best/Worst */}
-        <div className="terminal-panel" style={{ padding: '14px 16px' }}>
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-            <span style={{ fontSize: 10, fontWeight: 700, color: 'var(--muted-foreground)', letterSpacing: '0.06em' }}>STREAK & EXTREMES</span>
-            <Activity size={14} style={{ color: 'var(--brand-cyan)' }} />
+        <div className="terminal-panel p-3 flex flex-col gap-1.5">
+          <div className="flex items-center justify-between"><span className="text-[10px] font-mono font-semibold tracking-wider text-muted-foreground uppercase">STREAK</span><ChartBarIcon className="size-3.5 text-muted-foreground/60" /></div>
+          <div className="text-sm font-mono font-bold flex items-center gap-1.5" style={{ color: (summary?.currentStreak ?? 0) > 0 ? 'var(--trade-yes)' : (summary?.currentStreak ?? 0) < 0 ? 'var(--trade-no)' : 'var(--muted-foreground)' }}>
+            {(summary?.currentStreak ?? 0) > 0 ? <><FireIcon className="size-3.5" /> +{summary?.currentStreak} streak</> : (summary?.currentStreak ?? 0) < 0 ? <><ArrowTrendingDownIcon className="size-3.5" /> {summary?.currentStreak}</> : '— Even'}
           </div>
-          <div style={{ fontSize: 14, fontWeight: 800, fontFamily: 'var(--font-mono)', color: (summary?.currentStreak ?? 0) >= 0 ? 'var(--trade-yes)' : 'var(--trade-no)', display: 'flex', alignItems: 'center', gap: 6 }}>
-            {(summary?.currentStreak ?? 0) > 0 ? (
-              <>
-                <Flame size={14} style={{ color: 'var(--trade-yes)' }} />
-                <span>+{summary?.currentStreak} win streak</span>
-              </>
-            ) : (summary?.currentStreak ?? 0) < 0 ? (
-              <>
-                <TrendingDown size={14} style={{ color: 'var(--trade-no)' }} />
-                <span>{summary?.currentStreak} loss streak</span>
-              </>
-            ) : (
-              <span>— Even</span>
-            )}
-          </div>
-          <div style={{ fontSize: 11, color: 'var(--muted-foreground)', fontFamily: 'var(--font-mono)' }}>
-            Best +{(summary?.bestDay ?? 0).toFixed(2)} • Worst {(summary?.worstDay ?? 0).toFixed(2)}
-          </div>
+          <div className="text-[11px] font-mono text-muted-foreground">Best +{(summary?.bestDay ?? 0).toFixed(1)} • Worst {(summary?.worstDay ?? 0).toFixed(1)}</div>
         </div>
       </div>
 
-      {/* Primary Equity Curve — spans full width */}
-      <div className="terminal-panel" style={{ padding: 0, overflow: 'hidden' }}>
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '14px 18px', borderBottom: '1px solid var(--border)', flexWrap: 'wrap', gap: 10 }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-            <TrendingUp size={16} style={{ color: 'var(--brand-cyan)' }} />
-            <span style={{ fontWeight: 700, fontSize: 13 }}>Equity Curve — Cumulative Realized PnL</span>
-            <span style={{ fontSize: 10, fontFamily: 'var(--font-mono)', padding: '2px 6px', borderRadius: 999, background: 'rgba(0,255,204,0.10)', color: 'var(--brand-cyan)', border: '1px solid rgba(0,255,204,0.25)' }}>
-              VERIFIED SETTLEMENTS
-            </span>
+      {/* Tabbed workspace — compact, no forced height, inline scrolls where needed */}
+      <div className="terminal-panel p-0 flex flex-col overflow-hidden">
+        {/* Tab bar */}
+        <div className="flex items-center justify-between gap-2 px-3 py-2 border-b border-border/40 bg-secondary/10 flex-wrap">
+          <div className="flex items-center gap-1 bg-secondary/30 p-0.5 rounded-lg border border-border/40">
+            {([
+              { id: 'equity', label: 'Equity Curve', Icon: ArrowTrendingUpIcon },
+              { id: 'daily', label: 'Daily & Agents', Icon: ChartBarSquareIcon },
+              { id: 'dist', label: 'Distribution', Icon: ChartPieIcon },
+              { id: 'ledger', label: 'Ledger & Fills', Icon: CalendarIcon },
+            ] as const).map((t) => (
+              <button key={t.id} type="button" onClick={() => setActiveTab(t.id)} className={cn('inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-[11px] font-semibold transition-colors', activeTab === t.id ? 'bg-primary text-primary-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground')}>
+                <t.Icon className="size-3.5" /> {t.label}
+              </button>
+            ))}
           </div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
-            <label style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 11, color: 'var(--muted-foreground)', cursor: 'pointer' }}>
-              <input type="checkbox" checked={showSwarm} onChange={(e) => setShowSwarm(e.target.checked)} style={{ accentColor: '#f59e0b' }} />
-              <span style={{ color: '#f59e0b', fontWeight: 600 }}>Swarm (Operator)</span>
-            </label>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 11, color: 'var(--muted-foreground)' }}>
-              <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}><span style={{ width: 10, height: 2, background: '#00ffcc', display: 'inline-block', borderRadius: 2 }} /> {isGuest ? 'Swarm' : 'You'}</span>
-              {showSwarm && <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}><span style={{ width: 10, height: 2, background: '#f59e0b', display: 'inline-block', borderRadius: 2, borderTop: '1px dashed #f59e0b' }} /> Operator</span>}
-            </div>
-          </div>
-        </div>
-        <div style={{ padding: '12px 16px' }}>
-          <EquityCurveChart user={userCurve} swarm={showSwarm ? swarmCurve : []} height={240} />
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: 8, flexWrap: 'wrap', gap: 8 }}>
-            <div style={{ fontSize: 11, color: 'var(--muted-foreground)', fontFamily: 'var(--font-mono)' }}>
-              Settled PnL = (payout − cost) per lot • VOID = 0.5 payout • Pending/open trades excluded until settlement
-            </div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 11 }}>
-              <span style={{ color: 'var(--muted-foreground)' }}>Avg daily</span>
-              <strong style={{ fontFamily: 'var(--font-mono)', color: (summary?.avgDailyPnl ?? 0) >= 0 ? 'var(--trade-yes)' : 'var(--trade-no)' }}>
-                {(summary?.avgDailyPnl ?? 0) >= 0 ? '+' : ''}
-                {(summary?.avgDailyPnl ?? 0).toFixed(2)} tUSDC
-              </strong>
-              <span style={{ width: 1, height: 12, background: 'var(--border)', display: 'inline-block' }} />
-              <span style={{ color: 'var(--muted-foreground)', fontFamily: 'var(--font-mono)', fontSize: 10 }}>{userCurve.length} days • {(summary?.totalTrades ?? 0)} fills</span>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      {/* Secondary Row: Daily PnL + Agent Performance */}
-      <div className="analytics-grid-2">
-        <div className="terminal-panel" style={{ padding: 0, overflow: 'hidden' }}>
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '12px 16px', borderBottom: '1px solid var(--border)' }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-              <BarChart3 size={16} style={{ color: '#a855f7' }} />
-              <span style={{ fontWeight: 700, fontSize: 13 }}>Daily Realized PnL</span>
-              <span style={{ fontSize: 10, padding: '2px 6px', borderRadius: 999, background: 'rgba(168,85,247,0.12)', color: '#a855f7', border: '1px solid rgba(168,85,247,0.25)', fontFamily: 'var(--font-mono)' }}>{dailyBars.filter((d) => d.pnl !== 0).length} active days</span>
-            </div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 10, color: 'var(--muted-foreground)', fontFamily: 'var(--font-mono)' }}>
-              <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}><span style={{ width: 8, height: 8, background: '#10b981', borderRadius: 2 }} /> Win day</span>
-              <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}><span style={{ width: 8, height: 8, background: '#f43f5e', borderRadius: 2 }} /> Loss day</span>
-            </div>
-          </div>
-          <div style={{ padding: '12px 16px' }}>
-            <DailyPnlBars data={dailyBars} height={200} />
+          <div className="flex items-center gap-2 text-[11px] font-mono text-muted-foreground">
+            {activeTab === 'equity' && <><label className="inline-flex items-center gap-1.5 cursor-pointer"><input type="checkbox" checked={showSwarm} onChange={(e) => setShowSwarm(e.target.checked)} className="size-3 accent-amber-500" /> <span className="text-amber-400 font-semibold">Swarm</span></label><span className="w-px h-3 bg-border hidden sm:inline-block" /><span>{userCurve.length} days • {(summary?.totalTrades ?? 0)} fills</span></>}
+            {activeTab === 'daily' && <span>{dailyBars.filter((d) => d.pnl !== 0).length} active days</span>}
+            {activeTab === 'ledger' && <span>{ledgerRows.length} days • verifiable</span>}
           </div>
         </div>
 
-        <div className="terminal-panel" style={{ padding: 0, overflow: 'hidden' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '12px 16px', borderBottom: '1px solid var(--border)' }}>
-            <Gauge size={16} style={{ color: 'var(--brand-cyan)' }} />
-            <span style={{ fontWeight: 700, fontSize: 13 }}>Agent Contribution</span>
-            <span style={{ marginLeft: 'auto', fontSize: 10, color: 'var(--muted-foreground)', fontFamily: 'var(--font-mono)' }}>PnL per agent ({range})</span>
-          </div>
-          <div style={{ padding: '14px 16px', display: 'flex', flexDirection: 'column', gap: 12 }}>
-            {/* Swarm vs User toggle inside */}
-            {(isGuest ? data?.swarmAgentBreakdown : data?.agentBreakdown)?.map((a) => {
-              const maxAbs = Math.max(...(isGuest ? data?.swarmAgentBreakdown ?? [] : data?.agentBreakdown ?? []).map((x) => Math.abs(x.pnl)), 1);
-              const isPos = a.pnl >= 0;
-              const barPct = Math.min(100, (Math.abs(a.pnl) / maxAbs) * 100);
-              const color = a.agentType === 'Volt' ? '#f59e0b' : a.agentType === 'Oracle' ? '#00ffcc' : a.agentType === 'Titan' ? '#a855f7' : '#10b981';
-              const Icon = a.agentType === 'Volt' ? Zap : a.agentType === 'Oracle' ? Brain : a.agentType === 'Titan' ? Shield : Activity;
-              return (
-                <div key={a.agentType} style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                    <div style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 11, fontWeight: 700, color }}>
-                      <Icon size={12} /> <span>{a.agentType.toUpperCase()}</span>
-                      <span style={{ fontSize: 10, fontWeight: 500, color: 'var(--muted-foreground)', fontFamily: 'var(--font-mono)' }}>{a.trades} fills • {a.winRate.toFixed(0)}% WR</span>
-                    </div>
-                    <span style={{ fontSize: 12, fontWeight: 700, fontFamily: 'var(--font-mono)', color: isPos ? 'var(--trade-yes)' : 'var(--trade-no)' }}>
-                      {isPos ? '+' : ''}
-                      {a.pnl.toFixed(2)} tUSDC
-                    </span>
-                  </div>
-                  <div style={{ height: 8, background: 'rgba(255,255,255,0.06)', borderRadius: 999, overflow: 'hidden', position: 'relative' }}>
-                    <div
-                      style={{
-                        position: 'absolute',
-                        left: isPos ? '50%' : `calc(50% - ${barPct / 2}%)`,
-                        width: `${barPct / 2}%`,
-                        height: '100%',
-                        background: isPos ? 'var(--trade-yes)' : 'var(--trade-no)',
-                        borderRadius: 999,
-                        transition: 'width 0.3s ease',
-                      }}
-                    />
-                    <div style={{ position: 'absolute', left: '50%', top: 0, bottom: 0, width: 1, background: 'rgba(255,255,255,0.12)' }} />
-                  </div>
-                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', fontSize: 10, color: 'var(--muted-foreground)', fontFamily: 'var(--font-mono)' }}>
-                    <span>{a.wins}W / {a.losses}L</span>
-                    <span>Vol {a.volume.toFixed(1)} • Avg {a.avgPnl.toFixed(2)}</span>
-                  </div>
-                </div>
-              );
-            })}
-            {/* Comparison note */}
-            {!isGuest && (
-              <div style={{ marginTop: 4, padding: '8px 10px', background: 'rgba(0,255,204,0.06)', border: '1px solid rgba(0,255,204,0.14)', borderRadius: 8, fontSize: 11, color: 'var(--muted-foreground)', display: 'flex', alignItems: 'center', gap: 8 }}>
-                <Eye size={12} style={{ color: 'var(--brand-cyan)' }} />
-                <span>
-                  <strong style={{ color: '#fafafa' }}>Transparent:</strong> Swarm breakdown isOperator={isOperator ? ' (you)' : ''} on-chain verified. Your curve overlays operator for delta tracking.
-                </span>
-              </div>
-            )}
-          </div>
-        </div>
-      </div>
-
-      {/* Third Row: Distributions + Market Breakdown */}
-      <div className="analytics-grid-3">
-        <div className="terminal-panel" style={{ padding: 0, overflow: 'hidden' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '12px 16px', borderBottom: '1px solid var(--border)' }}>
-            <PieChart size={14} style={{ color: '#10b981' }} />
-            <span style={{ fontWeight: 700, fontSize: 12 }}>Outcome Split</span>
-          </div>
-          <div style={{ padding: 16 }}>
-            {(() => {
-              const outcomes = data?.outcomeBreakdown || [];
-              const pieData = outcomes.map((o) => ({
-                label: o.outcome,
-                value: o.trades,
-                color: o.outcome === 'YES' ? '#10b981' : o.outcome === 'NO' ? '#f43f5e' : '#71717a',
-              }));
-              if (pieData.every((d) => d.value === 0)) {
-                return <div style={{ fontSize: 12, color: 'var(--muted-foreground)', textAlign: 'center', padding: 24 }}>No outcome data yet.</div>;
-              }
-              return <Donut data={pieData} size={150} />;
-            })()}
-            <div style={{ marginTop: 14, display: 'flex', flexDirection: 'column', gap: 6 }}>
-              {(data?.outcomeBreakdown || []).map((o) => (
-                <div key={o.outcome} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', fontSize: 11, padding: '6px 8px', background: 'rgba(255,255,255,0.03)', borderRadius: 6, border: '1px solid var(--border)' }}>
-                  <span style={{ fontWeight: 700, color: o.outcome === 'YES' ? 'var(--trade-yes)' : 'var(--trade-no)' }}>{o.outcome}</span>
-                  <span style={{ fontFamily: 'var(--font-mono)', color: '#d4d4d8' }}>{o.pnl >= 0 ? '+' : ''}{o.pnl.toFixed(2)} • {o.winRate.toFixed(0)}% WR</span>
-                </div>
-              ))}
-            </div>
-          </div>
-        </div>
-
-        <div className="terminal-panel" style={{ padding: 0, overflow: 'hidden' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '12px 16px', borderBottom: '1px solid var(--border)' }}>
-            <Layers size={14} style={{ color: '#f59e0b' }} />
-            <span style={{ fontWeight: 700, fontSize: 12 }}>Symbol & Window</span>
-          </div>
-          <div style={{ padding: 16, display: 'flex', flexDirection: 'column', gap: 12 }}>
-            <div>
-              <div style={{ fontSize: 10, fontWeight: 700, color: 'var(--muted-foreground)', letterSpacing: '0.06em', marginBottom: 8 }}>BY SYMBOL</div>
-              {(data?.symbolBreakdown && data.symbolBreakdown.length > 0 ? data.symbolBreakdown : [{ symbol: '—', pnl: 0, trades: 0, winRate: 0 }]).map((s) => (
-                <div key={s.symbol} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '8px 10px', background: '#18181b', border: '1px solid var(--border)', borderRadius: 8, marginBottom: 6 }}>
-                  <div>
-                    <div style={{ fontSize: 12, fontWeight: 700, color: '#fafafa' }}>{s.symbol}</div>
-                    <div style={{ fontSize: 10, color: 'var(--muted-foreground)', fontFamily: 'var(--font-mono)' }}>{s.trades} fills • {s.winRate.toFixed(0)}% WR</div>
-                  </div>
-                  <div style={{ fontSize: 12, fontWeight: 700, fontFamily: 'var(--font-mono)', color: s.pnl >= 0 ? 'var(--trade-yes)' : 'var(--trade-no)' }}>{s.pnl >= 0 ? '+' : ''}{s.pnl.toFixed(2)}</div>
-                </div>
-              ))}
-            </div>
-            <div>
-              <div style={{ fontSize: 10, fontWeight: 700, color: 'var(--muted-foreground)', letterSpacing: '0.06em', marginBottom: 8 }}>BY WINDOW</div>
-              <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
-                {(data?.windowBreakdown || []).map((w) => (
-                  <span key={w.window} style={{ padding: '4px 8px', borderRadius: 999, background: 'rgba(255,255,255,0.05)', border: '1px solid var(--border)', fontSize: 11, fontFamily: 'var(--font-mono)', color: w.pnl >= 0 ? 'var(--trade-yes)' : 'var(--trade-no)', fontWeight: 600 }}>
-                    {w.window}: {w.pnl >= 0 ? '+' : ''}{w.pnl.toFixed(1)} ({w.trades})
-                  </span>
-                ))}
-                {(!data?.windowBreakdown || data.windowBreakdown.length === 0) && <span style={{ fontSize: 11, color: 'var(--muted-foreground)' }}>No window data.</span>}
+        {/* Tab content — compact, content-driven height */}
+        <div className="p-3">
+          {activeTab === 'equity' && (
+            <div className="flex flex-col gap-2">
+              <EquityCurveChart user={userCurve} swarm={showSwarm ? swarmCurve : []} height={260} />
+              <div className="flex items-center justify-between gap-2 text-[10px] font-mono text-muted-foreground border-t border-border/30 pt-2">
+                <span>Settled PnL = (payout − cost) per lot • VOID = 0.5 • Pending excluded</span>
+                <span>Avg daily <strong className="text-foreground" style={{ color: (summary?.avgDailyPnl ?? 0) >= 0 ? 'var(--trade-yes)' : 'var(--trade-no)' }}>{(summary?.avgDailyPnl ?? 0) >= 0 ? '+' : ''}{(summary?.avgDailyPnl ?? 0).toFixed(2)}</strong> tUSDC</span>
               </div>
             </div>
-          </div>
-        </div>
+          )}
 
-        <div className="terminal-panel" style={{ padding: 0, overflow: 'hidden' }}>
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '12px 16px', borderBottom: '1px solid var(--border)' }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-              <Timer size={14} style={{ color: 'var(--brand-cyan)' }} />
-              <span style={{ fontWeight: 700, fontSize: 12 }}>Volume Timeline</span>
-            </div>
-            <span style={{ fontSize: 10, color: 'var(--muted-foreground)', fontFamily: 'var(--font-mono)' }}>tUSDC per day</span>
-          </div>
-          <div style={{ padding: '12px 16px' }}>
-            {/* Simple mini volume bars */}
-            {(() => {
-              const vols = dailyBars.map((d) => d.volume);
-              const maxV = Math.max(...vols, 1);
-              return (
-                <div style={{ display: 'flex', alignItems: 'end', gap: 2, height: 120, paddingTop: 8 }}>
-                  {dailyBars.map((d) => {
-                    const h = maxV > 0 ? (d.volume / maxV) * 100 : 0;
+          {activeTab === 'daily' && (
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
+              <div className="terminal-panel p-0 flex flex-col overflow-hidden">
+                <div className="flex items-center justify-between px-3 py-2 border-b border-border/40">
+                  <span className="text-xs font-bold flex items-center gap-1.5"><ChartBarSquareIcon className="size-3.5 text-muted-foreground" /> Daily Realized PnL</span>
+                  <span className="text-[10px] font-mono text-muted-foreground">{dailyBars.length} days</span>
+                </div>
+                <div className="p-2">
+                  <DailyPnlBars data={dailyBars} height={200} />
+                </div>
+              </div>
+              <div className="terminal-panel p-0 flex flex-col overflow-hidden">
+                <div className="flex items-center gap-1.5 px-3 py-2 border-b border-border/40">
+                  <Squares2X2Icon className="size-3.5 text-muted-foreground" />
+                  <span className="text-xs font-bold">Agent Contribution</span>
+                  <span className="ml-auto text-[10px] font-mono text-muted-foreground">PnL per agent ({range})</span>
+                </div>
+                <div className="p-3 flex flex-col gap-3">
+                  {(isGuest ? data?.swarmAgentBreakdown : data?.agentBreakdown)?.map((a) => {
+                    const maxAbs = Math.max(...(isGuest ? data?.swarmAgentBreakdown ?? [] : data?.agentBreakdown ?? []).map((x) => Math.abs(x.pnl)), 1);
+                    const isPos = a.pnl >= 0;
+                    const barPct = Math.min(100, (Math.abs(a.pnl) / maxAbs) * 100);
+                    const color = a.agentType === 'Volt' ? '#fbbf24' : a.agentType === 'Oracle' ? '#2dd4bf' : a.agentType === 'Titan' ? '#a78bfa' : '#6ee7b7';
+                    const Icon = a.agentType === 'Volt' ? BoltIcon : a.agentType === 'Oracle' ? CpuChipIcon : a.agentType === 'Titan' ? ShieldCheckIcon : ChartBarIcon;
                     return (
-                      <div key={d.date} style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 2 }}>
-                        <div style={{ width: '100%', height: 96, display: 'flex', alignItems: 'end', justifyContent: 'center' }}>
-                          <div style={{ width: '85%', height: `${Math.max(2, h)}%`, background: d.trades > 0 ? 'rgba(0,255,204,0.7)' : 'rgba(255,255,255,0.06)', borderRadius: '3px 3px 0 0', border: d.trades > 0 ? '1px solid rgba(0,255,204,0.4)' : '1px solid transparent', borderBottom: 'none' }} title={`${d.date}: ${d.volume.toFixed(1)} tUSDC`} />
+                      <div key={a.agentType} className="flex flex-col gap-1.5">
+                        <div className="flex items-center justify-between">
+                          <div className="inline-flex items-center gap-1.5 text-[11px] font-bold" style={{ color }}><Icon className="size-3" /> {a.agentType.toUpperCase()} <span className="text-[10px] font-medium text-muted-foreground font-mono">{a.trades} fills • {a.winRate.toFixed(0)}% WR</span></div>
+                          <span className="text-xs font-mono font-bold" style={{ color: isPos ? 'var(--trade-yes)' : 'var(--trade-no)' }}>{isPos ? '+' : ''}{a.pnl.toFixed(2)} tUSDC</span>
                         </div>
-                        {dailyBars.length <= 14 || dailyBars.indexOf(d) % Math.ceil(dailyBars.length / 7) === 0 ? (
-                          <span style={{ fontSize: 8, color: '#71717a', fontFamily: 'var(--font-mono)', transform: 'rotate(-30deg)', transformOrigin: 'center', whiteSpace: 'nowrap', marginTop: 4 }}>{d.date.slice(5)}</span>
-                        ) : null}
+                        <div className="h-1.5 bg-secondary/30 rounded-full overflow-hidden relative">
+                          <div className="absolute top-0 bottom-0 w-px bg-border/50 left-1/2" />
+                          <div style={{ position: 'absolute', left: isPos ? '50%' : `calc(50% - ${barPct / 2}%)`, width: `${barPct / 2}%`, height: '100%', background: isPos ? 'var(--trade-yes)' : 'var(--trade-no)', borderRadius: 999 }} />
+                        </div>
+                        <div className="flex justify-between text-[10px] font-mono text-muted-foreground"><span>{a.wins}W / {a.losses}L</span><span>Vol {a.volume.toFixed(1)}</span></div>
                       </div>
                     );
                   })}
                 </div>
-              );
-            })()}
-            <div style={{ marginTop: 12, display: 'flex', alignItems: 'center', justifyContent: 'space-between', fontSize: 11, color: 'var(--muted-foreground)', borderTop: '1px solid var(--border)', paddingTop: 10 }}>
-              <span>Total {(summary?.totalVolume ?? 0).toFixed(2)} tUSDC • {dailyBars.reduce((a, d) => a + d.trades, 0)} fills in range</span>
-              <span style={{ fontFamily: 'var(--font-mono)', fontSize: 10 }}>Avg vol {(dailyBars.length ? (dailyBars.reduce((a, d) => a + d.volume, 0) / dailyBars.length).toFixed(1) : '0.0')}/day</span>
+              </div>
             </div>
-          </div>
-        </div>
-      </div>
-
-      {/* Ledger + Recent Trades */}
-      <div className="analytics-grid-ledger">
-        <div className="terminal-panel" style={{ padding: 0, overflow: 'hidden' }}>
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '12px 16px', borderBottom: '1px solid var(--border)', flexWrap: 'wrap', gap: 8 }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-              <Calendar size={16} style={{ color: 'var(--brand-cyan)' }} />
-              <span style={{ fontWeight: 700, fontSize: 13 }}>Daily Balance Ledger</span>
-              <span style={{ fontSize: 10, padding: '2px 6px', borderRadius: 999, background: 'rgba(255,255,255,0.06)', border: '1px solid var(--border)', fontFamily: 'var(--font-mono)', color: 'var(--muted-foreground)' }}>{ledgerRows.length} days • verifiable</span>
-            </div>
-            <button type="button" className="btn-secondary" onClick={exportCsv} style={{ fontSize: 11, padding: '4px 10px' }}>
-              <Download size={12} /> <span>Export CSV</span>
-            </button>
-          </div>
-          <div style={{ overflowX: 'auto' }}>
-            <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>
-              <thead>
-                <tr style={{ background: '#0e0e11', borderBottom: '1px solid var(--border)', color: 'var(--muted-foreground)', textAlign: 'left' }}>
-                  <th style={{ padding: '8px 12px', fontWeight: 500, fontSize: 10 }}>DATE (UTC)</th>
-                  <th style={{ padding: '8px 10px', fontWeight: 500, fontSize: 10, textAlign: 'right' }}>START</th>
-                  <th style={{ padding: '8px 10px', fontWeight: 500, fontSize: 10, textAlign: 'right' }}>DAILY PnL</th>
-                  <th style={{ padding: '8px 10px', fontWeight: 500, fontSize: 10, textAlign: 'right' }}>END BALANCE</th>
-                  <th style={{ padding: '8px 10px', fontWeight: 500, fontSize: 10, textAlign: 'center' }}>TRADES</th>
-                  <th style={{ padding: '8px 10px', fontWeight: 500, fontSize: 10, textAlign: 'center' }}>W/L</th>
-                  <th style={{ padding: '8px 10px', fontWeight: 500, fontSize: 10, textAlign: 'right' }}>VOLUME</th>
-                </tr>
-              </thead>
-              <tbody>
-                {pagedLedger.length === 0 ? (
-                  <tr>
-                    <td colSpan={7} style={{ padding: 24, textAlign: 'center', color: 'var(--muted-foreground)' }}>
-                      {isGuest ? 'Swarm ledger is building — operator trades will populate daily rows after settlements.' : 'No trades in selected range. Extend range or wait for settlements.'}
-                    </td>
-                  </tr>
-                ) : (
-                  pagedLedger.map((r) => {
-                    const isPos = r.dailyPnl > 0.01;
-                    const isNeg = r.dailyPnl < -0.01;
-                    return (
-                      <tr key={r.date} style={{ borderBottom: '1px solid rgba(255,255,255,0.04)', background: isPos ? 'rgba(16,185,129,0.04)' : isNeg ? 'rgba(244,63,94,0.04)' : 'transparent' }}>
-                        <td style={{ padding: '10px 12px', fontFamily: 'var(--font-mono)', fontSize: 11, color: '#d4d4d8' }}>{r.date}</td>
-                        <td style={{ padding: '10px', textAlign: 'right', fontFamily: 'var(--font-mono)', color: 'var(--muted-foreground)' }}>{r.startBalance.toFixed(2)}</td>
-                        <td style={{ padding: '10px', textAlign: 'right', fontFamily: 'var(--font-mono)', fontWeight: 700, color: isPos ? 'var(--trade-yes)' : isNeg ? 'var(--trade-no)' : 'var(--muted-foreground)' }}>
-                          {isPos ? '+' : ''}{r.dailyPnl.toFixed(2)}
-                        </td>
-                        <td style={{ padding: '10px', textAlign: 'right', fontFamily: 'var(--font-mono)', fontWeight: 700, color: r.endBalance >= 0 ? 'var(--trade-yes)' : 'var(--trade-no)' }}>{r.endBalance >= 0 ? '+' : ''}{r.endBalance.toFixed(2)}</td>
-                        <td style={{ padding: '10px', textAlign: 'center' }}>
-                          <span style={{ padding: '2px 6px', borderRadius: 4, background: r.trades > 0 ? 'rgba(0,255,204,0.10)' : 'rgba(255,255,255,0.04)', border: `1px solid ${r.trades > 0 ? 'rgba(0,255,204,0.25)' : 'var(--border)'}`, fontSize: 11, fontFamily: 'var(--font-mono)', color: r.trades > 0 ? 'var(--brand-cyan)' : 'var(--muted-foreground)' }}>{r.trades}</span>
-                        </td>
-                        <td style={{ padding: '10px', textAlign: 'center', fontFamily: 'var(--font-mono)', fontSize: 11, color: '#a1a1aa' }}>
-                          <span style={{ color: 'var(--trade-yes)' }}>{r.wins}W</span> / <span style={{ color: 'var(--trade-no)' }}>{r.losses}L</span>
-                        </td>
-                        <td style={{ padding: '10px', textAlign: 'right', fontFamily: 'var(--font-mono)', color: 'var(--muted-foreground)' }}>{r.volume.toFixed(1)}</td>
-                      </tr>
-                    );
-                  })
-                )}
-              </tbody>
-            </table>
-          </div>
-
-          {/* Ledger Pagination Bar */}
-          {ledgerRows.length > 0 && (
-            <Pagination
-              currentPage={ledgerPage}
-              totalItems={ledgerRows.length}
-              pageSize={ledgerPageSize}
-              onPageChange={setLedgerPage}
-              onPageSizeChange={setLedgerPageSize}
-              pageSizeOptions={[10, 25, 50]}
-              itemLabel="days"
-              isLoading={isLoading}
-            />
           )}
-        </div>
 
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-          <div className="terminal-panel" style={{ padding: 0, overflow: 'hidden' }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '12px 16px', borderBottom: '1px solid var(--border)' }}>
-              <Activity size={14} style={{ color: '#f59e0b' }} />
-              <span style={{ fontWeight: 700, fontSize: 12 }}>Recent Fills (Ledger Source)</span>
-              <span style={{ marginLeft: 'auto', fontSize: 10, color: 'var(--muted-foreground)', fontFamily: 'var(--font-mono)' }}>Last 10</span>
-            </div>
-            <div style={{ display: 'flex', flexDirection: 'column' }}>
-              {(data?.recentTrades && data.recentTrades.length > 0 ? data.recentTrades : []).map((t: any) => {
-                const isWin = (t.pnl ?? 0) > 0.01;
-                const isLoss = (t.pnl ?? 0) < -0.01;
-                const timeStr = new Date(t.createdAt).toLocaleTimeString();
-                return (
-                  <div key={t.id} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '10px 14px', borderBottom: '1px solid rgba(255,255,255,0.04)', background: t.isSettled ? 'transparent' : 'rgba(245,158,11,0.04)' }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 8, minWidth: 0 }}>
-                      <span style={{ fontSize: 10, fontFamily: 'var(--font-mono)', padding: '2px 5px', borderRadius: 4, background: t.agentType === 'Volt' ? 'rgba(245,158,11,0.12)' : t.agentType === 'Oracle' ? 'rgba(0,255,204,0.12)' : 'rgba(168,85,247,0.12)', color: t.agentType === 'Volt' ? '#f59e0b' : t.agentType === 'Oracle' ? '#00ffcc' : '#a855f7', border: `1px solid ${t.agentType === 'Volt' ? 'rgba(245,158,11,0.3)' : t.agentType === 'Oracle' ? 'rgba(0,255,204,0.3)' : 'rgba(168,85,247,0.3)'}`, fontWeight: 700 }}>{t.agentType}</span>
-                      <div style={{ minWidth: 0 }}>
-                        <div style={{ fontSize: 11, fontWeight: 600, color: '#fafafa', display: 'flex', alignItems: 'center', gap: 4 }}>
-                          {t.outcome} {t.direction === 'BUY' ? <ArrowUpRight size={11} style={{ color: 'var(--trade-yes)' }} /> : <ArrowDownRight size={11} style={{ color: 'var(--trade-no)' }} />}
-                          <span style={{ fontFamily: 'var(--font-mono)', fontSize: 10, color: 'var(--muted-foreground)' }}>@{t.price?.toFixed(2)} × {t.lotSize}</span>
-                        </div>
-                        <div style={{ fontSize: 10, color: 'var(--muted-foreground)', fontFamily: 'var(--font-mono)' }}>{timeStr} • {t.marketId?.slice(0, 10)}…</div>
-                      </div>
+          {activeTab === 'dist' && (
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-3">
+              <div className="terminal-panel p-3 flex flex-col gap-3">
+                <div className="flex items-center gap-1.5 text-xs font-bold"><ChartPieIcon className="size-3.5 text-muted-foreground" /> Outcome Split</div>
+                {(() => {
+                  const outcomes = data?.outcomeBreakdown || [];
+                  const pieData = outcomes.map((o) => ({ label: o.outcome, value: o.trades, color: o.outcome === 'YES' ? '#6ee7b7' : o.outcome === 'NO' ? '#fda4af' : '#a1a1aa' }));
+                  if (pieData.every((d) => d.value === 0)) return <div className="text-xs text-muted-foreground text-center py-6">No outcome data yet.</div>;
+                  return <Donut data={pieData} size={130} />;
+                })()}
+                <div className="flex flex-col gap-1.5">
+                  {(data?.outcomeBreakdown || []).map((o) => (
+                    <div key={o.outcome} className="flex items-center justify-between text-[11px] px-2 py-1.5 rounded-lg bg-secondary/20 border border-border/30">
+                      <span className="font-bold" style={{ color: o.outcome === 'YES' ? 'var(--trade-yes)' : 'var(--trade-no)' }}>{o.outcome}</span>
+                      <span className="font-mono text-muted-foreground">{o.pnl >= 0 ? '+' : ''}{o.pnl.toFixed(1)} • {o.winRate.toFixed(0)}% WR</span>
                     </div>
-                    <div style={{ textAlign: 'right', flexShrink: 0, marginLeft: 8 }}>
-                      <div style={{ fontSize: 11, fontWeight: 700, fontFamily: 'var(--font-mono)', color: isWin ? 'var(--trade-yes)' : isLoss ? 'var(--trade-no)' : 'var(--muted-foreground)' }}>
-                        {t.isSettled ? (isWin ? `+${(t.pnl ?? 0).toFixed(2)}` : (t.pnl ?? 0).toFixed(2)) : 'OPEN'}
+                  ))}
+                </div>
+              </div>
+              <div className="terminal-panel p-3 flex flex-col gap-3">
+                <div className="flex items-center gap-1.5 text-xs font-bold"><Square3Stack3DIcon className="size-3.5 text-muted-foreground" /> Symbol & Window</div>
+                <div className="flex flex-col gap-3">
+                  <div>
+                    <div className="text-[10px] font-mono font-semibold tracking-wider text-muted-foreground uppercase mb-1.5">By Symbol</div>
+                    {(data?.symbolBreakdown?.length ? data.symbolBreakdown : [{ symbol: '—', pnl: 0, trades: 0, winRate: 0 }]).map((s) => (
+                      <div key={s.symbol} className="flex items-center justify-between px-2.5 py-2 rounded-lg bg-secondary/20 border border-border/30 mb-1.5">
+                        <div><div className="text-xs font-bold text-foreground">{s.symbol}</div><div className="text-[10px] font-mono text-muted-foreground">{s.trades} fills • {s.winRate.toFixed(0)}% WR</div></div>
+                        <div className="text-xs font-mono font-bold" style={{ color: s.pnl >= 0 ? 'var(--trade-yes)' : 'var(--trade-no)' }}>{s.pnl >= 0 ? '+' : ''}{s.pnl.toFixed(1)}</div>
                       </div>
-                      <div style={{ fontSize: 9, color: 'var(--muted-foreground)', fontFamily: 'var(--font-mono)' }}>{t.isSettled ? 'SETTLED' : 'AWAITING'}</div>
+                    ))}
+                  </div>
+                  <div>
+                    <div className="text-[10px] font-mono font-semibold tracking-wider text-muted-foreground uppercase mb-1.5">By Window</div>
+                    <div className="flex gap-1.5 flex-wrap">
+                      {(data?.windowBreakdown || []).map((w) => (
+                        <span key={w.window} className="px-2 py-1 rounded-full bg-secondary/30 border border-border/40 text-[11px] font-mono font-semibold" style={{ color: w.pnl >= 0 ? 'var(--trade-yes)' : 'var(--trade-no)' }}>{w.window}: {w.pnl >= 0 ? '+' : ''}{w.pnl.toFixed(1)} ({w.trades})</span>
+                      ))}
                     </div>
                   </div>
-                );
-              })}
-              {(!data?.recentTrades || data.recentTrades.length === 0) && (
-                <div style={{ padding: 20, textAlign: 'center', color: 'var(--muted-foreground)', fontSize: 12 }}>No recent fills in range.</div>
-              )}
-            </div>
-          </div>
-
-          <div className="terminal-panel" style={{ padding: '14px 16px', background: 'rgba(0,255,204,0.04)', borderColor: 'rgba(0,255,204,0.18)' }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
-              <Shield size={14} style={{ color: 'var(--brand-cyan)' }} />
-              <span style={{ fontWeight: 700, fontSize: 12, color: '#fafafa' }}>Transparency Guarantee</span>
-              <span style={{ marginLeft: 'auto', fontSize: 10, padding: '2px 6px', borderRadius: 999, background: 'rgba(0,255,204,0.12)', color: 'var(--brand-cyan)', border: '1px solid rgba(0,255,204,0.25)', fontFamily: 'var(--font-mono)' }}>ON-CHAIN VERIFIED</span>
-            </div>
-            <ul style={{ margin: 0, paddingLeft: 16, fontSize: 11, color: '#d4d4d8', lineHeight: 1.6, display: 'flex', flexDirection: 'column', gap: 4 }}>
-              <li>Every point = real settlement: <code style={{ fontFamily: 'var(--font-mono)', background: 'rgba(255,255,255,0.06)', padding: '1px 4px', borderRadius: 3 }}>payout − cost</code> per lot, SELL inverted, VOID = 0.5 payout.</li>
-              <li>Operator (0x93e3…59Cf) curve is public — compare your copy-trading delta live.</li>
-              <li>Unclaimed payouts are gross pending redemption, not double-counted in realized equity.</li>
-              <li>Ledger export is audit-ready CSV for external verification.</li>
-            </ul>
-            {!isGuest && !isOperator && (
-              <div style={{ marginTop: 10, display: 'flex', alignItems: 'center', gap: 8 }}>
-                <span style={{ fontSize: 11, color: 'var(--muted-foreground)' }}>Your delta vs swarm:</span>
-                <span style={{ fontSize: 12, fontWeight: 800, fontFamily: 'var(--font-mono)', padding: '3px 8px', borderRadius: 6, background: delta >= 0 ? 'rgba(16,185,129,0.14)' : 'rgba(244,63,94,0.14)', border: `1px solid ${delta >= 0 ? 'rgba(16,185,129,0.30)' : 'rgba(244,63,94,0.30)'}`, color: delta >= 0 ? 'var(--trade-yes)' : 'var(--trade-no)' }}>
-                  {delta >= 0 ? '+' : ''}{delta.toFixed(2)} tUSDC
-                </span>
+                </div>
               </div>
-            )}
-          </div>
+              <div className="terminal-panel p-3 flex flex-col gap-2">
+                <div className="flex items-center justify-between"><span className="text-xs font-bold flex items-center gap-1.5"><ClockIcon className="size-3.5 text-muted-foreground" /> Volume Timeline</span><span className="text-[10px] font-mono text-muted-foreground">tUSDC / day</span></div>
+                <div className="flex flex-col">
+                  {(() => {
+                    const vols = dailyBars.map((d) => d.volume);
+                    const maxV = Math.max(...vols, 1);
+                    return (
+                      <div className="flex items-end gap-1 h-[140px] pt-2">
+                        {dailyBars.map((d) => {
+                          const h = maxV > 0 ? (d.volume / maxV) * 100 : 0;
+                          return (
+                            <div key={d.date} className="flex-1 flex flex-col items-center gap-1 min-w-0">
+                              <div className="w-full h-[110px] flex items-end justify-center"><div className="w-[70%] rounded-t" style={{ height: `${Math.max(2, h)}%`, background: d.trades > 0 ? 'rgba(45,212,191,0.6)' : 'hsl(var(--secondary)/0.25)', border: d.trades > 0 ? '1px solid rgba(45,212,191,0.3)' : '1px solid transparent', borderBottom: 'none' }} /></div>
+                              {(dailyBars.length <= 14 || dailyBars.indexOf(d) % Math.ceil(dailyBars.length / 6) === 0) && <span className="text-[8px] font-mono text-muted-foreground -rotate-12 origin-center whitespace-nowrap">{d.date.slice(5)}</span>}
+                            </div>
+                          );
+                        })}
+                      </div>
+                    );
+                  })()}
+                  <div className="flex justify-between text-[10px] font-mono text-muted-foreground border-t border-border/30 pt-2 mt-2"><span>Total {(summary?.totalVolume ?? 0).toFixed(1)} tUSDC</span><span>Avg {(dailyBars.length ? (dailyBars.reduce((a, d) => a + d.volume, 0) / dailyBars.length).toFixed(1) : '0.0')}/day</span></div>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {activeTab === 'ledger' && (
+            <div className="grid grid-cols-1 xl:grid-cols-[1.6fr_0.9fr] gap-3">
+              <div className="terminal-panel p-0 flex flex-col overflow-hidden">
+                <div className="flex items-center justify-between px-3 py-2 border-b border-border/40 bg-secondary/10">
+                  <div className="flex items-center gap-1.5"><CalendarIcon className="size-3.5 text-muted-foreground" /><span className="text-xs font-bold">Daily Balance Ledger</span><Badge variant="outline" className="font-mono text-[10px] bg-secondary/30 border-border/40 text-muted-foreground">{ledgerRows.length} days</Badge></div>
+                  <button type="button" onClick={exportCsv} className="inline-flex items-center gap-1 px-2 py-1 rounded-md border bg-secondary/30 border-border/50 text-[11px] font-medium text-muted-foreground hover:text-foreground"><ArrowDownTrayIcon className="size-3" /> CSV</button>
+                </div>
+                <div className="max-h-[320px] overflow-y-auto">
+                  <table className="w-full border-collapse text-xs">
+                    <thead className="sticky top-0 z-10 bg-[#111114] border-b border-border/60">
+                      <tr className="text-[10px] font-mono text-muted-foreground uppercase">
+                        <th className="px-2.5 py-2 text-left font-semibold">Date (UTC)</th><th className="px-2 py-2 text-right">Start</th><th className="px-2 py-2 text-right">Daily PnL</th><th className="px-2 py-2 text-right">End Bal</th><th className="px-2 py-2 text-center">Trades</th><th className="px-2 py-2 text-center">W/L</th><th className="px-2 py-2 text-right">Volume</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-border/20">
+                      {pagedLedger.map((r) => {
+                        const isPos = r.dailyPnl > 0.01; const isNeg = r.dailyPnl < -0.01;
+                        return (
+                          <tr key={r.date} className="hover:bg-secondary/10" style={{ background: isPos ? 'rgba(16,185,129,0.04)' : isNeg ? 'rgba(244,63,94,0.04)' : 'transparent' }}>
+                            <td className="px-2.5 py-2 font-mono text-muted-foreground">{r.date}</td>
+                            <td className="px-2 py-2 text-right font-mono text-muted-foreground">{r.startBalance.toFixed(1)}</td>
+                            <td className="px-2 py-2 text-right font-mono font-bold" style={{ color: isPos ? 'var(--trade-yes)' : isNeg ? 'var(--trade-no)' : 'var(--muted-foreground)' }}>{isPos ? '+' : ''}{r.dailyPnl.toFixed(2)}</td>
+                            <td className="px-2 py-2 text-right font-mono font-bold" style={{ color: r.endBalance >= 0 ? 'var(--trade-yes)' : 'var(--trade-no)' }}>{r.endBalance >= 0 ? '+' : ''}{r.endBalance.toFixed(1)}</td>
+                            <td className="px-2 py-2 text-center"><span className="px-1.5 py-0.5 rounded border text-[10px] font-mono" style={{ background: r.trades ? 'rgba(45,212,191,0.08)' : 'transparent', borderColor: r.trades ? 'rgba(45,212,191,0.18)' : 'var(--border)', color: r.trades ? '#2dd4bf' : 'var(--muted-foreground)' }}>{r.trades}</span></td>
+                            <td className="px-2 py-2 text-center font-mono text-[11px]"><span style={{ color: 'var(--trade-yes)' }}>{r.wins}W</span> / <span style={{ color: 'var(--trade-no)' }}>{r.losses}L</span></td>
+                            <td className="px-2 py-2 text-right font-mono text-muted-foreground">{r.volume.toFixed(1)}</td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+                {ledgerRows.length > 0 && <Pagination currentPage={ledgerPage} totalItems={ledgerRows.length} pageSize={ledgerPageSize} onPageChange={setLedgerPage} onPageSizeChange={setLedgerPageSize} pageSizeOptions={[10, 25, 50]} itemLabel="days" isLoading={isLoading} />}
+              </div>
+              <div className="flex flex-col gap-3">
+                <div className="terminal-panel p-0 flex flex-col overflow-hidden">
+                  <div className="flex items-center gap-1.5 px-3 py-2 border-b border-border/40"><ChartBarIcon className="size-3.5 text-muted-foreground" /><span className="text-xs font-bold">Recent Fills</span><span className="ml-auto text-[10px] font-mono text-muted-foreground">Last 10</span></div>
+                  <div className="divide-y divide-border/20 max-h-[280px] overflow-y-auto">
+                    {(data?.recentTrades?.slice(0, 10) || []).map((t: any) => {
+                      const isWin = (t.pnl ?? 0) > 0.01; const isLoss = (t.pnl ?? 0) < -0.01;
+                      return (
+                        <div key={t.id} className="flex items-center justify-between px-3 py-2 hover:bg-secondary/10">
+                          <div className="flex items-center gap-2 min-w-0">
+                            <span className="text-[10px] font-mono px-1.5 py-0.5 rounded border font-bold flex-shrink-0" style={{ background: t.agentType === 'Volt' ? 'rgba(245,158,11,0.08)' : t.agentType === 'Oracle' ? 'rgba(45,212,191,0.08)' : 'rgba(167,139,250,0.08)', color: t.agentType === 'Volt' ? '#fbbf24' : t.agentType === 'Oracle' ? '#2dd4bf' : '#a78bfa', borderColor: t.agentType === 'Volt' ? 'rgba(245,158,11,0.18)' : t.agentType === 'Oracle' ? 'rgba(45,212,191,0.18)' : 'rgba(167,139,250,0.18)' }}>{t.agentType}</span>
+                            <div className="min-w-0"><div className="text-xs font-semibold text-foreground flex items-center gap-1 truncate">{t.outcome} @ {t.price?.toFixed(2)} × {t.lotSize}<span className="text-[10px] font-mono text-muted-foreground">• {new Date(t.createdAt).toLocaleTimeString()}</span></div><div className="text-[10px] font-mono text-muted-foreground truncate">{t.marketId?.slice(0, 14)}…</div></div>
+                          </div>
+                          <div className="text-right flex-shrink-0 ml-2"><div className="text-xs font-mono font-bold" style={{ color: isWin ? 'var(--trade-yes)' : isLoss ? 'var(--trade-no)' : 'var(--muted-foreground)' }}>{t.isSettled ? (isWin ? `+${(t.pnl ?? 0).toFixed(2)}` : (t.pnl ?? 0).toFixed(2)) : 'OPEN'}</div><div className="text-[9px] font-mono text-muted-foreground">{t.isSettled ? 'SETTLED' : 'AWAITING'}</div></div>
+                        </div>
+                      );
+                    })}
+                    {(!data?.recentTrades || data.recentTrades.length === 0) && <div className="p-4 text-center text-xs text-muted-foreground">No recent fills.</div>}
+                  </div>
+                </div>
+                <div className="terminal-panel p-3 bg-secondary/10 border-border/40">
+                  <div className="flex items-center gap-1.5 mb-1.5"><ShieldCheckIcon className="size-3.5 text-muted-foreground" /><span className="text-xs font-bold text-foreground">Transparency Guarantee</span><Badge variant="outline" className="ml-auto font-mono text-[10px] bg-secondary/30 border-border/40 text-muted-foreground">ON-CHAIN VERIFIED</Badge></div>
+                  <ul className="text-[11px] text-muted-foreground leading-relaxed list-disc pl-4 space-y-1">
+                    <li>Every point = real settlement: <code className="font-mono bg-secondary/40 px-1 py-0.5 rounded">payout − cost</code> per lot.</li>
+                    <li>Operator (0x93e3…59Cf) curve public — compare delta live.</li>
+                    <li>Unclaimed = gross pending, not double-counted.</li>
+                  </ul>
+                  {!isGuest && !isOperator && <div className="mt-2 flex items-center gap-2 text-xs">Your delta vs swarm: <span className="px-2 py-0.5 rounded border font-mono font-bold text-xs" style={{ background: delta >= 0 ? 'rgba(16,185,129,0.12)' : 'rgba(244,63,94,0.12)', borderColor: delta >= 0 ? 'rgba(16,185,129,0.22)' : 'rgba(244,63,94,0.22)', color: delta >= 0 ? 'var(--trade-yes)' : 'var(--trade-no)' }}>{delta >= 0 ? '+' : ''}{delta.toFixed(2)} tUSDC</span></div>}
+                </div>
+              </div>
+            </div>
+          )}
         </div>
       </div>
     </div>
   );
 };
-
-export default AnalyticsView;

@@ -1,9 +1,9 @@
 import React from 'react';
 import {
-  Layers,
-  ListOrdered,
-  Crosshair,
-} from 'lucide-react';
+  Square3Stack3DIcon,
+  QueueListIcon,
+  ViewfinderCircleIcon,
+} from '@heroicons/react/24/outline';
 
 export interface SkeletonProps extends React.HTMLAttributes<HTMLDivElement> {
   width?: string | number;
@@ -136,55 +136,45 @@ export const StatCardsGridSkeleton: React.FC = () => {
  */
 export const MarketCardSkeleton: React.FC = () => {
   return (
-    <div
-      className="matrix-card"
-      style={{
-        background: '#121216',
-        borderColor: 'var(--border)',
-        pointerEvents: 'none',
-        display: 'flex',
-        flexDirection: 'column',
-        gap: '12px',
-        padding: '14px',
-        borderRadius: '8px',
-      }}
-    >
+    <div className="p-3.5 rounded-xl border border-border/40 bg-secondary/20 flex flex-col justify-between select-none">
       {/* Card Top */}
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-          <Skeleton variant="rectangular" width={60} height={20} borderRadius={4} />
-          <Skeleton variant="badge" width={36} height={18} />
+      <div className="flex items-center justify-between pb-2 border-b border-border/30">
+        <div className="flex items-center gap-1.5">
+          <Skeleton variant="text" width={60} height={16} />
+          <Skeleton variant="badge" width={32} height={16} />
         </div>
-        <Skeleton variant="rectangular" width={68} height={20} borderRadius={4} />
+        <Skeleton variant="text" width={40} height={12} />
       </div>
 
       {/* Strike & Spot */}
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-          <Skeleton variant="text" width={40} height={9} />
-          <Skeleton variant="text" width={75} height={18} />
+      <div className="grid grid-cols-2 gap-2 p-2 rounded-lg bg-secondary/30 border border-border/40 my-2.5">
+        <div>
+          <Skeleton variant="text" width={40} height={10} />
+          <Skeleton variant="text" width={65} height={16} />
         </div>
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', alignItems: 'flex-end' }}>
-          <Skeleton variant="text" width={55} height={9} />
-          <Skeleton variant="text" width={80} height={16} />
+        <div>
+          <Skeleton variant="text" width={50} height={10} />
+          <Skeleton variant="text" width={75} height={16} />
         </div>
       </div>
 
       {/* Probability bar */}
-      <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+      <div className="flex flex-col gap-1.5">
+        <div className="flex justify-between items-center">
           <Skeleton variant="text" width={45} height={10} />
-          <Skeleton variant="badge" width={70} height={16} />
+          <Skeleton variant="badge" width={60} height={14} />
           <Skeleton variant="text" width={45} height={10} />
         </div>
         <Skeleton variant="rectangular" width="100%" height={6} borderRadius={3} />
       </div>
 
       {/* Quotes Footer */}
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '6px', marginTop: '4px' }}>
-        <Skeleton variant="rectangular" height={26} borderRadius={4} />
-        <Skeleton variant="rectangular" height={26} borderRadius={4} />
-        <Skeleton variant="rectangular" height={26} borderRadius={4} />
+      <div className="flex items-center justify-between pt-2.5 mt-2.5 border-t border-border/30">
+        <div className="flex gap-2">
+          <Skeleton variant="text" width={45} height={14} />
+          <Skeleton variant="text" width={45} height={14} />
+        </div>
+        <Skeleton variant="badge" width={55} height={18} />
       </div>
     </div>
   );
@@ -195,22 +185,25 @@ export const MarketCardSkeleton: React.FC = () => {
  */
 export const MarketMatrixSkeleton: React.FC = () => {
   return (
-    <div className="terminal-panel market-matrix-panel" style={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
+    <div className="terminal-panel flex flex-col h-full overflow-hidden">
       {/* Header */}
-      <div className="terminal-panel-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-          <Layers size={16} style={{ color: 'var(--brand-cyan)' }} />
-          <Skeleton variant="text" width={160} height={14} />
-          <Skeleton variant="badge" width={54} height={18} />
+      <div className="p-4 pb-3 border-b border-border/40 flex flex-col gap-3 flex-shrink-0">
+        <div className="flex justify-between items-center">
+          <div className="flex items-center gap-2">
+            <Square3Stack3DIcon className="size-4 text-muted-foreground" />
+            <Skeleton variant="text" width={160} height={14} />
+            <Skeleton variant="badge" width={54} height={18} />
+          </div>
+          <Skeleton variant="rectangular" width={200} height={28} borderRadius={8} />
         </div>
-        <div style={{ display: 'flex', gap: '8px' }}>
-          <Skeleton variant="rectangular" width={140} height={24} borderRadius={6} />
-          <Skeleton variant="rectangular" width={80} height={24} borderRadius={6} />
+        <div className="flex justify-between items-center pt-1 border-t border-border/30">
+          <Skeleton variant="rectangular" width={240} height={24} borderRadius={6} />
+          <Skeleton variant="rectangular" width={180} height={24} borderRadius={6} />
         </div>
       </div>
 
       {/* Grid of 6 cards */}
-      <div className="matrix-grid" style={{ flex: 1, padding: '14px', overflowY: 'auto' }}>
+      <div className="p-4 grid grid-cols-1 md:grid-cols-2 2xl:grid-cols-3 gap-3 flex-1 overflow-y-auto">
         {[1, 2, 3, 4, 5, 6].map((i) => (
           <MarketCardSkeleton key={i} />
         ))}
@@ -224,54 +217,56 @@ export const MarketMatrixSkeleton: React.FC = () => {
  */
 export const OrderBookDepthSkeleton: React.FC = () => {
   return (
-    <div className="terminal-panel orderbook-panel" style={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
+    <div className="terminal-panel flex flex-col h-full overflow-hidden">
       {/* Header */}
-      <div className="terminal-panel-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-          <ListOrdered size={16} style={{ color: 'var(--brand-cyan)' }} />
+      <div className="p-4 pb-3 border-b border-border/40 flex items-center justify-between flex-shrink-0">
+        <div className="flex items-center gap-2">
+          <QueueListIcon className="size-4 text-muted-foreground" />
           <Skeleton variant="text" width={140} height={14} />
           <Skeleton variant="badge" width={40} height={18} />
         </div>
-        <div style={{ display: 'flex', gap: '4px' }}>
-          <Skeleton variant="rectangular" width={65} height={22} borderRadius={4} />
-          <Skeleton variant="rectangular" width={65} height={22} borderRadius={4} />
+        <div className="flex gap-1">
+          <Skeleton variant="rectangular" width={75} height={24} borderRadius={6} />
+          <Skeleton variant="rectangular" width={75} height={24} borderRadius={6} />
         </div>
       </div>
 
       {/* Column Headers */}
-      <div className="book-table-header" style={{ display: 'flex', justifyContent: 'space-between', padding: '6px 14px' }}>
+      <div className="grid grid-cols-3 px-4 py-2 border-b border-border/40 bg-secondary/10 flex-shrink-0">
         <Skeleton variant="text" width={70} height={10} />
-        <Skeleton variant="text" width={70} height={10} />
-        <Skeleton variant="text" width={70} height={10} />
+        <div className="flex justify-end"><Skeleton variant="text" width={70} height={10} /></div>
+        <div className="flex justify-end"><Skeleton variant="text" width={70} height={10} /></div>
       </div>
 
       {/* Asks Ladder Skeleton */}
-      <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', padding: '6px 14px' }}>
-        {[1, 2, 3, 4, 5].map((i) => (
-          <div key={`ask-skel-${i}`} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', height: '22px' }}>
-            <Skeleton variant="text" width={50} height={12} />
-            <Skeleton variant="text" width={60} height={12} />
-            <Skeleton variant="text" width={50} height={12} />
-          </div>
-        ))}
-      </div>
+      <div className="p-2 flex flex-col gap-1 flex-1 justify-between">
+        <div className="flex flex-col gap-1">
+          {[1, 2, 3, 4, 5].map((i) => (
+            <div key={`ask-skel-${i}`} className="grid grid-cols-3 items-center px-2.5 py-1">
+              <Skeleton variant="text" width={50} height={12} />
+              <div className="flex justify-end"><Skeleton variant="text" width={60} height={12} /></div>
+              <div className="flex justify-end"><Skeleton variant="text" width={50} height={12} /></div>
+            </div>
+          ))}
+        </div>
 
-      {/* Spread Banner Skeleton */}
-      <div className="book-spread-banner" style={{ margin: '8px 14px', padding: '10px 14px', borderRadius: '6px', background: 'rgba(255, 255, 255, 0.02)', display: 'flex', justifyContent: 'space-between' }}>
-        <Skeleton variant="rectangular" width={80} height={28} borderRadius={4} />
-        <Skeleton variant="rectangular" width={80} height={28} borderRadius={4} />
-        <Skeleton variant="rectangular" width={80} height={28} borderRadius={4} />
-      </div>
+        {/* Spread Banner Skeleton */}
+        <div className="grid grid-cols-3 p-2.5 my-2 rounded-lg bg-secondary/30 border border-border/40">
+          <Skeleton variant="rectangular" height={28} borderRadius={4} />
+          <Skeleton variant="rectangular" height={28} borderRadius={4} />
+          <Skeleton variant="rectangular" height={28} borderRadius={4} />
+        </div>
 
-      {/* Bids Ladder Skeleton */}
-      <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', padding: '6px 14px' }}>
-        {[1, 2, 3, 4, 5].map((i) => (
-          <div key={`bid-skel-${i}`} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', height: '22px' }}>
-            <Skeleton variant="text" width={50} height={12} />
-            <Skeleton variant="text" width={60} height={12} />
-            <Skeleton variant="text" width={50} height={12} />
-          </div>
-        ))}
+        {/* Bids Ladder Skeleton */}
+        <div className="flex flex-col gap-1">
+          {[1, 2, 3, 4, 5].map((i) => (
+            <div key={`bid-skel-${i}`} className="grid grid-cols-3 items-center px-2.5 py-1">
+              <Skeleton variant="text" width={50} height={12} />
+              <div className="flex justify-end"><Skeleton variant="text" width={60} height={12} /></div>
+              <div className="flex justify-end"><Skeleton variant="text" width={50} height={12} /></div>
+            </div>
+          ))}
+        </div>
       </div>
     </div>
   );
@@ -354,37 +349,43 @@ export const OrderHistoryTableSkeleton: React.FC<{ rows?: number }> = ({ rows = 
  */
 export const EdgeRadarHeatmapSkeleton: React.FC = () => {
   return (
-    <div className="terminal-panel edge-radar-panel" style={{ display: 'flex', flexDirection: 'column', gap: '16px', padding: '18px' }}>
-      <div className="terminal-panel-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-          <Crosshair size={16} style={{ color: 'var(--brand-cyan)' }} />
+    <div className="terminal-panel p-4 flex flex-col gap-3">
+      <div className="flex justify-between items-center pb-3 border-b border-border/40">
+        <div className="flex items-center gap-2">
+          <ViewfinderCircleIcon className="size-4 text-muted-foreground" />
           <Skeleton variant="text" width={220} height={14} />
           <Skeleton variant="badge" width={90} height={18} />
         </div>
-        <div style={{ display: 'flex', gap: '12px' }}>
+        <div className="flex gap-3">
           <Skeleton variant="text" width={80} height={12} />
           <Skeleton variant="text" width={80} height={12} />
         </div>
       </div>
 
-      <div style={{ display: 'grid', gridTemplateColumns: '120px 1fr 1fr 1fr', gap: '10px' }}>
+      <div className="flex flex-col gap-2">
         {/* Header row */}
-        <Skeleton variant="rectangular" height={32} borderRadius={4} />
-        <Skeleton variant="rectangular" height={32} borderRadius={4} />
-        <Skeleton variant="rectangular" height={32} borderRadius={4} />
-        <Skeleton variant="rectangular" height={32} borderRadius={4} />
+        <div className="grid grid-cols-[100px_repeat(3,1fr)] gap-2.5">
+          <Skeleton variant="rectangular" height={24} borderRadius={4} />
+          <Skeleton variant="rectangular" height={24} borderRadius={4} />
+          <Skeleton variant="rectangular" height={24} borderRadius={4} />
+          <Skeleton variant="rectangular" height={24} borderRadius={4} />
+        </div>
 
         {/* BTC Row */}
-        <Skeleton variant="rectangular" height={80} borderRadius={6} />
-        <Skeleton variant="rectangular" height={80} borderRadius={6} />
-        <Skeleton variant="rectangular" height={80} borderRadius={6} />
-        <Skeleton variant="rectangular" height={80} borderRadius={6} />
+        <div className="grid grid-cols-[100px_repeat(3,1fr)] gap-2.5">
+          <Skeleton variant="rectangular" height={72} borderRadius={8} />
+          <Skeleton variant="rectangular" height={72} borderRadius={8} />
+          <Skeleton variant="rectangular" height={72} borderRadius={8} />
+          <Skeleton variant="rectangular" height={72} borderRadius={8} />
+        </div>
 
         {/* ETH Row */}
-        <Skeleton variant="rectangular" height={80} borderRadius={6} />
-        <Skeleton variant="rectangular" height={80} borderRadius={6} />
-        <Skeleton variant="rectangular" height={80} borderRadius={6} />
-        <Skeleton variant="rectangular" height={80} borderRadius={6} />
+        <div className="grid grid-cols-[100px_repeat(3,1fr)] gap-2.5">
+          <Skeleton variant="rectangular" height={72} borderRadius={8} />
+          <Skeleton variant="rectangular" height={72} borderRadius={8} />
+          <Skeleton variant="rectangular" height={72} borderRadius={8} />
+          <Skeleton variant="rectangular" height={72} borderRadius={8} />
+        </div>
       </div>
     </div>
   );

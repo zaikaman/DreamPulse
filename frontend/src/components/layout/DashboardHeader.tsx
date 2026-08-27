@@ -1,19 +1,17 @@
 import React from 'react';
 import {
-  Menu,
-  Gauge,
-  Crosshair,
-  ListOrdered,
-  Brain,
-  Cpu,
-  Search,
-  Wallet,
-  Zap,
-  Volume2,
-  VolumeX,
-  Eye,
-  Bot,
-} from 'lucide-react';
+  Bars3Icon,
+  Squares2X2Icon,
+  ViewfinderCircleIcon,
+  QueueListIcon,
+  CpuChipIcon,
+  MagnifyingGlassIcon,
+  WalletIcon,
+  BoltIcon,
+  SpeakerWaveIcon,
+  SpeakerXMarkIcon,
+  EyeIcon,
+} from '@heroicons/react/24/outline';
 import type { SessionGrant } from '../../types/index.js';
 import type { WalletState } from '../../hooks/useSessionKey.js';
 import { useUserRole } from '../../hooks/useUserRole.js';
@@ -61,11 +59,11 @@ const DashboardHeaderComponent: React.FC<DashboardHeaderProps> = ({
   const { isTrader, isOperator } = useUserRole(wallet);
 
   const topTabs = [
-    { id: 'Overview', label: 'Overview', Icon: Gauge },
-    { id: 'Edge Radar', label: 'Edge Radar', Icon: Crosshair },
-    { id: 'Markets & Depth', label: 'Markets & Depth', Icon: ListOrdered },
-    { id: 'AI Swarm Feed', label: 'AI Stream', Icon: Brain },
-    { id: 'Swarm Cockpit', label: isOperator ? 'Swarm Cockpit (Admin)' : 'Swarm Transparency', Icon: Cpu },
+    { id: 'Overview', label: 'Overview', Icon: Squares2X2Icon },
+    { id: 'Edge Radar', label: 'Edge Radar', Icon: ViewfinderCircleIcon },
+    { id: 'Markets & Depth', label: 'Markets & Depth', Icon: QueueListIcon },
+    { id: 'AI Swarm Feed', label: 'AI Stream', Icon: CpuChipIcon },
+    { id: 'Swarm Cockpit', label: isOperator ? 'Swarm Cockpit (Admin)' : 'Swarm Transparency', Icon: CpuChipIcon },
   ];
 
   return (
@@ -78,7 +76,7 @@ const DashboardHeaderComponent: React.FC<DashboardHeaderProps> = ({
           onClick={onToggleCollapse}
           aria-label="Toggle Sidebar"
         >
-          <Menu size={16} />
+          <Bars3Icon className="size-4" />
         </button>
 
         <div className="shadcn-tabs-bar" style={{ marginLeft: '4px' }}>
@@ -91,7 +89,7 @@ const DashboardHeaderComponent: React.FC<DashboardHeaderProps> = ({
                 className={`shadcn-tab-btn ${activeTab === t.id ? 'active' : ''}`}
                 onClick={() => onSelectTab(t.id)}
               >
-                <Icon size={14} />
+                <Icon className="size-3.5" />
                 <span>{t.label}</span>
               </button>
             );
@@ -172,7 +170,7 @@ const DashboardHeaderComponent: React.FC<DashboardHeaderProps> = ({
       {/* Right: Search, Mode, Network, Session & Wallet */}
       <div className="header-right-section">
         <div className="header-search-bar">
-          <Search size={14} />
+          <MagnifyingGlassIcon className="size-3.5" />
           <input
             type="text"
             placeholder="Search contracts..."
@@ -201,17 +199,17 @@ const DashboardHeaderComponent: React.FC<DashboardHeaderProps> = ({
         >
           {isOperator ? (
             <>
-              <Bot size={12} />
+              <CpuChipIcon className="size-3" />
               <span style={{ fontWeight: 600, letterSpacing: '0.04em' }}>OPERATOR</span>
             </>
           ) : isTrader ? (
             <>
-              <Wallet size={12} />
+              <WalletIcon className="size-3" />
               <span style={{ fontWeight: 600, letterSpacing: '0.04em' }}>TRADER</span>
             </>
           ) : (
             <>
-              <Eye size={12} />
+              <EyeIcon className="size-3" />
               <span>WATCH-ONLY</span>
             </>
           )}
@@ -233,7 +231,7 @@ const DashboardHeaderComponent: React.FC<DashboardHeaderProps> = ({
           title={soundEngine.getMuted() ? 'Unmute Sound Effects (M)' : 'Mute Sound Effects (M)'}
           style={{ width: '32px', height: '32px' }}
         >
-          {soundEngine.getMuted() ? <VolumeX size={14} style={{ color: 'var(--muted-foreground)' }} /> : <Volume2 size={14} style={{ color: 'var(--brand-cyan)' }} />}
+          {soundEngine.getMuted() ? <SpeakerXMarkIcon className="size-3.5" style={{ color: 'var(--muted-foreground)' }} /> : <SpeakerWaveIcon className="size-3.5" style={{ color: 'var(--brand-cyan)' }} />}
         </button>
 
         {/* Session Delegation & Wallet Status Action */}
@@ -244,7 +242,7 @@ const DashboardHeaderComponent: React.FC<DashboardHeaderProps> = ({
             onClick={onConnectWallet}
             title="Connect Web3 Wallet"
           >
-            <Wallet size={13} />
+            <WalletIcon className="size-3.5" />
             <span>Connect Wallet</span>
           </button>
         ) : !wallet.isCorrectNetwork ? (
@@ -254,7 +252,7 @@ const DashboardHeaderComponent: React.FC<DashboardHeaderProps> = ({
             onClick={onSwitchNetwork}
             title="Switch to Somnia Shannon Testnet (50312)"
           >
-            <Zap size={13} />
+            <BoltIcon className="size-3.5" />
             <span>Switch Network</span>
           </button>
         ) : (

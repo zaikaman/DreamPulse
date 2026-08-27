@@ -1,10 +1,12 @@
 import React, { useMemo } from 'react';
 import {
-  ChevronLeft,
-  ChevronRight,
-  ChevronsLeft,
-  ChevronsRight,
-} from 'lucide-react';
+  ChevronLeftIcon,
+  ChevronRightIcon,
+  ChevronDoubleLeftIcon,
+  ChevronDoubleRightIcon,
+} from '@heroicons/react/24/outline';
+import { Button } from './button.js';
+import { cn } from '../../lib/utils.js';
 
 export interface PaginationProps {
   currentPage: number;
@@ -55,63 +57,30 @@ export const Pagination: React.FC<PaginationProps> = ({
 
   return (
     <div
-      className={`dreampulse-pagination-bar ${className}`}
-      style={{
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'space-between',
-        flexWrap: 'wrap',
-        gap: '14px',
-        padding: '12px 18px',
-        borderTop: '1px solid var(--border)',
-        background: 'rgba(0, 0, 0, 0.25)',
-        ...style,
-      }}
+      style={style}
+      className={cn(
+        "flex items-center justify-between flex-wrap gap-3 px-4 py-2.5 border-t border-border/40 bg-secondary/10 text-xs font-mono",
+        className
+      )}
     >
       {/* Item Range Counter */}
-      <div
-        style={{
-          fontSize: '12px',
-          color: 'var(--muted-foreground)',
-          fontFamily: 'var(--font-mono)',
-          display: 'flex',
-          alignItems: 'center',
-          gap: '4px',
-        }}
-      >
+      <div className="flex items-center gap-1.5 text-muted-foreground">
         <span>Showing</span>
-        <strong style={{ color: 'var(--foreground)' }}>
+        <strong className="text-foreground font-semibold">
           {startItem}–{endItem}
         </strong>
         <span>of</span>
-        <strong style={{ color: 'var(--brand-cyan)' }}>{totalItems}</strong>
+        <strong className="text-foreground font-semibold">{totalItems}</strong>
         <span>{itemLabel}</span>
       </div>
 
       {/* Controls Group */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: '16px', flexWrap: 'wrap' }}>
+      <div className="flex items-center gap-4 flex-wrap">
         {/* Page Size Selector */}
         {onPageSizeChange && pageSizeOptions.length > 1 && (
-          <div
-            style={{
-              display: 'flex',
-              alignItems: 'center',
-              gap: '6px',
-              fontSize: '11px',
-              color: 'var(--muted-foreground)',
-            }}
-          >
+          <div className="flex items-center gap-1.5 text-muted-foreground text-[11px]">
             <span>Rows:</span>
-            <div
-              style={{
-                display: 'flex',
-                gap: '2px',
-                background: 'rgba(255, 255, 255, 0.03)',
-                padding: '2px',
-                borderRadius: '4px',
-                border: '1px solid var(--border)',
-              }}
-            >
+            <div className="flex items-center gap-1 bg-secondary/40 p-0.5 rounded-md border border-border/50">
               {pageSizeOptions.map((size) => {
                 const isActive = pageSize === size;
                 return (
@@ -119,18 +88,12 @@ export const Pagination: React.FC<PaginationProps> = ({
                     key={size}
                     type="button"
                     onClick={() => onPageSizeChange(size)}
-                    style={{
-                      padding: '2px 7px',
-                      fontSize: '11px',
-                      fontFamily: 'var(--font-mono)',
-                      background: isActive ? 'rgba(0, 240, 255, 0.15)' : 'transparent',
-                      border: isActive ? '1px solid var(--brand-cyan)' : '1px solid transparent',
-                      color: isActive ? 'var(--brand-cyan)' : 'var(--muted-foreground)',
-                      borderRadius: '3px',
-                      cursor: 'pointer',
-                      fontWeight: isActive ? 700 : 400,
-                      transition: 'all 0.15s ease',
-                    }}
+                    className={cn(
+                      "px-2 py-0.5 rounded text-[10px] font-mono transition-colors cursor-pointer",
+                      isActive
+                        ? "bg-primary text-primary-foreground font-bold shadow-xs"
+                        : "text-muted-foreground hover:text-foreground"
+                    )}
                   >
                     {size}
                   </button>
@@ -141,96 +104,60 @@ export const Pagination: React.FC<PaginationProps> = ({
         )}
 
         {/* Page Navigation Buttons */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+        <div className="flex items-center gap-1">
           {/* First Page */}
-          <button
-            type="button"
+          <Button
+            variant="outline"
+            size="icon-xs"
             disabled={safeCurrentPage === 1 || isLoading}
             onClick={() => onPageChange(1)}
-            style={{
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              width: '28px',
-              height: '28px',
-              borderRadius: '5px',
-              background: 'rgba(255, 255, 255, 0.03)',
-              border: '1px solid var(--border)',
-              color: safeCurrentPage === 1 ? 'rgba(255, 255, 255, 0.2)' : 'var(--foreground)',
-              cursor: safeCurrentPage === 1 || isLoading ? 'not-allowed' : 'pointer',
-              opacity: isLoading ? 0.6 : 1,
-              transition: 'all 0.15s ease',
-            }}
             title="First Page"
+            className="size-7 p-0 border-border/50 bg-secondary/20 hover:bg-secondary/60 disabled:opacity-30"
           >
-            <ChevronsLeft size={14} />
-          </button>
+            <ChevronDoubleLeftIcon className="size-3" />
+          </Button>
 
           {/* Previous Page */}
-          <button
-            type="button"
+          <Button
+            variant="outline"
+            size="icon-xs"
             disabled={safeCurrentPage === 1 || isLoading}
-            onClick={() => onPageChange(Math.max(1, safeCurrentPage - 1))}
-            style={{
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              width: '28px',
-              height: '28px',
-              borderRadius: '5px',
-              background: 'rgba(255, 255, 255, 0.03)',
-              border: '1px solid var(--border)',
-              color: safeCurrentPage === 1 ? 'rgba(255, 255, 255, 0.2)' : 'var(--foreground)',
-              cursor: safeCurrentPage === 1 || isLoading ? 'not-allowed' : 'pointer',
-              opacity: isLoading ? 0.6 : 1,
-              transition: 'all 0.15s ease',
-            }}
+            onClick={() => onPageChange(safeCurrentPage - 1)}
             title="Previous Page"
+            className="size-7 p-0 border-border/50 bg-secondary/20 hover:bg-secondary/60 disabled:opacity-30"
           >
-            <ChevronLeft size={14} />
-          </button>
+            <ChevronLeftIcon className="size-3" />
+          </Button>
 
-          {/* Numeric Page Buttons */}
-          <div style={{ display: 'flex', alignItems: 'center', gap: '3px' }}>
+          {/* Page Numbers */}
+          <div className="flex items-center gap-1">
             {paginationItems.map((item, idx) => {
               if (item === '...') {
                 return (
                   <span
                     key={`ellipsis-${idx}`}
-                    style={{
-                      padding: '0 4px',
-                      fontSize: '11px',
-                      color: 'var(--muted-foreground)',
-                      fontFamily: 'var(--font-mono)',
-                    }}
+                    className="px-1 text-muted-foreground/60 text-xs"
                   >
-                    ...
+                    …
                   </span>
                 );
               }
-              const pageNum = Number(item);
-              const isActive = safeCurrentPage === pageNum;
+
+              const pageNum = item as number;
+              const isActive = pageNum === safeCurrentPage;
+
               return (
                 <button
-                  key={pageNum}
+                  key={`page-${pageNum}`}
                   type="button"
                   disabled={isLoading}
                   onClick={() => onPageChange(pageNum)}
-                  style={{
-                    minWidth: '28px',
-                    height: '28px',
-                    padding: '0 6px',
-                    borderRadius: '5px',
-                    fontSize: '11px',
-                    fontFamily: 'var(--font-mono)',
-                    fontWeight: isActive ? 700 : 500,
-                    background: isActive ? 'rgba(0, 240, 255, 0.15)' : 'rgba(255, 255, 255, 0.02)',
-                    border: isActive ? '1px solid var(--brand-cyan)' : '1px solid var(--border)',
-                    color: isActive ? 'var(--brand-cyan)' : 'var(--foreground)',
-                    cursor: isLoading ? 'not-allowed' : 'pointer',
-                    opacity: isLoading ? 0.7 : 1,
-                    transition: 'all 0.15s ease',
-                  }}
+                  className={cn(
+                    "size-7 flex items-center justify-center rounded-md font-mono text-xs transition-colors cursor-pointer border",
+                    isActive
+                      ? "bg-primary text-primary-foreground font-bold border-primary shadow-xs"
+                      : "bg-secondary/20 border-border/50 text-muted-foreground hover:text-foreground hover:bg-secondary/60"
+                  )}
                 >
                   {pageNum}
                 </button>
@@ -239,52 +166,28 @@ export const Pagination: React.FC<PaginationProps> = ({
           </div>
 
           {/* Next Page */}
-          <button
-            type="button"
+          <Button
+            variant="outline"
+            size="icon-xs"
             disabled={safeCurrentPage === totalPages || isLoading}
-            onClick={() => onPageChange(Math.min(totalPages, safeCurrentPage + 1))}
-            style={{
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              width: '28px',
-              height: '28px',
-              borderRadius: '5px',
-              background: 'rgba(255, 255, 255, 0.03)',
-              border: '1px solid var(--border)',
-              color: safeCurrentPage === totalPages ? 'rgba(255, 255, 255, 0.2)' : 'var(--foreground)',
-              cursor: safeCurrentPage === totalPages || isLoading ? 'not-allowed' : 'pointer',
-              opacity: isLoading ? 0.6 : 1,
-              transition: 'all 0.15s ease',
-            }}
+            onClick={() => onPageChange(safeCurrentPage + 1)}
             title="Next Page"
+            className="size-7 p-0 border-border/50 bg-secondary/20 hover:bg-secondary/60 disabled:opacity-30"
           >
-            <ChevronRight size={14} />
-          </button>
+            <ChevronRightIcon className="size-3" />
+          </Button>
 
           {/* Last Page */}
-          <button
-            type="button"
+          <Button
+            variant="outline"
+            size="icon-xs"
             disabled={safeCurrentPage === totalPages || isLoading}
             onClick={() => onPageChange(totalPages)}
-            style={{
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              width: '28px',
-              height: '28px',
-              borderRadius: '5px',
-              background: 'rgba(255, 255, 255, 0.03)',
-              border: '1px solid var(--border)',
-              color: safeCurrentPage === totalPages ? 'rgba(255, 255, 255, 0.2)' : 'var(--foreground)',
-              cursor: safeCurrentPage === totalPages || isLoading ? 'not-allowed' : 'pointer',
-              opacity: isLoading ? 0.6 : 1,
-              transition: 'all 0.15s ease',
-            }}
             title="Last Page"
+            className="size-7 p-0 border-border/50 bg-secondary/20 hover:bg-secondary/60 disabled:opacity-30"
           >
-            <ChevronsRight size={14} />
-          </button>
+            <ChevronDoubleRightIcon className="size-3" />
+          </Button>
         </div>
       </div>
     </div>

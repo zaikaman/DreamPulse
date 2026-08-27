@@ -1,11 +1,11 @@
 import React, { useMemo, useState, useEffect } from 'react';
 import {
-  Zap,
-  ArrowRight,
-  ExternalLink,
-  ListOrdered,
-  Brain,
-} from 'lucide-react';
+  BoltIcon,
+  ArrowRightIcon,
+  ArrowTopRightOnSquareIcon,
+  QueueListIcon,
+  CpuChipIcon,
+} from '@heroicons/react/24/outline';
 import type { Market, AgentThoughtLog, SessionGrant } from '../../types/index.js';
 import type { MarketTickData } from '../../hooks/useTelemetry.js';
 import type { WalletState } from '../../hooks/useSessionKey.js';
@@ -63,7 +63,7 @@ const OverviewViewComponent: React.FC<OverviewViewProps> = ({
     return () => clearInterval(timer);
   }, []);
 
-  // Top 5 alpha opportunities by absolute mathematical edge
+  // Top 4 alpha opportunities (compact) 
   const opportunities = markets
     .map((m) => {
       const tick = liveTicks.get(m.id);
@@ -80,7 +80,7 @@ const OverviewViewComponent: React.FC<OverviewViewProps> = ({
       };
     })
     .sort((a, b) => b.absEdge - a.absEdge)
-    .slice(0, 5);
+    .slice(0, 4);
 
   // Distinct thoughts across the 4 agents to prevent repetitive single-agent spam
   const distinctThoughts = useMemo(() => {
@@ -108,7 +108,7 @@ const OverviewViewComponent: React.FC<OverviewViewProps> = ({
   const { portfolio } = useUserPortfolio(wallet);
 
   return (
-    <div className="overview-container" style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+    <div className="overview-container flex flex-col gap-2.5 h-full min-h-0 flex-1 overflow-hidden" style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
       {/* Non-Custodial Session Delegation Status Banner */}
       {wallet && onOpenSessionModal && onRevokeSession && onConnectWallet && onSwitchNetwork && (
         <SessionStatusBar
@@ -141,8 +141,8 @@ const OverviewViewComponent: React.FC<OverviewViewProps> = ({
         onNavigateToTab={onNavigateToTab}
       />
 
-      {/* 2. Primary Focal Point: Top Arbitrage Opportunities */}
-      <div className="terminal-panel" style={{ padding: '0', overflow: 'hidden' }}>
+      {/* 2. Primary Focal Point: Top Arbitrage Opportunities - compact 4 rows */}
+      <div className="terminal-panel flex-shrink-0" style={{ padding: '0', overflow: 'hidden' }}>
         <div
           className="terminal-panel-header"
           style={{
@@ -153,7 +153,7 @@ const OverviewViewComponent: React.FC<OverviewViewProps> = ({
           }}
         >
           <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-            <Zap size={15} className="text-muted-foreground" />
+            <BoltIcon className="size-4 text-muted-foreground" />
             <span style={{ fontWeight: 600, fontSize: '13px' }} className="text-foreground">Top Arbitrage & Mispricing Opportunities</span>
             <Badge variant="outline" className="font-mono text-[10px] text-muted-foreground bg-secondary/40 border-border/50">
               {opportunities.filter((o) => o.absEdge >= 0.03).length} ANOMALIES
@@ -167,7 +167,7 @@ const OverviewViewComponent: React.FC<OverviewViewProps> = ({
             onClick={() => onNavigateToTab('Edge Radar')}
           >
             <span>Open Full Radar</span>
-            <ArrowRight size={12} />
+            <ArrowRightIcon className="size-3" />
           </Button>
         </div>
 
@@ -259,7 +259,7 @@ const OverviewViewComponent: React.FC<OverviewViewProps> = ({
                             }}
                           >
                             <span>Inspect</span>
-                            <ExternalLink size={10} />
+                            <ArrowTopRightOnSquareIcon className="size-2.5" />
                           </Button>
                         </td>
                       </tr>
@@ -272,13 +272,13 @@ const OverviewViewComponent: React.FC<OverviewViewProps> = ({
         )}
       </div>
 
-      {/* 3. Secondary Split: Quick Market Catalog + Latest Swarm Reasoning */}
-      <div style={{ display: 'grid', gridTemplateColumns: '1.2fr 1fr', gap: '16px' }}>
-        {/* Left: Quick Active Markets */}
-        <div className="terminal-panel" style={{ padding: '14px 18px' }}>
+      {/* 3. Secondary Split: compact, fills remainder, inline scroll */}
+      <div className="flex-1 min-h-0 grid gap-2.5 overflow-hidden" style={{ display: 'grid', gridTemplateColumns: '1.2fr 1fr', gap: '10px' }}>
+        {/* Left: Quick Active Markets - 3 items, internal scroll */}
+        <div className="terminal-panel flex flex-col min-h-0 overflow-hidden" style={{ padding: '12px 14px' }}>
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '12px' }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-              <ListOrdered size={15} className="text-muted-foreground" />
+              <QueueListIcon className="size-4 text-muted-foreground" />
               <span style={{ fontWeight: 600, fontSize: '13px' }} className="text-foreground">Active Prediction Catalog</span>
               <Badge variant="outline" className="font-mono text-[10px] text-muted-foreground bg-secondary/40 border-border/50">
                 {markets.length} Markets
@@ -291,13 +291,13 @@ const OverviewViewComponent: React.FC<OverviewViewProps> = ({
               onClick={() => onNavigateToTab('Markets & Depth')}
             >
               <span>View Full CLOB</span>
-              <ArrowRight size={12} />
+              <ArrowRightIcon className="size-3" />
             </Button>
           </div>
 
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+          <div className="flex-1 min-h-0 overflow-y-auto" style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
             {isLoading && markets.length === 0 ? (
-              [1, 2, 3, 4].map((i) => (
+              [1, 2, 3].map((i) => (
                 <div
                   key={`quick-skel-${i}`}
                   style={{
@@ -325,7 +325,7 @@ const OverviewViewComponent: React.FC<OverviewViewProps> = ({
                 </div>
               ))
             ) : (
-              markets.slice(0, 4).map((m) => {
+              markets.slice(0, 3).map((m) => {
                 const tick = liveTicks.get(m.id);
                 const implied = tick?.impliedProb ?? m.impliedProbYes;
                 const isSelected = selectedMarketId === m.id;
@@ -365,7 +365,7 @@ const OverviewViewComponent: React.FC<OverviewViewProps> = ({
                         }}
                       >
                         <span>Trade</span>
-                        <ArrowRight size={10} />
+                        <ArrowRightIcon className="size-2.5" />
                       </Button>
                     </div>
                   </div>
@@ -375,16 +375,16 @@ const OverviewViewComponent: React.FC<OverviewViewProps> = ({
           </div>
         </div>
 
-        {/* Right: Live AI Reasoning Snapshot */}
+        {/* Right: Live AI Reasoning Snapshot - 3 items, internal scroll */}
         <div
-          className="terminal-panel"
-          style={{ padding: '14px 18px' }}
+          className="terminal-panel flex flex-col min-h-0 overflow-hidden"
+          style={{ padding: '12px 14px' }}
           onMouseEnter={() => setIsHovered(true)}
           onMouseLeave={() => setIsHovered(false)}
         >
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '12px' }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-              <Brain size={15} className="text-muted-foreground" />
+              <CpuChipIcon className="size-4 text-muted-foreground" />
               <span style={{ fontWeight: 600, fontSize: '13px' }} className="text-foreground">Live Swarm Intelligence</span>
               <Badge variant="outline" className="font-mono text-[10px] text-muted-foreground bg-secondary/40 border-border/50 gap-1.5">
                 <div className={cn("size-1.5 rounded-full", isHovered ? "bg-amber-400" : "bg-emerald-400")} />
@@ -398,17 +398,17 @@ const OverviewViewComponent: React.FC<OverviewViewProps> = ({
               onClick={() => onNavigateToTab('AI Swarm Feed')}
             >
               <span>Full Stream</span>
-              <ArrowRight size={12} />
+              <ArrowRightIcon className="size-3" />
             </Button>
           </div>
 
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+          <div className="flex-1 min-h-0 overflow-y-auto" style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
             {distinctThoughts.length === 0 ? (
-              <div style={{ padding: '24px', textAlign: 'center' }} className="text-muted-foreground font-mono text-xs">
+              <div style={{ padding: '16px', textAlign: 'center' }} className="text-muted-foreground font-mono text-xs">
                 Swarm actively evaluating Shannon CLOB markets. Executed trades will appear here.
               </div>
             ) : (
-              distinctThoughts.map((t, idx) => {
+              distinctThoughts.slice(0, 3).map((t, idx) => {
                 const timeDiff = Math.max(0, Math.floor((nowTime - new Date(t.createdAt).getTime()) / 1000));
                 const relTime = timeDiff < 5 ? 'Just now' : `${timeDiff}s ago`;
 

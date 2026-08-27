@@ -1,9 +1,12 @@
 import React from 'react';
-import { ScanEye, ArrowRight, Zap } from 'lucide-react';
+import { ViewfinderCircleIcon, ArrowRightIcon, BoltIcon } from '@heroicons/react/24/outline';
 import type { Market } from '../../types/index.js';
 import type { MarketTickData } from '../../hooks/useTelemetry.js';
 import { EdgeRadarHeatmap } from '../EdgeRadarHeatmap.js';
 import { Skeleton } from '../ui/Skeleton.js';
+import { Button } from '../ui/button.js';
+import { Badge } from '../ui/badge.js';
+import { cn } from '../../lib/utils.js';
 
 interface EdgeRadarViewProps {
   markets: Market[];
@@ -30,7 +33,7 @@ const EdgeRadarViewComponent: React.FC<EdgeRadarViewProps> = ({
   const isYesEdge = edge > 0;
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
+    <div className="flex flex-col gap-4">
       {/* 1. Full-Width Discrepancy Heatmap Matrix */}
       <EdgeRadarHeatmap
         markets={markets}
@@ -42,14 +45,17 @@ const EdgeRadarViewComponent: React.FC<EdgeRadarViewProps> = ({
 
       {/* 2. Focused Anomaly & Mathematical Inspector Card */}
       {isLoading && !selectedMarket ? (
-        <div className="terminal-panel" style={{ padding: '20px' }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '16px' }}>
-            <Skeleton variant="text" width={260} height={16} />
-            <Skeleton variant="rectangular" width={140} height={28} borderRadius={4} />
+        <div className="terminal-panel p-4">
+          <div className="flex items-center justify-between pb-3 mb-3 border-b border-border/40">
+            <Skeleton variant="text" width={240} height={16} />
+            <Skeleton variant="rectangular" width={140} height={28} borderRadius={6} />
           </div>
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '16px' }}>
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3.5">
             {[1, 2, 3, 4].map((i) => (
-              <div key={i} style={{ background: '#18181b', padding: '14px', borderRadius: '8px', border: '1px solid var(--border)', display: 'flex', flexDirection: 'column', gap: '8px' }}>
+              <div
+                key={i}
+                className="p-3.5 rounded-lg border border-border/40 bg-secondary/20 flex flex-col gap-2"
+              >
                 <Skeleton variant="text" width={110} height={11} />
                 <Skeleton variant="text" width={75} height={22} />
                 <Skeleton variant="text" width={130} height={10} />
@@ -58,89 +64,143 @@ const EdgeRadarViewComponent: React.FC<EdgeRadarViewProps> = ({
           </div>
         </div>
       ) : selectedMarket ? (
-        <div className="terminal-panel" style={{ padding: '20px' }}>
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '16px' }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-              <ScanEye size={18} style={{ color: 'var(--brand-cyan)' }} />
-              <span style={{ fontWeight: 600, fontSize: '15px' }}>
-                Mathematical Mispricing Inspector: {selectedMarket.symbol} (${selectedMarket.strikePrice.toLocaleString()} {selectedMarket.windowDuration})
-              </span>
-              <span className="stat-pill-tag tag-cyan">
-                ID: {selectedMarket.id.slice(0, 16)}...
-              </span>
+        <div className="terminal-panel p-4">
+          {/* Inspector Header */}
+          <div className="flex items-center justify-between pb-3 mb-3 border-b border-border/40 flex-wrap gap-2">
+            <div className="flex items-center gap-2.5">
+              <ViewfinderCircleIcon className="size-4 text-muted-foreground" />
+              <div>
+                <h4 className="text-xs font-semibold text-foreground tracking-wide">
+                  PRICING MODEL INSPECTOR: {selectedMarket.symbol}
+                </h4>
+                <p className="text-[11px] text-muted-foreground font-mono">
+                  Strike: ${selectedMarket.strikePrice.toLocaleString()} • Window: {selectedMarket.windowDuration} • Live Spot: ${(selectedTick?.spotPrice ?? selectedMarket.strikePrice).toLocaleString()}
+                </p>
+              </div>
             </div>
 
-            <button
-              type="button"
-              className="btn-glow"
+            <Button
+              variant="outline"
+              size="sm"
               onClick={onNavigateToDepth}
+              className="gap-1.5 text-xs text-muted-foreground hover:text-foreground border-border/60"
             >
-              <span>Open CLOB Order Book</span>
-              <ArrowRight size={11} />
-            </button>
+              <span>Execute Order on CLOB</span>
+              <ArrowRightIcon className="size-3" />
+            </Button>
           </div>
 
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '16px' }}>
-            <div style={{ background: '#18181b', padding: '14px', borderRadius: '8px', border: '1px solid var(--border)' }}>
-              <span style={{ fontSize: '11px', color: 'var(--muted-foreground)', display: 'block', marginBottom: '4px' }}>
-                CLOB IMPLIED PROBABILITY
-              </span>
-              <span style={{ fontSize: '20px', fontFamily: 'var(--font-mono)', fontWeight: 700 }}>
-                {(implied * 100).toFixed(2)}%
-              </span>
-              <span style={{ fontSize: '11px', color: 'var(--muted-foreground)', display: 'block', marginTop: '4px' }}>
-                YES Bid: ${selectedMarket.bestBidYes.toFixed(2)} | Ask: ${selectedMarket.bestAskYes.toFixed(2)}
-              </span>
+          {/* 4 Minimalist Metric Cards */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3.5">
+            {/* Stat 1: Implied CLOB Prob */}
+            <div className="p-3.5 rounded-lg border border-border/50 bg-secondary/20 flex flex-col justify-between">
+              <div className="flex items-center justify-between gap-1 mb-2">
+                <span className="text-[11px] font-mono text-muted-foreground font-semibold uppercase tracking-wider">
+                  CLOB Implied Prob
+                </span>
+                <Badge variant="outline" className="text-[10px] font-mono px-1.5 py-0 text-muted-foreground">
+                  MID
+                </Badge>
+              </div>
+              <div className="font-mono text-lg font-bold text-foreground">
+                {(implied * 100).toFixed(1)}%
+              </div>
+              <div className="text-[10px] font-mono text-muted-foreground mt-2">
+                YES ${implied.toFixed(2)} • NO ${(1 - implied).toFixed(2)}
+              </div>
             </div>
 
-            <div style={{ background: '#18181b', padding: '14px', borderRadius: '8px', border: '1px solid var(--border)' }}>
-              <span style={{ fontSize: '11px', color: 'var(--muted-foreground)', display: 'block', marginBottom: '4px' }}>
-                BLACK-SCHOLES FAIR VALUE Φ(z)
-              </span>
-              <span style={{ fontSize: '20px', fontFamily: 'var(--font-mono)', fontWeight: 700, color: 'var(--brand-cyan)' }}>
-                {(fair * 100).toFixed(2)}%
-              </span>
-              <span style={{ fontSize: '11px', color: 'var(--muted-foreground)', display: 'block', marginTop: '4px' }}>
-                Continuous Normal Cumulative Dist
-              </span>
+            {/* Stat 2: Fair Value */}
+            <div className="p-3.5 rounded-lg border border-border/50 bg-secondary/20 flex flex-col justify-between">
+              <div className="flex items-center justify-between gap-1 mb-2">
+                <span className="text-[11px] font-mono text-muted-foreground font-semibold uppercase tracking-wider">
+                  Black-Scholes Φ(z)
+                </span>
+                <Badge variant="outline" className="text-[10px] font-mono px-1.5 py-0 text-muted-foreground">
+                  FAIR
+                </Badge>
+              </div>
+              <div className="font-mono text-lg font-bold text-foreground">
+                {(fair * 100).toFixed(1)}%
+              </div>
+              <div className="text-[10px] font-mono text-muted-foreground mt-2">
+                Historical Normal Volatility
+              </div>
             </div>
 
-            <div style={{ background: '#18181b', padding: '14px', borderRadius: '8px', border: '1px solid var(--border)' }}>
-              <span style={{ fontSize: '11px', color: 'var(--muted-foreground)', display: 'block', marginBottom: '4px' }}>
-                CALCULATED EDGE ARB DELTA
-              </span>
-              <span
-                style={{
-                  fontSize: '20px',
-                  fontFamily: 'var(--font-mono)',
-                  fontWeight: 700,
-                  color: isYesEdge ? 'var(--trade-yes)' : 'var(--trade-no)',
-                }}
-              >
-                {isYesEdge ? '+' : ''}{(edge * 100).toFixed(2)}%
-              </span>
-              <span style={{ display: 'flex', alignItems: 'center', gap: '4px', fontSize: '11px', color: 'var(--muted-foreground)', marginTop: '4px' }}>
-                {Math.abs(edge) >= 0.03 ? (
-                  <>
-                    <Zap size={11} style={{ color: 'var(--trade-anomaly)' }} />
-                    <span>Statistically Significant</span>
-                  </>
-                ) : (
-                  <span>Within Normal Spread</span>
+            {/* Stat 3: Edge Delta */}
+            <div className="p-3.5 rounded-lg border border-border/50 bg-secondary/20 flex flex-col justify-between">
+              <div className="flex items-center justify-between gap-1 mb-2">
+                <span className="text-[11px] font-mono text-muted-foreground font-semibold uppercase tracking-wider">
+                  Mispricing Alpha
+                </span>
+                <Badge
+                  variant="outline"
+                  className={cn(
+                    "text-[10px] font-mono px-1.5 py-0",
+                    Math.abs(edge) >= 0.03
+                      ? "bg-amber-500/10 text-amber-300 border-amber-500/30"
+                      : "text-muted-foreground"
+                  )}
+                >
+                  {Math.abs(edge) >= 0.03 ? 'ANOMALY' : 'EDGE'}
+                </Badge>
+              </div>
+              <div
+                className={cn(
+                  "font-mono text-lg font-bold",
+                  Math.abs(edge) < 0.01
+                    ? "text-foreground"
+                    : isYesEdge
+                    ? "text-emerald-400"
+                    : "text-rose-400"
                 )}
-              </span>
+              >
+                {isYesEdge ? '+' : ''}{(edge * 100).toFixed(1)}%
+              </div>
+              <div className="text-[10px] font-mono text-muted-foreground mt-2">
+                {Math.abs(edge) < 0.01
+                  ? 'Fairly priced market'
+                  : isYesEdge
+                  ? 'YES Underpriced Opportunity'
+                  : 'NO Underpriced Opportunity'}
+              </div>
             </div>
 
-            <div style={{ background: '#18181b', padding: '14px', borderRadius: '8px', border: '1px solid var(--border)' }}>
-              <span style={{ fontSize: '11px', color: 'var(--muted-foreground)', display: 'block', marginBottom: '4px' }}>
-                RECOMMENDED STRATEGY
-              </span>
-              <span style={{ fontSize: '16px', fontWeight: 700, color: isYesEdge ? 'var(--trade-yes)' : 'var(--trade-no)', display: 'block', marginTop: '2px' }}>
-                {edge > 0.01 ? 'BUY YES (Underpriced)' : edge < -0.01 ? 'BUY NO (Overpriced)' : 'WAIT FOR CONVERGENCE'}
-              </span>
-              <span style={{ fontSize: '11px', color: 'var(--muted-foreground)', display: 'block', marginTop: '6px' }}>
-                Autonomous Volt Sniper armed
-              </span>
+            {/* Stat 4: Recommended Action */}
+            <div className="p-3.5 rounded-lg border border-border/50 bg-secondary/20 flex flex-col justify-between">
+              <div className="flex items-center justify-between gap-1 mb-2">
+                <span className="text-[11px] font-mono text-muted-foreground font-semibold uppercase tracking-wider">
+                  Swarm Execution
+                </span>
+                <Badge variant="outline" className="text-[10px] font-mono px-1.5 py-0 text-muted-foreground">
+                  AUTO
+                </Badge>
+              </div>
+              <div className="flex items-center gap-2">
+                <span
+                  className={cn(
+                    "inline-flex items-center gap-1 px-2 py-0.5 rounded font-mono text-xs font-bold border",
+                    Math.abs(edge) >= 0.03
+                      ? isYesEdge
+                        ? "bg-emerald-500/10 text-emerald-400 border-emerald-500/30"
+                        : "bg-rose-500/10 text-rose-400 border-rose-500/30"
+                      : "bg-secondary/40 text-muted-foreground border-border/50"
+                  )}
+                >
+                  {Math.abs(edge) >= 0.03 && <BoltIcon className="size-3" />}
+                  <span>
+                    {Math.abs(edge) >= 0.03
+                      ? isYesEdge
+                        ? 'BUY YES'
+                        : 'BUY NO'
+                      : 'MAINTAIN SPREAD'}
+                  </span>
+                </span>
+              </div>
+              <div className="text-[10px] font-mono text-muted-foreground mt-2">
+                {Math.abs(edge) >= 0.03 ? 'Volt Urgency Fill' : 'Titan 2-Sided Quoting'}
+              </div>
             </div>
           </div>
         </div>
