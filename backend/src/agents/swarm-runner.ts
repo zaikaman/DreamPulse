@@ -10,10 +10,10 @@ import { userSwarmService } from '../services/user-swarm-service.js';
 import { operatorAccount, hasOperatorGas } from '../config/somnia.js';
 import { telemetryWsGateway } from '../websocket/server.js';
 import type { IAgentContext, IAgentDecision } from './base-agent.js';
-import type { AgentType, SessionGrant, SwarmStatusSummary } from '../types/index.js';
+import type { AgentType, SwarmAgentType, SessionGrant, SwarmStatusSummary } from '../types/index.js';
 
 export interface AgentTelemetryState {
-  agentType: AgentType;
+  agentType: SwarmAgentType;
   isEnabled: boolean;
   status: 'ACTIVE' | 'PAUSED' | 'IDLE' | 'ERROR';
   evalLatencyMs: number;
@@ -37,7 +37,7 @@ export class MultiAgentSwarmRunner {
   private personalLastTradeTimes = new Map<string, number>(); // key: `${userAddress}:${agentType}`
   private personalLastOpportunityKeys = new Map<string, number>(); // key: `${userAddress}:${marketId}:${agentType}:${action}:${outcome}:${price}`
 
-  private telemetry: Record<AgentType, AgentTelemetryState> = {
+  private telemetry: Record<SwarmAgentType, AgentTelemetryState> = {
     Volt: {
       agentType: 'Volt',
       isEnabled: true,
@@ -195,10 +195,10 @@ export class MultiAgentSwarmRunner {
     const spotTickers = marketService.getAllSpotTickers();
 
     // 1. Evaluate Quantitative Trading Agents (Volt, Oracle, Titan) on open order book markets
-    const tradingAgents = [
-      { agent: voltSniperAgent, type: 'Volt' as AgentType },
-      { agent: oracleArbAgent, type: 'Oracle' as AgentType },
-      { agent: titanMMAgent, type: 'Titan' as AgentType },
+    const tradingAgents: { agent: any; type: SwarmAgentType }[] = [
+      { agent: voltSniperAgent, type: 'Volt' },
+      { agent: oracleArbAgent, type: 'Oracle' },
+      { agent: titanMMAgent, type: 'Titan' },
     ];
 
     if (openMarkets.length > 0) {
@@ -663,8 +663,9 @@ export class MultiAgentSwarmRunner {
   /**
    * Toggles individual agent ON / OFF.
    */
-  public toggleAgent(agentType: AgentType, enabled: boolean): boolean {
-    const state = this.telemetry[agentType];
+  public toggleAgent(agentType: AgentType | string, enabled: boolean): boolean {
+    if (agentType === 'Manual') return false;
+    const state = this.telemetry[agentType as SwarmAgentType];
     if (!state) return false;
 
     state.isEnabled = enabled;

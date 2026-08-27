@@ -95,6 +95,7 @@ export const ActivePositionsDrawer: React.FC<ActivePositionsDrawerProps> = ({
     try {
       const res = await apiClient.getOrders({
         userAddress: wallet.address,
+        source: 'TERMINAL',
         limit: 50,
       });
       if (res.success && res.data) {
@@ -127,7 +128,10 @@ export const ActivePositionsDrawer: React.FC<ActivePositionsDrawerProps> = ({
         <div className="flex items-center gap-3">
           <div className="flex items-center gap-1.5 text-foreground font-bold">
             <BriefcaseIcon className="w-4 h-4 text-brand-cyan" />
-            <span className="hidden sm:inline">Portfolio & Activity</span>
+            <span className="hidden sm:inline">Terminal Activity</span>
+            <Badge variant="outline" className="text-[9px] px-1.5 py-0 border-brand-cyan/30 text-brand-cyan bg-brand-cyan/5">
+              MANUAL
+            </Badge>
           </div>
 
           {/* Sub-Tabs */}

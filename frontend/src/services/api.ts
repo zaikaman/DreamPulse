@@ -164,6 +164,7 @@ export const apiClient = {
     marketId?: string;
     scope?: 'ALL_SWARM' | 'MY_ORDERS' | 'ALL';
     swarmOnly?: boolean;
+    source?: 'SWARM' | 'TERMINAL' | 'ALL';
     limit?: number;
     page?: number;
     pageSize?: number;
@@ -182,6 +183,7 @@ export const apiClient = {
     const searchParams = new URLSearchParams();
     if (params?.userAddress) searchParams.append('userAddress', params.userAddress);
     if (params?.swarmOnly || params?.scope === 'ALL_SWARM') searchParams.append('swarmOnly', 'true');
+    if (params?.source) searchParams.append('source', params.source);
     if (params?.agentType && params.agentType !== 'ALL') searchParams.append('agentType', params.agentType);
     if (params?.status && params.status !== 'ALL') searchParams.append('status', params.status);
     if (params?.outcome && params.outcome !== 'ALL') searchParams.append('outcome', params.outcome);
@@ -260,18 +262,20 @@ export const apiClient = {
     });
   },
 
-  async getAnalytics(userAddress?: string, range: string = '30d'): Promise<{ success: boolean; data: any }> {
+  async getAnalytics(userAddress?: string, range: string = '30d', source: string = 'ALL'): Promise<{ success: boolean; data: any }> {
     const params = new URLSearchParams();
     if (userAddress) params.append('userAddress', userAddress);
     if (range) params.append('range', range);
+    if (source && source !== 'ALL') params.append('source', source);
     const q = params.toString();
     return fetchJson(`/analytics/equity${q ? `?${q}` : ''}`);
   },
 
-  async getBalanceHistory(userAddress?: string, range: string = '30d'): Promise<{ success: boolean; data: any }> {
+  async getBalanceHistory(userAddress?: string, range: string = '30d', source: string = 'ALL'): Promise<{ success: boolean; data: any }> {
     const params = new URLSearchParams();
     if (userAddress) params.append('userAddress', userAddress);
     if (range) params.append('range', range);
+    if (source && source !== 'ALL') params.append('source', source);
     const q = params.toString();
     return fetchJson(`/analytics/balance-history${q ? `?${q}` : ''}`);
   },

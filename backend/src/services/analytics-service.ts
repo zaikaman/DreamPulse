@@ -73,13 +73,29 @@ export interface AnalyticsSummary {
   totalClaimed: number;
 }
 
+export interface SourceBreakdown {
+  source: 'ALL' | 'SWARM' | 'TERMINAL';
+  label: string;
+  pnl: number;
+  trades: number;
+  wins: number;
+  losses: number;
+  winRate: number;
+  volume: number;
+}
+
 export interface AnalyticsResponse {
   range: AnalyticsRange;
+  source: 'ALL' | 'SWARM' | 'TERMINAL';
   userAddress: string;
   isOperator: boolean;
   generatedAt: string;
   summary: AnalyticsSummary;
-  equityCurve: EquityPoint[]; // user equity curve
+  terminalSummary?: AnalyticsSummary;
+  swarmSummary?: AnalyticsSummary;
+  sourceBreakdown: SourceBreakdown[];
+  equityCurve: EquityPoint[]; // filtered equity curve
+  terminalEquityCurve?: EquityPoint[]; // separate terminal equity curve
   swarmEquityCurve: EquityPoint[]; // operator swarm curve for comparison
   dailyBars: DailyBar[];
   agentBreakdown: AgentBreakdown[];
@@ -272,9 +288,12 @@ function computeEquityAndDaily(orders: OrderExecution[], cutoffMs: number): { eq
 }
 
 function breakdownByAgent(orders: OrderExecution[]): AgentBreakdown[] {
-  const agents: AgentType[] = ['Volt', 'Oracle', 'Titan', 'Sweeper'];
-  return agents.map((agent) => {
-    const filtered = orders.filter((o) => o.agentType === agent);
+  const agentList: AgentType[] = ['Volt', 'Oracle', 'Titan', 'Sweeper'];
+  if (orders.some((o) => o.agentType === 'Manual' || o.source === 'TERMINAL')) {
+    agentList.push('Manual');
+  }
+  return agentList.map((agent) => {
+    const filtered = orders.filter((o) => o.agentType === agent || (agent === 'Manual' && o.source === 'TERMINAL'));
     const settled = filtered.filter((o) => o.isSettled);
     const wins = settled.filter((o) => (o.pnl ?? 0) > 0.01).length;
     const losses = settled.filter((o) => (o.pnl ?? 0) < -0.01).length;
@@ -334,9 +353,14 @@ export class AnalyticsService {
     }
   }
 
-  public async getAnalytics(userAddress: string | undefined, range: AnalyticsRange = '30d', force: boolean = false): Promise<AnalyticsResponse> {
+  public async getAnalytics(
+    userAddress: string | undefined,
+    range: AnalyticsRange = '30d',
+    source: 'ALL' | 'SWARM' | 'TERMINAL' = 'ALL',
+    force: boolean = false,
+  ): Promise<AnalyticsResponse> {
     const normalizedUser = userAddress && userAddress.trim().length > 0 ? userAddress.trim().toLowerCase() : undefined;
-    const cacheKey = `${normalizedUser || 'swarm'}:${range}`;
+    const cacheKey = `${normalizedUser || 'swarm'}:${range}:${source}`;
     const nowMs = Date.now();
 
     if (!force) {
@@ -359,10 +383,23 @@ export class AnalyticsService {
       const userOrders = normalizedUser ? allOrders.filter((o) => o.userAddress && o.userAddress.toLowerCase() === normalizedUser) : [];
       const operatorOrders = allOrders.filter((o) => o.userAddress && o.userAddress.toLowerCase() === operatorAccount.address.toLowerCase());
 
-      const primaryOrders = normalizedUser ? userOrders : operatorOrders;
+      const allTargetOrders = normalizedUser ? userOrders : operatorOrders;
+      
+      let primaryOrders = allTargetOrders;
+      if (source === 'TERMINAL') {
+        primaryOrders = allTargetOrders.filter((o) => o.source === 'TERMINAL' || o.agentType === 'Manual');
+      } else if (source === 'SWARM') {
+        primaryOrders = allTargetOrders.filter((o) => o.source !== 'TERMINAL' && o.agentType !== 'Manual');
+      }
 
       const primaryComputed = computeEquityAndDaily(primaryOrders, cutoffMs);
       const swarmComputed = computeEquityAndDaily(operatorOrders, cutoffMs);
+
+      const terminalOrdersAll = allTargetOrders.filter((o) => o.source === 'TERMINAL' || o.agentType === 'Manual');
+      const swarmOrdersAll = allTargetOrders.filter((o) => o.source !== 'TERMINAL' && o.agentType !== 'Manual');
+
+      const terminalComputed = computeEquityAndDaily(terminalOrdersAll, cutoffMs);
+      const swarmUserComputed = computeEquityAndDaily(swarmOrdersAll, cutoffMs);
 
       // Enrich summary with on-chain unclaimed + claimed
       let unclaimedPnl = 0;
@@ -381,6 +418,46 @@ export class AnalyticsService {
 
       swarmComputed.summary.unclaimedPnl = 0;
       swarmComputed.summary.totalClaimed = 0;
+
+      // Source Breakdown comparative analytics
+      const sourceBreakdown: SourceBreakdown[] = [
+        {
+          source: 'ALL',
+          label: 'All Activity',
+          pnl: Number(allTargetOrders.reduce((a, o) => a + (o.pnl ?? 0), 0).toFixed(2)),
+          trades: allTargetOrders.length,
+          wins: allTargetOrders.filter((o) => o.isSettled && (o.pnl ?? 0) > 0.01).length,
+          losses: allTargetOrders.filter((o) => o.isSettled && (o.pnl ?? 0) < -0.01).length,
+          winRate: allTargetOrders.filter((o) => o.isSettled).length > 0
+            ? Number(((allTargetOrders.filter((o) => o.isSettled && (o.pnl ?? 0) > 0.01).length / allTargetOrders.filter((o) => o.isSettled).length) * 100).toFixed(1))
+            : 0,
+          volume: Number(allTargetOrders.reduce((a, o) => a + (o.totalCost || 0), 0).toFixed(2)),
+        },
+        {
+          source: 'SWARM',
+          label: 'Swarm AI Mirror',
+          pnl: Number(swarmOrdersAll.reduce((a, o) => a + (o.pnl ?? 0), 0).toFixed(2)),
+          trades: swarmOrdersAll.length,
+          wins: swarmOrdersAll.filter((o) => o.isSettled && (o.pnl ?? 0) > 0.01).length,
+          losses: swarmOrdersAll.filter((o) => o.isSettled && (o.pnl ?? 0) < -0.01).length,
+          winRate: swarmOrdersAll.filter((o) => o.isSettled).length > 0
+            ? Number(((swarmOrdersAll.filter((o) => o.isSettled && (o.pnl ?? 0) > 0.01).length / swarmOrdersAll.filter((o) => o.isSettled).length) * 100).toFixed(1))
+            : 0,
+          volume: Number(swarmOrdersAll.reduce((a, o) => a + (o.totalCost || 0), 0).toFixed(2)),
+        },
+        {
+          source: 'TERMINAL',
+          label: 'Trader Cockpit',
+          pnl: Number(terminalOrdersAll.reduce((a, o) => a + (o.pnl ?? 0), 0).toFixed(2)),
+          trades: terminalOrdersAll.length,
+          wins: terminalOrdersAll.filter((o) => o.isSettled && (o.pnl ?? 0) > 0.01).length,
+          losses: terminalOrdersAll.filter((o) => o.isSettled && (o.pnl ?? 0) < -0.01).length,
+          winRate: terminalOrdersAll.filter((o) => o.isSettled).length > 0
+            ? Number(((terminalOrdersAll.filter((o) => o.isSettled && (o.pnl ?? 0) > 0.01).length / terminalOrdersAll.filter((o) => o.isSettled).length) * 100).toFixed(1))
+            : 0,
+          volume: Number(terminalOrdersAll.reduce((a, o) => a + (o.totalCost || 0), 0).toFixed(2)),
+        },
+      ];
 
       // Breakdowns
       const agentBreakdown = breakdownByAgent(primaryOrders.filter((o) => {
@@ -409,11 +486,16 @@ export class AnalyticsService {
 
       const result: AnalyticsResponse = {
         range,
+        source,
         userAddress: normalizedUser || operatorAccount.address,
         isOperator,
         generatedAt: new Date().toISOString(),
         summary: primaryComputed.summary,
+        terminalSummary: terminalComputed.summary,
+        swarmSummary: swarmUserComputed.summary,
+        sourceBreakdown,
         equityCurve: primaryComputed.equity,
+        terminalEquityCurve: terminalComputed.equity,
         swarmEquityCurve: swarmComputed.equity,
         dailyBars: primaryComputed.daily,
         agentBreakdown,
@@ -437,9 +519,17 @@ export class AnalyticsService {
     return promise;
   }
 
-  public async getBalanceHistory(userAddress: string | undefined, range: AnalyticsRange = '30d'): Promise<{ equityCurve: EquityPoint[]; swarmEquityCurve: EquityPoint[] }> {
-    const analytics = await this.getAnalytics(userAddress, range);
-    return { equityCurve: analytics.equityCurve, swarmEquityCurve: analytics.swarmEquityCurve };
+  public async getBalanceHistory(
+    userAddress: string | undefined,
+    range: AnalyticsRange = '30d',
+    source: 'ALL' | 'SWARM' | 'TERMINAL' = 'ALL',
+  ): Promise<{ equityCurve: EquityPoint[]; swarmEquityCurve: EquityPoint[]; terminalEquityCurve?: EquityPoint[] }> {
+    const analytics = await this.getAnalytics(userAddress, range, source);
+    return {
+      equityCurve: analytics.equityCurve,
+      swarmEquityCurve: analytics.swarmEquityCurve,
+      terminalEquityCurve: analytics.terminalEquityCurve,
+    };
   }
 }
 

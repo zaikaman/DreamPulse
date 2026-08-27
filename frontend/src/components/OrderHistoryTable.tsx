@@ -160,6 +160,7 @@ export const OrderHistoryTable: React.FC<OrderHistoryTableProps> = ({
         const res = await apiClient.getOrders({
           userAddress: scope === 'MY_ORDERS' ? userAddress : undefined,
           swarmOnly: scope === 'ALL_SWARM',
+          source: 'SWARM',
           agentType: selectedAgent,
           outcome: selectedOutcome,
           search: debouncedSearch || undefined,
@@ -211,6 +212,7 @@ export const OrderHistoryTable: React.FC<OrderHistoryTableProps> = ({
         const res = await apiClient.getOrders({
           userAddress: scope === 'MY_ORDERS' ? userAddress : undefined,
           swarmOnly: scope === 'ALL_SWARM',
+          source: 'SWARM',
           page: 1,
           pageSize: 1,
         });
@@ -243,6 +245,7 @@ export const OrderHistoryTable: React.FC<OrderHistoryTableProps> = ({
         apiClient.getOrders({
           userAddress: s === 'MY_ORDERS' ? ua : undefined,
           swarmOnly: s === 'ALL_SWARM',
+          source: 'SWARM',
           agentType: ag,
           outcome: oc,
           search: ds || undefined,

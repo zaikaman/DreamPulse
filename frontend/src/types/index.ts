@@ -7,7 +7,9 @@ export type OutcomeType = 'YES' | 'NO' | 'VOID';
 export type OrderDirection = 'BUY' | 'SELL';
 export type OrderType = 'LIMIT' | 'IOC' | 'POST_ONLY';
 export type OrderStatus = 'PENDING' | 'FILLED' | 'PARTIALLY_FILLED' | 'CANCELLED' | 'REJECTED';
-export type AgentType = 'Volt' | 'Oracle' | 'Titan' | 'Sweeper';
+export type OrderSource = 'SWARM' | 'TERMINAL';
+export type SwarmAgentType = 'Volt' | 'Oracle' | 'Titan' | 'Sweeper';
+export type AgentType = SwarmAgentType | 'Manual';
 
 export interface Market {
   id: string;
@@ -80,6 +82,7 @@ export interface OrderExecution {
   sessionId?: string;
   marketId: string;
   agentType: AgentType;
+  source?: OrderSource;
   outcome: OutcomeType;
   direction: OrderDirection;
   orderType: OrderType;

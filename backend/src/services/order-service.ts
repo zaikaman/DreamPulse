@@ -23,6 +23,7 @@ import type {
   OrderExecution,
   SessionGrant,
   AgentType,
+  OrderSource,
   OutcomeType,
   OrderDirection,
   OrderType,
@@ -50,6 +51,7 @@ export interface QueryOrdersParams {
   searchQuery?: string;
   scope?: 'SWARM' | 'MY_ORDERS' | 'ALL';
   swarmOnly?: boolean;
+  source?: 'SWARM' | 'TERMINAL' | 'ALL';
   limit?: number;
   offset?: number;
 }
@@ -514,12 +516,19 @@ export class OrderService {
       const pnlVal = row.pnl !== null && row.pnl !== undefined ? Number(row.pnl) : 0;
       const isSettled = row.is_settled === true || (row.is_settled !== false && (row.settled_at != null || (row.pnl != null && pnlVal !== 0)));
 
+      const orderSource: OrderSource =
+        (row.source as OrderSource) ||
+        (row.agent_type === 'Manual' || row.agent_type === 'MANUAL' ? 'TERMINAL' : 'SWARM');
+      const agentType: AgentType =
+        row.agent_type === 'Manual' || row.agent_type === 'MANUAL' ? 'Manual' : (row.agent_type as AgentType) || 'Titan';
+
       const order: OrderExecution = {
         id: row.id,
         userAddress: row.user_address,
         sessionId: row.session_id || undefined,
         marketId: row.market_id,
-        agentType: row.agent_type as AgentType,
+        agentType,
+        source: orderSource,
         outcome: row.outcome as OutcomeType,
         direction: row.direction as OrderDirection,
         orderType: row.order_type as OrderType,
@@ -604,6 +613,7 @@ export class OrderService {
   public async executeAgentDecision(
     decision: IAgentDecision,
     session: SessionGrant,
+    source: OrderSource = 'SWARM',
   ): Promise<OrderExecution | null> {
     if (decision.action === 'HOLD' || decision.action === 'CANCEL_QUOTE') {
       return null;
@@ -928,12 +938,15 @@ export class OrderService {
     const actualLotSize = fillsQuantity > 0 ? fillsQuantity : quantizedSize;
     const actualTotalCost = Number((quantizedPrice * actualLotSize).toFixed(4));
 
+    const effectiveAgentType: AgentType = source === 'TERMINAL' ? 'Manual' : decision.agentType;
+
     const orderExecution: OrderExecution = {
       id: orderId,
       userAddress: session.userAddress,
       sessionId: session.id,
       marketId: decision.targetMarketId,
-      agentType: decision.agentType,
+      agentType: effectiveAgentType,
+      source,
       outcome,
       direction,
       orderType: decision.action === 'LIMIT_QUOTE' ? 'LIMIT' : 'IOC',
@@ -982,7 +995,7 @@ export class OrderService {
         orderId,
         marketId: decision.targetMarketId,
         userAddress: session.userAddress.toLowerCase(),
-        agentType: decision.agentType,
+        agentType: effectiveAgentType,
         outcome,
         direction,
         price: quantizedPrice,
@@ -996,7 +1009,8 @@ export class OrderService {
       userAddress: session.userAddress,
       orderId,
       marketId: decision.targetMarketId,
-      agentType: decision.agentType,
+      agentType: effectiveAgentType,
+      source,
       outcome: orderExecution.outcome,
       direction: orderExecution.direction,
       price: quantizedPrice,
@@ -1019,7 +1033,8 @@ export class OrderService {
           user_address: session.userAddress,
           session_id: isUuid ? session.id : null,
           market_id: decision.targetMarketId,
-          agent_type: decision.agentType,
+          agent_type: effectiveAgentType,
+          source,
           outcome: orderExecution.outcome,
           direction: orderExecution.direction,
           order_type: orderExecution.orderType,
@@ -1081,7 +1096,8 @@ export class OrderService {
         userAddress: params.userAddress,
         sessionId: '',
         marketId: params.marketId,
-        agentType: 'Titan',
+        agentType: 'Manual',
+        source: 'TERMINAL',
         outcome,
         direction,
         orderType,
@@ -1119,7 +1135,8 @@ export class OrderService {
         userAddress: params.userAddress,
         orderId,
         marketId: params.marketId,
-        agentType: 'Titan',
+        agentType: 'Manual',
+        source: 'TERMINAL',
         outcome,
         direction,
         price: quantizedPrice,
@@ -1137,7 +1154,8 @@ export class OrderService {
           user_address: params.userAddress,
           session_id: null,
           market_id: params.marketId,
-          agent_type: 'Titan',
+          agent_type: 'Manual',
+          source: 'TERMINAL',
           outcome,
           direction,
           order_type: orderType,
@@ -1250,7 +1268,8 @@ export class OrderService {
         userAddress: params.userAddress,
         sessionId: session.id,
         marketId: params.marketId,
-        agentType: 'Titan',
+        agentType: 'Manual',
+        source: 'TERMINAL',
         outcome,
         direction,
         orderType,
@@ -1272,7 +1291,8 @@ export class OrderService {
         userAddress: params.userAddress,
         orderId,
         marketId: params.marketId,
-        agentType: 'Titan',
+        agentType: 'Manual',
+        source: 'TERMINAL',
         outcome,
         direction,
         price: quantizedPrice,
@@ -1288,7 +1308,8 @@ export class OrderService {
           user_address: params.userAddress,
           session_id: session.id,
           market_id: params.marketId,
-          agent_type: 'Titan',
+          agent_type: 'Manual',
+          source: 'TERMINAL',
           outcome,
           direction,
           order_type: orderType,
@@ -1318,7 +1339,7 @@ export class OrderService {
       rationale: `Trader Cockpit user execution (${orderType} ${outcome}) by ${params.userAddress}`,
     };
 
-    const executed = await this.executeAgentDecision(decision, session as unknown as SessionGrant);
+    const executed = await this.executeAgentDecision(decision, session as unknown as SessionGrant, 'TERMINAL');
     if (!executed) {
       throw new Error(`Order placement could not be completed on-chain. Please verify collateral allowance and try again.`);
     }
@@ -1332,10 +1353,18 @@ export class OrderService {
   public getOrders(params?: QueryOrdersParams): OrderExecution[] {
     let result = [...this.orders];
 
-    if (params?.swarmOnly || params?.scope === 'SWARM') {
-      const opAddr = (operatorAccount?.address || SOMNIA_ADDRESSES.operatorAccount).toLowerCase();
-      result = result.filter((o) => o.userAddress && o.userAddress.toLowerCase() === opAddr);
-    } else if (params?.userAddress) {
+    // Source filtering (TERMINAL vs SWARM)
+    if (params?.source === 'TERMINAL') {
+      result = result.filter((o) => o.source === 'TERMINAL' || o.agentType === 'Manual');
+    } else if (params?.source === 'SWARM' || params?.swarmOnly || params?.scope === 'SWARM') {
+      result = result.filter((o) => (o.source !== 'TERMINAL' && o.agentType !== 'Manual'));
+      if (params?.swarmOnly || params?.scope === 'SWARM') {
+        const opAddr = (operatorAccount?.address || SOMNIA_ADDRESSES.operatorAccount).toLowerCase();
+        result = result.filter((o) => o.userAddress && o.userAddress.toLowerCase() === opAddr);
+      }
+    }
+
+    if (params?.userAddress && !params?.swarmOnly && params?.scope !== 'SWARM') {
       try {
         if (!isAddress(params.userAddress)) return [];
         const normalized = getAddress(params.userAddress).toLowerCase();
@@ -1414,6 +1443,7 @@ export class OrderService {
     searchQuery?: string;
     scope?: 'SWARM' | 'MY_ORDERS' | 'ALL';
     swarmOnly?: boolean;
+    source?: 'SWARM' | 'TERMINAL' | 'ALL';
     limit?: number;
     page?: number;
     pageSize?: number;
@@ -1435,6 +1465,7 @@ export class OrderService {
       searchQuery: params?.searchQuery,
       scope: params?.scope,
       swarmOnly: params?.swarmOnly,
+      source: params?.source,
       limit: undefined,
       offset: undefined,
     });

@@ -78,6 +78,7 @@ CREATE TABLE IF NOT EXISTS public.orders (
     session_id UUID REFERENCES public.sessions(id) ON DELETE SET NULL,
     market_id VARCHAR(66) REFERENCES public.markets(id) ON DELETE CASCADE,
     agent_type VARCHAR(20) NOT NULL,
+    source VARCHAR(20) NOT NULL DEFAULT 'SWARM', -- 'SWARM', 'TERMINAL'
     outcome VARCHAR(10) NOT NULL, -- 'YES', 'NO'
     direction VARCHAR(10) NOT NULL, -- 'BUY', 'SELL'
     order_type VARCHAR(20) NOT NULL, -- 'LIMIT', 'IOC', 'POST_ONLY'

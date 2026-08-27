@@ -698,7 +698,7 @@ apiRouter.post('/swarm/reset', async (req: Request, res: Response) => {
 // 4. Order Execution & History Endpoints
 // ------------------------------------------------------------------------------
 apiRouter.get('/orders', (req: Request, res: Response) => {
-  const { userAddress, agentType, status, outcome, marketId, limit, page, pageSize, search, swarmOnly, scope } = req.query;
+  const { userAddress, agentType, status, outcome, marketId, limit, page, pageSize, search, swarmOnly, scope, source } = req.query;
 
   const result = orderService.queryOrdersPaginated({
     userAddress: typeof userAddress === 'string' ? userAddress : undefined,
@@ -709,6 +709,7 @@ apiRouter.get('/orders', (req: Request, res: Response) => {
     searchQuery: typeof search === 'string' ? search : undefined,
     scope: scope === 'SWARM' || scope === 'MY_ORDERS' || scope === 'ALL' ? scope : undefined,
     swarmOnly: swarmOnly === 'true' || scope === 'SWARM',
+    source: source === 'SWARM' || source === 'TERMINAL' || source === 'ALL' ? source : undefined,
     limit: limit !== undefined ? parseInt(limit as string, 10) : undefined,
     page: page !== undefined ? parseInt(page as string, 10) : undefined,
     pageSize: pageSize !== undefined ? parseInt(pageSize as string, 10) : undefined,
@@ -938,12 +939,13 @@ apiRouter.get('/sweeper/history', (req: Request, res: Response) => {
 // ------------------------------------------------------------------------------
 apiRouter.get('/analytics/equity', async (req: Request, res: Response) => {
   try {
-    const { userAddress, range } = req.query;
+    const { userAddress, range, source } = req.query;
     const parsedRange = (typeof range === 'string' ? range : '30d') as AnalyticsRange;
     const allowed: AnalyticsRange[] = ['24h', '7d', '30d', '90d', 'ALL'];
     const finalRange = allowed.includes(parsedRange) ? parsedRange : '30d';
+    const finalSource = (source === 'SWARM' || source === 'TERMINAL' || source === 'ALL' ? source : 'ALL') as 'ALL' | 'SWARM' | 'TERMINAL';
     const targetAddress = typeof userAddress === 'string' && userAddress.trim().length > 0 ? userAddress.trim() : undefined;
-    const data = await analyticsService.getAnalytics(targetAddress, finalRange);
+    const data = await analyticsService.getAnalytics(targetAddress, finalRange, finalSource);
     return res.json({ success: true, data });
   } catch (err: any) {
     return res.status(500).json({ success: false, error: err.message || 'Failed to fetch analytics' });
@@ -952,12 +954,13 @@ apiRouter.get('/analytics/equity', async (req: Request, res: Response) => {
 
 apiRouter.get('/analytics/balance-history', async (req: Request, res: Response) => {
   try {
-    const { userAddress, range } = req.query;
+    const { userAddress, range, source } = req.query;
     const parsedRange = (typeof range === 'string' ? range : '30d') as AnalyticsRange;
     const allowed: AnalyticsRange[] = ['24h', '7d', '30d', '90d', 'ALL'];
     const finalRange = allowed.includes(parsedRange) ? parsedRange : '30d';
+    const finalSource = (source === 'SWARM' || source === 'TERMINAL' || source === 'ALL' ? source : 'ALL') as 'ALL' | 'SWARM' | 'TERMINAL';
     const targetAddress = typeof userAddress === 'string' && userAddress.trim().length > 0 ? userAddress.trim() : undefined;
-    const data = await analyticsService.getBalanceHistory(targetAddress, finalRange);
+    const data = await analyticsService.getBalanceHistory(targetAddress, finalRange, finalSource);
     return res.json({ success: true, data });
   } catch (err: any) {
     return res.status(500).json({ success: false, error: err.message || 'Failed to fetch balance history' });

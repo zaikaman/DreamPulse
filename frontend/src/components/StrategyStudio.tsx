@@ -37,7 +37,9 @@ const MARKET_OPTIONS = [
   { symbol: 'DOGE/USD', name: 'DOGE/USD', label: '5m Binary Contracts', badge: 'DOGE · 5m', color: '#d97706' },
 ];
 
-const STRATEGY_THEME: Record<Exclude<AgentType, 'Sweeper'>, { color: string; bg: string; border: string; iconBg: string; Icon: React.ElementType; tag: string; desc: string }> = {
+export type BacktestAgentType = 'Volt' | 'Oracle' | 'Titan';
+
+const STRATEGY_THEME: Record<BacktestAgentType, { color: string; bg: string; border: string; iconBg: string; Icon: React.ElementType; tag: string; desc: string }> = {
   Volt: { color: '#f59e0b', bg: 'rgba(245,158,11,0.08)', border: 'rgba(245,158,11,0.22)', iconBg: 'rgba(245,158,11,0.12)', Icon: BoltIcon, tag: 'Latency Drift', desc: 'Capitalizes on spot velocity drift jumps before resting order book quotes update.' },
   Oracle: { color: '#2dd4bf', bg: 'rgba(45,212,191,0.08)', border: 'rgba(45,212,191,0.22)', iconBg: 'rgba(45,212,191,0.12)', Icon: SparklesIcon, tag: 'Black-Scholes Φ(z)', desc: 'Exploits pricing divergences against theoretical cumulative normal distribution pricing.' },
   Titan: { color: '#a78bfa', bg: 'rgba(167,139,250,0.08)', border: 'rgba(167,139,250,0.22)', iconBg: 'rgba(167,139,250,0.12)', Icon: AdjustmentsHorizontalIcon, tag: 'Avellaneda-Stoikov', desc: 'Continuous two-sided liquidity provision with dynamic inventory aversion skewing.' },
@@ -68,7 +70,10 @@ export const StrategyStudio: React.FC<StrategyStudioProps> = ({
   const { isGuest, isTrader, isOperator } = useUserRole(wallet);
   const { isLoading, currentResult, runSimulation, deployToSwarm } = useBacktest(wallet.address || undefined);
 
-  const [selectedAgent, setSelectedAgent] = useState<AgentType>(initialConfig?.agentType || 'Volt');
+  const initialAgent: BacktestAgentType = (initialConfig?.agentType === 'Oracle' || initialConfig?.agentType === 'Titan')
+    ? initialConfig.agentType
+    : 'Volt';
+  const [selectedAgent, setSelectedAgent] = useState<BacktestAgentType>(initialAgent);
   const [symbol, setSymbol] = useState<string>('BTC/USD');
   const [isMarketDropdownOpen, setIsMarketDropdownOpen] = useState<boolean>(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
@@ -128,7 +133,9 @@ export const StrategyStudio: React.FC<StrategyStudioProps> = ({
 
   useEffect(() => {
     if (initialConfig) {
-      if (initialConfig.agentType) setSelectedAgent(initialConfig.agentType);
+      if (initialConfig.agentType === 'Volt' || initialConfig.agentType === 'Oracle' || initialConfig.agentType === 'Titan') {
+        setSelectedAgent(initialConfig.agentType);
+      }
       if (initialConfig.config) {
         if (initialConfig.config.driftThreshold !== undefined) setDriftThreshold(initialConfig.config.driftThreshold);
         if (initialConfig.config.minEdge !== undefined) setMinEdge(initialConfig.config.minEdge);
@@ -288,7 +295,7 @@ export const StrategyStudio: React.FC<StrategyStudioProps> = ({
   const drawdownLinePath = drawdownPathPoints.length > 0 ? `M ${drawdownPathPoints.join(' L ')}` : '';
   const drawdownAreaPath = drawdownPathPoints.length > 0 ? `M ${padding},${padding} L ${drawdownPathPoints.join(' L ')} L ${svgWidth - padding},${padding} Z` : '';
 
-  const theme = (STRATEGY_THEME as Record<string, typeof STRATEGY_THEME[Exclude<AgentType, 'Sweeper'>]>)[selectedAgent] ?? STRATEGY_THEME.Volt;
+  const theme = STRATEGY_THEME[selectedAgent] ?? STRATEGY_THEME.Volt;
   const lotColor = theme.color;
 
   return (
@@ -320,7 +327,7 @@ export const StrategyStudio: React.FC<StrategyStudioProps> = ({
 
         {/* Strategy Selector — 3 accent cards */}
         <div className="p-3.5 grid grid-cols-1 md:grid-cols-3 gap-3">
-          {(Object.keys(STRATEGY_THEME) as Array<Exclude<AgentType, 'Sweeper'>>).map((key) => {
+          {(Object.keys(STRATEGY_THEME) as Array<BacktestAgentType>).map((key) => {
             const th = STRATEGY_THEME[key];
             const Icon = th.Icon;
             const isActive = selectedAgent === key;

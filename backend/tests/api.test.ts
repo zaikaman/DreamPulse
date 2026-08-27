@@ -147,7 +147,18 @@ describe('Express REST API Endpoints', () => {
     expect(res.body.data.lotSize).toBe(20);
     expect(res.body.data.outcome).toBe('YES');
     expect(res.body.data.status).toBe('FILLED');
+    expect(res.body.data.source).toBe('TERMINAL');
+    expect(res.body.data.agentType).toBe('Manual');
     expect(res.body.data.txHash).toBe(payload.txHash);
+
+    // Verify GET /api/v1/orders with source filter
+    const termRes = await request(app).get(`/api/v1/orders?userAddress=${payload.userAddress}&source=TERMINAL`);
+    expect(termRes.status).toBe(200);
+    expect(termRes.body.data.some((o: any) => o.id === res.body.data.id)).toBe(true);
+
+    const swarmRes = await request(app).get(`/api/v1/orders?userAddress=${payload.userAddress}&source=SWARM`);
+    expect(swarmRes.status).toBe(200);
+    expect(swarmRes.body.data.some((o: any) => o.id === res.body.data.id)).toBe(false);
   });
 
   it('POST /api/v1/swarm/toggle-copytrade enables and disables autonomous copy-trading', async () => {

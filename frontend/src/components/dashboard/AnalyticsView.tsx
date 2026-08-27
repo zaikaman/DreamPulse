@@ -21,8 +21,15 @@ import {
   PresentationChartLineIcon,
   Squares2X2Icon,
   FireIcon,
+  CommandLineIcon,
 } from '@heroicons/react/24/outline';
-import { useAnalytics, type AnalyticsRange, type EquityPoint, type DailyBar } from '../../hooks/useAnalytics.js';
+import {
+  useAnalytics,
+  type AnalyticsRange,
+  type AnalyticsSource,
+  type EquityPoint,
+  type DailyBar,
+} from '../../hooks/useAnalytics.js';
 import type { WalletState } from '../../hooks/useSessionKey.js';
 import { useUserRole } from '../../hooks/useUserRole.js';
 import { Spinner } from '../ui/Spinner.js';
@@ -190,7 +197,7 @@ interface AnalyticsViewProps {
 
 export const AnalyticsView: React.FC<AnalyticsViewProps> = ({ wallet, onConnectWallet }) => {
   const { isGuest, isOperator } = useUserRole(wallet);
-  const { data, isLoading, error, range, setRange, refresh } = useAnalytics(wallet, '30d');
+  const { data, isLoading, error, range, setRange, source, setSource, refresh } = useAnalytics(wallet, '30d');
   const [showSwarm, setShowSwarm] = useState(true);
   const [ledgerPage, setLedgerPage] = useState(1);
   const [ledgerPageSize, setLedgerPageSize] = useState(10);
@@ -200,10 +207,16 @@ export const AnalyticsView: React.FC<AnalyticsViewProps> = ({ wallet, onConnectW
     { id: '24h', label: '24H' }, { id: '7d', label: '7D' }, { id: '30d', label: '30D' }, { id: '90d', label: '90D' }, { id: 'ALL', label: 'ALL' },
   ];
 
+  const sourceOptions: { id: AnalyticsSource; label: string; Icon: React.ComponentType<{ className?: string }> }[] = [
+    { id: 'ALL', label: 'All Activity', Icon: Squares2X2Icon },
+    { id: 'TERMINAL', label: 'Trading Terminal', Icon: CommandLineIcon },
+    { id: 'SWARM', label: 'Swarm AI Copy-Trades', Icon: CpuChipIcon },
+  ];
+
   const summary = data?.summary;
   const ledgerRows = useMemo(() => (!data?.ledger ? [] : [...data.ledger].reverse()), [data?.ledger]);
   const totalLedgerPages = Math.max(1, Math.ceil(ledgerRows.length / ledgerPageSize));
-  useEffect(() => { setLedgerPage(1); }, [range]);
+  useEffect(() => { setLedgerPage(1); }, [range, source]);
   useEffect(() => { if (ledgerPage > totalLedgerPages) setLedgerPage(totalLedgerPages); }, [totalLedgerPages, ledgerPage]);
   const pagedLedger = useMemo(() => { const start = (ledgerPage - 1) * ledgerPageSize; return ledgerRows.slice(start, start + ledgerPageSize); }, [ledgerRows, ledgerPage, ledgerPageSize]);
 
@@ -213,7 +226,7 @@ export const AnalyticsView: React.FC<AnalyticsViewProps> = ({ wallet, onConnectW
     const rows = data.ledger.map((r) => `${r.date},${r.startBalance},${r.endBalance},${r.dailyPnl},${r.trades},${r.wins},${r.losses},${r.volume}`).join('\n');
     const blob = new Blob([header + rows], { type: 'text/csv' });
     const url = URL.createObjectURL(blob);
-    const a = document.createElement('a'); a.href = url; a.download = `dreampulse-analytics-${data.range}-${new Date().toISOString().slice(0, 10)}.csv`; a.click(); URL.revokeObjectURL(url);
+    const a = document.createElement('a'); a.href = url; a.download = `dreampulse-analytics-${(data.source || 'all').toLowerCase()}-${data.range}-${new Date().toISOString().slice(0, 10)}.csv`; a.click(); URL.revokeObjectURL(url);
   };
 
   if (isLoading && !data) {
@@ -258,8 +271,18 @@ export const AnalyticsView: React.FC<AnalyticsViewProps> = ({ wallet, onConnectW
           </div>
           <div>
             <div className="flex items-center gap-2 flex-wrap">
-              <h2 className="text-sm font-bold tracking-tight text-foreground">Analytics & Balance Transparency</h2>
+              <h2 className="text-sm font-bold tracking-tight text-foreground">Analytics & Performance</h2>
               <Badge variant="outline" className="font-mono text-[10px] px-1.5 py-0 bg-secondary/30 border-border/40 text-muted-foreground">LIVE LEDGER</Badge>
+              {source === 'TERMINAL' && (
+                <Badge variant="outline" className="font-mono text-[10px] px-1.5 py-0 bg-brand-cyan/10 border-brand-cyan/30 text-brand-cyan">
+                  TRADING TERMINAL
+                </Badge>
+              )}
+              {source === 'SWARM' && (
+                <Badge variant="outline" className="font-mono text-[10px] px-1.5 py-0 bg-amber-500/10 border-amber-500/30 text-amber-400">
+                  SWARM COPY-TRADES
+                </Badge>
+              )}
               <span className="text-[10px] font-mono text-muted-foreground hidden sm:inline">Verifiable per-settlement PnL • {data?.generatedAt ? new Date(data.generatedAt).toLocaleTimeString() : ''}</span>
             </div>
           </div>
@@ -267,13 +290,56 @@ export const AnalyticsView: React.FC<AnalyticsViewProps> = ({ wallet, onConnectW
         <div className="flex items-center gap-2 flex-wrap">
           <div className="flex items-center gap-1 bg-secondary/30 p-0.5 rounded-lg border border-border/40">
             {rangeOptions.map((r) => (
-              <button key={r.id} type="button" onClick={() => { setRange(r.id); setLedgerPage(1); }} className={cn('px-2.5 py-1 rounded-md text-[11px] font-semibold transition-colors', range === r.id ? 'bg-primary text-primary-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground')}>
+              <button key={r.id} type="button" onClick={() => { setRange(r.id); setLedgerPage(1); }} className={cn('px-2.5 py-1 rounded-md text-[11px] font-semibold transition-colors cursor-pointer', range === r.id ? 'bg-primary text-primary-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground')}>
                 {r.label}
               </button>
             ))}
           </div>
-          <button type="button" onClick={() => refresh()} className="w-7 h-7 grid place-items-center rounded-lg border bg-secondary/30 border-border/50 text-muted-foreground hover:text-foreground"><ArrowPathIcon className="w-3.5 h-3.5" /></button>
-          <button type="button" onClick={exportCsv} className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border bg-secondary/30 border-border/50 text-xs font-medium text-muted-foreground hover:text-foreground"><ArrowDownTrayIcon className="w-3.5 h-3.5" /> Export</button>
+          <button type="button" onClick={() => refresh()} className="w-7 h-7 grid place-items-center rounded-lg border bg-secondary/30 border-border/50 text-muted-foreground hover:text-foreground cursor-pointer" title="Refresh Analytics"><ArrowPathIcon className="w-3.5 h-3.5" /></button>
+          <button type="button" onClick={exportCsv} className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border bg-secondary/30 border-border/50 text-xs font-medium text-muted-foreground hover:text-foreground cursor-pointer"><ArrowDownTrayIcon className="w-3.5 h-3.5" /> Export</button>
+        </div>
+      </div>
+
+      {/* Source Segment Selector */}
+      <div className="flex items-center justify-between gap-3 p-1.5 rounded-xl border bg-secondary/15 border-border/40 flex-wrap flex-shrink-0">
+        <div className="flex items-center gap-1">
+          <span className="text-[11px] font-mono font-semibold text-muted-foreground uppercase px-2">Order Source:</span>
+          {sourceOptions.map((s) => (
+            <button
+              key={s.id}
+              type="button"
+              onClick={() => {
+                setSource(s.id);
+                setLedgerPage(1);
+              }}
+              className={cn(
+                'inline-flex items-center gap-1.5 px-3 py-1 rounded-lg text-xs font-semibold transition-all cursor-pointer',
+                source === s.id
+                  ? 'bg-primary text-primary-foreground shadow-xs'
+                  : 'text-muted-foreground hover:text-foreground hover:bg-secondary/30'
+              )}
+            >
+              <s.Icon className="w-3.5 h-3.5" />
+              <span>{s.label}</span>
+              {s.id === 'TERMINAL' && data?.sourceBreakdown?.find(b => b.source === 'TERMINAL')?.trades !== undefined && (
+                <span className={cn("px-1.5 py-0.2 rounded-full text-[9px] font-mono", source === 'TERMINAL' ? "bg-black/20 text-white" : "bg-brand-cyan/15 text-brand-cyan")}>
+                  {data.sourceBreakdown.find(b => b.source === 'TERMINAL')?.trades}
+                </span>
+              )}
+              {s.id === 'SWARM' && data?.sourceBreakdown?.find(b => b.source === 'SWARM')?.trades !== undefined && (
+                <span className={cn("px-1.5 py-0.2 rounded-full text-[9px] font-mono", source === 'SWARM' ? "bg-black/20 text-white" : "bg-amber-500/15 text-amber-400")}>
+                  {data.sourceBreakdown.find(b => b.source === 'SWARM')?.trades}
+                </span>
+              )}
+            </button>
+          ))}
+        </div>
+
+        {/* Source description pill */}
+        <div className="text-[11px] font-mono text-muted-foreground px-2 hidden md:flex items-center gap-2">
+          {source === 'ALL' && <span>Showing all portfolio activity (Terminal orders + Swarm copy-trades)</span>}
+          {source === 'TERMINAL' && <span className="text-brand-cyan font-semibold">Exclusively showing manual discretionary orders from Trader Cockpit</span>}
+          {source === 'SWARM' && <span className="text-amber-400 font-semibold">Exclusively showing autonomous Swarm AI copy-trades & mirror fills</span>}
         </div>
       </div>
 
@@ -284,7 +350,100 @@ export const AnalyticsView: React.FC<AnalyticsViewProps> = ({ wallet, onConnectW
             <EyeIcon className="w-4 h-4 text-muted-foreground" />
             <span><strong className="text-foreground">Watch-Only:</strong> Showing <strong className="text-foreground">Protocol Swarm (Operator)</strong> verified. Connect to overlay your curve.</span>
           </div>
-          {onConnectWallet && <button type="button" onClick={onConnectWallet} className="inline-flex items-center gap-1.5 px-3 py-1 rounded-lg bg-primary text-primary-foreground text-xs font-bold"><WalletIcon className="w-3.5 h-3.5" /> Connect</button>}
+          {onConnectWallet && <button type="button" onClick={onConnectWallet} className="inline-flex items-center gap-1.5 px-3 py-1 rounded-lg bg-primary text-primary-foreground text-xs font-bold cursor-pointer"><WalletIcon className="w-3.5 h-3.5" /> Connect</button>}
+        </div>
+      )}
+
+      {/* Comparative Source Performance Matrix */}
+      {data?.sourceBreakdown && data.sourceBreakdown.length >= 2 && source === 'ALL' && !isGuest && (
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-3 flex-shrink-0">
+          <div className="terminal-panel p-3 border-border/50 bg-secondary/10 flex flex-col gap-2">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-1.5 text-xs font-bold text-brand-cyan">
+                <CommandLineIcon className="w-4 h-4" />
+                <span>Trader Cockpit (Manual Trades)</span>
+              </div>
+              <Badge variant="outline" className="text-[9px] font-mono border-brand-cyan/30 text-brand-cyan bg-brand-cyan/5">
+                DISCRETIONARY
+              </Badge>
+            </div>
+            {(() => {
+              const term = data.sourceBreakdown.find(b => b.source === 'TERMINAL');
+              const pnl = term?.pnl ?? 0;
+              return (
+                <div className="grid grid-cols-4 gap-2 pt-1">
+                  <div>
+                    <div className="text-[10px] text-muted-foreground uppercase font-mono">Net PnL</div>
+                    <div className="text-sm font-mono font-bold" style={{ color: pnl >= 0 ? 'var(--trade-yes)' : 'var(--trade-no)' }}>
+                      {pnl >= 0 ? '+' : ''}{pnl.toFixed(2)}
+                    </div>
+                  </div>
+                  <div>
+                    <div className="text-[10px] text-muted-foreground uppercase font-mono">Win Rate</div>
+                    <div className="text-sm font-mono font-bold text-foreground">
+                      {term?.winRate.toFixed(1) ?? '0.0'}%
+                    </div>
+                  </div>
+                  <div>
+                    <div className="text-[10px] text-muted-foreground uppercase font-mono">Fills</div>
+                    <div className="text-sm font-mono font-bold text-foreground">
+                      {term?.trades ?? 0}
+                    </div>
+                  </div>
+                  <div>
+                    <div className="text-[10px] text-muted-foreground uppercase font-mono">Volume</div>
+                    <div className="text-sm font-mono font-bold text-foreground">
+                      ${term?.volume.toFixed(1) ?? '0.0'}
+                    </div>
+                  </div>
+                </div>
+              );
+            })()}
+          </div>
+
+          <div className="terminal-panel p-3 border-border/50 bg-secondary/10 flex flex-col gap-2">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-1.5 text-xs font-bold text-amber-400">
+                <CpuChipIcon className="w-4 h-4" />
+                <span>Swarm AI Copy-Trades (Mirror)</span>
+              </div>
+              <Badge variant="outline" className="text-[9px] font-mono border-amber-500/30 text-amber-400 bg-amber-500/5">
+                AUTONOMOUS
+              </Badge>
+            </div>
+            {(() => {
+              const swarm = data.sourceBreakdown.find(b => b.source === 'SWARM');
+              const pnl = swarm?.pnl ?? 0;
+              return (
+                <div className="grid grid-cols-4 gap-2 pt-1">
+                  <div>
+                    <div className="text-[10px] text-muted-foreground uppercase font-mono">Net PnL</div>
+                    <div className="text-sm font-mono font-bold" style={{ color: pnl >= 0 ? 'var(--trade-yes)' : 'var(--trade-no)' }}>
+                      {pnl >= 0 ? '+' : ''}{pnl.toFixed(2)}
+                    </div>
+                  </div>
+                  <div>
+                    <div className="text-[10px] text-muted-foreground uppercase font-mono">Win Rate</div>
+                    <div className="text-sm font-mono font-bold text-foreground">
+                      {swarm?.winRate.toFixed(1) ?? '0.0'}%
+                    </div>
+                  </div>
+                  <div>
+                    <div className="text-[10px] text-muted-foreground uppercase font-mono">Fills</div>
+                    <div className="text-sm font-mono font-bold text-foreground">
+                      {swarm?.trades ?? 0}
+                    </div>
+                  </div>
+                  <div>
+                    <div className="text-[10px] text-muted-foreground uppercase font-mono">Volume</div>
+                    <div className="text-sm font-mono font-bold text-foreground">
+                      ${swarm?.volume.toFixed(1) ?? '0.0'}
+                    </div>
+                  </div>
+                </div>
+              );
+            })()}
+          </div>
         </div>
       )}
 
@@ -392,19 +551,25 @@ export const AnalyticsView: React.FC<AnalyticsViewProps> = ({ wallet, onConnectW
                     const maxAbs = Math.max(...(isGuest ? data?.swarmAgentBreakdown ?? [] : data?.agentBreakdown ?? []).map((x) => Math.abs(x.pnl)), 1);
                     const isPos = a.pnl >= 0;
                     const barPct = Math.min(100, (Math.abs(a.pnl) / maxAbs) * 100);
-                    const color = a.agentType === 'Volt' ? '#fbbf24' : a.agentType === 'Oracle' ? '#2dd4bf' : a.agentType === 'Titan' ? '#a78bfa' : '#6ee7b7';
-                    const Icon = a.agentType === 'Volt' ? BoltIcon : a.agentType === 'Oracle' ? CpuChipIcon : a.agentType === 'Titan' ? ShieldCheckIcon : ChartBarIcon;
+                    const isManual = a.agentType === 'Manual';
+                    const color = isManual ? '#38bdf8' : a.agentType === 'Volt' ? '#fbbf24' : a.agentType === 'Oracle' ? '#2dd4bf' : a.agentType === 'Titan' ? '#a78bfa' : '#6ee7b7';
+                    const Icon = isManual ? CommandLineIcon : a.agentType === 'Volt' ? BoltIcon : a.agentType === 'Oracle' ? CpuChipIcon : a.agentType === 'Titan' ? ShieldCheckIcon : ChartBarIcon;
+                    const displayName = isManual ? 'MANUAL (TERMINAL)' : a.agentType.toUpperCase();
                     return (
                       <div key={a.agentType} className="flex flex-col gap-1.5">
                         <div className="flex items-center justify-between">
-                          <div className="inline-flex items-center gap-1.5 text-[11px] font-bold" style={{ color }}><Icon className="w-3 h-3" /> {a.agentType.toUpperCase()} <span className="text-[10px] font-medium text-muted-foreground font-mono">{a.trades} fills • {a.winRate.toFixed(0)}% WR</span></div>
+                          <div className="inline-flex items-center gap-1.5 text-[11px] font-bold" style={{ color }}>
+                            <Icon className="w-3.5 h-3.5" />
+                            <span>{displayName}</span>
+                            <span className="text-[10px] font-medium text-muted-foreground font-mono">{a.trades} fills • {a.winRate.toFixed(0)}% WR</span>
+                          </div>
                           <span className="text-xs font-mono font-bold" style={{ color: isPos ? 'var(--trade-yes)' : 'var(--trade-no)' }}>{isPos ? '+' : ''}{a.pnl.toFixed(2)} tUSDC</span>
                         </div>
                         <div className="h-1.5 bg-secondary/30 rounded-full overflow-hidden relative">
                           <div className="absolute top-0 bottom-0 w-px bg-border/50 left-1/2" />
                           <div style={{ position: 'absolute', left: isPos ? '50%' : `calc(50% - ${barPct / 2}%)`, width: `${barPct / 2}%`, height: '100%', background: isPos ? 'var(--trade-yes)' : 'var(--trade-no)', borderRadius: 999 }} />
                         </div>
-                        <div className="flex justify-between text-[10px] font-mono text-muted-foreground"><span>{a.wins}W / {a.losses}L</span><span>Vol {a.volume.toFixed(1)}</span></div>
+                        <div className="flex justify-between text-[10px] font-mono text-muted-foreground"><span>{a.wins}W / {a.losses}L</span><span>Vol ${a.volume.toFixed(1)}</span></div>
                       </div>
                     );
                   })}

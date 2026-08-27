@@ -4,6 +4,7 @@ import type { WalletState } from './useSessionKey.js';
 import { telemetryClient } from '../services/telemetry-client.js';
 
 export type AnalyticsRange = '24h' | '7d' | '30d' | '90d' | 'ALL';
+export type AnalyticsSource = 'ALL' | 'SWARM' | 'TERMINAL';
 
 export interface EquityPoint {
   date: string;
@@ -35,6 +36,17 @@ export interface AgentBreakdown {
   winRate: number;
   volume: number;
   avgPnl: number;
+}
+
+export interface SourceBreakdown {
+  source: 'ALL' | 'SWARM' | 'TERMINAL';
+  label: string;
+  pnl: number;
+  trades: number;
+  wins: number;
+  losses: number;
+  winRate: number;
+  volume: number;
 }
 
 export interface LedgerRow {
@@ -75,11 +87,16 @@ export interface AnalyticsSummary {
 
 export interface AnalyticsData {
   range: AnalyticsRange;
+  source: AnalyticsSource;
   userAddress: string;
   isOperator: boolean;
   generatedAt: string;
   summary: AnalyticsSummary;
+  terminalSummary?: AnalyticsSummary;
+  swarmSummary?: AnalyticsSummary;
+  sourceBreakdown: SourceBreakdown[];
   equityCurve: EquityPoint[];
+  terminalEquityCurve?: EquityPoint[];
   swarmEquityCurve: EquityPoint[];
   dailyBars: DailyBar[];
   agentBreakdown: AgentBreakdown[];
@@ -97,15 +114,22 @@ export interface UseAnalyticsReturn {
   error: string | null;
   range: AnalyticsRange;
   setRange: (r: AnalyticsRange) => void;
+  source: AnalyticsSource;
+  setSource: (s: AnalyticsSource) => void;
   refresh: () => Promise<void>;
 }
 
 const LOCAL_ANALYTICS_PREFIX = 'dreampulse_analytics_';
 
-export function useAnalytics(wallet?: WalletState, initialRange: AnalyticsRange = '30d'): UseAnalyticsReturn {
+export function useAnalytics(
+  wallet?: WalletState,
+  initialRange: AnalyticsRange = '30d',
+  initialSource: AnalyticsSource = 'ALL',
+): UseAnalyticsReturn {
   const address = wallet?.address || undefined;
   const [range, setRange] = useState<AnalyticsRange>(initialRange);
-  const cacheKey = `${LOCAL_ANALYTICS_PREFIX}${address || 'swarm'}_${range}`;
+  const [source, setSource] = useState<AnalyticsSource>(initialSource);
+  const cacheKey = `${LOCAL_ANALYTICS_PREFIX}${address || 'swarm'}_${range}_${source}`;
 
   const [data, setData] = useState<AnalyticsData | null>(() => {
     try {
@@ -120,7 +144,7 @@ export function useAnalytics(wallet?: WalletState, initialRange: AnalyticsRange 
   const inFlightRef = useRef(false);
   const lastFetchAtRef = useRef(0);
 
-  // Sync cache if active wallet or range changes
+  // Sync cache if active wallet, range, or source changes
   useEffect(() => {
     try {
       const cached = localStorage.getItem(cacheKey);
@@ -141,7 +165,7 @@ export function useAnalytics(wallet?: WalletState, initialRange: AnalyticsRange 
     lastFetchAtRef.current = now;
     setError(null);
     try {
-      const res = await apiClient.getAnalytics(address, range);
+      const res = await apiClient.getAnalytics(address, range, source);
       if (res.success && res.data) {
         setData(res.data as AnalyticsData);
         try {
@@ -154,7 +178,7 @@ export function useAnalytics(wallet?: WalletState, initialRange: AnalyticsRange 
       inFlightRef.current = false;
       setIsLoading(false);
     }
-  }, [address, range, cacheKey]);
+  }, [address, range, source, cacheKey]);
 
   useEffect(() => {
     fetchData(true);
@@ -181,5 +205,5 @@ export function useAnalytics(wallet?: WalletState, initialRange: AnalyticsRange 
     };
   }, [fetchData]);
 
-  return { data, isLoading, error, range, setRange, refresh: () => fetchData(true) };
+  return { data, isLoading, error, range, setRange, source, setSource, refresh: () => fetchData(true) };
 }

@@ -282,6 +282,7 @@ export class TelemetryWebSocketServer {
     orderId: string;
     marketId: string;
     agentType?: string;
+    source?: string;
     outcome: string;
     direction: string;
     price: number;
