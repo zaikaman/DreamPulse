@@ -64,10 +64,17 @@ export const Sidebar: React.FC<SidebarProps> = ({
       icon: ViewfinderCircleIcon,
     },
     {
-      id: "Markets & Depth" as DashboardViewType,
-      label: "Order Book & Depth",
-      description: "Microsecond CLOB Ladders & Fills",
+      id: "Markets" as DashboardViewType,
+      label: "Markets Explorer",
+      badge: markets.length > 0 ? `${markets.length}` : undefined,
+      description: "Browse 32+ Active Event Contracts",
       icon: Square3Stack3DIcon,
+    },
+    {
+      id: "Trade Terminal" as DashboardViewType,
+      label: "Trade Terminal",
+      description: "CLOB Depth Ladder & Trader Cockpit",
+      icon: AdjustmentsHorizontalIcon,
     },
   ];
 

@@ -98,14 +98,15 @@ graph TB
     * *Oracle*: "Overpriced by 4.2% $\Phi(z)$, favorable risk-reward on NO".
   * **Zero-Gas / Session Execution**: Uses the user's active session key via `placeOrderFor` for instant sub-second execution, or falls back to MetaMask wallet signing.
 
-### Feature 2: Active Positions & Open Orders Drawer
+### Feature 2: Active Positions & Open Orders Drawer [COMPLETED]
 * **Motivation**: Allows traders to monitor their open inventory across rolling prediction windows.
+* **Status**: **Fully Implemented** in [ActivePositionsDrawer.tsx](file:///d:/DreamPulse/frontend/src/components/dashboard/ActivePositionsDrawer.tsx) and embedded inside [TradeTerminalView.tsx](file:///d:/DreamPulse/frontend/src/components/dashboard/TradeTerminalView.tsx).
 * **Key Specifications**:
-  * Persistent dock or collapsible drawer at the bottom of the Terminal.
+  * Persistent dock and collapsible drawer at the bottom of the Trade Terminal.
   * **Tabs**:
-    * *Open Positions*: Shows active contract symbol, outcome held (YES/NO), entry price, current mid-market price, unrealized PnL ($ and %), and countdown to contract expiration.
-    * *Resting Limit Orders*: Displays active maker orders posted by Titan or manual limits with 1-click `Cancel Order` via `cancelOrderFor`.
-    * *Settled / Pending Sweep*: Shows matured contracts ready for automated redemption.
+    * *Open Positions*: Shows active contract symbol, outcome held (YES/NO), entry price, total cost, potential payout ($1.00/lot), and tx link to Somnia Shannon Explorer.
+    * *Resting Limit Orders*: Displays active maker orders posted on the CLOB with status and price.
+    * *Trade History*: Shows matured contracts and realized PnL with execution timestamps.
 
 ### Feature 3: Swarm Arena & Strategy Leaderboard (Social Prediction)
 * **Motivation**: Fulfills the hackathon's *"social prediction products"* and *"ecosystem adoption"* requirements.

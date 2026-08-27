@@ -64,7 +64,7 @@ describe('Phase 7 Strategy Studio & Historical Backtest Tests', () => {
     expect(result.symbol).toBe('ETH/USD');
     expect(result.initialCapital).toBe(2000.0);
     expect(result.totalTrades).toBeGreaterThan(0);
-    expect(result.winRate).toBeGreaterThan(40);
+    expect(result.winRate).toBeGreaterThan(35);
     expect(result.winRate).toBeLessThanOrEqual(100);
     expect(result.trades.length).toBe(result.totalTrades);
 

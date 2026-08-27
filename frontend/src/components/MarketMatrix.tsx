@@ -3,7 +3,6 @@ import {
   Square3Stack3DIcon,
   MagnifyingGlassIcon,
   XMarkIcon,
-  ClockIcon,
   ArrowTrendingUpIcon,
   ArrowTrendingDownIcon,
   Squares2X2Icon,
@@ -21,6 +20,7 @@ interface MarketMatrixProps {
   markets: Market[];
   selectedMarketId: string | null;
   onSelectMarket: (marketId: string) => void;
+  onOpenTradeTerminal?: (marketId: string) => void;
   liveTicks: Map<string, MarketTickData>;
   currentSpotPrices: Record<string, number>;
   isLoading?: boolean;
@@ -30,6 +30,7 @@ export const MarketMatrix: React.FC<MarketMatrixProps> = ({
   markets,
   selectedMarketId,
   onSelectMarket,
+  onOpenTradeTerminal,
   liveTicks,
   currentSpotPrices,
   isLoading = false,
@@ -317,15 +318,20 @@ export const MarketMatrix: React.FC<MarketMatrixProps> = ({
                         <span className="text-rose-400 font-bold">${market.bestAskYes.toFixed(2)}</span>
                       </td>
                       <td className="px-3.5 py-3 text-right">
-                        <Badge
-                          variant={isSelected ? "default" : "outline"}
-                          className={cn(
-                            "text-[10px] px-2 py-0.5",
-                            isSelected ? "bg-primary text-primary-foreground" : "text-muted-foreground border-border/50"
-                          )}
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            if (onOpenTradeTerminal) {
+                              onOpenTradeTerminal(market.id);
+                            } else {
+                              onSelectMarket(market.id);
+                            }
+                          }}
+                          className="px-2.5 py-1 rounded bg-brand-cyan/15 hover:bg-brand-cyan/25 border border-brand-cyan/40 text-brand-cyan text-[11px] font-mono font-bold transition-colors cursor-pointer"
                         >
-                          {isSelected ? 'ACTIVE' : 'INSPECT'}
-                        </Badge>
+                          Trade →
+                        </button>
                       </td>
                     </tr>
                   );
@@ -334,8 +340,8 @@ export const MarketMatrix: React.FC<MarketMatrixProps> = ({
             </table>
           </div>
         ) : (
-          /* Grid View - 2 Columns with Generous Spacing & Zero Overflow */
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-3.5">
+          /* Grid View - 3 Columns on Large Screens with Generous Spacing */
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3.5">
             {paginatedMarkets.map((market) => {
               const tick = liveTicks.get(market.id);
               const isSelected = market.id === selectedMarketId;
@@ -352,13 +358,13 @@ export const MarketMatrix: React.FC<MarketMatrixProps> = ({
                   key={market.id}
                   onClick={() => onSelectMarket(market.id)}
                   className={cn(
-                    "group flex flex-col justify-between p-4 rounded-xl border transition-all cursor-pointer select-none",
+                    "terminal-card p-3.5 transition-all duration-200 cursor-pointer flex flex-col justify-between group",
                     isSelected
-                      ? "border-foreground/50 bg-secondary/60 ring-1 ring-foreground/20 shadow-sm"
+                      ? "border-primary ring-1 ring-primary/40 bg-secondary/40 shadow-sm"
                       : "border-border/50 bg-secondary/20 hover:bg-secondary/40 hover:border-border/80"
                   )}
                 >
-                  {/* Row 1: Symbol, Horizon & Action Pill */}
+                  {/* Row 1: Symbol, Horizon & Action Button */}
                   <div className="flex items-center justify-between pb-2.5 border-b border-border/30">
                     <div className="flex items-center gap-2">
                       <span className="font-mono text-sm font-bold text-foreground">
@@ -369,21 +375,21 @@ export const MarketMatrix: React.FC<MarketMatrixProps> = ({
                       </Badge>
                     </div>
                     <div className="flex items-center gap-2">
-                      <div className="flex items-center gap-1 font-mono text-[11px] text-muted-foreground bg-secondary/30 px-2 py-0.5 rounded-md border border-border/30">
-                        <ClockIcon className="w-3 h-3 text-muted-foreground" />
-                        <span>{market.windowDuration}</span>
-                      </div>
-                      <Badge
-                        variant={isSelected ? "default" : "outline"}
-                        className={cn(
-                          "font-mono text-[10px] px-2 py-0.5 transition-colors",
-                          isSelected
-                            ? "bg-primary text-primary-foreground font-bold shadow-xs"
-                            : "text-muted-foreground border-border/50 group-hover:border-border group-hover:text-foreground"
-                        )}
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          if (onOpenTradeTerminal) {
+                            onOpenTradeTerminal(market.id);
+                          } else {
+                            onSelectMarket(market.id);
+                          }
+                        }}
+                        className="px-2.5 py-0.5 rounded bg-brand-cyan/15 hover:bg-brand-cyan/25 border border-brand-cyan/40 text-brand-cyan text-[10px] font-mono font-bold transition-colors cursor-pointer flex items-center gap-1"
                       >
-                        {isSelected ? 'ACTIVE' : 'INSPECT'}
-                      </Badge>
+                        <span>Trade</span>
+                        <span>→</span>
+                      </button>
                     </div>
                   </div>
 

@@ -68,7 +68,8 @@ export const CommandDialog: React.FC<CommandDialogProps> = ({
   const platformViews = [
     { id: "Overview" as DashboardViewType, label: "Terminal Overview", icon: Squares2X2Icon, desc: "Live CLOB & Macro Swarm" },
     { id: "Edge Radar" as DashboardViewType, label: "Edge Radar", icon: ViewfinderCircleIcon, desc: "Φ(z) Normal Distribution Heatmap" },
-    { id: "Markets & Depth" as DashboardViewType, label: "Markets & Depth", icon: Square3Stack3DIcon, desc: "Order Book Depth Chart" },
+    { id: "Markets" as DashboardViewType, label: "Markets Explorer", icon: Square3Stack3DIcon, desc: "Browse 32+ Event Prediction Contracts" },
+    { id: "Trade Terminal" as DashboardViewType, label: "Trade Terminal", icon: AdjustmentsHorizontalIcon, desc: "CLOB Depth Ladder & Trader Cockpit" },
     { id: "AI Swarm Feed" as DashboardViewType, label: "AI Swarm Feed", icon: CpuChipIcon, desc: "Multi-Agent Chain-of-Thought" },
     { id: "Swarm Cockpit" as DashboardViewType, label: "Swarm Cockpit", icon: AdjustmentsHorizontalIcon, desc: "Autonomous Execution Controls" },
   ];

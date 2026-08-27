@@ -76,6 +76,25 @@ export const TraderCockpitTicket: React.FC<TraderCockpitTicketProps> = ({
     totalCost: number;
   } | null>(null);
   const [pulseEffect, setPulseEffect] = useState<boolean>(false);
+  const [isFauceting, setIsFauceting] = useState<boolean>(false);
+
+  const handleClaimFaucet = async () => {
+    if (!wallet.isConnected || !wallet.address) {
+      onConnectWallet?.();
+      return;
+    }
+    setIsFauceting(true);
+    try {
+      await web3Service.claimTestUsdcFaucet(wallet.address as `0x${string}`, 1000);
+      soundEngine.playTradeFill();
+      setExecutionError(null);
+    } catch (err: any) {
+      console.error('[TraderCockpitTicket] Faucet claim error:', err);
+      setExecutionError(err.message || 'Faucet claim failed. Please try again.');
+    } finally {
+      setIsFauceting(false);
+    }
+  };
 
   // Derive active live prices
   const currentBestBid = bestBidYes ?? market.bestBidYes ?? 0.49;
@@ -613,11 +632,34 @@ export const TraderCockpitTicket: React.FC<TraderCockpitTicketProps> = ({
         </div>
       </div>
 
-      {/* Execution Error Banner */}
+      {/* Execution Error Banner with 1-Click Recovery Actions */}
       {executionError && (
-        <div className="p-2.5 mb-3 rounded-lg bg-rose-500/10 border border-rose-500/30 text-rose-400 text-xs font-mono flex items-start gap-2 flex-shrink-0">
-          <ExclamationTriangleIcon className="w-4 h-4 flex-shrink-0 mt-0.5" />
-          <span className="leading-snug">{executionError}</span>
+        <div className="p-2.5 mb-3 rounded-lg bg-rose-500/10 border border-rose-500/30 text-rose-400 text-xs font-mono flex flex-col gap-2 flex-shrink-0">
+          <div className="flex items-start gap-2">
+            <ExclamationTriangleIcon className="w-4 h-4 flex-shrink-0 mt-0.5" />
+            <span className="leading-snug">{executionError}</span>
+          </div>
+          <div className="flex items-center gap-2 pt-1 border-t border-rose-500/20 flex-wrap">
+            {(executionError.toLowerCase().includes('faucet') || executionError.toLowerCase().includes('balance')) && (
+              <button
+                type="button"
+                disabled={isFauceting}
+                onClick={handleClaimFaucet}
+                className="px-2 py-1 rounded bg-brand-cyan/20 border border-brand-cyan/40 text-brand-cyan hover:bg-brand-cyan/30 text-[10px] font-bold cursor-pointer transition-colors"
+              >
+                {isFauceting ? 'Minting 1,000 TestUSDC...' : 'Claim 1,000 TestUSDC Faucet'}
+              </button>
+            )}
+            {(executionError.toLowerCase().includes('allowance') || executionError.toLowerCase().includes('session modal') || executionError.toLowerCase().includes('operator') || executionError.toLowerCase().includes('cap') || executionError.toLowerCase().includes('limit')) && onOpenSessionModal && (
+              <button
+                type="button"
+                onClick={onOpenSessionModal}
+                className="px-2 py-1 rounded bg-amber-500/20 border border-amber-500/40 text-amber-400 hover:bg-amber-500/30 text-[10px] font-bold cursor-pointer transition-colors"
+              >
+                Open Session Modal to Authorize
+              </button>
+            )}
+          </div>
         </div>
       )}
 
@@ -644,6 +686,31 @@ export const TraderCockpitTicket: React.FC<TraderCockpitTicketProps> = ({
               <span>View on Somnia Explorer</span>
               <ArrowTopRightOnSquareIcon className="w-3 h-3" />
             </a>
+          )}
+        </div>
+      )}
+
+      {/* Collateral & Session Guardrails Summary */}
+      {wallet.isConnected && (
+        <div className="flex items-center justify-between px-1 mb-2 text-[10px] font-mono text-muted-foreground">
+          <div className="flex items-center gap-1">
+            <span>Available:</span>
+            <span className={cn(
+              "font-bold",
+              Number(wallet.balanceCollateral) < calculations.totalCost ? "text-amber-400" : "text-foreground"
+            )}>
+              ${wallet.balanceCollateral} USDC
+            </span>
+          </div>
+          {Number(wallet.balanceCollateral) < calculations.totalCost && (
+            <button
+              type="button"
+              disabled={isFauceting}
+              onClick={handleClaimFaucet}
+              className="text-brand-cyan hover:underline text-[9px] font-bold cursor-pointer"
+            >
+              {isFauceting ? 'Minting...' : '+ Get 1,000 TestUSDC'}
+            </button>
           )}
         </div>
       )}

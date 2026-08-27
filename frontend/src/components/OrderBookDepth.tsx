@@ -28,6 +28,8 @@ interface OrderBookDepthProps {
   agentThoughts?: AgentThoughtLog[];
   onOpenSessionModal?: () => void;
   onConnectWallet?: () => void;
+  onPrefillOrder?: (data: LadderPrefillData) => void;
+  hideEmbeddedTicket?: boolean;
 }
 
 export const OrderBookDepth: React.FC<OrderBookDepthProps> = ({
@@ -40,6 +42,8 @@ export const OrderBookDepth: React.FC<OrderBookDepthProps> = ({
   agentThoughts = [],
   onOpenSessionModal,
   onConnectWallet,
+  onPrefillOrder,
+  hideEmbeddedTicket = false,
 }) => {
   const [activeLeg, setActiveLeg] = useState<'YES' | 'NO'>('YES');
   const [viewMode, setViewMode] = useState<'SPLIT' | 'LADDER' | 'COCKPIT'>('SPLIT');
@@ -123,14 +127,16 @@ export const OrderBookDepth: React.FC<OrderBookDepthProps> = ({
   // 1-Click Ladder Interactions
   const handleLadderAskClick = (askPrice: number, askQty: number) => {
     soundEngine.playTradeFill();
-    setPrefillData({
+    const data: LadderPrefillData = {
       outcome: 'YES',
       price: askPrice,
       lotSize: askQty,
       source: 'ask',
       timestamp: Date.now(),
-    });
-    if (viewMode === 'LADDER') {
+    };
+    setPrefillData(data);
+    onPrefillOrder?.(data);
+    if (!hideEmbeddedTicket && viewMode === 'LADDER') {
       setViewMode('COCKPIT');
     }
   };
@@ -139,14 +145,16 @@ export const OrderBookDepth: React.FC<OrderBookDepthProps> = ({
     soundEngine.playTradeFill();
     // Buying the counterpart NO outcome
     const noPrice = Number((1.0 - bidPrice).toFixed(2));
-    setPrefillData({
+    const data: LadderPrefillData = {
       outcome: 'NO',
       price: noPrice,
       lotSize: bidQty,
       source: 'bid',
       timestamp: Date.now(),
-    });
-    if (viewMode === 'LADDER') {
+    };
+    setPrefillData(data);
+    onPrefillOrder?.(data);
+    if (!hideEmbeddedTicket && viewMode === 'LADDER') {
       setViewMode('COCKPIT');
     }
   };
@@ -206,49 +214,51 @@ export const OrderBookDepth: React.FC<OrderBookDepthProps> = ({
           </div>
 
           {/* View Mode Segment Switcher */}
-          <div className="flex items-center gap-0.5 bg-secondary/40 p-0.5 rounded-lg border border-border/40 text-xs font-mono">
-            <button
-              type="button"
-              onClick={() => setViewMode('SPLIT')}
-              className={cn(
-                "px-2 py-0.5 text-[10px] rounded transition-colors cursor-pointer flex items-center gap-1",
-                viewMode === 'SPLIT'
-                  ? "bg-secondary text-foreground font-bold shadow-sm"
-                  : "text-muted-foreground hover:text-foreground"
-              )}
-              title="Dual Split View"
-            >
-              <ArrowsPointingInIcon className="w-3 h-3" />
-              <span className="hidden sm:inline">Split</span>
-            </button>
-            <button
-              type="button"
-              onClick={() => setViewMode('LADDER')}
-              className={cn(
-                "px-2 py-0.5 text-[10px] rounded transition-colors cursor-pointer",
-                viewMode === 'LADDER'
-                  ? "bg-secondary text-foreground font-bold shadow-sm"
-                  : "text-muted-foreground hover:text-foreground"
-              )}
-              title="Order Book Depth Ladder Only"
-            >
-              Depth
-            </button>
-            <button
-              type="button"
-              onClick={() => setViewMode('COCKPIT')}
-              className={cn(
-                "px-2 py-0.5 text-[10px] rounded transition-colors cursor-pointer flex items-center gap-1",
-                viewMode === 'COCKPIT'
-                  ? "bg-secondary text-brand-cyan font-bold shadow-sm"
-                  : "text-muted-foreground hover:text-foreground"
-              )}
-              title="Trader Cockpit Ticket Only"
-            >
-              <AdjustmentsHorizontalIcon className="w-3 h-3" />
-              <span>Ticket</span>
-            </button>
-          </div>
+          {!hideEmbeddedTicket && (
+            <div className="flex items-center gap-0.5 bg-secondary/40 p-0.5 rounded-lg border border-border/40 text-xs font-mono">
+              <button
+                type="button"
+                onClick={() => setViewMode('SPLIT')}
+                className={cn(
+                  "px-2 py-0.5 text-[10px] rounded transition-colors cursor-pointer flex items-center gap-1",
+                  viewMode === 'SPLIT'
+                    ? "bg-secondary text-foreground font-bold shadow-sm"
+                    : "text-muted-foreground hover:text-foreground"
+                )}
+                title="Dual Split View"
+              >
+                <ArrowsPointingInIcon className="w-3 h-3" />
+                <span className="hidden sm:inline">Split</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => setViewMode('LADDER')}
+                className={cn(
+                  "px-2 py-0.5 text-[10px] rounded transition-colors cursor-pointer",
+                  viewMode === 'LADDER'
+                    ? "bg-secondary text-foreground font-bold shadow-sm"
+                    : "text-muted-foreground hover:text-foreground"
+                )}
+                title="Order Book Depth Ladder Only"
+              >
+                Depth
+              </button>
+              <button
+                type="button"
+                onClick={() => setViewMode('COCKPIT')}
+                className={cn(
+                  "px-2 py-0.5 text-[10px] rounded transition-colors cursor-pointer flex items-center gap-1",
+                  viewMode === 'COCKPIT'
+                    ? "bg-secondary text-brand-cyan font-bold shadow-sm"
+                    : "text-muted-foreground hover:text-foreground"
+                )}
+                title="Trader Cockpit Ticket Only"
+              >
+                <AdjustmentsHorizontalIcon className="w-3 h-3" />
+                <span>Ticket</span>
+              </button>
+            </div>
+          )}
         </div>
       </div>
 
@@ -287,13 +297,20 @@ export const OrderBookDepth: React.FC<OrderBookDepthProps> = ({
       </div>
 
       {/* Main Responsive Split Grid */}
-      <div className="flex-1 min-h-0 overflow-hidden grid grid-cols-1 md:grid-cols-2 divide-y md:divide-y-0 md:divide-x divide-border/40">
+      <div
+        className={cn(
+          "flex-1 min-h-0 overflow-hidden",
+          hideEmbeddedTicket
+            ? "flex flex-col"
+            : "grid grid-cols-1 md:grid-cols-2 divide-y md:divide-y-0 md:divide-x divide-border/40"
+        )}
+      >
         {/* Left Column: CLOB Depth Ladder */}
-        {(viewMode === 'SPLIT' || viewMode === 'LADDER') && (
+        {(hideEmbeddedTicket || viewMode === 'SPLIT' || viewMode === 'LADDER') && (
           <div
             className={cn(
               "flex flex-col h-full overflow-hidden",
-              viewMode === 'LADDER' && "col-span-2 md:col-span-2"
+              (!hideEmbeddedTicket && viewMode === 'LADDER') && "col-span-2 md:col-span-2"
             )}
           >
             {/* Book Table Column Headers */}
@@ -436,7 +453,7 @@ export const OrderBookDepth: React.FC<OrderBookDepthProps> = ({
         )}
 
         {/* Right Column: Trader Cockpit Ticket */}
-        {(viewMode === 'SPLIT' || viewMode === 'COCKPIT') && (
+        {!hideEmbeddedTicket && (viewMode === 'SPLIT' || viewMode === 'COCKPIT') && (
           <div
             className={cn(
               "flex flex-col h-full overflow-hidden bg-secondary/5",

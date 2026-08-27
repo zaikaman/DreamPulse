@@ -13,7 +13,8 @@ import { CinematicHero, type DashboardViewType } from './components/landing/Cine
 import { CommandDialog } from './components/common/CommandDialog.js';
 import { OverviewView } from './components/dashboard/OverviewView.js';
 import { EdgeRadarView } from './components/dashboard/EdgeRadarView.js';
-import { MarketsDepthView } from './components/dashboard/MarketsDepthView.js';
+import { MarketsExplorerView } from './components/dashboard/MarketsExplorerView.js';
+import { TradeTerminalView } from './components/dashboard/TradeTerminalView.js';
 import { SwarmFeedView } from './components/dashboard/SwarmFeedView.js';
 import { useKeyboardShortcuts } from './hooks/useKeyboardShortcuts.js';
 import { soundEngine } from './services/audio.js';
@@ -98,6 +99,13 @@ export const App: React.FC = () => {
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, []);
 
+  // Navigation helper to switch to Trade Terminal with a chosen market
+  const handleOpenTradeTerminal = useCallback((marketId: string) => {
+    setSelectedMarketId(marketId);
+    setActiveNav('Trade Terminal');
+    window.location.hash = '#trade';
+  }, [setSelectedMarketId]);
+
   // Listen to URL hash changes
   useEffect(() => {
     const handleHash = () => {
@@ -106,8 +114,10 @@ export const App: React.FC = () => {
         setActiveNav('Overview');
       } else if (hash === 'radar') {
         setActiveNav('Edge Radar');
-      } else if (hash === 'markets' || hash === 'depth') {
-        setActiveNav('Markets & Depth');
+      } else if (hash === 'trade' || hash === 'cockpit-terminal') {
+        setActiveNav('Trade Terminal');
+      } else if (hash === 'markets' || hash === 'depth' || hash === 'catalog') {
+        setActiveNav('Markets');
       } else if (hash === 'swarm' || hash === 'ai') {
         setActiveNav('AI Swarm Feed');
       } else if (hash === 'cockpit' || hash === 'swarm-cockpit') {
@@ -134,7 +144,8 @@ export const App: React.FC = () => {
       setActiveNav(target);
       if (tab === 'Overview') window.location.hash = '#overview';
       else if (tab === 'Edge Radar') window.location.hash = '#radar';
-      else if (tab === 'Markets & Depth') window.location.hash = '#markets';
+      else if (tab === 'Markets' || tab === 'Markets & Depth') window.location.hash = '#markets';
+      else if (tab === 'Trade Terminal') window.location.hash = '#trade';
       else if (tab === 'AI Swarm Feed') window.location.hash = '#swarm';
       else if (tab === 'Swarm Cockpit') window.location.hash = '#cockpit';
       else if (tab === 'Analytics') window.location.hash = '#analytics';
@@ -293,13 +304,22 @@ export const App: React.FC = () => {
             onSelectMarket={setSelectedMarketId}
             liveTicks={liveTicks}
             onNavigateToDepth={() => {
-              setActiveNav('Markets & Depth');
-              window.location.hash = '#markets';
+              handleOpenTradeTerminal(selectedMarketId || markets[0]?.id || '');
             }}
             isLoading={isMarketsLoading}
           />
-        ) : activeNav === 'Markets & Depth' ? (
-          <MarketsDepthView
+        ) : activeNav === 'Markets' || activeNav === 'Markets & Depth' ? (
+          <MarketsExplorerView
+            markets={markets}
+            selectedMarketId={selectedMarketId}
+            onSelectMarket={setSelectedMarketId}
+            onOpenTradeTerminal={handleOpenTradeTerminal}
+            liveTicks={liveTicks}
+            currentSpotPrices={currentSpotPrices}
+            isLoading={isMarketsLoading}
+          />
+        ) : activeNav === 'Trade Terminal' ? (
+          <TradeTerminalView
             markets={markets}
             selectedMarket={selectedMarket}
             selectedMarketId={selectedMarketId}

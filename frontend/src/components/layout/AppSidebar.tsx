@@ -3,6 +3,7 @@ import {
   Squares2X2Icon,
   ViewfinderCircleIcon,
   QueueListIcon,
+  AdjustmentsHorizontalIcon,
   CpuChipIcon,
   ChartBarIcon,
   SparklesIcon,
@@ -59,10 +60,16 @@ const AppSidebarComponent: React.FC<AppSidebarProps> = ({
       badge: 'Scanner',
     },
     {
-      id: 'Markets & Depth',
-      label: 'Markets & Order Book',
+      id: 'Markets',
+      label: 'Markets Explorer',
       Icon: QueueListIcon,
       badge: `${activeMarketsCount} Live`,
+    },
+    {
+      id: 'Trade Terminal',
+      label: 'Trade Terminal',
+      Icon: AdjustmentsHorizontalIcon,
+      badge: 'Cockpit',
     },
     {
       id: 'AI Swarm Feed',
@@ -151,7 +158,7 @@ const AppSidebarComponent: React.FC<AppSidebarProps> = ({
               <button
                 key={item.id}
                 type="button"
-                className={`sidebar-nav-item ${activeTab === item.id ? 'active' : ''}`}
+                className={`sidebar-nav-item ${(activeTab === item.id || (item.id === 'Markets' && activeTab === 'Markets & Depth')) ? 'active' : ''}`}
                 onClick={() => onSelectTab(item.id)}
                 title={collapsed ? item.label : undefined}
               >

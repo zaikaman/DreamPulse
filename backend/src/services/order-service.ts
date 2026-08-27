@@ -1060,6 +1060,7 @@ export class OrderService {
 
     const {
       rawQuantity,
+      rawPriceOwn,
       quantizedSize,
       quantizedPrice,
       totalCost,
@@ -1165,6 +1166,138 @@ export class OrderService {
 
     if (outcome !== 'YES' && outcome !== 'NO') {
       throw new Error(`Invalid outcome '${outcome}'. Expected 'YES' or 'NO'.`);
+    }
+
+    const market = marketService.getMarketById(params.marketId);
+    if (!market) {
+      throw new Error(`Market '${params.marketId}' not found.`);
+    }
+
+    // Check risk limits directly
+    const registeredSession = sessionService.getSessionById(session.id);
+    if (registeredSession) {
+      const riskAllowance = sessionService.validateTradeAllowance(session.id, totalCost);
+      if (!riskAllowance.allowed) {
+        throw new Error(`Session risk limit reached: ${riskAllowance.reason}`);
+      }
+    } else {
+      if (!session.isActive) {
+        throw new Error(`Session is inactive. Please re-authorize your session in the Session Modal.`);
+      }
+      if (new Date(session.expiresAt).getTime() <= Date.now()) {
+        throw new Error(`Session has expired. Please re-authorize your session in the Session Modal.`);
+      }
+      if (totalCost > session.maxTradeSize) {
+        throw new Error(`Trade size ($${totalCost.toFixed(2)}) exceeds session single-trade limit of $${session.maxTradeSize.toFixed(2)}. Adjust size or update limits in the Session Modal.`);
+      }
+      if (session.spentToday + totalCost > session.dailyVolumeCap) {
+        throw new Error(`Order would exceed daily volume cap of $${session.dailyVolumeCap.toFixed(2)} ($${session.spentToday.toFixed(2)} spent today).`);
+      }
+    }
+
+    // Check user's on-chain TestUSDC balance and operator allowance
+    const userAddress = getAddress(params.userAddress);
+    const operatorAddress = operatorAccount.address;
+    const one = 10n ** BigInt(SOMNIA_ADDRESSES.decimals);
+    const needRaw = (rawPriceOwn * rawQuantity) / one;
+
+    if (process.env.NODE_ENV !== 'test') {
+      try {
+        const [userBalanceRaw, userAllowanceRaw] = await Promise.all([
+          somniaExchange.client.getErc20Balance(SOMNIA_ADDRESSES.testUsdc, userAddress).catch(() => null),
+          publicClient.readContract({
+            address: SOMNIA_ADDRESSES.testUsdc,
+            abi: ERC20_ABI,
+            functionName: 'allowance',
+            args: [userAddress, operatorAddress],
+          }).catch(() => null),
+        ]);
+
+        if (userBalanceRaw !== null && userBalanceRaw < needRaw) {
+          const balHuman = (Number(userBalanceRaw) / 1e6).toFixed(2);
+          const needHuman = (Number(needRaw) / 1e6).toFixed(2);
+          throw new Error(`Insufficient TestUSDC balance in wallet ($${balHuman} available, $${needHuman} needed). Please claim 1,000 TestUSDC from the faucet in the header.`);
+        }
+
+        if (userAllowanceRaw !== null && userAllowanceRaw < needRaw) {
+          throw new Error(`TestUSDC allowance to operator is required for zero-gas trading. Please click 'Approve Collateral' or re-authorize your session in the Session Modal.`);
+        }
+      } catch (fundErr: any) {
+        if (fundErr.message?.includes('Insufficient') || fundErr.message?.includes('allowance')) {
+          throw fundErr;
+        }
+      }
+    }
+
+    const isZeroMarketId = !market?.marketIdHex || market.marketIdHex.toLowerCase() === ZERO_ADDRESS.toLowerCase() || /^0x0+$/i.test(market.marketIdHex);
+
+    if (isZeroMarketId) {
+      // Rolling market: execute inside DreamPulse CLOB engine
+      sessionService.recordTradeSpend(session.id, totalCost);
+
+      const orderId = crypto.randomUUID();
+      const now = new Date().toISOString();
+      const simTxHash = `0xsim_${orderId.replace(/-/g, '').slice(0, 40)}` as Hex;
+      const orderExecution: OrderExecution = {
+        id: orderId,
+        userAddress: params.userAddress,
+        sessionId: session.id,
+        marketId: params.marketId,
+        agentType: 'Titan',
+        outcome,
+        direction,
+        orderType,
+        price: quantizedPrice,
+        lotSize: quantizedSize,
+        totalCost,
+        status: 'FILLED',
+        txHash: simTxHash,
+        pnl: 0,
+        isSettled: false,
+        createdAt: now,
+        filledAt: now,
+      };
+
+      this.orders.unshift(orderExecution);
+      this.orderMap.set(orderId, orderExecution);
+
+      telemetryWsGateway.broadcastOrderFilled({
+        userAddress: params.userAddress,
+        orderId,
+        marketId: params.marketId,
+        agentType: 'Titan',
+        outcome,
+        direction,
+        price: quantizedPrice,
+        lotSize: quantizedSize,
+        txHash: simTxHash,
+      });
+
+      this.notifyStateChange();
+
+      try {
+        await supabase.from('orders').insert({
+          id: orderId,
+          user_address: params.userAddress,
+          session_id: session.id,
+          market_id: params.marketId,
+          agent_type: 'Titan',
+          outcome,
+          direction,
+          order_type: orderType,
+          price: quantizedPrice,
+          lot_size: quantizedSize,
+          total_cost: totalCost,
+          status: 'FILLED',
+          tx_hash: simTxHash,
+          pnl: 0,
+          is_settled: false,
+          created_at: now,
+          filled_at: now,
+        });
+      } catch (_err) {}
+
+      return orderExecution;
     }
 
     const decision: IAgentDecision = {
