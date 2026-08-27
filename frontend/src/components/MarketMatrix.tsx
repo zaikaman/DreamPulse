@@ -7,6 +7,9 @@ import {
   ArrowTrendingDownIcon,
   Squares2X2Icon,
   Bars3Icon,
+  ArrowsUpDownIcon,
+  FunnelIcon,
+  SparklesIcon,
 } from '@heroicons/react/24/outline';
 import type { Market } from '../types/index.js';
 import type { MarketTickData } from '../hooks/useTelemetry.js';
@@ -15,6 +18,17 @@ import { Pagination } from './ui/Pagination.js';
 import { Badge } from './ui/badge.js';
 import { Button } from './ui/button.js';
 import { cn } from '../lib/utils.js';
+
+export type SortOption =
+  | 'EDGE_DESC'
+  | 'EDGE_ASC'
+  | 'TIME_ASC'
+  | 'TIME_DESC'
+  | 'SPREAD_ASC'
+  | 'STRIKE_DESC'
+  | 'STRIKE_ASC';
+
+export type EdgeFilterOption = 'ALL' | 'HIGH_ALPHA' | 'YES_ONLY' | 'NO_ONLY';
 
 interface MarketMatrixProps {
   markets: Market[];
@@ -38,21 +52,35 @@ export const MarketMatrix: React.FC<MarketMatrixProps> = ({
   const [selectedSymbol, setSelectedSymbol] = useState<string>('ALL');
   const [selectedWindow, setSelectedWindow] = useState<string>('ALL');
   const [searchQuery, setSearchQuery] = useState<string>('');
+  const [sortBy, setSortBy] = useState<SortOption>('EDGE_DESC');
+  const [edgeFilter, setEdgeFilter] = useState<EdgeFilterOption>('ALL');
   const [viewMode, setViewMode] = useState<'grid' | 'table'>('grid');
   const [currentPage, setCurrentPage] = useState<number>(1);
   const [pageSize, setPageSize] = useState<number>(6);
 
-  // Filter only active live markets with positive remaining time
-  const filteredMarkets = useMemo(() => {
-    return markets.filter((m) => {
+  // Filter and sort active prediction contracts
+  const filteredAndSortedMarkets = useMemo(() => {
+    const list = markets.filter((m) => {
       const tick = liveTicks.get(m.id);
-      const timeLeft = tick?.timeLeftSeconds ?? Math.max(0, Math.floor((new Date(m.closeTimestamp).getTime() - Date.now()) / 1000));
-      
+      const timeLeft =
+        tick?.timeLeftSeconds ??
+        Math.max(
+          0,
+          Math.floor((new Date(m.closeTimestamp).getTime() - Date.now()) / 1000)
+        );
+
       // Only live open markets
       if (m.status !== 'Open' && timeLeft <= 0) return false;
 
       if (selectedSymbol !== 'ALL' && m.symbol !== selectedSymbol) return false;
-      if (selectedWindow !== 'ALL' && m.windowDuration !== selectedWindow) return false;
+      if (selectedWindow !== 'ALL' && m.windowDuration !== selectedWindow)
+        return false;
+
+      const edge = tick?.edge ?? m.edgePercentage;
+      if (edgeFilter === 'YES_ONLY' && edge <= 0) return false;
+      if (edgeFilter === 'NO_ONLY' && edge >= 0) return false;
+      if (edgeFilter === 'HIGH_ALPHA' && Math.abs(edge) < 0.2) return false;
+
       if (searchQuery.trim()) {
         const q = searchQuery.toLowerCase().trim();
         return (
@@ -63,15 +91,67 @@ export const MarketMatrix: React.FC<MarketMatrixProps> = ({
       }
       return true;
     });
-  }, [markets, liveTicks, selectedSymbol, selectedWindow, searchQuery]);
 
-  // Reset to page 1 on filter/search change
+    // Apply sorting
+    return list.sort((a, b) => {
+      const tickA = liveTicks.get(a.id);
+      const tickB = liveTicks.get(b.id);
+      const edgeA = Math.abs(tickA?.edge ?? a.edgePercentage);
+      const edgeB = Math.abs(tickB?.edge ?? b.edgePercentage);
+      const timeA =
+        tickA?.timeLeftSeconds ??
+        Math.max(
+          0,
+          Math.floor((new Date(a.closeTimestamp).getTime() - Date.now()) / 1000)
+        );
+      const timeB =
+        tickB?.timeLeftSeconds ??
+        Math.max(
+          0,
+          Math.floor((new Date(b.closeTimestamp).getTime() - Date.now()) / 1000)
+        );
+      const spreadA = Math.max(0, a.bestAskYes - a.bestBidYes);
+      const spreadB = Math.max(0, b.bestAskYes - b.bestBidYes);
+
+      switch (sortBy) {
+        case 'EDGE_DESC':
+          return edgeB - edgeA;
+        case 'EDGE_ASC':
+          return edgeA - edgeB;
+        case 'TIME_ASC':
+          return timeA - timeB;
+        case 'TIME_DESC':
+          return timeB - timeA;
+        case 'SPREAD_ASC':
+          return spreadA - spreadB;
+        case 'STRIKE_DESC':
+          return b.strikePrice - a.strikePrice;
+        case 'STRIKE_ASC':
+          return a.strikePrice - b.strikePrice;
+        default:
+          return 0;
+      }
+    });
+  }, [
+    markets,
+    liveTicks,
+    selectedSymbol,
+    selectedWindow,
+    searchQuery,
+    sortBy,
+    edgeFilter,
+  ]);
+
+  // Reset to page 1 on filter/search/sort change
   useEffect(() => {
     setCurrentPage(1);
-  }, [selectedSymbol, selectedWindow, searchQuery]);
+  }, [selectedSymbol, selectedWindow, searchQuery, sortBy, edgeFilter]);
 
   // Clamp current page when filtered markets change
-  const totalPages = Math.max(1, Math.ceil(filteredMarkets.length / pageSize));
+  const totalPages = Math.max(
+    1,
+    Math.ceil(filteredAndSortedMarkets.length / pageSize)
+  );
   useEffect(() => {
     if (currentPage > totalPages) {
       setCurrentPage(totalPages);
@@ -81,27 +161,74 @@ export const MarketMatrix: React.FC<MarketMatrixProps> = ({
   // Paginated slice of markets
   const paginatedMarkets = useMemo(() => {
     const start = (currentPage - 1) * pageSize;
-    return filteredMarkets.slice(start, start + pageSize);
-  }, [filteredMarkets, currentPage, pageSize]);
+    return filteredAndSortedMarkets.slice(start, start + pageSize);
+  }, [filteredAndSortedMarkets, currentPage, pageSize]);
+
+  const isFiltered =
+    selectedSymbol !== 'ALL' ||
+    selectedWindow !== 'ALL' ||
+    edgeFilter !== 'ALL' ||
+    sortBy !== 'EDGE_DESC' ||
+    Boolean(searchQuery.trim());
 
   return (
     <div className="terminal-panel flex flex-col h-full overflow-hidden">
       {/* Header & Controls */}
-      <div className="p-4 pb-3 border-b border-border/40 flex flex-col gap-3 flex-shrink-0">
+      <div className="p-3.5 pb-3 border-b border-border/40 flex flex-col gap-2.5 flex-shrink-0">
+        {/* Row 1: Title, Count, Sort Selector, Search, View Mode */}
         <div className="flex items-center justify-between flex-wrap gap-2">
           <div className="flex items-center gap-2">
-            <Square3Stack3DIcon className="w-4 h-4 text-muted-foreground" />
-            <span className="text-xs font-semibold text-foreground tracking-wide">
+            <Square3Stack3DIcon className="w-4 h-4 text-brand-cyan" />
+            <span className="text-xs font-semibold text-foreground tracking-wide font-mono">
               ACTIVE PREDICTION MARKETS
             </span>
-            <Badge variant="outline" className="font-mono text-[10px] text-muted-foreground bg-secondary/40 border-border/50 gap-1 px-1.5 py-0">
+            <Badge
+              variant="outline"
+              className="font-mono text-[10px] text-muted-foreground bg-secondary/40 border-border/50 gap-1 px-1.5 py-0"
+            >
               <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
-              <span>{filteredMarkets.length} LIVE</span>
+              <span>{filteredAndSortedMarkets.length} LIVE</span>
             </Badge>
           </div>
 
-          {/* Right Toolbar: View Mode & Search Box */}
-          <div className="flex items-center gap-2">
+          {/* Right Controls: Sort & Search & View Mode */}
+          <div className="flex items-center gap-2 flex-wrap">
+            {/* Sort Dropdown */}
+            <div className="flex items-center gap-1.5 bg-secondary/40 px-2 py-1 rounded-lg border border-border/50 text-xs font-mono">
+              <ArrowsUpDownIcon className="w-3.5 h-3.5 text-brand-cyan shrink-0" />
+              <span className="text-[10px] text-muted-foreground uppercase font-semibold hidden md:inline">
+                Sort:
+              </span>
+              <select
+                value={sortBy}
+                onChange={(e) => setSortBy(e.target.value as SortOption)}
+                aria-label="Sort prediction contracts"
+                className="bg-transparent text-foreground text-xs font-mono focus:outline-none cursor-pointer pr-1"
+              >
+                <option value="EDGE_DESC" className="bg-background text-foreground">
+                  Highest Alpha Edge (Desc)
+                </option>
+                <option value="EDGE_ASC" className="bg-background text-foreground">
+                  Lowest Alpha Edge (Asc)
+                </option>
+                <option value="TIME_ASC" className="bg-background text-foreground">
+                  Expiring Soonest
+                </option>
+                <option value="TIME_DESC" className="bg-background text-foreground">
+                  Expiring Latest
+                </option>
+                <option value="SPREAD_ASC" className="bg-background text-foreground">
+                  Tightest Spread
+                </option>
+                <option value="STRIKE_DESC" className="bg-background text-foreground">
+                  Strike: High to Low
+                </option>
+                <option value="STRIKE_ASC" className="bg-background text-foreground">
+                  Strike: Low to High
+                </option>
+              </select>
+            </div>
+
             {/* View Mode Switcher */}
             <div className="flex items-center gap-0.5 bg-secondary/40 p-0.5 rounded-lg border border-border/50">
               <button
@@ -133,14 +260,14 @@ export const MarketMatrix: React.FC<MarketMatrixProps> = ({
             </div>
 
             {/* Search Box */}
-            <div className="relative flex items-center min-w-[180px]">
+            <div className="relative flex items-center min-w-[170px]">
               <MagnifyingGlassIcon className="w-3.5 h-3.5 absolute left-2.5 text-muted-foreground pointer-events-none" />
               <input
                 type="text"
                 placeholder="Search contract..."
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
-                className="w-full h-7 pl-8 pr-7 text-xs font-mono rounded-lg border border-border/60 bg-secondary/30 text-foreground placeholder:text-muted-foreground/60 focus:outline-none focus:border-border transition-colors"
+                className="w-full h-7 pl-8 pr-7 text-xs font-mono rounded-lg border border-border/60 bg-secondary/30 text-foreground placeholder:text-muted-foreground/60 focus:outline-none focus:border-brand-cyan transition-colors"
               />
               {searchQuery && (
                 <button
@@ -155,51 +282,103 @@ export const MarketMatrix: React.FC<MarketMatrixProps> = ({
           </div>
         </div>
 
-        {/* Filter Pills Bar */}
-        <div className="flex items-center justify-between flex-wrap gap-2 pt-1 border-t border-border/30 text-xs">
-          {/* Symbol Filter */}
-          <div className="flex items-center gap-1 bg-secondary/30 p-0.5 rounded-lg border border-border/40 overflow-x-auto">
-            {['ALL', 'BTC/USD', 'ETH/USD', 'SOL/USD', 'BNB/USD', 'DOGE/USD'].map((sym) => {
-              const isActive = selectedSymbol === sym;
-              return (
-                <button
-                  key={sym}
-                  type="button"
-                  onClick={() => setSelectedSymbol(sym)}
-                  className={cn(
-                    "px-2.5 py-1 text-[11px] font-mono rounded-md transition-colors cursor-pointer whitespace-nowrap",
-                    isActive
-                      ? "bg-primary text-primary-foreground font-semibold shadow-xs"
-                      : "text-muted-foreground hover:text-foreground hover:bg-secondary/60"
-                  )}
-                >
-                  {sym === 'ALL' ? 'ALL ASSETS' : sym.replace('/USD', '')}
-                </button>
-              );
-            })}
+        {/* Row 2: Asset Filter, Duration Horizon Filter, Edge Filter, and Reset Button */}
+        <div className="flex items-center justify-between flex-wrap gap-2 pt-1.5 border-t border-border/30 text-xs">
+          <div className="flex items-center gap-2 flex-wrap">
+            {/* Symbol Filter */}
+            <div className="flex items-center gap-1 bg-secondary/30 p-0.5 rounded-lg border border-border/40 overflow-x-auto">
+              {['ALL', 'BTC/USD', 'ETH/USD', 'SOL/USD', 'BNB/USD', 'DOGE/USD'].map((sym) => {
+                const isActive = selectedSymbol === sym;
+                return (
+                  <button
+                    key={sym}
+                    type="button"
+                    onClick={() => setSelectedSymbol(sym)}
+                    className={cn(
+                      "px-2.5 py-1 text-[11px] font-mono rounded-md transition-colors cursor-pointer whitespace-nowrap",
+                      isActive
+                        ? "bg-primary text-primary-foreground font-semibold shadow-xs"
+                        : "text-muted-foreground hover:text-foreground hover:bg-secondary/60"
+                    )}
+                  >
+                    {sym === 'ALL' ? 'ALL ASSETS' : sym.replace('/USD', '')}
+                  </button>
+                );
+              })}
+            </div>
+
+            {/* Horizon Filter */}
+            <div className="flex items-center gap-1 bg-secondary/30 p-0.5 rounded-lg border border-border/40 overflow-x-auto">
+              {['ALL', '5m', '15m', '1h', '4h', '24h'].map((win) => {
+                const isActive = selectedWindow === win;
+                return (
+                  <button
+                    key={win}
+                    type="button"
+                    onClick={() => setSelectedWindow(win)}
+                    className={cn(
+                      "px-2.5 py-1 text-[11px] font-mono rounded-md transition-colors cursor-pointer whitespace-nowrap",
+                      isActive
+                        ? "bg-primary text-primary-foreground font-semibold shadow-xs"
+                        : "text-muted-foreground hover:text-foreground hover:bg-secondary/60"
+                    )}
+                  >
+                    {win}
+                  </button>
+                );
+              })}
+            </div>
+
+            {/* Alpha Edge Preset Filter */}
+            <div className="flex items-center gap-1 bg-secondary/30 p-0.5 rounded-lg border border-border/40 overflow-x-auto">
+              <span className="pl-1.5 pr-0.5 text-muted-foreground flex items-center gap-1 text-[10px] uppercase font-semibold font-mono hidden lg:flex">
+                <FunnelIcon className="w-3 h-3 text-brand-cyan" />
+                <span>Alpha:</span>
+              </span>
+              {[
+                { id: 'ALL', label: 'ALL ALPHA' },
+                { id: 'HIGH_ALPHA', label: 'HIGH ALPHA (≥20%)', hasSparkle: true },
+                { id: 'YES_ONLY', label: 'YES ALPHA' },
+                { id: 'NO_ONLY', label: 'NO ALPHA' },
+              ].map((opt) => {
+                const isActive = edgeFilter === opt.id;
+                return (
+                  <button
+                    key={opt.id}
+                    type="button"
+                    onClick={() => setEdgeFilter(opt.id as EdgeFilterOption)}
+                    className={cn(
+                      "px-2 py-1 text-[11px] font-mono rounded-md transition-colors cursor-pointer whitespace-nowrap flex items-center gap-1",
+                      isActive
+                        ? "bg-brand-cyan/20 text-brand-cyan border border-brand-cyan/40 font-bold shadow-xs"
+                        : "text-muted-foreground hover:text-foreground hover:bg-secondary/60"
+                    )}
+                  >
+                    {opt.hasSparkle && <SparklesIcon className="w-3 h-3 text-amber-400" />}
+                    <span>{opt.label}</span>
+                  </button>
+                );
+              })}
+            </div>
           </div>
 
-          {/* Horizon Filter */}
-          <div className="flex items-center gap-1 bg-secondary/30 p-0.5 rounded-lg border border-border/40 overflow-x-auto">
-            {['ALL', '5m', '15m', '1h', '4h', '24h'].map((win) => {
-              const isActive = selectedWindow === win;
-              return (
-                <button
-                  key={win}
-                  type="button"
-                  onClick={() => setSelectedWindow(win)}
-                  className={cn(
-                    "px-2.5 py-1 text-[11px] font-mono rounded-md transition-colors cursor-pointer whitespace-nowrap",
-                    isActive
-                      ? "bg-primary text-primary-foreground font-semibold shadow-xs"
-                      : "text-muted-foreground hover:text-foreground hover:bg-secondary/60"
-                  )}
-                >
-                  {win}
-                </button>
-              );
-            })}
-          </div>
+          {/* Reset Filters Shortcut */}
+          {isFiltered && (
+            <button
+              type="button"
+              onClick={() => {
+                setSelectedSymbol('ALL');
+                setSelectedWindow('ALL');
+                setEdgeFilter('ALL');
+                setSortBy('EDGE_DESC');
+                setSearchQuery('');
+              }}
+              className="text-[11px] font-mono text-muted-foreground hover:text-brand-cyan underline cursor-pointer flex items-center gap-1"
+            >
+              <XMarkIcon className="w-3 h-3" />
+              <span>Reset Filters</span>
+            </button>
+          )}
         </div>
       </div>
 
@@ -211,21 +390,23 @@ export const MarketMatrix: React.FC<MarketMatrixProps> = ({
               <MarketCardSkeleton key={`market-skel-${i}`} />
             ))}
           </div>
-        ) : filteredMarkets.length === 0 ? (
+        ) : filteredAndSortedMarkets.length === 0 ? (
           <div className="flex flex-col items-center justify-center p-12 text-center gap-3">
             <p className="text-xs text-muted-foreground">
               No active prediction contracts matching selected filters.
             </p>
-            {(selectedSymbol !== 'ALL' || selectedWindow !== 'ALL' || searchQuery) && (
+            {isFiltered && (
               <Button
                 variant="outline"
                 size="sm"
                 onClick={() => {
                   setSelectedSymbol('ALL');
                   setSelectedWindow('ALL');
+                  setEdgeFilter('ALL');
+                  setSortBy('EDGE_DESC');
                   setSearchQuery('');
                 }}
-                className="text-xs"
+                className="text-xs font-mono"
               >
                 Reset Filters
               </Button>
@@ -494,10 +675,10 @@ export const MarketMatrix: React.FC<MarketMatrixProps> = ({
       </div>
 
       {/* Pagination Footer */}
-      {filteredMarkets.length > 0 && (
+      {filteredAndSortedMarkets.length > 0 && (
         <Pagination
           currentPage={currentPage}
-          totalItems={filteredMarkets.length}
+          totalItems={filteredAndSortedMarkets.length}
           pageSize={pageSize}
           onPageChange={setCurrentPage}
           onPageSizeChange={setPageSize}

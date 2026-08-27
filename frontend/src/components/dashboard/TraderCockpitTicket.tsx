@@ -442,7 +442,7 @@ export const TraderCockpitTicket: React.FC<TraderCockpitTicketProps> = ({
                 if (!isNaN(val)) setPrice(val);
               }}
               className={cn(
-                "w-full pl-7 pr-3 py-2 bg-secondary/40 border border-border/60 rounded-lg text-sm font-mono text-foreground focus:outline-none focus:border-brand-cyan transition-all",
+                "w-full pl-7 pr-3 py-2 bg-secondary/40 border border-border/60 rounded-lg text-sm font-mono text-foreground focus:outline-none focus:border-brand-cyan transition-all [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none",
                 orderType === 'IOC' && "opacity-80 cursor-not-allowed bg-secondary/20"
               )}
             />
@@ -520,7 +520,7 @@ export const TraderCockpitTicket: React.FC<TraderCockpitTicketProps> = ({
               const val = parseFloat(e.target.value);
               if (!isNaN(val)) setCollateralAmount(Math.max(1, val));
             }}
-            className="w-full pl-7 pr-3 py-2 bg-secondary/40 border border-border/60 rounded-lg text-sm font-mono text-foreground focus:outline-none focus:border-brand-cyan transition-all"
+            className="w-full pl-7 pr-3 py-2 bg-secondary/40 border border-border/60 rounded-lg text-sm font-mono text-foreground focus:outline-none focus:border-brand-cyan transition-all [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
           />
         </div>
 
@@ -730,22 +730,17 @@ export const TraderCockpitTicket: React.FC<TraderCockpitTicketProps> = ({
             type="button"
             disabled={isSubmitting}
             onClick={handleExecuteOrder}
-            className={cn(
-              "w-full py-3 rounded-xl font-bold text-xs uppercase tracking-wider transition-all cursor-pointer flex items-center justify-center gap-2 shadow-lg disabled:opacity-50 disabled:cursor-not-allowed",
-              isYes
-                ? "bg-emerald-500 hover:bg-emerald-400 text-background shadow-emerald-500/20"
-                : "bg-rose-500 hover:bg-rose-400 text-background shadow-rose-500/20"
-            )}
+            className="w-full py-3 rounded-xl font-bold text-xs uppercase tracking-wider bg-white hover:bg-zinc-100 text-zinc-950 border border-white/40 shadow-lg shadow-white/10 transition-all cursor-pointer flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed active:scale-[0.99]"
           >
             {isSubmitting ? (
               <>
                 <Spinner size="sm" />
-                <span>Routing to Somnia CLOB...</span>
+                <span className="text-zinc-950 font-bold">Routing to Somnia CLOB...</span>
               </>
             ) : (
               <>
-                {activeSession?.isActive && <BoltIcon className="w-4 h-4" />}
-                <span>
+                {activeSession?.isActive && <BoltIcon className="w-4 h-4 text-zinc-950" />}
+                <span className="text-zinc-950 font-bold">
                   {activeSession?.isActive ? 'Place Zero-Gas Order' : 'Sign & Place with Wallet'} • ${calculations.totalCost.toFixed(2)}
                 </span>
               </>

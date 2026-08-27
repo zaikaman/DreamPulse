@@ -132,14 +132,19 @@ export const TradeTerminalView: React.FC<TradeTerminalViewProps> = ({
             {/* In The Money Status Badge */}
             <Badge
               variant="outline"
+              title={
+                isITM
+                  ? `In-The-Money: Live spot ($${spot.toLocaleString()}) >= strike ($${strike.toLocaleString()}). YES outcome currently leads.`
+                  : `Out-of-The-Money: Live spot ($${spot.toLocaleString()}) < strike ($${strike.toLocaleString()}). NO outcome currently leads.`
+              }
               className={cn(
-                "text-[9px] font-mono px-1.5 py-0",
+                "text-[9px] font-mono px-1.5 py-0 cursor-help",
                 isITM
                   ? "bg-emerald-500/10 text-emerald-400 border-emerald-500/30"
                   : "bg-rose-500/10 text-rose-400 border-rose-500/30"
               )}
             >
-              {isITM ? 'IN THE MONEY' : 'OUT OF MONEY'}
+              {isITM ? 'ITM · YES LEADING' : 'OTM · NO LEADING'}
             </Badge>
           </div>
 

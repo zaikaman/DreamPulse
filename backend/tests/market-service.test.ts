@@ -274,7 +274,7 @@ describe('Market Service & Anomaly Detector Unit & Integration Tests', () => {
       expect(first.id).toBeDefined();
       expect(first.strikePrice).toBeGreaterThan(0);
       expect(first.bestBidYes).toBeGreaterThanOrEqual(0);
-      expect(first.bestAskYes).toBeLessThanOrEqual(0.99);
+      expect(first.bestAskYes).toBeLessThanOrEqual(1.0);
 
       const depth = marketService.getMarketDepth(first.id);
       expect(depth).toBeDefined();

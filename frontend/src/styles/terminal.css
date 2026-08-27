@@ -70,6 +70,18 @@
   background: transparent;
 }
 
+/* Remove default HTML number input spinners / steppers */
+input[type="number"]::-webkit-outer-spin-button,
+input[type="number"]::-webkit-inner-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+
+input[type="number"] {
+  -moz-appearance: textfield;
+  appearance: textfield;
+}
+
 /* Base Terminal Layout Containers */
 .terminal-layout {
   width: 100%;
