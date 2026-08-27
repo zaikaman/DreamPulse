@@ -440,14 +440,14 @@ Tx: ${pos.txHash || 'N/A'}`;
                     const pnlVal = hist.pnl ?? 0;
 
                     const settlementSubText = marketInfo.settlementPrice
-                      ? `Chốt @ ${formatCurrencyAmount(marketInfo.settlementPrice)}`
+                      ? `Settled @ ${formatCurrencyAmount(marketInfo.settlementPrice)}`
                       : (pnlVal > 0 ? 'Settled (Win)' : 'Settled (Loss)');
 
                     const tooltipText = `[Settled Trade Summary]
 Asset: ${marketInfo.assetName} (${marketInfo.symbol}) ${marketInfo.windowDuration}
 Condition: Price > ${formatCurrencyAmount(marketInfo.strikePrice)} at Expiry
 Entry: ${hist.direction} ${hist.lotSize} Lots @ $${hist.price.toFixed(2)}
-Settlement: ${marketInfo.settlementPrice ? `Chốt @ ${formatCurrencyAmount(marketInfo.settlementPrice)}` : 'Resolved'}
+Settlement: ${marketInfo.settlementPrice ? `Settled @ ${formatCurrencyAmount(marketInfo.settlementPrice)}` : 'Resolved'}
 PnL: ${isProfitable ? '+' : ''}$${pnlVal.toFixed(2)} USDC
 Tx: ${hist.txHash || 'N/A'}`;
 

@@ -518,23 +518,23 @@ export const OrderHistoryTable: React.FC<OrderHistoryTableProps> = ({
                     pnlMainText = pnl > 0 ? `+${pnl.toFixed(2)} tUSDC` : `${pnl.toFixed(2)} tUSDC`;
                     pnlColor = pnl > 0 ? 'var(--trade-buy)' : 'var(--trade-sell)';
                     if (marketInfo.settlementPrice) {
-                      settlementSubText = `Chốt @ ${formatCurrencyAmount(marketInfo.settlementPrice)}`;
+                      settlementSubText = `Settled @ ${formatCurrencyAmount(marketInfo.settlementPrice)}`;
                     } else {
                       settlementSubText = pnl > 0 ? 'Settled (Win)' : 'Settled (Loss)';
                     }
                   } else if (order.status !== 'FILLED') {
                     pnlMainText = '— PENDING';
                     pnlColor = 'var(--muted-foreground)';
-                    settlementSubText = 'Chờ khớp lệnh';
+                    settlementSubText = 'Awaiting Fill';
                   } else if (isOpen) {
                     pnlMainText = '— OPEN';
                     pnlColor = 'var(--muted-foreground)';
-                    settlementSubText = 'Đang chạy (Live)';
+                    settlementSubText = 'Active (In Play)';
                   } else {
                     pnlMainText = '0.00 tUSDC';
                     pnlColor = 'var(--muted-foreground)';
                     if (marketInfo.settlementPrice) {
-                      settlementSubText = `Chốt @ ${formatCurrencyAmount(marketInfo.settlementPrice)}`;
+                      settlementSubText = `Settled @ ${formatCurrencyAmount(marketInfo.settlementPrice)}`;
                     } else {
                       settlementSubText = 'Settled';
                     }
@@ -552,7 +552,7 @@ Asset: ${marketInfo.assetName} (${marketInfo.symbol}) ${marketInfo.windowDuratio
 Condition: Price > ${formatCurrencyAmount(marketInfo.strikePrice)} at Expiry
 Order: ${order.direction} ${order.lotSize.toFixed(1)} lots @ ${order.price.toFixed(2)} tUSDC
 Cost: ${order.totalCost.toFixed(2)} tUSDC (Implied: ${(order.price * 100).toFixed(0)}%)
-Settlement: ${marketInfo.settlementPrice ? `Chốt @ ${formatCurrencyAmount(marketInfo.settlementPrice)}` : (isOpen ? 'Đang mở (Pending Expiry)' : 'Đã kết thúc')}
+Settlement: ${marketInfo.settlementPrice ? `Settled @ ${formatCurrencyAmount(marketInfo.settlementPrice)}` : (isOpen ? 'Open (Pending Expiry)' : 'Finalized')}
 Realized PnL: ${pnl !== 0 ? (pnl > 0 ? `+${pnl.toFixed(2)} tUSDC (Win)` : `${pnl.toFixed(2)} tUSDC (Loss)`) : (isOpen ? 'Open in progress' : '0.00 tUSDC')}
 Agent: ${order.agentType} (${agentRoleMap[order.agentType] || 'Autonomous Swarm'})
 Tx Hash: ${order.txHash || 'N/A'}`;
