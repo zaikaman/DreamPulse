@@ -69,6 +69,14 @@ export const apiClient = {
   },
 
   // Sessions
+  async getActiveSession(userAddress: string): Promise<{ success: boolean; session: SessionGrant | null }> {
+    return fetchJson<{ success: boolean; session: SessionGrant | null }>(`/sessions/${encodeURIComponent(userAddress)}?active=true`);
+  },
+
+  async getUserSessions(userAddress: string): Promise<{ success: boolean; count: number; activeSession: SessionGrant | null; sessions: SessionGrant[] }> {
+    return fetchJson(`/sessions/${encodeURIComponent(userAddress)}`);
+  },
+
   async registerSession(payload: {
     userAddress: string;
     operatorAddress: string;
@@ -208,7 +216,13 @@ export const apiClient = {
     });
   },
 
+  async getBacktestHistory(userAddress?: string): Promise<{ success: boolean; data: any[] }> {
+    const q = userAddress ? `?userAddress=${encodeURIComponent(userAddress)}` : '';
+    return fetchJson(`/backtest/history${q}`);
+  },
+
   async runBacktest(config: {
+    userAddress?: string;
     agentType: string;
     symbol: string;
     startDate?: string;

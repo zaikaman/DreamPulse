@@ -69,7 +69,7 @@ The backend runs an Express HTTP server, WebSocket telemetry stream, and autonom
    - In the **Deploy** tab, choose the `main` branch.
    - Click **Deploy Branch** (or enable **Automatic Deploys** from `main`).
 6. **Ensure Dyno is Active**:
-   - In the **Resources** tab, verify that `web: npm run start:backend` is turned ON (1 Dyno).
+   - In the **Resources** tab, verify that `web: node backend/dist/index.js` is turned ON (1 Dyno).
 
 ---
 

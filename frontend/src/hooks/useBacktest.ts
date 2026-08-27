@@ -91,7 +91,7 @@ export const useBacktest = (userAddress?: string) => {
 
   const fetchHistory = useCallback(async () => {
     try {
-      const res = await fetch(`/api/v1/backtest/history${userAddress ? `?userAddress=${userAddress}` : ''}`).then((r) => r.json());
+      const res = await apiClient.getBacktestHistory(userAddress);
       if (res?.data) {
         setHistory(res.data);
       }
@@ -115,18 +115,14 @@ export const useBacktest = (userAddress?: string) => {
           ...params,
         };
 
-        const response = await fetch('/api/v1/backtest/run', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(payload),
-        }).then((r) => r.json());
+        const response = await apiClient.runBacktest(payload);
 
         if (response?.success && response.result) {
-          setCurrentResult(response.result);
-          setHistory((prev) => [response.result, ...prev]);
-          return response.result;
+          setCurrentResult(response.result as BacktestDetailedResult);
+          setHistory((prev) => [response.result as BacktestDetailedResult, ...prev]);
+          return response.result as BacktestDetailedResult;
         } else {
-          throw new Error(response?.error || 'Simulation failed');
+          throw new Error('Simulation failed');
         }
       } catch (err: any) {
         setError(err.message || 'Simulation execution error');

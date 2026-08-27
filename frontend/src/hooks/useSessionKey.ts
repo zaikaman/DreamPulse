@@ -167,78 +167,106 @@ export function useSessionKey(): UseSessionKeyReturn {
    * Fetches active session from backend API and Supabase.
    */
   const fetchActiveSession = useCallback(async (address: Address) => {
-    try {
-      const res = await fetch(`/api/v1/sessions/${encodeURIComponent(address)}?active=true`);
-      if (res.ok) {
-        const data = await res.json();
-        if (data.success && data.session) {
-          const s = data.session;
-          const sessionGrant: SessionGrant = {
-            id: s.id,
-            userAddress: s.userAddress as `0x${string}`,
-            operatorAddress: s.operatorAddress as `0x${string}`,
-            permissions: s.permissions || ['placeOrderFor', 'cancelOrderFor'],
-            maxTradeSize: Number(s.maxTradeSize),
-            dailyVolumeCap: Number(s.dailyVolumeCap),
-            spentToday: Number(s.spentToday || 0),
-            expiresAt: s.expiresAt,
-            isActive: Boolean(s.isActive),
-            onChainTxHash: s.onChainTxHash,
-            vaultDepositAmount: s.vaultDepositAmount,
-            targetPoolAddress: s.targetPoolAddress,
-            onChainAuthorized: s.onChainAuthorized === true,
-          };
+    let sessionFound: SessionGrant | null = null;
+    let backendSuccess = false;
 
-          if (new Date(sessionGrant.expiresAt).getTime() > Date.now() && sessionGrant.isActive) {
-            setActiveSession(sessionGrant);
-            localStorage.setItem(LOCAL_SESSION_KEY, JSON.stringify(sessionGrant));
-            return;
-          }
+    // 1. Fetch from Backend API via apiClient (handles configured backend URL)
+    try {
+      const data = await apiClient.getActiveSession(address);
+      backendSuccess = true;
+      if (data?.success && data?.session) {
+        const s = data.session;
+        const grant: SessionGrant = {
+          id: s.id,
+          userAddress: (s.userAddress || address) as `0x${string}`,
+          operatorAddress: (s.operatorAddress || SOMNIA_ADDRESSES.operatorAccount) as `0x${string}`,
+          permissions: s.permissions || ['placeOrderFor', 'cancelOrderFor'],
+          maxTradeSize: Number(s.maxTradeSize),
+          dailyVolumeCap: Number(s.dailyVolumeCap),
+          spentToday: Number(s.spentToday || 0),
+          expiresAt: s.expiresAt,
+          isActive: Boolean(s.isActive),
+          onChainTxHash: s.onChainTxHash,
+          vaultDepositAmount: s.vaultDepositAmount,
+          targetPoolAddress: s.targetPoolAddress,
+          onChainAuthorized: s.onChainAuthorized === true,
+        };
+
+        if (new Date(grant.expiresAt).getTime() > Date.now() && grant.isActive) {
+          sessionFound = grant;
         }
       }
     } catch (err) {
-      console.warn('[useSessionKey] Failed fetching active session from backend:', err);
+      console.warn('[useSessionKey] Failed fetching active session from backend API:', err);
     }
 
-    // Fallback: check Supabase directly
-    try {
-      const { data } = await supabase
-        .from('sessions')
-        .select('*')
-        .eq('user_address', address)
-        .eq('is_active', true)
-        .order('created_at', { ascending: false })
-        .limit(1);
+    // 2. Fallback: check Supabase directly if not found from backend
+    if (!sessionFound) {
+      try {
+        const { data } = await supabase
+          .from('sessions')
+          .select('*')
+          .ilike('user_address', address)
+          .eq('is_active', true)
+          .order('created_at', { ascending: false })
+          .limit(1);
 
-      if (data && data.length > 0) {
-        const row = data[0];
-        if (new Date(row.expires_at).getTime() > Date.now()) {
-          const sessionGrant: SessionGrant = {
-            id: row.id,
-            userAddress: row.user_address,
-            operatorAddress: row.operator_address,
-            permissions: row.permissions || ['placeOrderFor', 'cancelOrderFor'],
-            maxTradeSize: Number(row.max_trade_size),
-            dailyVolumeCap: Number(row.daily_volume_cap),
-            spentToday: Number(row.spent_today || 0),
-            expiresAt: row.expires_at,
-            isActive: row.is_active,
-            onChainTxHash: row.on_chain_tx_hash,
-            vaultDepositAmount: row.vault_deposit_amount,
-            targetPoolAddress: row.target_pool_address,
-            onChainAuthorized: row.on_chain_authorized === true,
-          };
-          setActiveSession(sessionGrant);
-          localStorage.setItem(LOCAL_SESSION_KEY, JSON.stringify(sessionGrant));
-          return;
+        if (data && data.length > 0) {
+          const row = data[0];
+          if (new Date(row.expires_at).getTime() > Date.now()) {
+            sessionFound = {
+              id: row.id,
+              userAddress: row.user_address,
+              operatorAddress: row.operator_address,
+              permissions: row.permissions || ['placeOrderFor', 'cancelOrderFor'],
+              maxTradeSize: Number(row.max_trade_size),
+              dailyVolumeCap: Number(row.daily_volume_cap),
+              spentToday: Number(row.spent_today || 0),
+              expiresAt: row.expires_at,
+              isActive: row.is_active,
+              onChainTxHash: row.on_chain_tx_hash,
+              vaultDepositAmount: row.vault_deposit_amount,
+              targetPoolAddress: row.target_pool_address,
+              onChainAuthorized: row.on_chain_authorized === true,
+            };
+          }
         }
+      } catch (err) {
+        console.warn('[useSessionKey] Supabase fallback error:', err);
       }
-    } catch {
-      // ignore
     }
 
-    setActiveSession(null);
-    localStorage.removeItem(LOCAL_SESSION_KEY);
+    if (sessionFound) {
+      setActiveSession(sessionFound);
+      localStorage.setItem(LOCAL_SESSION_KEY, JSON.stringify(sessionFound));
+      return;
+    }
+
+    // 3. If neither backend nor Supabase returned a session:
+    // If backend was reached and explicitly reported no active session (and DB had none):
+    if (backendSuccess) {
+      setActiveSession(null);
+      localStorage.removeItem(LOCAL_SESSION_KEY);
+    } else {
+      // If network failed, check if localStorage has a valid unexpired session for this wallet
+      try {
+        const saved = localStorage.getItem(LOCAL_SESSION_KEY);
+        if (saved) {
+          const parsed = JSON.parse(saved);
+          if (
+            parsed?.userAddress &&
+            parsed.userAddress.toLowerCase() === address.toLowerCase() &&
+            parsed.isActive &&
+            new Date(parsed.expiresAt).getTime() > Date.now()
+          ) {
+            setActiveSession(parsed);
+            return;
+          }
+        }
+      } catch {}
+      setActiveSession(null);
+      localStorage.removeItem(LOCAL_SESSION_KEY);
+    }
   }, []);
 
   /**

@@ -308,12 +308,62 @@ export class SessionService {
     }
 
     const userKey = getAddress(userAddress).toLowerCase();
-    const sessionId = this.userToActiveSessionId.get(userKey);
-    if (!sessionId) {
-      return null;
+    let sessionId = this.userToActiveSessionId.get(userKey);
+    let session = sessionId ? this.sessions.get(sessionId) : null;
+
+    // If not found in in-memory cache, attempt to restore from Supabase
+    if (!session && isSessionPersistenceEnabled()) {
+      try {
+        const { data } = await supabase
+          .from('sessions')
+          .select('*')
+          .ilike('user_address', userAddress)
+          .eq('is_active', true)
+          .order('created_at', { ascending: false })
+          .limit(1);
+
+        if (data && data.length > 0) {
+          const row = data[0];
+          const expiresTimestamp = new Date(row.expires_at).getTime();
+          if (expiresTimestamp > Date.now()) {
+            const updatedAtTimestamp = new Date(row.updated_at || row.created_at).getTime();
+            const isPastDay =
+              Date.now() - updatedAtTimestamp > 24 * 3600 * 1000 ||
+              new Date(updatedAtTimestamp).getUTCDate() !== new Date().getUTCDate();
+            const spentToday = isPastDay ? 0 : Number(row.spent_today || 0);
+            const lastSpendResetTimestamp = isPastDay ? Date.now() : updatedAtTimestamp;
+
+            const record: SessionRecord = {
+              id: row.id,
+              userAddress: getAddress(row.user_address) as Address,
+              operatorAddress: getAddress(row.operator_address) as Address,
+              permissions: Array.isArray(row.permissions) ? row.permissions : ['placeOrderFor', 'cancelOrderFor'],
+              maxTradeSize: Number(row.max_trade_size),
+              dailyVolumeCap: Number(row.daily_volume_cap),
+              spentToday,
+              lastSpendResetTimestamp,
+              expiresAt: row.expires_at,
+              isActive: true,
+              nonce: 0,
+              onChainTxHash: (row.on_chain_tx_hash as Hex) || undefined,
+              vaultDepositAmount: row.vault_deposit_amount ? Number(row.vault_deposit_amount) : undefined,
+              targetPoolAddress: row.target_pool_address ? (getAddress(row.target_pool_address) as Address) : undefined,
+              onChainAuthorized: row.on_chain_authorized === true,
+              createdAt: row.created_at,
+              updatedAt: row.updated_at,
+            };
+
+            this.sessions.set(record.id, record);
+            this.userToActiveSessionId.set(userKey, record.id);
+            session = record;
+            sessionId = record.id;
+          }
+        }
+      } catch (err: any) {
+        console.warn('[SessionService] getUserActiveSession DB lookup warning:', err.message);
+      }
     }
 
-    const session = this.sessions.get(sessionId);
     if (!session) {
       return null;
     }

@@ -1,0 +1,38 @@
+# Vercel Ignore - DreamPulse Frontend
+# Excludes backend, contracts, migrations, specifications, and dev artifacts from Vercel deployments
+
+# Backend code & artifacts
+backend/
+dist/
+build/
+
+# Smart Contracts & Artifacts
+contracts/
+dreamdex-bot-kit/
+
+# Database Migrations & Tooling
+supabase/
+
+# Agent, Spec & Documentation artifacts
+.agents/
+.specify/
+.codex/
+specs/
+assets/
+*.md
+!frontend/**/*.md
+
+# Environment variables & secrets
+.env*
+!.env.example
+
+# Testing & Coverage
+coverage/
+tests/
+__tests__/
+
+# Logs & Cache
+*.log
+.turbo
+.eslintcache
+.cache

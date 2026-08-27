@@ -31,7 +31,6 @@
     "typescript": "^5.7.3"
   },
   "devDependencies": {
-    "concurrently": "^9.1.2",
-    "solc": "^0.8.36"
+    "concurrently": "^9.1.2"
   }
 }

@@ -45,15 +45,18 @@ export default defineConfig({
   },
   build: {
     outDir: 'dist',
-    sourcemap: true,
+    sourcemap: process.env.VITE_SOURCEMAP === 'true',
     target: 'esnext',
+    minify: 'esbuild',
+    cssCodeSplit: true,
+    chunkSizeWarningLimit: 1000,
     rollupOptions: {
       output: {
         manualChunks: {
           'vendor-react': ['react', 'react-dom'],
           'vendor-web3': ['viem'],
-          'vendor-icons': ['lucide-react'],
           'vendor-three': ['three', '@react-three/fiber'],
+          'vendor-supabase': ['@supabase/supabase-js'],
         },
       },
     },

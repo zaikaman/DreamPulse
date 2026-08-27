@@ -1,0 +1,38 @@
+# Heroku Slug Ignore - DreamPulse Backend
+# Excludes frontend, static media, contracts, migrations, tests, and specs from the dyno slug image
+
+# Frontend application (Hosted on Vercel)
+frontend/
+
+# Smart Contracts & Artifacts
+contracts/
+dreamdex-bot-kit/
+example/
+
+# Database Migrations & Scripts (Managed directly in Supabase)
+supabase/
+
+# Heavy static assets, mockups, design files
+assets/
+
+# Agent memories, specifications & task logs
+.agents/
+.specify/
+.codex/
+specs/
+
+# Markdown documentation
+*.md
+!backend/**/*.md
+
+# Backend Tests & Test Fixtures
+backend/tests/
+backend/**/__tests__/
+backend/**/*.test.ts
+backend/**/*.spec.ts
+
+# IDE, OS, and Temp files
+.vscode/
+.idea/
+.DS_Store
+*.log
