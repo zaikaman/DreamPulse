@@ -43,6 +43,20 @@ const envSchema = z.object({
   SOMNIA_CHAIN_ID: z.string().default('50312').transform((val) => parseInt(val, 10)),
   OPERATOR_PRIVATE_KEY: z.string().default('0x0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef'),
 
+  // Autonomous Swarm & Execution Control
+  ENABLE_SWARM_RUNNER: z.preprocess((val) => {
+    if (process.env.DISABLE_SWARM_RUNNER === 'true' || process.env.DISABLE_SWARM_RUNNER === '1') {
+      return false;
+    }
+    if (val === 'false' || val === '0' || val === false) {
+      return false;
+    }
+    return true;
+  }, z.boolean()).default(true),
+  DRY_RUN_MODE: z.preprocess((val) => {
+    return val === 'true' || val === '1' || val === true;
+  }, z.boolean()).default(false),
+
   // Security & Admin
   OPERATOR_ADMIN_SECRET: z.string().optional(),
   FRONTEND_ORIGIN: z.string().default('*'),

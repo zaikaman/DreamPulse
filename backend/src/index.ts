@@ -78,8 +78,15 @@ if (!process.env.VITEST) {
     });
 
     // Start Autonomous Multi-Agent Swarm Runner Loop (1000ms evaluation tick)
-    const { swarmRunner } = await import('./agents/swarm-runner.js');
-    swarmRunner.start(1000);
+    if (env.ENABLE_SWARM_RUNNER && !env.DRY_RUN_MODE) {
+      const { swarmRunner } = await import('./agents/swarm-runner.js');
+      swarmRunner.start(1000);
+      console.log('[DreamPulse Engine] Autonomous Multi-Agent Swarm Runner started (Active on-chain execution).');
+    } else {
+      console.log(
+        `[DreamPulse Engine] Swarm Runner loop is DISABLED (ENABLE_SWARM_RUNNER=${env.ENABLE_SWARM_RUNNER}, DRY_RUN_MODE=${env.DRY_RUN_MODE}). Running in local API/Read-Only mode to avoid conflicts with production Heroku.`
+      );
+    }
   });
 }
 
