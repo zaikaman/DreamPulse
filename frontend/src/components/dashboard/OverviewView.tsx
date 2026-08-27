@@ -11,8 +11,10 @@ import type { MarketTickData } from '../../hooks/useTelemetry.js';
 import type { WalletState } from '../../hooks/useSessionKey.js';
 import { useAgentSwarm } from '../../hooks/useAgentSwarm.js';
 import { useUserPortfolio } from '../../hooks/useUserPortfolio.js';
+import { useOnboarding } from '../../hooks/useOnboarding.js';
 import { StatCardsGrid } from './StatCardsGrid.js';
 import { SessionStatusBar } from '../SessionStatusBar.js';
+import { OnboardingQuestBar } from './OnboardingQuestBar.js';
 import { OpportunityTableSkeleton, Skeleton } from '../ui/Skeleton.js';
 import { Badge } from '../ui/badge.js';
 import { Button } from '../ui/button.js';
@@ -34,6 +36,7 @@ interface OverviewViewProps {
   onOpenSessionModal?: (options?: { revoke?: boolean }) => void;
   onConnectWallet?: () => Promise<void>;
   onSwitchNetwork?: () => Promise<void>;
+  onOpenTour?: () => void;
 }
 
 const OverviewViewComponent: React.FC<OverviewViewProps> = ({
@@ -52,6 +55,7 @@ const OverviewViewComponent: React.FC<OverviewViewProps> = ({
   onOpenSessionModal,
   onConnectWallet,
   onSwitchNetwork,
+  onOpenTour,
 }) => {
   const [isHovered, setIsHovered] = useState<boolean>(false);
   const [nowTime, setNowTime] = useState<number>(Date.now());
@@ -105,8 +109,36 @@ const OverviewViewComponent: React.FC<OverviewViewProps> = ({
   const { detailed: swarmDetailed, summary: swarmSummary, orders } = useAgentSwarm();
   const { portfolio } = useUserPortfolio(wallet);
 
+  const {
+    quests,
+    completedQuestsCount,
+    totalQuestsCount,
+    progressPercent,
+    allQuestsCompleted,
+    isQuestBarDismissed,
+    openOnboarding,
+    dismissQuestBar,
+  } = useOnboarding({ wallet, activeSession, ordersCount: orders.length });
+
   return (
     <div className="overview-container flex flex-col gap-2.5 h-full min-h-0 flex-1 overflow-hidden" style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+      {/* Onboarding & Quick-Start Quest Checklist */}
+      <OnboardingQuestBar
+        quests={quests}
+        completedCount={completedQuestsCount}
+        totalCount={totalQuestsCount}
+        progressPercent={progressPercent}
+        allCompleted={allQuestsCompleted}
+        isDismissed={isQuestBarDismissed}
+        isFauceting={isFauceting}
+        wallet={wallet}
+        onClaimFaucet={onClaimFaucet}
+        onOpenSessionModal={onOpenSessionModal}
+        onNavigateTab={(tab) => onNavigateToTab(tab)}
+        onOpenTour={onOpenTour || openOnboarding}
+        onDismiss={dismissQuestBar}
+      />
+
       {/* Non-Custodial Session Delegation Status Banner */}
       {wallet && onOpenSessionModal && onConnectWallet && onSwitchNetwork && (
         <SessionStatusBar

@@ -30,6 +30,7 @@ export interface CommandDialogProps {
   onSelectMarket?: (marketId: string) => void;
   onNavigateView: (view: DashboardViewType) => void;
   onOpenSessionModal?: (options?: { revoke?: boolean }) => void;
+  onOpenTour?: () => void;
   onClaimFaucet?: () => void;
   wallet?: {
     address: string | null;
@@ -62,6 +63,7 @@ export const CommandDialog: React.FC<CommandDialogProps> = ({
   onSelectMarket,
   onNavigateView,
   onOpenSessionModal,
+  onOpenTour,
   onClaimFaucet,
   wallet,
   activeSession,
@@ -191,6 +193,23 @@ export const CommandDialog: React.FC<CommandDialogProps> = ({
   // 2. Definition of all quick actions
   const actionItems = useMemo<CommandItem[]>(() => {
     const actions: CommandItem[] = [];
+
+    // Guided Onboarding Tour Action
+    if (onOpenTour) {
+      actions.push({
+        id: "action-guided-tour",
+        type: "action",
+        title: "Restart Setup Guide & Onboarding",
+        subtitle: "Launch interactive 4-step first-run wizard and feature guide",
+        badge: "Guide",
+        icon: SparklesIcon,
+        keywords: "tour onboarding help guide walkthrough setup welcome tutorial start learn docs",
+        onSelect: () => {
+          onOpenTour();
+          onClose();
+        },
+      });
+    }
 
     // Faucet Action
     if (onClaimFaucet) {

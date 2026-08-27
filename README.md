@@ -31,15 +31,16 @@
 7. [Strategy Studio & Institutional Backtesting](#strategy-studio--institutional-backtesting)
 8. [Personal Swarm: Copy-Trading vs Isolated Per-Wallet Swarms](#personal-swarm-copy-trading-vs-isolated-per-wallet-swarms)
 9. [Institutional Design System & Minimalist Terminal UI](#institutional-design-system--minimalist-terminal-ui)
-10. [Smart Contracts & On-Chain Deployments](#smart-contracts--on-chain-deployments)
-11. [Hackathon Judging Criteria Alignment](#hackathon-judging-criteria-alignment)
-12. [Developer Feedback Report (Somnia & DreamDEX SDK)](#developer-feedback-report-somnia--dreamdex-sdk)
-13. [System Architecture Diagrams](#system-architecture-diagrams)
-14. [API & WebSocket Telemetry Protocol](#api--websocket-telemetry-protocol)
-15. [Local Installation & Development Guide](#local-installation--development-guide)
-16. [Verification & Test Suite (100/100 Passing)](#verification--test-suite-100100-passing)
-17. [2–3 Minute Demo Video Walkthrough](#23-minute-demo-video-walkthrough)
-18. [License & Acknowledgements](#license--acknowledgements)
+10. [Minimalist Onboarding & First-Run Activation Flow](#minimalist-onboarding--first-run-activation-flow)
+11. [Smart Contracts & On-Chain Deployments](#smart-contracts--on-chain-deployments)
+12. [Hackathon Judging Criteria Alignment](#hackathon-judging-criteria-alignment)
+13. [Developer Feedback Report (Somnia & DreamDEX SDK)](#developer-feedback-report-somnia--dreamdex-sdk)
+14. [System Architecture Diagrams](#system-architecture-diagrams)
+15. [API & WebSocket Telemetry Protocol](#api--websocket-telemetry-protocol)
+16. [Local Installation & Development Guide](#local-installation--development-guide)
+17. [Verification & Test Suite (100/100 Passing)](#verification--test-suite-100100-passing)
+18. [2–3 Minute Demo Video Walkthrough](#23-minute-demo-video-walkthrough)
+19. [License & Acknowledgements](#license--acknowledgements)
 
 ---
 
@@ -327,6 +328,55 @@ The DreamPulse frontend is crafted with a high-aesthetic, minimalist institution
   * **Execution & Studio**: *Strategy Studio (quant backtester IDE — Simulate then Deploy to My Personal Swarm or, for Operator, to Global Swarm)*, *Settlement Sweeper (batch claim & compound)*, and *Portfolio Analytics (Sharpe/Sortino)*.
 * **Global Command Palette (`⌘K / Ctrl+K`)**: Lightning-fast fuzzy search modal to jump between prediction markets, navigate views, and execute platform actions.
 * **Procedural Web Audio Feedback**: Zero-asset synthesizer utilizing the Web Audio API to deliver millisecond-accurate acoustic feedback for order fills, opportunity alerts, and settlement sweeps.
+
+---
+
+## Minimalist Onboarding & First-Run Activation Flow
+
+To ensure new users are never overwhelmed by the depth of 9+ trading modules, DreamPulse features a multi-tiered, non-intrusive onboarding architecture designed to get traders from wallet connection to first value in under 60 seconds:
+
+```
+┌─────────────────────────────────────────────────────────────────────────────┐
+│  LAYER 1: The First-Connect Glassmorphic Wizard (Modal Triggered on 1st Connect) │
+│  "3 Steps to First Value in < 60 seconds"                                    │
+└─────────────────────────────────────────────────────────────────────────────┘
+                                      │
+                                      ▼
+┌─────────────────────────────────────────────────────────────────────────────┐
+│  LAYER 2: Interactive Path Selector ("Choose Your Journey")                  │
+│  [ 🤖 Passive Swarm Copytrade ]   [ ⚡ Pro Terminal & Copilot ]   [ 🎯 Quant Studio ]│
+└─────────────────────────────────────────────────────────────────────────────┘
+                                      │
+                                      ▼
+┌─────────────────────────────────────────────────────────────────────────────┐
+│  LAYER 3: Persistent Quick-Start Quest Bar (Top of Overview & Sidebar)      │
+│  Progress: [████████░░░░] 2/4 Steps Completed (Claim Faucet -> Session -> 1st Trade)│
+└─────────────────────────────────────────────────────────────────────────────┘
+```
+
+### 1. Interactive 4-Step First-Run Wizard (`OnboardingWizardModal.tsx`)
+Auto-triggers on the very first wallet connection per address/device (persisted in `localStorage`):
+1. **Network Verification**: Automatically verifies the connection to **Somnia Shannon Testnet** (Chain ID `50312`) and provides a 1-click network switch action.
+2. **1-Click Testnet Collateral & Gas Faucet**: Immediately claims 1,000 tUSDC test collateral and verifies STT gas balance with instant acoustic chime feedback.
+3. **Session Key Demystification & Delegation**: Explains non-custodial session keys (enabling sub-100ms algorithmic execution without signing MetaMask popups on every 30s contract) with 1-click authorization and customizable risk caps.
+4. **Choose Your Trading Journey**: Presents 3 role-based pathways that route the user directly to their preferred workflow:
+   * **Autonomous Swarm Vaults (Recommended)**: Routes directly to `Swarm Cockpit` for 1-click copytrading.
+   * **AI Alpha Copilot & Trade Terminal**: Routes directly to `Trade Terminal` for manual order execution with AI guidance.
+   * **Edge Radar & Quant Studio**: Routes directly to `Edge Radar` for mathematical mispricing arbitrage and formula backtesting.
+
+### 2. Getting Started Quests Bar (`OnboardingQuestBar.tsx`)
+A sleek, minimalist banner embedded at the top of the **Terminal Overview**:
+* Real-time progress tracker (`2 / 4 Completed • 50%`).
+* Interactive milestone pills:
+  1. `Connect Wallet` (Auto-checked when connected to Shannon)
+  2. `Claim 1,000 tUSDC Faucet` (1-click inline claim button)
+  3. `Authorize Session Key` (1-click inline modal launcher)
+  4. `Copytrade or Place Trade` (Direct route launcher)
+* Dismissable with state persistence or expandable anytime via the **Guided Tour** trigger.
+
+### 3. Replay & Accessibility Hooks
+* **Sidebar Footer**: Discrete `[ Guided Tour ]` action button always available for reference.
+* **Global Command Palette (`⌘K`)**: Instant fuzzy search shortcut for `Restart Setup Guide & Onboarding`.
 
 ---
 

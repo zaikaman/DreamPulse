@@ -29,6 +29,7 @@ interface SidebarProps {
   isCollapsed?: boolean;
   onToggleCollapse?: () => void;
   onOpenSessionModal?: () => void;
+  onOpenTour?: () => void;
   wallet?: {
     address: string | null;
     balanceSTT?: string;
@@ -52,6 +53,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
   markets: _markets = [],
   isCollapsed = false,
   onOpenSessionModal,
+  onOpenTour,
   wallet,
   activeSession,
   onConnectWallet,
@@ -225,6 +227,33 @@ export const Sidebar: React.FC<SidebarProps> = ({
 
       {/* Footer Support Card & Web3 Status */}
       <div className="space-y-2.5 pt-3 border-t border-border/50 w-full">
+        {/* Guided Setup Tour Trigger */}
+        {!isCollapsed ? (
+          <button
+            onClick={() => onOpenTour?.()}
+            className="w-full flex items-center justify-between px-2.5 py-1.5 rounded-lg border border-border/40 bg-secondary/30 hover:bg-secondary/70 text-muted-foreground hover:text-foreground text-xs transition-colors cursor-pointer"
+            title="Open DreamPulse Setup & Feature Guide"
+          >
+            <div className="flex items-center gap-2">
+              <SparklesIcon className="w-3.5 h-3.5 text-foreground/70" />
+              <span>Guided Tour</span>
+            </div>
+            <Badge variant="outline" className="text-[9px] font-mono px-1 py-0 h-3.5 text-muted-foreground border-border/40">
+              Help
+            </Badge>
+          </button>
+        ) : (
+          <div className="flex justify-center">
+            <button
+              onClick={() => onOpenTour?.()}
+              className="p-1.5 rounded-lg text-muted-foreground hover:text-foreground hover:bg-secondary/60 transition-colors cursor-pointer"
+              title="Guided Tour"
+            >
+              <SparklesIcon className="w-4 h-4" />
+            </button>
+          </div>
+        )}
+
         {!isCollapsed && (
           <div className="rounded-xl border border-border/50 bg-card/40 backdrop-blur-md p-2.5 space-y-1 text-xs shadow-2xs">
             <div className="flex items-center justify-between">

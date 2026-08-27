@@ -21,6 +21,7 @@ import { soundEngine } from './services/audio.js';
 import { apiClient } from './services/api.js';
 import { telemetryClient, type OrderFillData, type SweepCompleteData } from './services/telemetry-client.js';
 import { Spinner } from './components/ui/Spinner.js';
+import { useOnboarding } from './hooks/useOnboarding.js';
 
 // Lazy load heavy modules to minimize initial bundle size and accelerate TTI
 const SwarmCockpitView = React.lazy(() => import('./components/dashboard/SwarmCockpitView.js').then((m) => ({ default: m.SwarmCockpitView })));
@@ -28,6 +29,7 @@ const StrategyStudio = React.lazy(() => import('./components/StrategyStudio.js')
 const SweeperControls = React.lazy(() => import('./components/SweeperControls.js').then((m) => ({ default: m.SweeperControls })));
 const AnalyticsView = React.lazy(() => import('./components/dashboard/AnalyticsView.js').then((m) => ({ default: m.AnalyticsView })));
 const SessionDelegationModal = React.lazy(() => import('./components/SessionDelegationModal.js').then((m) => ({ default: m.SessionDelegationModal })));
+const OnboardingWizardModal = React.lazy(() => import('./components/onboarding/OnboardingWizardModal.js').then((m) => ({ default: m.OnboardingWizardModal })));
 
 export const App: React.FC = () => {
   const [activeNav, setActiveNav] = useState<DashboardViewType>('Landing');
@@ -68,6 +70,13 @@ export const App: React.FC = () => {
     refreshAllowanceStatus,
     clearError: clearSessionError,
   } = useSessionKey();
+
+  const {
+    isOnboardingOpen,
+    openOnboarding,
+    closeOnboarding,
+    completeOnboarding,
+  } = useOnboarding({ wallet, activeSession });
 
   const [isSessionModalOpen, setIsSessionModalOpen] = useState<boolean>(false);
   const [sessionModalInitialRevoke, setSessionModalInitialRevoke] = useState<boolean>(false);
@@ -269,6 +278,7 @@ export const App: React.FC = () => {
         isFauceting={isSessionFauceting}
         onClaimFaucet={claimCollateralFaucet}
         onOpenSessionModal={handleOpenSessionModal}
+        onOpenTour={() => openOnboarding(0)}
         onConnectWallet={connectWallet}
         onDisconnectWallet={disconnectWallet}
         onSwitchNetwork={switchNetwork}
@@ -298,6 +308,7 @@ export const App: React.FC = () => {
             isFauceting={isSessionFauceting}
             onClaimFaucet={claimCollateralFaucet}
             onOpenSessionModal={handleOpenSessionModal}
+            onOpenTour={() => openOnboarding(0)}
             onConnectWallet={connectWallet}
             onSwitchNetwork={switchNetwork}
             isLoading={isMarketsLoading}
@@ -424,6 +435,7 @@ export const App: React.FC = () => {
           else if (view === 'Landing') window.location.hash = '';
         }}
         onOpenSessionModal={handleOpenSessionModal}
+        onOpenTour={() => openOnboarding(0)}
         onClaimFaucet={claimCollateralFaucet}
         wallet={wallet}
         activeSession={activeSession}
@@ -460,6 +472,35 @@ export const App: React.FC = () => {
           onEnsureAllowances={ensureAllowances}
           onRefreshAllowance={refreshAllowanceStatus}
           onClearError={clearSessionError}
+        />
+      </React.Suspense>
+
+      {/* Interactive First-Run Onboarding & Setup Wizard */}
+      <React.Suspense fallback={null}>
+        <OnboardingWizardModal
+          isOpen={isOnboardingOpen}
+          onClose={closeOnboarding}
+          wallet={wallet}
+          activeSession={activeSession}
+          isFauceting={isSessionFauceting}
+          onClaimFaucet={claimCollateralFaucet}
+          onConnectWallet={connectWallet}
+          onSwitchNetwork={switchNetwork}
+          onOpenSessionModal={handleOpenSessionModal}
+          onNavigateView={(view) => {
+            setActiveNav(view);
+            if (view === 'Overview') window.location.hash = '#overview';
+            else if (view === 'Edge Radar') window.location.hash = '#radar';
+            else if (view === 'Markets' || view === 'Markets & Depth') window.location.hash = '#markets';
+            else if (view === 'Trade Terminal') window.location.hash = '#trade';
+            else if (view === 'AI Swarm Feed') window.location.hash = '#swarm';
+            else if (view === 'Swarm Cockpit') window.location.hash = '#cockpit';
+            else if (view === 'Strategy Studio') window.location.hash = '#studio';
+            else if (view === 'Settlement') window.location.hash = '#settlement';
+            else if (view === 'Analytics') window.location.hash = '#analytics';
+            else if (view === 'Landing') window.location.hash = '';
+          }}
+          onComplete={completeOnboarding}
         />
       </React.Suspense>
     </>

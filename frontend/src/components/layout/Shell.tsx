@@ -28,6 +28,7 @@ interface ShellProps {
   isFauceting?: boolean;
   onClaimFaucet?: () => void;
   onOpenSessionModal?: () => void;
+  onOpenTour?: () => void;
   onConnectWallet?: () => void;
   onDisconnectWallet?: () => void;
   onSwitchNetwork?: () => void;
@@ -51,6 +52,7 @@ export const Shell: React.FC<ShellProps> = ({
   isFauceting = false,
   onClaimFaucet,
   onOpenSessionModal,
+  onOpenTour,
   onConnectWallet,
   onDisconnectWallet,
   onSwitchNetwork,
@@ -103,6 +105,7 @@ export const Shell: React.FC<ShellProps> = ({
           isCollapsed={isSidebarCollapsed}
           onToggleCollapse={onToggleSidebar}
           onOpenSessionModal={onOpenSessionModal}
+          onOpenTour={onOpenTour}
           wallet={wallet}
           activeSession={activeSession}
           onConnectWallet={onConnectWallet}
