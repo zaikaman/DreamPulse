@@ -21,9 +21,14 @@
     "build:backend": "npm run build --workspace=dreampulse-backend",
     "build:frontend": "npm run build --workspace=dreampulse-frontend",
     "build": "npm run build:backend && npm run build:frontend",
+    "heroku-postbuild": "npm run build:backend",
+    "start:backend": "npm start --workspace=dreampulse-backend",
     "test:backend": "npm run test --workspace=dreampulse-backend",
     "test": "npm run test:backend",
     "verify": "npm run typecheck && npm run test && npm run build"
+  },
+  "dependencies": {
+    "typescript": "^5.7.3"
   },
   "devDependencies": {
     "concurrently": "^9.1.2",

@@ -99,9 +99,19 @@ class TelemetryClient {
   }
 
   private getWsUrl(): string {
-    if ((import.meta as any).env?.VITE_BACKEND_WS_URL) {
-      return (import.meta as any).env.VITE_BACKEND_WS_URL;
+    const rawWsUrl = ((import.meta as any).env?.VITE_BACKEND_WS_URL || '').trim();
+    if (rawWsUrl) {
+      const trimmed = rawWsUrl.replace(/\/+$/, '');
+      return trimmed.endsWith('/ws/telemetry') ? trimmed : `${trimmed}/ws/telemetry`;
     }
+
+    const rawHttpUrl = ((import.meta as any).env?.VITE_BACKEND_HTTP_URL || '').trim();
+    if (rawHttpUrl && (rawHttpUrl.startsWith('http://') || rawHttpUrl.startsWith('https://'))) {
+      const wsProtocol = rawHttpUrl.startsWith('https://') ? 'wss://' : 'ws://';
+      const cleanHttp = rawHttpUrl.replace(/^https?:\/\//, '').replace(/\/api\/v1\/?$/, '').replace(/\/+$/, '');
+      return `${wsProtocol}${cleanHttp}/ws/telemetry`;
+    }
+
     const loc = window.location;
     const protocol = loc.protocol === 'https:' ? 'wss:' : 'ws:';
     const host = loc.hostname;

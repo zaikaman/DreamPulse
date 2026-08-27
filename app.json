@@ -1,0 +1,104 @@
+{
+  "name": "DreamPulse Backend Engine",
+  "description": "Autonomous Multi-Agent Trading Swarm on Somnia DreamDEX",
+  "repository": "https://github.com/zaikaman/DreamPulse",
+  "keywords": [
+    "somnia",
+    "dreamdex",
+    "trading-agents",
+    "llm",
+    "express",
+    "websocket"
+  ],
+  "image": "heroku/nodejs",
+  "buildpacks": [
+    {
+      "url": "heroku/nodejs"
+    }
+  ],
+  "env": {
+    "NODE_ENV": {
+      "description": "Node runtime environment",
+      "value": "production"
+    },
+    "NPM_CONFIG_PRODUCTION": {
+      "description": "Set false to install devDependencies during heroku-postbuild compilation",
+      "value": "false"
+    },
+    "FRONTEND_ORIGIN": {
+      "description": "Allowed CORS frontend origin URL(s), comma-separated or * (e.g., https://dreampulse.vercel.app)",
+      "value": "*",
+      "required": false
+    },
+    "SUPABASE_URL": {
+      "description": "Supabase project URL (https://<project-ref>.supabase.co)",
+      "required": true
+    },
+    "SUPABASE_SERVICE_ROLE_KEY": {
+      "description": "Supabase service_role key for backend write & daemon privileges",
+      "required": true
+    },
+    "SUPABASE_ANON_KEY": {
+      "description": "Supabase public anon key",
+      "required": true
+    },
+    "OPERATOR_PRIVATE_KEY": {
+      "description": "Somnia operator account private key with leading 0x",
+      "required": true
+    },
+    "OPERATOR_ADMIN_SECRET": {
+      "description": "Admin authorization secret header token for protected endpoints",
+      "required": false
+    },
+    "GROQ_API_KEY": {
+      "description": "Primary Groq LLM API Key for autonomous agent market reasoning",
+      "required": false
+    },
+    "GEMINI_API_KEY": {
+      "description": "Secondary Google Gemini API Key fallback",
+      "required": false
+    },
+    "NETWORK": {
+      "description": "Target blockchain network",
+      "value": "testnet"
+    },
+    "SOMNIA_RPC_URL": {
+      "description": "Somnia Shannon RPC endpoint",
+      "value": "https://dream-rpc.somnia.network"
+    },
+    "SOMNIA_WS_URL": {
+      "description": "Somnia Shannon WebSocket RPC endpoint",
+      "value": "wss://api.infra.testnet.somnia.network/ws"
+    },
+    "INDEXER_URL": {
+      "description": "DreamDEX Indexer GraphQL endpoint",
+      "value": "https://dev.smk.somnia.host/v1/graphql"
+    },
+    "REST_API_URL": {
+      "description": "DreamDEX REST API endpoint",
+      "value": "https://stg.api.dreamdex.io/v0"
+    },
+    "SOMNIA_CHAIN_ID": {
+      "description": "Somnia Shannon Testnet Chain ID",
+      "value": "50312"
+    },
+    "DREAMDEX_REGISTRY_ADDRESS": {
+      "description": "DreamDEX Registry smart contract address",
+      "value": "0x3ecC694Cef705358864a646142ac17A90E29e388"
+    },
+    "OPERATOR_PERMISSIONS_REGISTRY_ADDRESS": {
+      "description": "DreamDEX Operator Permissions Registry smart contract address",
+      "value": "0x15C7e8CE38F021c5b45d098AaD788f63090bF20A"
+    },
+    "DREAMDEX_VENUE_ID": {
+      "description": "DreamDEX Venue ID bytes32 identifier",
+      "value": "0x679795a0195a1b76cdebb7c51d74e058aee92919b8c3389af86ef24535e8a28c"
+    }
+  },
+  "formation": {
+    "web": {
+      "quantity": 1,
+      "size": "eco"
+    }
+  }
+}

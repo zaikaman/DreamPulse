@@ -524,6 +524,9 @@ npm run dev
 * **Backend REST Gateway**: `http://localhost:5000/api/v1`
 * **WebSocket Stream**: `ws://localhost:5000/ws/telemetry`
 
+### 4. Production Cloud Deployment (Vercel & Heroku)
+For step-by-step instructions on deploying the **Frontend to Vercel** and the **Backend to Heroku**, refer to the dedicated [Production Deployment Guide](./DEPLOYMENT.md).
+
 ---
 
 ## 🧪 Verification & Test Suite (97/97 Passing)

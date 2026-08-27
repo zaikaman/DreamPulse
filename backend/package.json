@@ -18,23 +18,23 @@
   "dependencies": {
     "@somnia-chain/markets-sdk": "^0.28.1",
     "@supabase/supabase-js": "^2.49.1",
+    "@types/cors": "^2.8.17",
+    "@types/express": "^4.17.21",
+    "@types/node": "^22.13.5",
+    "@types/ws": "^8.5.14",
     "cors": "^2.8.5",
     "dotenv": "^16.4.7",
     "express": "^4.21.2",
     "openai": "^4.86.0",
+    "typescript": "^5.7.3",
     "viem": "^2.23.0",
     "ws": "^8.18.0",
     "zod": "^3.24.2"
   },
   "devDependencies": {
-    "@types/cors": "^2.8.17",
-    "@types/express": "^4.17.21",
-    "@types/node": "^22.13.5",
     "@types/supertest": "^6.0.2",
-    "@types/ws": "^8.5.14",
     "supertest": "^7.0.0",
     "tsx": "^4.19.3",
-    "typescript": "^5.7.3",
     "vitest": "^3.0.6"
   }
 }

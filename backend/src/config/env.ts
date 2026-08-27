@@ -17,7 +17,7 @@ const defaultGroqKeys = ['gsk_mock_key_1', 'gsk_mock_key_2', 'gsk_mock_key_3', '
 const finalGroqKeys = rawGroqKeys.length > 0 ? rawGroqKeys : defaultGroqKeys;
 
 const envSchema = z.object({
-  PORT: z.string().default('5000').transform((val) => parseInt(val, 10)),
+  PORT: z.coerce.number().default(5000),
   NODE_ENV: z.enum(['development', 'production', 'test']).default('development'),
 
   // Supabase
@@ -45,6 +45,7 @@ const envSchema = z.object({
 
   // Security & Admin
   OPERATOR_ADMIN_SECRET: z.string().optional(),
+  FRONTEND_ORIGIN: z.string().default('*'),
 
   // Protocol addresses & APIs (Somnia Shannon Testnet)
   REST_API_URL: z.string().default('https://stg.api.dreamdex.io/v0'),

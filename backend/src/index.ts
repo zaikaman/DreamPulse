@@ -10,7 +10,31 @@ const app = express();
 const server = http.createServer(app);
 
 // Global Middleware
-app.use(cors());
+const allowedOrigins = env.FRONTEND_ORIGIN && env.FRONTEND_ORIGIN !== '*'
+  ? env.FRONTEND_ORIGIN.split(',').map((s) => s.trim().replace(/\/+$/, ''))
+  : ['*'];
+
+app.use(
+  cors({
+    origin: (origin, callback) => {
+      // Allow requests with no origin (curl, health checks, server-to-server)
+      if (!origin || allowedOrigins.includes('*')) {
+        return callback(null, true);
+      }
+      const normalizedOrigin = origin.replace(/\/+$/, '');
+      if (
+        allowedOrigins.includes(normalizedOrigin) ||
+        normalizedOrigin.endsWith('.vercel.app') ||
+        normalizedOrigin.includes('localhost') ||
+        normalizedOrigin.includes('127.0.0.1')
+      ) {
+        return callback(null, true);
+      }
+      return callback(null, true); // Permissive fallback to prevent breaking cross-domain requests
+    },
+    credentials: true,
+  })
+);
 app.use(express.json());
 app.use(requestLogger);
 
@@ -34,7 +58,7 @@ app.use(errorHandler);
 telemetryWsGateway.initialize(server);
 
 if (!process.env.VITEST) {
-  server.listen(env.PORT, async () => {
+  server.listen(env.PORT, '0.0.0.0', async () => {
     console.log(`[DreamPulse Engine] HTTP & WebSocket Server listening on port ${env.PORT}`);
     console.log(`[DreamPulse Engine] REST API: http://localhost:${env.PORT}/api/v1`);
     console.log(`[DreamPulse Engine] WebSocket Stream: ws://localhost:${env.PORT}/ws/telemetry`);

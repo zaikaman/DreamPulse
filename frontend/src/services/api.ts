@@ -11,7 +11,12 @@ import type {
   PortfolioSummary,
 } from '../types/index.js';
 
-const API_BASE_URL = import.meta.env.VITE_BACKEND_HTTP_URL || '/api/v1';
+const rawApiUrl = ((import.meta as any).env?.VITE_BACKEND_HTTP_URL || '').trim();
+const API_BASE_URL = rawApiUrl
+  ? rawApiUrl.replace(/\/+$/, '').endsWith('/api/v1')
+    ? rawApiUrl.replace(/\/+$/, '')
+    : `${rawApiUrl.replace(/\/+$/, '')}/api/v1`
+  : '/api/v1';
 
 async function fetchJson<T>(endpoint: string, options?: RequestInit): Promise<T> {
   const url = `${API_BASE_URL}${endpoint}`;
