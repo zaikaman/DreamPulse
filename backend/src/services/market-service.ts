@@ -205,8 +205,17 @@ export class MarketService extends EventEmitter {
         const m = liveBinaryMarkets[i];
         if (!m) continue;
 
-        const rawAsset = String(m.asset || 'BTC').toUpperCase();
-        const symbol = rawAsset.includes('/') ? rawAsset : `${rawAsset}/USD`;
+        const rawAsset = String(m.asset || 'BTC').toUpperCase().trim();
+        let symbol: string;
+        if (rawAsset.includes('/')) {
+          symbol = rawAsset.replace(/\/USD\/USD$/i, '/USD');
+        } else if (rawAsset.endsWith('USD')) {
+          symbol = `${rawAsset.slice(0, -3)}/USD`;
+        } else if (rawAsset.endsWith('USDT')) {
+          symbol = `${rawAsset.slice(0, -4)}/USD`;
+        } else {
+          symbol = `${rawAsset}/USD`;
+        }
         const spot = this.spotPrices.get(symbol)?.price || (symbol === 'BTC/USD' ? 77000 : 2400);
         const marketId = String(m.marketId || m.id || `${SOMNIA_ADDRESSES.binaryModule}-${m.id}`);
         discoveredIds.add(marketId);

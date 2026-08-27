@@ -90,6 +90,20 @@ const poolFailureUntil = new Map<string, number>();
 const POOL_FAILURE_COOLDOWN_MS = 10 * 60 * 1000; // per-pool 10m cooldown after revert to avoid gas drain on bad pools
 const orderOnchainMarketCache = new Map<string, { data: MarketOnchain; expiresAt: number }>();
 
+function parseSymbolFromRaw(raw: string): string {
+  const upper = (raw || '').toUpperCase().trim();
+  if (upper.includes('BTC')) return 'BTC/USD';
+  if (upper.includes('ETH')) return 'ETH/USD';
+  if (upper.includes('SOL')) return 'SOL/USD';
+  if (upper.includes('BNB')) return 'BNB/USD';
+  if (upper.includes('DOGE')) return 'DOGE/USD';
+  if (upper.includes('STT')) return 'STT/USD';
+  if (upper.includes('/')) return upper;
+  if (upper.endsWith('USD')) return `${upper.slice(0, -3)}/USD`;
+  if (upper.endsWith('USDT')) return `${upper.slice(0, -4)}/USD`;
+  return `${upper}/USD`;
+}
+
 /**
  * Ensures the operator wallet has sufficient TestUSDC collateral for swarm order execution.
  * Concurrent callers await the same faucet promise instead of silently skipping.
@@ -582,15 +596,16 @@ export class OrderService {
           const parts = order.marketId.split('-');
           if (parts.length >= 5) {
             const rawSymbol = parts[1];
-            const symbol = rawSymbol.startsWith('BTC') ? 'BTC/USD' : rawSymbol.startsWith('ETH') ? 'ETH/USD' : 'SOL/USD';
+            const symbol = parseSymbolFromRaw(rawSymbol);
             const strikePrice = Number(parts[3]);
             const closeTimeMs = Number(parts[4]);
+            const windowDuration = parts[2]?.endsWith('m') || parts[2]?.endsWith('h') || parts[2]?.endsWith('d') ? parts[2] : '5m';
             if (!isNaN(strikePrice) && !isNaN(closeTimeMs)) {
               order.marketSnapshot = {
                 symbol,
                 strikePrice,
                 closeTimestamp: new Date(closeTimeMs).toISOString(),
-                windowDuration: '5m',
+                windowDuration,
               };
             }
           }
@@ -1282,6 +1297,16 @@ export class OrderService {
         isSettled: false,
         createdAt: now,
         filledAt: now,
+        marketSnapshot: market
+          ? {
+              symbol: market.symbol,
+              strikePrice: market.strikePrice,
+              closeTimestamp: market.closeTimestamp,
+              settlementPrice: market.settlementPrice,
+              winningOutcome: market.winningOutcome,
+              windowDuration: market.windowDuration,
+            }
+          : undefined,
       };
 
       this.orders.unshift(orderExecution);
@@ -1778,7 +1803,7 @@ export class OrderService {
           const parts = order.marketId.split('-');
           if (parts.length >= 5) {
             const rawSymbol = parts[1];
-            const symbol = rawSymbol.startsWith('BTC') ? 'BTC/USD' : rawSymbol.startsWith('ETH') ? 'ETH/USD' : 'SOL/USD';
+            const symbol = parseSymbolFromRaw(rawSymbol);
             const closeTimeMs = Number(parts[4]);
             if (!isNaN(closeTimeMs) && now >= closeTimeMs) {
               const k = `${symbol}-${closeTimeMs}`;
@@ -1880,7 +1905,7 @@ export class OrderService {
           const parts = order.marketId.split('-');
           if (parts.length >= 5) {
             const rawSymbol = parts[1];
-            const symbol = rawSymbol.startsWith('BTC') ? 'BTC/USD' : rawSymbol.startsWith('ETH') ? 'ETH/USD' : 'SOL/USD';
+            const symbol = parseSymbolFromRaw(rawSymbol);
             const strikePrice = Number(parts[3]);
             const closeTimeMs = Number(parts[4]);
             if (!isNaN(strikePrice) && !isNaN(closeTimeMs) && now >= closeTimeMs) {

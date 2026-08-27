@@ -28,26 +28,62 @@ interface ParsedMarketInfo {
   winningOutcome?: 'YES' | 'NO' | 'VOID';
 }
 
+function normalizeMarketSymbol(raw: string): string {
+  if (!raw) return 'BTC/USD';
+  const s = raw.trim().toUpperCase().replace(/\/USD\/USD$/i, '/USD');
+  if (s.includes('BTC')) return 'BTC/USD';
+  if (s.includes('ETH')) return 'ETH/USD';
+  if (s.includes('SOL')) return 'SOL/USD';
+  if (s.includes('BNB')) return 'BNB/USD';
+  if (s.includes('DOGE')) return 'DOGE/USD';
+  if (s.includes('STT')) return 'STT/USD';
+  if (s.includes('/')) return s;
+  if (s.endsWith('USD')) return `${s.slice(0, -3)}/USD`;
+  if (s.endsWith('USDT')) return `${s.slice(0, -4)}/USD`;
+  return `${s}/USD`;
+}
+
+function getAssetDisplayName(symbol: string): string {
+  if (symbol.includes('BTC')) return 'Bitcoin';
+  if (symbol.includes('ETH')) return 'Ethereum';
+  if (symbol.includes('SOL')) return 'Solana';
+  if (symbol.includes('BNB')) return 'BNB';
+  if (symbol.includes('DOGE')) return 'Dogecoin';
+  if (symbol.includes('STT')) return 'Somnia';
+  return symbol.split('/')[0];
+}
+
 function parseOrderMarketDetails(order: OrderExecution): ParsedMarketInfo {
-  let symbol = order.marketSnapshot?.symbol || '';
+  let symbol = order.marketSnapshot?.symbol ? normalizeMarketSymbol(order.marketSnapshot.symbol) : '';
   let strikePrice = order.marketSnapshot?.strikePrice;
   let settlementPrice = order.marketSnapshot?.settlementPrice;
   let winningOutcome = order.marketSnapshot?.winningOutcome;
   let windowDuration = order.marketSnapshot?.windowDuration || '5m';
 
-  if (!symbol && order.marketId) {
-    if (order.marketId.includes('-')) {
-      const parts = order.marketId.split('-');
-      if (parts.length >= 2) {
-        const rawSym = parts[1].toUpperCase();
-        symbol = rawSym.includes('BTC') ? 'BTC/USD' : rawSym.includes('ETH') ? 'ETH/USD' : rawSym.includes('SOL') ? 'SOL/USD' : rawSym.includes('STT') ? 'STT/USD' : `${rawSym}/USD`;
+  if (order.marketId && order.marketId.includes('-')) {
+    const parts = order.marketId.split('-');
+    if (parts.length >= 2) {
+      if (!symbol) {
+        symbol = normalizeMarketSymbol(parts[1]);
+      }
+      if (parts.length >= 5) {
+        if (parts[2]?.endsWith('m') || parts[2]?.endsWith('h') || parts[2]?.endsWith('d')) {
+          windowDuration = parts[2];
+        }
+        const parsedStrike = Number(parts[3]);
+        if (!isNaN(parsedStrike) && parsedStrike > 0 && !strikePrice) {
+          strikePrice = parsedStrike;
+        }
+      } else {
         for (let i = 2; i < parts.length; i++) {
-          const num = Number(parts[i]);
-          if (!isNaN(num) && num >= 1 && !strikePrice) {
-            strikePrice = num;
-          }
-          if (parts[i].endsWith('m') || parts[i].endsWith('h')) {
+          if (parts[i].endsWith('m') || parts[i].endsWith('h') || parts[i].endsWith('d')) {
             windowDuration = parts[i];
+          } else {
+            const num = Number(parts[i]);
+            // Strike price must be a valid positive price and not a millisecond timestamp (> 1e11)
+            if (!isNaN(num) && num > 0 && num < 1_000_000_000 && !strikePrice) {
+              strikePrice = num;
+            }
           }
         }
       }
@@ -55,8 +91,8 @@ function parseOrderMarketDetails(order: OrderExecution): ParsedMarketInfo {
   }
 
   if (!symbol) symbol = 'BTC/USD';
-
-  const assetName = symbol.includes('BTC') ? 'Bitcoin' : symbol.includes('ETH') ? 'Ethereum' : symbol.includes('SOL') ? 'Solana' : symbol.includes('STT') ? 'Somnia' : symbol.split('/')[0];
+  symbol = normalizeMarketSymbol(symbol);
+  const assetName = getAssetDisplayName(symbol);
 
   return {
     symbol,
