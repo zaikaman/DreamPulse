@@ -154,13 +154,40 @@ export const StrategyStudio: React.FC<StrategyStudioProps> = ({
         if (onOpenSessionModal) onOpenSessionModal();
         return;
       }
+      if (!wallet.address) return;
       setIsDeploying(true);
       try {
-        if (wallet.address) {
-          localStorage.setItem(`dreampulse_strategy_${wallet.address.toLowerCase()}`, JSON.stringify({ agentType: selectedAgent, symbol, config: { driftThreshold, minEdge, confidenceThreshold, targetSpread, inventoryAversion, lotSize }, deployedAt: new Date().toISOString() }));
+        // Deploy backtested parameters to isolated personal swarm (activates PERSONAL mode)
+        const personalConfig: Record<string, any> = {};
+        if (selectedAgent === 'Volt') personalConfig.driftThreshold = driftThreshold;
+        if (selectedAgent === 'Volt' || selectedAgent === 'Oracle') personalConfig.minEdge = minEdge;
+        if (selectedAgent === 'Oracle') personalConfig.confidenceThreshold = confidenceThreshold;
+        if (selectedAgent === 'Titan') {
+          personalConfig.targetSpread = targetSpread;
+          personalConfig.inventoryAversion = inventoryAversion;
         }
-        setDeployedSuccess(true);
-        setTimeout(() => setDeployedSuccess(false), 4000);
+        personalConfig.lotSize = lotSize;
+        if (currentResult) {
+          const { apiClient } = await import('../services/api.js');
+          const ok = await apiClient.updatePersonalAgentConfig(wallet.address, selectedAgent, personalConfig);
+          if (ok?.success) {
+            // Ensure mode is PERSONAL
+            await apiClient.setPersonalSwarmMode(wallet.address, 'PERSONAL').catch(() => {});
+            setDeployedSuccess(true);
+            setTimeout(() => setDeployedSuccess(false), 4000);
+          }
+        } else {
+          // No backtest yet — deploy current slider values directly
+          const { apiClient } = await import('../services/api.js');
+          const ok = await apiClient.updatePersonalAgentConfig(wallet.address, selectedAgent, personalConfig);
+          if (ok?.success) {
+            await apiClient.setPersonalSwarmMode(wallet.address, 'PERSONAL').catch(() => {});
+            setDeployedSuccess(true);
+            setTimeout(() => setDeployedSuccess(false), 4000);
+          }
+        }
+      } catch (e) {
+        console.warn('[StrategyStudio] personal deploy failed', e);
       } finally {
         setIsDeploying(false);
       }
@@ -271,8 +298,8 @@ export const StrategyStudio: React.FC<StrategyStudioProps> = ({
         {/* Header Bar */}
         <div className="flex items-center justify-between gap-4 px-4 py-3 border-b border-border/40 flex-wrap">
           <div className="flex items-center gap-3 min-w-0">
-            <div className="size-8 rounded-lg grid place-items-center border flex-shrink-0 bg-secondary/30 border-border/50 text-muted-foreground">
-              <ChartBarIcon className="size-4" />
+            <div className="w-8 h-8 rounded-lg grid place-items-center border flex-shrink-0 bg-secondary/30 border-border/50 text-muted-foreground">
+              <ChartBarIcon className="w-4 h-4" />
             </div>
             <div className="min-w-0">
               <h2 className="text-sm font-bold tracking-tight text-foreground leading-none">Strategy Studio & Quantitative Backtest Simulator</h2>
@@ -281,11 +308,11 @@ export const StrategyStudio: React.FC<StrategyStudioProps> = ({
           </div>
           <div className="flex items-center gap-2 flex-shrink-0">
             <button type="button" onClick={handleExportCsv} disabled={!currentResult || currentResult.trades.length === 0} className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border bg-secondary/30 border-border/50 text-xs font-medium text-muted-foreground hover:text-foreground hover:bg-secondary/50 disabled:opacity-40 disabled:cursor-not-allowed transition-colors">
-              <ArrowDownTrayIcon className="size-3.5" />
+              <ArrowDownTrayIcon className="w-3.5 h-3.5" />
               <span>Export CSV</span>
             </button>
             <button type="button" onClick={handleRunSimulation} disabled={isLoading} className="inline-flex items-center gap-1.5 px-4 py-1.5 rounded-lg border text-xs font-bold transition-all disabled:opacity-60" style={{ background: theme.color, color: '#09090b', borderColor: theme.color, boxShadow: `0 0 12px ${theme.color}28` }}>
-              {isLoading ? <Spinner size="xs" variant="amber" /> : <PlayIcon className="size-3.5 fill-current" />}
+              {isLoading ? <Spinner size="xs" variant="amber" /> : <PlayIcon className="w-3.5 h-3.5 fill-current" />}
               <span>{isLoading ? 'Simulating…' : 'Run Backtest Replay'}</span>
             </button>
           </div>
@@ -312,8 +339,8 @@ export const StrategyStudio: React.FC<StrategyStudioProps> = ({
                 <div className="absolute top-0 left-0 right-0 h-[2.5px]" style={{ background: th.color, opacity: isActive ? 1 : 0.35 }} />
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-2">
-                    <div className="size-7 rounded-lg grid place-items-center border flex-shrink-0 bg-secondary/30 border-border/50 text-muted-foreground">
-                      <Icon className="size-3.5" />
+                    <div className="w-7 h-7 rounded-lg grid place-items-center border flex-shrink-0 bg-secondary/30 border-border/50 text-muted-foreground">
+                      <Icon className="w-3.5 h-3.5" />
                     </div>
                     <span className="text-xs font-bold tracking-tight text-foreground">{key} {key === 'Volt' ? 'Sniper' : key === 'Oracle' ? 'Vol Arb' : 'Market Maker'}</span>
                   </div>
@@ -341,7 +368,7 @@ export const StrategyStudio: React.FC<StrategyStudioProps> = ({
                   <span className="text-[10px] font-mono font-bold px-1.5 py-0.5 rounded border" style={{ background: `${selectedMarketOption.color}14`, color: selectedMarketOption.color, borderColor: `${selectedMarketOption.color}30` }}>{selectedMarketOption.badge}</span>
                   <span className="text-xs font-bold text-foreground">{selectedMarketOption.name}</span>
                 </div>
-                <ChevronDownIcon className="size-3.5 text-muted-foreground" style={{ transform: isMarketDropdownOpen ? 'rotate(180deg)' : 'none', transition: 'transform 0.15s' }} />
+                <ChevronDownIcon className="w-3.5 h-3.5 text-muted-foreground" style={{ transform: isMarketDropdownOpen ? 'rotate(180deg)' : 'none', transition: 'transform 0.15s' }} />
               </div>
               {isMarketDropdownOpen && (
                 <div className="custom-dropdown-menu">
@@ -356,7 +383,7 @@ export const StrategyStudio: React.FC<StrategyStudioProps> = ({
                             <div className="text-[10px] text-muted-foreground">{opt.label}</div>
                           </div>
                         </div>
-                        {isSel && <CheckCircleIcon className="size-3.5 text-teal-400" />}
+                        {isSel && <CheckCircleIcon className="w-3.5 h-3.5 text-teal-400" />}
                       </div>
                     );
                   })}
@@ -367,7 +394,7 @@ export const StrategyStudio: React.FC<StrategyStudioProps> = ({
             {/* Period */}
             <div>
               <label className="text-[10px] font-mono font-semibold tracking-wider text-muted-foreground uppercase flex items-center gap-1.5 mb-2">
-                <CalendarIcon className="size-3 text-muted-foreground" /> Historical Period Horizon
+                <CalendarIcon className="w-3 h-3 text-muted-foreground" /> Historical Period Horizon
               </label>
               <div className="flex items-center gap-1 bg-secondary/30 p-0.5 rounded-lg border border-border/40 flex-wrap">
                 {(['24h', '3d', '7d', '14d', '30d', 'custom'] as const).map((p) => (
@@ -381,7 +408,7 @@ export const StrategyStudio: React.FC<StrategyStudioProps> = ({
             {/* Granularity */}
             <div>
               <label className="text-[10px] font-mono font-semibold tracking-wider text-muted-foreground uppercase flex items-center gap-1.5 mb-2">
-                <ClockIcon className="size-3 text-muted-foreground" /> Candle Granularity
+                <ClockIcon className="w-3 h-3 text-muted-foreground" /> Candle Granularity
               </label>
               <div className="flex items-center gap-1 bg-secondary/30 p-0.5 rounded-lg border border-border/40">
                 {(['1m', '5m', '15m', '1h'] as const).map((tf) => (
@@ -456,10 +483,10 @@ export const StrategyStudio: React.FC<StrategyStudioProps> = ({
           {/* Friction */}
           <div>
             <button type="button" onClick={() => setShowFrictionSettings(!showFrictionSettings)} className="inline-flex items-center gap-1.5 text-[11px] font-mono text-muted-foreground hover:text-foreground transition-colors">
-              <ShieldExclamationIcon className="size-3.5 text-muted-foreground" />
+              <ShieldExclamationIcon className="w-3.5 h-3.5 text-muted-foreground" />
               <span className="font-semibold text-foreground">Execution Microstructure & Friction Controls</span>
               <span className="text-[10px]">({slippageBps} bps slippage, {feeBps} bps fee, {latencyMs}ms latency)</span>
-              {showFrictionSettings ? <ChevronUpIcon className="size-3" /> : <ChevronDownIcon className="size-3" />}
+              {showFrictionSettings ? <ChevronUpIcon className="w-3 h-3" /> : <ChevronDownIcon className="w-3 h-3" />}
             </button>
             {showFrictionSettings && (
               <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mt-3 p-3.5 rounded-xl border bg-secondary/20 border-border/50">
@@ -492,12 +519,15 @@ export const StrategyStudio: React.FC<StrategyStudioProps> = ({
           <MetricCard label="Trade Expectancy" value={`${(currentResult.expectancy ?? 0.85) >= 0 ? '+' : ''}$${(currentResult.expectancy ?? 0.85).toFixed(2)}`} sub="Expected Net / Trade" color="#2dd4bf" icon={CurrencyDollarIcon} />
           <div className="terminal-panel p-3.5 flex flex-col justify-between">
             <div className="flex items-center justify-between">
-              <span className="text-[10px] font-mono font-semibold tracking-wider text-muted-foreground uppercase">{isOperator ? 'Global Swarm' : isTrader ? 'My Session Bot' : 'Automation'}</span>
-              {isOperator ? <CpuChipIcon className="size-3.5 text-muted-foreground/60" /> : isTrader ? <BoltIcon className="size-3.5 text-muted-foreground/60" /> : <WalletIcon className="size-3.5 text-muted-foreground/60" />}
+              <span className="text-[10px] font-mono font-semibold tracking-wider text-muted-foreground uppercase">{isOperator ? 'Global Swarm (Operator)' : isTrader ? 'My Personal Swarm' : 'Automation'}</span>
+              {isOperator ? <CpuChipIcon className="w-3.5 h-3.5 text-muted-foreground/60" /> : isTrader ? <BoltIcon className="w-3.5 h-3.5 text-muted-foreground/60" /> : <WalletIcon className="w-3.5 h-3.5 text-muted-foreground/60" />}
             </div>
             <button type="button" onClick={handleDeploy} disabled={isDeploying || deployedSuccess} className="mt-3 w-full inline-flex items-center justify-center gap-1.5 py-2 rounded-lg border text-xs font-bold transition-colors disabled:opacity-60" style={{ background: deployedSuccess ? 'rgba(52,211,153,0.12)' : isGuest ? 'hsl(var(--secondary)/0.4)' : theme.color, color: deployedSuccess ? '#6ee7b7' : isGuest ? 'var(--muted-foreground)' : '#09090b', borderColor: deployedSuccess ? 'rgba(52,211,153,0.22)' : isGuest ? 'hsl(var(--border)/0.5)' : theme.color }}>
-              {deployedSuccess ? <><CheckCircleIcon className="size-3.5" /> {isOperator ? 'Applied to Swarm!' : 'Bot Deployed!'}</> : isGuest ? <><WalletIcon className="size-3.5" /> Connect to Deploy</> : isTrader && !activeSession?.isActive ? <><KeyIcon className="size-3.5" /> Delegate Session</> : isTrader ? <>{isDeploying ? <Spinner size="xs" variant="cyan" /> : <BoltIcon className="size-3.5" />}{isDeploying ? 'Deploying…' : 'Deploy to Session Bot'}</> : <>{isDeploying ? <Spinner size="xs" variant="amber" /> : <CpuChipIcon className="size-3.5" />}{isDeploying ? 'Updating…' : 'Deploy to Swarm'}</>}
+              {deployedSuccess ? <><CheckCircleIcon className="w-3.5 h-3.5" /> {isOperator ? 'Applied to Global Swarm!' : 'Deployed to My Swarm!'}</> : isGuest ? <><WalletIcon className="w-3.5 h-3.5" /> Connect to Deploy</> : isTrader && !activeSession?.isActive ? <><KeyIcon className="w-3.5 h-3.5" /> Delegate Session First</> : isTrader ? <>{isDeploying ? <Spinner size="xs" variant="cyan" /> : <BoltIcon className="w-3.5 h-3.5" />}{isDeploying ? 'Deploying…' : 'Deploy to My Personal Swarm'}</> : <>{isDeploying ? <Spinner size="xs" variant="amber" /> : <CpuChipIcon className="w-3.5 h-3.5" />}{isDeploying ? 'Updating…' : 'Deploy to Global Swarm'}</>}
             </button>
+            {isTrader && !deployedSuccess && (
+              <div className="text-[10px] text-muted-foreground mt-1.5 leading-snug">Activates your isolated swarm — copy-trading is disabled once personalized. Revert in Swarm Cockpit.</div>
+            )}
           </div>
         </div>
       ) : null}
@@ -508,10 +538,10 @@ export const StrategyStudio: React.FC<StrategyStudioProps> = ({
           <div className="flex items-center justify-between gap-3 px-4 py-3 border-b border-border/40 flex-wrap">
             <div className="flex items-center gap-1 bg-secondary/30 p-0.5 rounded-lg border border-border/40">
               <button type="button" onClick={() => setChartView('equity')} className={cn('inline-flex items-center gap-1.5 px-3 py-1 rounded-md text-[11px] font-bold transition-colors', chartView === 'equity' ? 'bg-primary text-primary-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground')}>
-                <ArrowTrendingUpIcon className="size-3.5" /> Portfolio Equity ($)
+                <ArrowTrendingUpIcon className="w-3.5 h-3.5" /> Portfolio Equity ($)
               </button>
               <button type="button" onClick={() => setChartView('drawdown')} className={cn('inline-flex items-center gap-1.5 px-3 py-1 rounded-md text-[11px] font-bold transition-colors', chartView === 'drawdown' ? 'bg-rose-500 text-white shadow-sm' : 'text-muted-foreground hover:text-foreground')}>
-                <ChartBarIcon className="size-3.5" /> Underwater Drawdown (%)
+                <ChartBarIcon className="w-3.5 h-3.5" /> Underwater Drawdown (%)
               </button>
             </div>
             <div className="flex items-center gap-3 text-[11px] font-mono text-muted-foreground flex-wrap">
@@ -551,7 +581,7 @@ export const StrategyStudio: React.FC<StrategyStudioProps> = ({
         <div className="terminal-panel p-0 overflow-hidden">
           <div className="flex items-center justify-between gap-3 px-4 py-3 border-b border-border/40 flex-wrap">
             <div className="flex items-center gap-2">
-              <QueueListIcon className="size-4 text-muted-foreground" />
+              <QueueListIcon className="w-4 h-4 text-muted-foreground" />
               <h3 className="text-xs font-bold tracking-tight text-foreground">Replay Executions Breakdown</h3>
               <Badge variant="outline" className="font-mono text-[10px] bg-secondary/40 border-border/50 text-muted-foreground">{currentResult.trades.length} trades</Badge>
             </div>
@@ -632,7 +662,7 @@ const MetricCard: React.FC<{ label: string; value: string; sub: string; color: s
   <div className="terminal-panel p-3.5 flex flex-col justify-between">
     <div className="flex items-center justify-between">
       <span className="text-[10px] font-mono font-semibold tracking-wider text-muted-foreground uppercase">{label}</span>
-      <Icon className="size-3.5 text-muted-foreground/60" />
+      <Icon className="w-3.5 h-3.5 text-muted-foreground/60" />
     </div>
     <div className="text-lg font-mono font-bold mt-2" style={{ color }}>{value}</div>
     <div className="text-[11px] text-muted-foreground mt-1">{sub}</div>

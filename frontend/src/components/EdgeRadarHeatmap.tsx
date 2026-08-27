@@ -53,13 +53,13 @@ const EdgeRadarHeatmapComponent: React.FC<EdgeRadarHeatmapProps> = ({
       {/* Panel Header */}
       <div className="flex items-center justify-between pb-3 mb-3 border-b border-border/40 flex-wrap gap-2">
         <div className="flex items-center gap-2">
-          <ViewfinderCircleIcon className="size-4 text-muted-foreground" />
+          <ViewfinderCircleIcon className="w-4 h-4 text-muted-foreground" />
           <span className="text-xs font-semibold text-foreground tracking-wide">
             REAL-TIME Φ(z) MISPRICING MATRIX
           </span>
           {highestAnomaly >= 0.03 && (
             <Badge variant="outline" className="font-mono text-[10px] bg-amber-500/10 text-amber-300 border-amber-500/30 gap-1">
-              <BoltIcon className="size-2.5" />
+              <BoltIcon className="w-2.5 h-2.5" />
               <span>{(highestAnomaly * 100).toFixed(1)}% MAX ARB</span>
             </Badge>
           )}
@@ -68,15 +68,15 @@ const EdgeRadarHeatmapComponent: React.FC<EdgeRadarHeatmapProps> = ({
         {/* Minimalist Legend */}
         <div className="flex items-center gap-4 text-[11px] font-mono text-muted-foreground">
           <div className="flex items-center gap-1.5">
-            <span className="size-1.5 rounded-full bg-emerald-400" />
+            <span className="w-1.5 h-1.5 rounded-full bg-emerald-400" />
             <span>YES Alpha (&gt;0)</span>
           </div>
           <div className="flex items-center gap-1.5">
-            <span className="size-1.5 rounded-full bg-rose-400" />
+            <span className="w-1.5 h-1.5 rounded-full bg-rose-400" />
             <span>NO Alpha (&lt;0)</span>
           </div>
           <div className="flex items-center gap-1.5">
-            <span className="size-1.5 rounded-full bg-muted-foreground/50" />
+            <span className="w-1.5 h-1.5 rounded-full bg-muted-foreground/50" />
             <span>Neutral</span>
           </div>
         </div>
@@ -178,7 +178,7 @@ const EdgeRadarHeatmapComponent: React.FC<EdgeRadarHeatmapProps> = ({
                     {/* Subtle Anomaly Indicator */}
                     {isAnomaly && (
                       <div
-                        className="absolute top-1.5 right-1.5 size-1.5 rounded-full bg-amber-400/80"
+                        className="absolute top-1.5 right-1.5 w-1.5 h-1.5 rounded-full bg-amber-400/80"
                         title="Statistical Anomaly (>=3% edge)"
                       />
                     )}

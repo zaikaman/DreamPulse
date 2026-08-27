@@ -190,7 +190,7 @@ export const MarketMatrixSkeleton: React.FC = () => {
       <div className="p-4 pb-3 border-b border-border/40 flex flex-col gap-3 flex-shrink-0">
         <div className="flex justify-between items-center">
           <div className="flex items-center gap-2">
-            <Square3Stack3DIcon className="size-4 text-muted-foreground" />
+            <Square3Stack3DIcon className="w-4 h-4 text-muted-foreground" />
             <Skeleton variant="text" width={160} height={14} />
             <Skeleton variant="badge" width={54} height={18} />
           </div>
@@ -221,7 +221,7 @@ export const OrderBookDepthSkeleton: React.FC = () => {
       {/* Header */}
       <div className="p-4 pb-3 border-b border-border/40 flex items-center justify-between flex-shrink-0">
         <div className="flex items-center gap-2">
-          <QueueListIcon className="size-4 text-muted-foreground" />
+          <QueueListIcon className="w-4 h-4 text-muted-foreground" />
           <Skeleton variant="text" width={140} height={14} />
           <Skeleton variant="badge" width={40} height={18} />
         </div>
@@ -352,7 +352,7 @@ export const EdgeRadarHeatmapSkeleton: React.FC = () => {
     <div className="terminal-panel p-4 flex flex-col gap-3">
       <div className="flex justify-between items-center pb-3 border-b border-border/40">
         <div className="flex items-center gap-2">
-          <ViewfinderCircleIcon className="size-4 text-muted-foreground" />
+          <ViewfinderCircleIcon className="w-4 h-4 text-muted-foreground" />
           <Skeleton variant="text" width={220} height={14} />
           <Skeleton variant="badge" width={90} height={18} />
         </div>

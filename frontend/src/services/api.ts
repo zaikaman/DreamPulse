@@ -232,5 +232,31 @@ export const apiClient = {
     const q = params.toString();
     return fetchJson(`/analytics/balance-history${q ? `?${q}` : ''}`);
   },
+
+  // Personal Swarm — per-wallet isolated strategy
+  async getPersonalSwarmConfig(userAddress: string): Promise<{ success: boolean; config: import('../types/index.js').PersonalSwarmConfig }> {
+    return fetchJson(`/swarm/my-config?userAddress=${encodeURIComponent(userAddress)}`);
+  },
+  async updatePersonalSwarmConfig(
+    userAddress: string,
+    payload: Partial<import('../types/index.js').PersonalSwarmConfig>,
+  ): Promise<{ success: boolean; config: import('../types/index.js').PersonalSwarmConfig }> {
+    return fetchJson('/swarm/my-config', { method: 'PUT', body: JSON.stringify({ userAddress, ...payload }) });
+  },
+  async setPersonalSwarmMode(userAddress: string, mode: 'COPY' | 'PERSONAL'): Promise<{ success: boolean; config: import('../types/index.js').PersonalSwarmConfig }> {
+    return fetchJson('/swarm/mode', { method: 'POST', body: JSON.stringify({ userAddress, mode }) });
+  },
+  async togglePersonalAgent(userAddress: string, agentType: string, enabled: boolean): Promise<{ success: boolean; config: import('../types/index.js').PersonalSwarmConfig }> {
+    return fetchJson('/swarm/toggle', { method: 'POST', body: JSON.stringify({ userAddress, agentType, enabled }) });
+  },
+  async updatePersonalAgentConfig(userAddress: string, agentType: string, config: Record<string, unknown>): Promise<{ success: boolean; config: import('../types/index.js').PersonalSwarmConfig }> {
+    return fetchJson('/swarm/config', { method: 'POST', body: JSON.stringify({ userAddress, agentType, config }) });
+  },
+  async getPersonalSwarmStatus(userAddress: string): Promise<{ success: boolean; status: import('../types/index.js').PersonalSwarmStatus }> {
+    return fetchJson(`/swarm/my-status?userAddress=${encodeURIComponent(userAddress)}`);
+  },
+  async resetPersonalSwarm(userAddress: string): Promise<{ success: boolean; config: import('../types/index.js').PersonalSwarmConfig }> {
+    return fetchJson('/swarm/reset', { method: 'POST', body: JSON.stringify({ userAddress }) });
+  },
 };
 

@@ -202,7 +202,7 @@ export const CinematicHero: React.FC<CinematicHeroProps> = ({
                 style={{ animationDelay: "320ms" }}
                 title="Connected to Somnia Testnet"
               >
-                <div className="size-2 rounded-full bg-emerald-400 animate-pulse" />
+                <div className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
                 <span>{shortAddress}</span>
               </button>
 
@@ -213,7 +213,7 @@ export const CinematicHero: React.FC<CinematicHeroProps> = ({
                 style={{ animationDelay: "350ms" }}
               >
                 <span>Launch Terminal</span>
-                <RocketLaunchIcon className="size-4" />
+                <RocketLaunchIcon className="w-4 h-4" />
               </button>
             </>
           ) : (
@@ -224,7 +224,7 @@ export const CinematicHero: React.FC<CinematicHeroProps> = ({
                 className="hidden sm:flex animate-blur-fade-up liquid-glass items-center gap-1.5 rounded-full px-4 py-2 text-sm text-white/90 hover:text-white transition-all cursor-pointer hover:bg-white/5 active:scale-95"
                 style={{ animationDelay: "320ms" }}
               >
-                <WalletIcon className="size-4 text-white/80" />
+                <WalletIcon className="w-4 h-4 text-white/80" />
                 <span>Connect Wallet</span>
               </button>
 
@@ -235,7 +235,7 @@ export const CinematicHero: React.FC<CinematicHeroProps> = ({
                 style={{ animationDelay: "350ms" }}
               >
                 <span>Launch Terminal</span>
-                <RocketLaunchIcon className="size-4" />
+                <RocketLaunchIcon className="w-4 h-4" />
               </button>
             </>
           )}
@@ -283,7 +283,7 @@ export const CinematicHero: React.FC<CinematicHeroProps> = ({
               style={{ transitionDelay: `${idx * 40}ms` }}
             >
               <span>{link.label}</span>
-              <ArrowRightIcon className="size-4 text-gray-500" />
+              <ArrowRightIcon className="w-4 h-4 text-gray-500" />
             </button>
           ))}
 
@@ -295,7 +295,7 @@ export const CinematicHero: React.FC<CinematicHeroProps> = ({
               }}
               className="w-full bg-white text-black rounded-full py-2.5 px-4 text-xs font-semibold flex items-center justify-center gap-2 hover:bg-gray-200 cursor-pointer"
             >
-              <RocketLaunchIcon className="size-4" />
+              <RocketLaunchIcon className="w-4 h-4" />
               <span>Launch Cyber-Terminal</span>
             </button>
 
@@ -307,7 +307,7 @@ export const CinematicHero: React.FC<CinematicHeroProps> = ({
                 }}
                 className="w-full liquid-glass rounded-full py-2.5 px-4 text-xs font-medium flex items-center justify-center gap-2 text-white hover:bg-white/5 cursor-pointer"
               >
-                <WalletIcon className="size-4" />
+                <WalletIcon className="w-4 h-4" />
                 <span>Connect Web3 Wallet</span>
               </button>
             )}
@@ -330,15 +330,15 @@ export const CinematicHero: React.FC<CinematicHeroProps> = ({
               style={{ animationDelay: "300ms" }}
             >
               <div className="flex items-center gap-1.5 font-medium text-white">
-                <Badge1Icon className="size-4 sm:size-5 text-white" />
+                <Badge1Icon className="w-4 h-4 sm:w-5 h-5 text-white" />
                 <span>{slide.badge1.label}</span>
               </div>
               <div className="flex items-center gap-1.5 text-gray-300">
-                <Badge2Icon className="size-4 text-gray-400" />
+                <Badge2Icon className="w-4 h-4 text-gray-400" />
                 <span>{slide.badge2.label}</span>
               </div>
               <div className="flex items-center gap-1.5 text-gray-300">
-                <Badge3Icon className="size-4 text-gray-400" />
+                <Badge3Icon className="w-4 h-4 text-gray-400" />
                 <span>{slide.badge3.label}</span>
               </div>
             </div>
@@ -376,7 +376,7 @@ export const CinematicHero: React.FC<CinematicHeroProps> = ({
                 style={{ animationDelay: "700ms" }}
               >
                 <span>{slide.secondaryCtaText}</span>
-                <ArrowRightIcon className="size-4" />
+                <ArrowRightIcon className="w-4 h-4" />
               </button>
             </div>
           </div>
@@ -412,7 +412,7 @@ export const CinematicHero: React.FC<CinematicHeroProps> = ({
                 style={{ animationDelay: "800ms" }}
                 aria-label="Previous Slide"
               >
-                <ChevronLeftIcon className="size-4" />
+                <ChevronLeftIcon className="w-4 h-4" />
                 <span>Previous</span>
               </button>
 
@@ -423,7 +423,7 @@ export const CinematicHero: React.FC<CinematicHeroProps> = ({
                 aria-label="Next Slide"
               >
                 <span>Next</span>
-                <ChevronRightIcon className="size-4" />
+                <ChevronRightIcon className="w-4 h-4" />
               </button>
             </div>
           </div>

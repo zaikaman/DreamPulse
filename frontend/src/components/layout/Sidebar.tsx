@@ -136,7 +136,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
               <div className="flex items-center gap-2.5 truncate">
                 <Icon
                   className={cn(
-                    "size-4 shrink-0",
+                    "w-4 h-4 shrink-0",
                     isActive ? "text-foreground" : "text-muted-foreground group-hover:text-foreground"
                   )}
                 />
@@ -185,7 +185,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
               onClick={() => onOpenSessionModal?.()}
               className="w-full flex items-center justify-center gap-2 rounded-lg bg-primary text-primary-foreground h-9 px-3 text-xs font-medium hover:bg-primary/90 transition-colors shadow-2xs cursor-pointer"
             >
-              <SparklesIcon className="size-3.5" />
+              <SparklesIcon className="w-3.5 h-3.5" />
               <span>{activeSession ? "Session Active" : "Delegate Session"}</span>
             </button>
           </div>
@@ -194,10 +194,10 @@ export const Sidebar: React.FC<SidebarProps> = ({
             <Button
               size="icon"
               onClick={() => onOpenSessionModal?.()}
-              className="size-9 rounded-lg shadow-2xs"
+              className="w-9 h-9 rounded-lg shadow-2xs"
               title={activeSession ? "Session Active" : "Delegate Session"}
             >
-              <SparklesIcon className="size-4" />
+              <SparklesIcon className="w-4 h-4" />
             </Button>
           </div>
         )}
@@ -216,7 +216,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
           <div className="rounded-xl border border-border/50 bg-card/40 backdrop-blur-md p-2.5 space-y-1 text-xs shadow-2xs">
             <div className="flex items-center justify-between">
               <span className="font-semibold text-foreground text-xs flex items-center gap-1.5">
-                <BoltIcon className="size-3 text-foreground/70" />
+                <BoltIcon className="w-3 h-3 text-foreground/70" />
                 Somnia L1
               </span>
               <Badge
@@ -241,7 +241,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
             )}
           >
             <div className="flex items-center gap-2 min-w-0">
-              <div className="size-1.5 rounded-full bg-emerald-400 shrink-0" />
+              <div className="w-1.5 h-1.5 rounded-full bg-emerald-400 shrink-0" />
               {!isCollapsed && (
                 <div className="text-left truncate">
                   <div className="font-mono text-xs text-foreground truncate">
@@ -255,7 +255,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
             </div>
             {!isCollapsed && activeSession && (
               <span title="Session Key Active">
-                <ShieldCheckIcon className="size-3 text-emerald-400 shrink-0" />
+                <ShieldCheckIcon className="w-3 h-3 text-emerald-400 shrink-0" />
               </span>
             )}
           </div>
@@ -267,7 +267,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
               onClick={onConnectWallet}
               className="w-full gap-1.5 text-xs font-normal text-muted-foreground hover:text-foreground"
             >
-              <CurrencyDollarIcon className="size-3.5" />
+              <CurrencyDollarIcon className="w-3.5 h-3.5" />
               <span>Connect Wallet</span>
             </Button>
           )

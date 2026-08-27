@@ -29,16 +29,17 @@
 5. [Mathematical & Quantitative Foundation](#-mathematical--quantitative-foundation)
 6. [Non-Custodial Session Delegation & BatchApprove.sol](#-non-custodial-session-delegation--batchapprovesol)
 7. [Strategy Studio & Institutional Backtesting](#-strategy-studio--institutional-backtesting)
-8. [Institutional Design System & Minimalist Terminal UI](#-institutional-design-system--minimalist-terminal-ui)
-9. [Smart Contracts & On-Chain Deployments](#-smart-contracts--on-chain-deployments)
-10. [Hackathon Judging Criteria Alignment](#-hackathon-judging-criteria-alignment)
-11. [Developer Feedback Report (Somnia & DreamDEX SDK)](#-developer-feedback-report-somnia--dreamdex-sdk)
-12. [System Architecture Diagrams](#-system-architecture-diagrams)
-13. [API & WebSocket Telemetry Protocol](#-api--websocket-telemetry-protocol)
-14. [Local Installation & Development Guide](#-local-installation--development-guide)
-15. [Verification & Test Suite (97/97 Passing)](#-verification--test-suite-9797-passing)
-16. [2–3 Minute Demo Video Walkthrough](#-23-minute-demo-video-walkthrough)
-17. [License & Acknowledgements](#-license--acknowledgements)
+8. [Personal Swarm: Copy-Trading vs Isolated Per-Wallet Swarms](#-personal-swarm-copy-trading-vs-isolated-per-wallet-swarms)
+9. [Institutional Design System & Minimalist Terminal UI](#-institutional-design-system--minimalist-terminal-ui)
+10. [Smart Contracts & On-Chain Deployments](#-smart-contracts--on-chain-deployments)
+11. [Hackathon Judging Criteria Alignment](#-hackathon-judging-criteria-alignment)
+12. [Developer Feedback Report (Somnia & DreamDEX SDK)](#-developer-feedback-report-somnia--dreamdex-sdk)
+13. [System Architecture Diagrams](#-system-architecture-diagrams)
+14. [API & WebSocket Telemetry Protocol](#-api--websocket-telemetry-protocol)
+15. [Local Installation & Development Guide](#-local-installation--development-guide)
+16. [Verification & Test Suite (97/97 Passing)](#-verification--test-suite-9797-passing)
+17. [2–3 Minute Demo Video Walkthrough](#-23-minute-demo-video-walkthrough)
+18. [License & Acknowledgements](#-license--acknowledgements)
 
 ---
 
@@ -262,7 +263,32 @@ DreamPulse includes a full-featured **Strategy Studio** running an institutional
   * **Profit Factor & Expectancy**: Total gross gains over gross losses.
   * **Win Rate & Payoff Ratio**: Average win size over average loss size.
   * **Underwater Drawdown Curve**: Detailed visual timeline of peak-to-trough capital pullbacks.
-* **1-Click Live Swarm Deployment**: Any verified backtested parameter set can be directly pushed to the live swarm cockpit with a single click.
+* **Hybrid Deployment Model**:
+  * **Operators** → *Deploy to Global Swarm*: any verified backtest can be pushed live to the canonical Protocol Swarm on Somnia Shannon (affects all copy-traders).
+  * **Traders** → *Deploy to My Personal Swarm*: backtested Volt/Oracle/Titan parameters are saved to the trader's isolated per-wallet swarm (`user_swarm_configs`). This automatically switches the wallet from `COPY` (mirroring the Protocol Swarm) to `PERSONAL` (independent evaluation loop, copy-trading disabled). Traders can revert to `COPY` at any time in the Swarm Cockpit.
+
+---
+
+## 🧬 Personal Swarm: Copy-Trading vs Isolated Per-Wallet Swarms
+
+**Every developed feature now centers around one invariant: traders own their strategy, custody never leaves their wallet.**
+
+Previously the Swarm Cockpit exposed a single global parameter set (only the Operator could edit) and the *Fork to My Strategy Studio* button was misleading — it merely opened the backtester without ever giving traders an isolated swarm. The new **Hybrid Personal Swarm** architecture resolves this:
+
+| Mode | Who trades? | How it works | On-chain invariant |
+| :--- | :--- | :--- | :--- |
+| **COPY (default)** | Protocol Swarm (Operator) + real-time copy-trade | New high-conviction signals on the canonical swarm are instantly replicated to every delegated wallet that remains in `COPY` mode, under that wallet's own `maxTradeSize` / `dailyVolumeCap` guardrails. Zero custody moves — `transferFrom(user, operator)` only for the exact `price × quantity` collateral; operator pays STT gas. | Users in `COPY` never miss the swarm edge; they auto-benefit from Titan's liquidity and Volt/Oracle alphas. |
+| **PERSONAL (isolated)** | Per-wallet ephemeral swarm | Once a trader customizes any Volt/Oracle/Titan slider in **My Personal Swarm** or clicks **Deploy to My Personal Swarm** from Strategy Studio, `user_swarm_configs.mode` flips to `PERSONAL`. The daemon spawns an independent evaluation loop per wallet — ephemeral `VoltSniperAgent` / `OracleArbAgent` / `TitanMMAgent` instances seeded with that wallet's parameters, with per-user rate limits (`60s` cooldown, `120s` opp dedup) and per-user inventory (`Titan` delta aggregated only from that wallet's unsettled fills). Copy-trading is **disabled** for this wallet while `PERSONAL`. | True strategy isolation: your drift thresholds (`0.05%–1.0%`), `minEdge` (`1%–12%`), `targetSpread` (`2%–8%`), `inventoryAversion` (`0.005–0.04`) and enabled flags execute independently of the Operator's policy. Revert to `COPY` with one click. |
+
+**Key production invariants:**
+
+* **DB:** `public.user_swarm_configs` (`user_address` PK, `mode COPY|PERSONAL`, `volt_enabled/oracle_enabled/titan_enabled`, `volt_config/oracle_config/titan_config` JSONB, `customized_at`). Supabase RLS permissive; persistence is `supabase + in-memory cache` with graceful in-memory fallback for tests.
+* **Backend:** `UserSwarmService` (`D:\DreamPulse\backend\src\services\user-swarm-service.ts:1`) validates ranges (`driftThreshold 0.0001–0.02`, `minEdge 0.005–0.2`, `lotSize 1–50`, etc.) and auto-personalizes on any config write. `MultiAgentSwarmRunner` (`D:\DreamPulse\backend\src\agents\swarm-runner.ts:330`) filters copy-trade targets to `COPY` wallets and runs `evaluatePersonalSwarms()` (max 30 wallets/cycle, per-user 60s cooldown, isolated `sanitizeDepthForSelfTrade(userAddr)`).
+* **API:** `GET /api/v1/swarm/my-config`, `PUT /api/v1/swarm/my-config`, `POST /api/v1/swarm/mode`, `POST /api/v1/swarm/toggle`, `POST /api/v1/swarm/config`, `GET /api/v1/swarm/my-status`, `POST /api/v1/swarm/reset` — all wallet-scoped via `userAddress`.
+* **Frontend:** `SwarmCockpitView` (`D:\DreamPulse\frontend\src\components\dashboard\SwarmCockpitView.tsx:1`) now composes two stacked panels: **Protocol Swarm (Transparency, read-only)** + **My Personal Swarm** (`D:\DreamPulse\frontend\src\components\PersonalSwarmCockpit.tsx:1`) with a `COPY ↔ PERSONAL` toggle, per-agent `ON/OFF`, sliders gated on `hasActiveSession`, and per-wallet PnL/fills KPIs. Protocol cards' CTA is now **Simulate in Strategy Studio** (no longer "Fork to My Strategy Studio" implying ownership of the global swarm); personal cards expose **Save Personal Config** → **Test in Strategy Studio**; strategy studio's trader CTA is **Deploy to My Personal Swarm** (persists via `PUT /swarm/config` + `POST /swarm/mode PERSONAL`).
+* **UX guarantee:** Guests see *Connect Wallet* empty state; `COPY` traders see a blue explainer + disabled sliders; `PERSONAL` without delegation sees amber delegation prompt; `PERSONAL` + delegated sees fully editable swarm with independent PnL attribution.
+
+This design preserves the original operator-as-source-of-truth while giving every wallet true strategy sovereignty — no mock, no hard-coded demo, production-ready on Shannon Testnet.
 
 ---
 
@@ -275,8 +301,8 @@ The DreamPulse frontend is crafted with a high-aesthetic, minimalist institution
 * **Cinematic Landing Showcase**: Immersive entry portal featuring interactive live swarm telemetry, protocol architecture breakdown, and seamless Web3 wallet authentication.
 * **Institutional 3-Category Sidebar**:
   * **Market Intelligence**: *Terminal Overview*, *Edge Radar (Black-Scholes mispricing)*, and *Order Book & Depth (CLOB ladders)*.
-  * **Quantitative Swarm**: *Live Swarm Feed (real-time chain-of-thought)* and *Swarm Cockpit (guardrails & controls)*.
-  * **Execution & Studio**: *Strategy Studio (quant backtester IDE)*, *Settlement Sweeper (batch claim & compound)*, and *Portfolio Analytics (Sharpe/Sortino)*.
+  * **Quantitative Swarm**: *Live Swarm Feed (real-time chain-of-thought)* and *Swarm Cockpit* — now a dual-panel workspace: **Protocol Swarm (Transparency, read-only, source of copy-trades)** + **My Personal Swarm (per-wallet COPY↔PERSONAL toggle, isolated sliders & PnL)**.
+  * **Execution & Studio**: *Strategy Studio (quant backtester IDE — Simulate then Deploy to My Personal Swarm or, for Operator, to Global Swarm)*, *Settlement Sweeper (batch claim & compound)*, and *Portfolio Analytics (Sharpe/Sortino)*.
 * **Global Command Palette (`⌘K / Ctrl+K`)**: Lightning-fast fuzzy search modal to jump between prediction markets, navigate views, and execute platform actions.
 * **Non-Custodial Session Delegation Modal**: Intuitive modal to grant scoped operator permissions with daily volume caps and single-trade limits.
 * **Procedural Web Audio Feedback**: Zero-asset synthesizer utilizing the Web Audio API to deliver millisecond-accurate acoustic feedback for order fills, opportunity alerts, and settlement sweeps.
@@ -399,8 +425,15 @@ The DreamPulse backend daemon exposes a comprehensive REST and WebSocket gateway
 | `POST` | `/api/v1/sessions/register` | Registers a non-custodial session delegation with EIP-712 signature and risk caps. |
 | `GET` | `/api/v1/sessions/:userAddress` | Retrieves the active session, spent volume, and allowance readiness for a user. |
 | `POST` | `/api/v1/sessions/:id/revoke` | Instantly revokes an active trading session. |
-| `GET` | `/api/v1/agents/status` | Returns operational status, latencies, trade counts, and PnL across all 4 agents. |
-| `POST` | `/api/v1/agents/toggle` | Administrative endpoint to enable/disable specific agents. |
+| `GET` | `/api/v1/agents/status` | Returns operational status, latencies, trade counts, and PnL across all 4 agents (Protocol Swarm). |
+| `POST` | `/api/v1/agents/toggle` | Administrative endpoint (Operator only) to enable/disable specific agents on the Protocol Swarm. |
+| `GET` | `/api/v1/swarm/my-config?userAddress=0x…` | Retrieves the caller's `PersonalSwarmConfig` (`mode COPY|PERSONAL`, per-agent toggles & params). |
+| `PUT` | `/api/v1/swarm/my-config` | Upserts the caller's personal swarm config — saving any agent param auto-flips `mode` to `PERSONAL`. |
+| `POST` | `/api/v1/swarm/mode` | Explicitly switches `{ userAddress, mode: COPY|PERSONAL }` (PERSONAL ⇒ isolated swarm, COPY ⇒ mirror). |
+| `POST` | `/api/v1/swarm/toggle` | Toggles a single personal agent `{ userAddress, agentType, enabled }`. |
+| `POST` | `/api/v1/swarm/config` | Updates a single personal agent's params `{ userAddress, agentType, config }` (validated ranges). |
+| `GET` | `/api/v1/swarm/my-status?userAddress=0x…` | Returns per-wallet isolated PnL / fills / sweeper attribution + `isCopyMode` flag. |
+| `POST` | `/api/v1/swarm/reset` | Resets the caller's swarm back to `COPY` (mirroring the Protocol Swarm, disables isolation). |
 | `GET` | `/api/v1/orders` | Paginated query of order history with filtering by agent, outcome, status, and scope. |
 | `GET` | `/api/v1/sweeper/summary` | Returns claimable unclaimed balances, all-time claimed amounts, and active settlements. |
 | `POST` | `/api/v1/sweeper/trigger` | Triggers an immediate batch settlement sweep across all resolved contracts. |

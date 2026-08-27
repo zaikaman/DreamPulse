@@ -232,10 +232,10 @@ export const AnalyticsView: React.FC<AnalyticsViewProps> = ({ wallet, onConnectW
   if (error && !data) {
     return (
       <div className="terminal-panel p-6 text-center">
-        <ExclamationTriangleIcon className="size-7 text-amber-400 mx-auto mb-3" />
+        <ExclamationTriangleIcon className="w-7 h-7 text-amber-400 mx-auto mb-3" />
         <div className="text-sm font-bold text-foreground mb-1">Analytics temporarily unavailable</div>
         <div className="text-xs text-muted-foreground mb-3">{error}</div>
-        <button type="button" className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border bg-secondary/30 text-xs" onClick={() => refresh()}><ArrowPathIcon className="size-3.5" /> Retry</button>
+        <button type="button" className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border bg-secondary/30 text-xs" onClick={() => refresh()}><ArrowPathIcon className="w-3.5 h-3.5" /> Retry</button>
       </div>
     );
   }
@@ -253,8 +253,8 @@ export const AnalyticsView: React.FC<AnalyticsViewProps> = ({ wallet, onConnectW
       {/* Header */}
       <div className="flex items-center justify-between gap-3 flex-wrap flex-shrink-0">
         <div className="flex items-center gap-3">
-          <div className="size-8 rounded-lg grid place-items-center border bg-secondary/30 border-border/50 text-muted-foreground">
-            <PresentationChartLineIcon className="size-4" />
+          <div className="w-8 h-8 rounded-lg grid place-items-center border bg-secondary/30 border-border/50 text-muted-foreground">
+            <PresentationChartLineIcon className="w-4 h-4" />
           </div>
           <div>
             <div className="flex items-center gap-2 flex-wrap">
@@ -272,8 +272,8 @@ export const AnalyticsView: React.FC<AnalyticsViewProps> = ({ wallet, onConnectW
               </button>
             ))}
           </div>
-          <button type="button" onClick={() => refresh()} className="size-7 grid place-items-center rounded-lg border bg-secondary/30 border-border/50 text-muted-foreground hover:text-foreground"><ArrowPathIcon className="size-3.5" /></button>
-          <button type="button" onClick={exportCsv} className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border bg-secondary/30 border-border/50 text-xs font-medium text-muted-foreground hover:text-foreground"><ArrowDownTrayIcon className="size-3.5" /> Export</button>
+          <button type="button" onClick={() => refresh()} className="w-7 h-7 grid place-items-center rounded-lg border bg-secondary/30 border-border/50 text-muted-foreground hover:text-foreground"><ArrowPathIcon className="w-3.5 h-3.5" /></button>
+          <button type="button" onClick={exportCsv} className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border bg-secondary/30 border-border/50 text-xs font-medium text-muted-foreground hover:text-foreground"><ArrowDownTrayIcon className="w-3.5 h-3.5" /> Export</button>
         </div>
       </div>
 
@@ -281,55 +281,55 @@ export const AnalyticsView: React.FC<AnalyticsViewProps> = ({ wallet, onConnectW
       {isGuest && (
         <div className="flex items-center justify-between gap-3 px-3 py-2.5 rounded-xl border bg-secondary/20 border-border/50 flex-shrink-0">
           <div className="flex items-center gap-2.5 text-xs text-muted-foreground">
-            <EyeIcon className="size-4 text-muted-foreground" />
+            <EyeIcon className="w-4 h-4 text-muted-foreground" />
             <span><strong className="text-foreground">Watch-Only:</strong> Showing <strong className="text-foreground">Protocol Swarm (Operator)</strong> verified. Connect to overlay your curve.</span>
           </div>
-          {onConnectWallet && <button type="button" onClick={onConnectWallet} className="inline-flex items-center gap-1.5 px-3 py-1 rounded-lg bg-primary text-primary-foreground text-xs font-bold"><WalletIcon className="size-3.5" /> Connect</button>}
+          {onConnectWallet && <button type="button" onClick={onConnectWallet} className="inline-flex items-center gap-1.5 px-3 py-1 rounded-lg bg-primary text-primary-foreground text-xs font-bold"><WalletIcon className="w-3.5 h-3.5" /> Connect</button>}
         </div>
       )}
 
       {/* KPI Grid — compact 4-col, 2 rows */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 flex-shrink-0">
         <div className="terminal-panel p-3 flex flex-col gap-1.5">
-          <div className="flex items-center justify-between"><span className="text-[10px] font-mono font-semibold tracking-wider text-muted-foreground uppercase">{isGuest ? 'SWARM TOTAL PnL' : 'YOUR TOTAL PnL'}</span><ArrowTrendingUpIcon className="size-3.5 text-muted-foreground/60" /></div>
+          <div className="flex items-center justify-between"><span className="text-[10px] font-mono font-semibold tracking-wider text-muted-foreground uppercase">{isGuest ? 'SWARM TOTAL PnL' : 'YOUR TOTAL PnL'}</span><ArrowTrendingUpIcon className="w-3.5 h-3.5 text-muted-foreground/60" /></div>
           <div className="text-lg font-mono font-bold" style={{ color: isUserPositive ? 'var(--trade-yes)' : 'var(--trade-no)' }}>{isUserPositive ? '+' : ''}{(summary?.totalPnl ?? 0).toFixed(2)} <span className="text-[10px] text-muted-foreground">tUSDC</span></div>
           <div className="flex items-center gap-1.5 text-[11px] font-mono text-muted-foreground"><span className="px-1.5 py-0.5 rounded border bg-secondary/30 border-border/40 text-[10px]">{summary?.totalTrades ?? 0} fills</span> Realized {(summary?.realizedPnl ?? 0).toFixed(1)}</div>
         </div>
         <div className="terminal-panel p-3 flex flex-col gap-1.5">
-          <div className="flex items-center justify-between"><span className="text-[10px] font-mono font-semibold tracking-wider text-muted-foreground uppercase">UNCLAIMED (ON-CHAIN)</span><Square3Stack3DIcon className="size-3.5 text-muted-foreground/60" /></div>
+          <div className="flex items-center justify-between"><span className="text-[10px] font-mono font-semibold tracking-wider text-muted-foreground uppercase">UNCLAIMED (ON-CHAIN)</span><Square3Stack3DIcon className="w-3.5 h-3.5 text-muted-foreground/60" /></div>
           <div className="text-lg font-mono font-bold text-amber-400">{(summary?.unclaimedPnl ?? 0).toFixed(2)} <span className="text-[10px] text-muted-foreground">tUSDC</span></div>
           <div className="text-[11px] text-muted-foreground">{data?.symbolBreakdown?.length ?? 0} markets • Sweeper auto-claims</div>
         </div>
         <div className="terminal-panel p-3 flex flex-col gap-1.5">
-          <div className="flex items-center justify-between"><span className="text-[10px] font-mono font-semibold tracking-wider text-muted-foreground uppercase">WIN RATE</span><ViewfinderCircleIcon className="size-3.5 text-muted-foreground/60" /></div>
+          <div className="flex items-center justify-between"><span className="text-[10px] font-mono font-semibold tracking-wider text-muted-foreground uppercase">WIN RATE</span><ViewfinderCircleIcon className="w-3.5 h-3.5 text-muted-foreground/60" /></div>
           <div className="text-lg font-mono font-bold text-foreground">{(summary?.winRate ?? 0).toFixed(1)}%</div>
           <div className="text-[11px] text-muted-foreground">{summary?.totalWins ?? 0}W / {summary?.totalLosses ?? 0}L • PF {summary?.profitFactor ?? 0}</div>
         </div>
         <div className="terminal-panel p-3 flex flex-col gap-1.5">
-          <div className="flex items-center justify-between"><span className="text-[10px] font-mono font-semibold tracking-wider text-muted-foreground uppercase">TOTAL VOLUME</span><ChartBarSquareIcon className="size-3.5 text-muted-foreground/60" /></div>
+          <div className="flex items-center justify-between"><span className="text-[10px] font-mono font-semibold tracking-wider text-muted-foreground uppercase">TOTAL VOLUME</span><ChartBarSquareIcon className="w-3.5 h-3.5 text-muted-foreground/60" /></div>
           <div className="text-lg font-mono font-bold text-foreground">{(summary?.totalVolume ?? 0).toFixed(1)} <span className="text-[10px] text-muted-foreground">tUSDC</span></div>
           <div className="text-[11px] text-muted-foreground">Avg {summary?.totalTrades ? (summary.totalVolume / summary.totalTrades).toFixed(2) : '0.00'} / fill</div>
         </div>
         <div className="terminal-panel p-3 flex flex-col gap-1.5">
-          <div className="flex items-center justify-between"><span className="text-[10px] font-mono font-semibold tracking-wider text-muted-foreground uppercase">PROFIT FACTOR</span><TrophyIcon className="size-3.5 text-muted-foreground/60" /></div>
+          <div className="flex items-center justify-between"><span className="text-[10px] font-mono font-semibold tracking-wider text-muted-foreground uppercase">PROFIT FACTOR</span><TrophyIcon className="w-3.5 h-3.5 text-muted-foreground/60" /></div>
           <div className="text-lg font-mono font-bold" style={{ color: (summary?.profitFactor ?? 0) >= 1 ? 'var(--trade-yes)' : 'var(--trade-no)' }}>{summary?.profitFactor === 99.99 ? '∞' : (summary?.profitFactor ?? 0).toFixed(2)}</div>
           <div className="text-[11px] text-muted-foreground">Expectancy {(summary?.expectancy ?? 0).toFixed(2)}</div>
         </div>
         <div className="terminal-panel p-3 flex flex-col gap-1.5">
-          <div className="flex items-center justify-between"><span className="text-[10px] font-mono font-semibold tracking-wider text-muted-foreground uppercase">MAX DRAWDOWN</span><ExclamationTriangleIcon className="size-3.5 text-muted-foreground/60" /></div>
+          <div className="flex items-center justify-between"><span className="text-[10px] font-mono font-semibold tracking-wider text-muted-foreground uppercase">MAX DRAWDOWN</span><ExclamationTriangleIcon className="w-3.5 h-3.5 text-muted-foreground/60" /></div>
           <div className="text-lg font-mono font-bold text-rose-400">{(summary?.maxDrawdown ?? 0).toFixed(2)}</div>
           <div className="text-[11px] text-muted-foreground">{(summary?.maxDrawdownPct ?? 0).toFixed(1)}% • Sharpe {summary?.sharpeApprox ?? 0}</div>
         </div>
         <div className="terminal-panel p-3 flex flex-col gap-1.5 relative overflow-hidden">
           <div className="absolute top-0 left-0 right-0 h-[2px] bg-amber-500/50" />
-          <div className="flex items-center justify-between"><span className="text-[10px] font-mono font-semibold tracking-wider text-muted-foreground uppercase">SWARM EQUITY</span><CpuChipIcon className="size-3.5 text-muted-foreground/60" /></div>
+          <div className="flex items-center justify-between"><span className="text-[10px] font-mono font-semibold tracking-wider text-muted-foreground uppercase">SWARM EQUITY</span><CpuChipIcon className="w-3.5 h-3.5 text-muted-foreground/60" /></div>
           <div className="text-lg font-mono font-bold" style={{ color: isSwarmPositive ? 'var(--trade-yes)' : 'var(--trade-no)' }}>{isSwarmPositive ? '+' : ''}{swarmTotal.toFixed(2)} <span className="text-[10px] text-muted-foreground">tUSDC</span></div>
           <div className="text-[11px] font-mono font-semibold" style={{ color: delta >= 0 ? 'var(--trade-yes)' : 'var(--trade-no)' }}>{isGuest ? 'Protocol verified' : delta >= 0 ? `You +${delta.toFixed(1)}` : `Swarm +${Math.abs(delta).toFixed(1)}`}</div>
         </div>
         <div className="terminal-panel p-3 flex flex-col gap-1.5">
-          <div className="flex items-center justify-between"><span className="text-[10px] font-mono font-semibold tracking-wider text-muted-foreground uppercase">STREAK</span><ChartBarIcon className="size-3.5 text-muted-foreground/60" /></div>
+          <div className="flex items-center justify-between"><span className="text-[10px] font-mono font-semibold tracking-wider text-muted-foreground uppercase">STREAK</span><ChartBarIcon className="w-3.5 h-3.5 text-muted-foreground/60" /></div>
           <div className="text-sm font-mono font-bold flex items-center gap-1.5" style={{ color: (summary?.currentStreak ?? 0) > 0 ? 'var(--trade-yes)' : (summary?.currentStreak ?? 0) < 0 ? 'var(--trade-no)' : 'var(--muted-foreground)' }}>
-            {(summary?.currentStreak ?? 0) > 0 ? <><FireIcon className="size-3.5" /> +{summary?.currentStreak} streak</> : (summary?.currentStreak ?? 0) < 0 ? <><ArrowTrendingDownIcon className="size-3.5" /> {summary?.currentStreak}</> : '— Even'}
+            {(summary?.currentStreak ?? 0) > 0 ? <><FireIcon className="w-3.5 h-3.5" /> +{summary?.currentStreak} streak</> : (summary?.currentStreak ?? 0) < 0 ? <><ArrowTrendingDownIcon className="w-3.5 h-3.5" /> {summary?.currentStreak}</> : '— Even'}
           </div>
           <div className="text-[11px] font-mono text-muted-foreground">Best +{(summary?.bestDay ?? 0).toFixed(1)} • Worst {(summary?.worstDay ?? 0).toFixed(1)}</div>
         </div>
@@ -347,12 +347,12 @@ export const AnalyticsView: React.FC<AnalyticsViewProps> = ({ wallet, onConnectW
               { id: 'ledger', label: 'Ledger & Fills', Icon: CalendarIcon },
             ] as const).map((t) => (
               <button key={t.id} type="button" onClick={() => setActiveTab(t.id)} className={cn('inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-[11px] font-semibold transition-colors', activeTab === t.id ? 'bg-primary text-primary-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground')}>
-                <t.Icon className="size-3.5" /> {t.label}
+                <t.Icon className="w-3.5 h-3.5" /> {t.label}
               </button>
             ))}
           </div>
           <div className="flex items-center gap-2 text-[11px] font-mono text-muted-foreground">
-            {activeTab === 'equity' && <><label className="inline-flex items-center gap-1.5 cursor-pointer"><input type="checkbox" checked={showSwarm} onChange={(e) => setShowSwarm(e.target.checked)} className="size-3 accent-amber-500" /> <span className="text-amber-400 font-semibold">Swarm</span></label><span className="w-px h-3 bg-border hidden sm:inline-block" /><span>{userCurve.length} days • {(summary?.totalTrades ?? 0)} fills</span></>}
+            {activeTab === 'equity' && <><label className="inline-flex items-center gap-1.5 cursor-pointer"><input type="checkbox" checked={showSwarm} onChange={(e) => setShowSwarm(e.target.checked)} className="w-3 h-3 accent-amber-500" /> <span className="text-amber-400 font-semibold">Swarm</span></label><span className="w-px h-3 bg-border hidden sm:inline-block" /><span>{userCurve.length} days • {(summary?.totalTrades ?? 0)} fills</span></>}
             {activeTab === 'daily' && <span>{dailyBars.filter((d) => d.pnl !== 0).length} active days</span>}
             {activeTab === 'ledger' && <span>{ledgerRows.length} days • verifiable</span>}
           </div>
@@ -374,7 +374,7 @@ export const AnalyticsView: React.FC<AnalyticsViewProps> = ({ wallet, onConnectW
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
               <div className="terminal-panel p-0 flex flex-col overflow-hidden">
                 <div className="flex items-center justify-between px-3 py-2 border-b border-border/40">
-                  <span className="text-xs font-bold flex items-center gap-1.5"><ChartBarSquareIcon className="size-3.5 text-muted-foreground" /> Daily Realized PnL</span>
+                  <span className="text-xs font-bold flex items-center gap-1.5"><ChartBarSquareIcon className="w-3.5 h-3.5 text-muted-foreground" /> Daily Realized PnL</span>
                   <span className="text-[10px] font-mono text-muted-foreground">{dailyBars.length} days</span>
                 </div>
                 <div className="p-2">
@@ -383,7 +383,7 @@ export const AnalyticsView: React.FC<AnalyticsViewProps> = ({ wallet, onConnectW
               </div>
               <div className="terminal-panel p-0 flex flex-col overflow-hidden">
                 <div className="flex items-center gap-1.5 px-3 py-2 border-b border-border/40">
-                  <Squares2X2Icon className="size-3.5 text-muted-foreground" />
+                  <Squares2X2Icon className="w-3.5 h-3.5 text-muted-foreground" />
                   <span className="text-xs font-bold">Agent Contribution</span>
                   <span className="ml-auto text-[10px] font-mono text-muted-foreground">PnL per agent ({range})</span>
                 </div>
@@ -397,7 +397,7 @@ export const AnalyticsView: React.FC<AnalyticsViewProps> = ({ wallet, onConnectW
                     return (
                       <div key={a.agentType} className="flex flex-col gap-1.5">
                         <div className="flex items-center justify-between">
-                          <div className="inline-flex items-center gap-1.5 text-[11px] font-bold" style={{ color }}><Icon className="size-3" /> {a.agentType.toUpperCase()} <span className="text-[10px] font-medium text-muted-foreground font-mono">{a.trades} fills • {a.winRate.toFixed(0)}% WR</span></div>
+                          <div className="inline-flex items-center gap-1.5 text-[11px] font-bold" style={{ color }}><Icon className="w-3 h-3" /> {a.agentType.toUpperCase()} <span className="text-[10px] font-medium text-muted-foreground font-mono">{a.trades} fills • {a.winRate.toFixed(0)}% WR</span></div>
                           <span className="text-xs font-mono font-bold" style={{ color: isPos ? 'var(--trade-yes)' : 'var(--trade-no)' }}>{isPos ? '+' : ''}{a.pnl.toFixed(2)} tUSDC</span>
                         </div>
                         <div className="h-1.5 bg-secondary/30 rounded-full overflow-hidden relative">
@@ -416,7 +416,7 @@ export const AnalyticsView: React.FC<AnalyticsViewProps> = ({ wallet, onConnectW
           {activeTab === 'dist' && (
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-3">
               <div className="terminal-panel p-3 flex flex-col gap-3">
-                <div className="flex items-center gap-1.5 text-xs font-bold"><ChartPieIcon className="size-3.5 text-muted-foreground" /> Outcome Split</div>
+                <div className="flex items-center gap-1.5 text-xs font-bold"><ChartPieIcon className="w-3.5 h-3.5 text-muted-foreground" /> Outcome Split</div>
                 {(() => {
                   const outcomes = data?.outcomeBreakdown || [];
                   const pieData = outcomes.map((o) => ({ label: o.outcome, value: o.trades, color: o.outcome === 'YES' ? '#6ee7b7' : o.outcome === 'NO' ? '#fda4af' : '#a1a1aa' }));
@@ -433,7 +433,7 @@ export const AnalyticsView: React.FC<AnalyticsViewProps> = ({ wallet, onConnectW
                 </div>
               </div>
               <div className="terminal-panel p-3 flex flex-col gap-3">
-                <div className="flex items-center gap-1.5 text-xs font-bold"><Square3Stack3DIcon className="size-3.5 text-muted-foreground" /> Symbol & Window</div>
+                <div className="flex items-center gap-1.5 text-xs font-bold"><Square3Stack3DIcon className="w-3.5 h-3.5 text-muted-foreground" /> Symbol & Window</div>
                 <div className="flex flex-col gap-3">
                   <div>
                     <div className="text-[10px] font-mono font-semibold tracking-wider text-muted-foreground uppercase mb-1.5">By Symbol</div>
@@ -455,7 +455,7 @@ export const AnalyticsView: React.FC<AnalyticsViewProps> = ({ wallet, onConnectW
                 </div>
               </div>
               <div className="terminal-panel p-3 flex flex-col gap-2">
-                <div className="flex items-center justify-between"><span className="text-xs font-bold flex items-center gap-1.5"><ClockIcon className="size-3.5 text-muted-foreground" /> Volume Timeline</span><span className="text-[10px] font-mono text-muted-foreground">tUSDC / day</span></div>
+                <div className="flex items-center justify-between"><span className="text-xs font-bold flex items-center gap-1.5"><ClockIcon className="w-3.5 h-3.5 text-muted-foreground" /> Volume Timeline</span><span className="text-[10px] font-mono text-muted-foreground">tUSDC / day</span></div>
                 <div className="flex flex-col">
                   {(() => {
                     const vols = dailyBars.map((d) => d.volume);
@@ -484,8 +484,8 @@ export const AnalyticsView: React.FC<AnalyticsViewProps> = ({ wallet, onConnectW
             <div className="grid grid-cols-1 xl:grid-cols-[1.6fr_0.9fr] gap-3">
               <div className="terminal-panel p-0 flex flex-col overflow-hidden">
                 <div className="flex items-center justify-between px-3 py-2 border-b border-border/40 bg-secondary/10">
-                  <div className="flex items-center gap-1.5"><CalendarIcon className="size-3.5 text-muted-foreground" /><span className="text-xs font-bold">Daily Balance Ledger</span><Badge variant="outline" className="font-mono text-[10px] bg-secondary/30 border-border/40 text-muted-foreground">{ledgerRows.length} days</Badge></div>
-                  <button type="button" onClick={exportCsv} className="inline-flex items-center gap-1 px-2 py-1 rounded-md border bg-secondary/30 border-border/50 text-[11px] font-medium text-muted-foreground hover:text-foreground"><ArrowDownTrayIcon className="size-3" /> CSV</button>
+                  <div className="flex items-center gap-1.5"><CalendarIcon className="w-3.5 h-3.5 text-muted-foreground" /><span className="text-xs font-bold">Daily Balance Ledger</span><Badge variant="outline" className="font-mono text-[10px] bg-secondary/30 border-border/40 text-muted-foreground">{ledgerRows.length} days</Badge></div>
+                  <button type="button" onClick={exportCsv} className="inline-flex items-center gap-1 px-2 py-1 rounded-md border bg-secondary/30 border-border/50 text-[11px] font-medium text-muted-foreground hover:text-foreground"><ArrowDownTrayIcon className="w-3 h-3" /> CSV</button>
                 </div>
                 <div className="max-h-[320px] overflow-y-auto">
                   <table className="w-full border-collapse text-xs">
@@ -516,7 +516,7 @@ export const AnalyticsView: React.FC<AnalyticsViewProps> = ({ wallet, onConnectW
               </div>
               <div className="flex flex-col gap-3">
                 <div className="terminal-panel p-0 flex flex-col overflow-hidden">
-                  <div className="flex items-center gap-1.5 px-3 py-2 border-b border-border/40"><ChartBarIcon className="size-3.5 text-muted-foreground" /><span className="text-xs font-bold">Recent Fills</span><span className="ml-auto text-[10px] font-mono text-muted-foreground">Last 10</span></div>
+                  <div className="flex items-center gap-1.5 px-3 py-2 border-b border-border/40"><ChartBarIcon className="w-3.5 h-3.5 text-muted-foreground" /><span className="text-xs font-bold">Recent Fills</span><span className="ml-auto text-[10px] font-mono text-muted-foreground">Last 10</span></div>
                   <div className="divide-y divide-border/20 max-h-[280px] overflow-y-auto">
                     {(data?.recentTrades?.slice(0, 10) || []).map((t: any) => {
                       const isWin = (t.pnl ?? 0) > 0.01; const isLoss = (t.pnl ?? 0) < -0.01;
@@ -534,7 +534,7 @@ export const AnalyticsView: React.FC<AnalyticsViewProps> = ({ wallet, onConnectW
                   </div>
                 </div>
                 <div className="terminal-panel p-3 bg-secondary/10 border-border/40">
-                  <div className="flex items-center gap-1.5 mb-1.5"><ShieldCheckIcon className="size-3.5 text-muted-foreground" /><span className="text-xs font-bold text-foreground">Transparency Guarantee</span><Badge variant="outline" className="ml-auto font-mono text-[10px] bg-secondary/30 border-border/40 text-muted-foreground">ON-CHAIN VERIFIED</Badge></div>
+                  <div className="flex items-center gap-1.5 mb-1.5"><ShieldCheckIcon className="w-3.5 h-3.5 text-muted-foreground" /><span className="text-xs font-bold text-foreground">Transparency Guarantee</span><Badge variant="outline" className="ml-auto font-mono text-[10px] bg-secondary/30 border-border/40 text-muted-foreground">ON-CHAIN VERIFIED</Badge></div>
                   <ul className="text-[11px] text-muted-foreground leading-relaxed list-disc pl-4 space-y-1">
                     <li>Every point = real settlement: <code className="font-mono bg-secondary/40 px-1 py-0.5 rounded">payout − cost</code> per lot.</li>
                     <li>Operator (0x93e3…59Cf) curve public — compare delta live.</li>

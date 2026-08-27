@@ -107,7 +107,7 @@ export const OrderBookDepth: React.FC<OrderBookDepthProps> = ({
       {/* Header & Leg Toggle */}
       <div className="p-4 pb-3 border-b border-border/40 flex items-center justify-between flex-wrap gap-2 flex-shrink-0">
         <div className="flex items-center gap-2">
-          <QueueListIcon className="size-4 text-muted-foreground" />
+          <QueueListIcon className="w-4 h-4 text-muted-foreground" />
           <span className="text-xs font-semibold text-foreground tracking-wide">
             CLOB DEPTH: {selectedMarket.symbol}
           </span>
@@ -158,7 +158,7 @@ export const OrderBookDepth: React.FC<OrderBookDepthProps> = ({
               ${spot.toLocaleString()}
             </span>
             <span className="text-[10px] text-muted-foreground flex items-center">
-              {strikeDelta >= 0 ? <ArrowTrendingUpIcon className="size-2.5 text-emerald-400" /> : <ArrowTrendingDownIcon className="size-2.5 text-rose-400" />}
+              {strikeDelta >= 0 ? <ArrowTrendingUpIcon className="w-2.5 h-2.5 text-emerald-400" /> : <ArrowTrendingDownIcon className="w-2.5 h-2.5 text-rose-400" />}
               {Math.abs(strikeDelta).toFixed(1)}
             </span>
           </div>
@@ -281,7 +281,7 @@ export const OrderBookDepth: React.FC<OrderBookDepthProps> = ({
       {/* Alpha & Valuation Signal Footer */}
       <div className="p-3 border-t border-border/40 bg-secondary/20 flex items-center justify-between text-xs font-mono flex-shrink-0">
         <div className="flex items-center gap-1.5 text-muted-foreground">
-          <BoltIcon className="size-3.5 text-emerald-400" />
+          <BoltIcon className="w-3.5 h-3.5 text-emerald-400" />
           <span className="text-[11px]">BSM Dislocation:</span>
         </div>
         <div className="flex items-center gap-2">

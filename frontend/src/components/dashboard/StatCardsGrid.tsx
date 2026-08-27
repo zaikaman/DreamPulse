@@ -114,7 +114,7 @@ export const StatCardsGrid: React.FC<StatCardsGridProps> = ({
         <div className="flex items-center gap-2">
           {perspective === 'PORTFOLIO' ? (
             <>
-              <div className="size-1.5 rounded-full bg-emerald-400" />
+              <div className="w-1.5 h-1.5 rounded-full bg-emerald-400" />
               <span className="text-xs font-semibold text-foreground tracking-wide">
                 MY TRADER WORKSPACE & PERFORMANCE
               </span>
@@ -124,7 +124,7 @@ export const StatCardsGrid: React.FC<StatCardsGridProps> = ({
             </>
           ) : (
             <>
-              <div className="size-1.5 rounded-full bg-amber-400" />
+              <div className="w-1.5 h-1.5 rounded-full bg-amber-400" />
               <span className="text-xs font-semibold text-foreground tracking-wide">
                 SOMNIA PROTOCOL SWARM TELEMETRY
               </span>
@@ -148,7 +148,7 @@ export const StatCardsGrid: React.FC<StatCardsGridProps> = ({
               )}
               onClick={() => setPerspective('PORTFOLIO')}
             >
-              <UserIcon className="size-3" />
+              <UserIcon className="w-3 h-3" />
               <span>My Trading Wallet</span>
             </button>
             <button
@@ -161,13 +161,13 @@ export const StatCardsGrid: React.FC<StatCardsGridProps> = ({
               )}
               onClick={() => setPerspective('SWARM')}
             >
-              <CpuChipIcon className="size-3" />
+              <CpuChipIcon className="w-3 h-3" />
               <span>Protocol Swarm</span>
             </button>
           </div>
         ) : (
           <div className="flex items-center gap-1.5 text-xs text-muted-foreground font-mono">
-            <LockClosedIcon className="size-3" />
+            <LockClosedIcon className="w-3 h-3" />
             <span>Non-Custodial Somnia Shannon Engine</span>
           </div>
         )}
@@ -190,19 +190,19 @@ export const StatCardsGrid: React.FC<StatCardsGridProps> = ({
                       className="px-2 py-0.5 text-[10px] font-mono font-bold rounded bg-amber-500/20 text-amber-300 border border-amber-500/40 hover:bg-amber-500/30 cursor-pointer inline-flex items-center gap-1 transition-colors"
                       title="Claim 1,000 TestUSDC for DreamDEX event trading"
                     >
-                      {isFauceting ? <ArrowPathIcon className="size-2.5 spin" /> : <CurrencyDollarIcon className="size-2.5" />}
+                      {isFauceting ? <ArrowPathIcon className="w-2.5 h-2.5 spin" /> : <CurrencyDollarIcon className="w-2.5 h-2.5" />}
                       <span>Claim 1k tUSDC</span>
                     </button>
                   )}
                 </div>
-                <WalletIcon className="size-3.5 stat-card-icon text-muted-foreground" />
+                <WalletIcon className="w-3.5 h-3.5 stat-card-icon text-muted-foreground" />
               </div>
               <div className="stat-card-value font-mono text-cyan-400">
                 {userCollateral} <span className="text-xs text-muted-foreground">tUSDC</span>
               </div>
               <div className="stat-card-footer">
                 <Badge variant="outline" className="font-mono text-[10px] text-muted-foreground bg-secondary/30 border-border/50 gap-1">
-                  <CheckCircleIcon className="size-2.5 text-emerald-400" />
+                  <CheckCircleIcon className="w-2.5 h-2.5 text-emerald-400" />
                   <span>{wallet?.isConnected ? 'WALLET CONNECTED' : 'NOT CONNECTED'}</span>
                 </Badge>
                 <span className="text-[11px] font-mono text-muted-foreground">Native Gas: {userNativeGas} STT</span>
@@ -213,7 +213,7 @@ export const StatCardsGrid: React.FC<StatCardsGridProps> = ({
             <div className="stat-card">
               <div className="stat-card-header">
                 <span className="stat-card-title">MY TOTAL PnL</span>
-                <ArrowTrendingUpIcon className="size-3.5 stat-card-icon text-muted-foreground" />
+                <ArrowTrendingUpIcon className="w-3.5 h-3.5 stat-card-icon text-muted-foreground" />
               </div>
               <div className={cn(
                 "stat-card-value font-mono",
@@ -223,7 +223,7 @@ export const StatCardsGrid: React.FC<StatCardsGridProps> = ({
               </div>
               <div className="stat-card-footer">
                 <Badge variant="outline" className="font-mono text-[10px] text-muted-foreground bg-secondary/30 border-border/50 gap-1">
-                  <ArrowTrendingUpIcon className="size-2.5" />
+                  <ArrowTrendingUpIcon className="w-2.5 h-2.5" />
                   <span>{userOrdersToday > 0 ? `${userOrdersToday} FILLS` : 'READY TO TRADE'}</span>
                 </Badge>
                 <span className="text-[11px] font-mono text-muted-foreground">
@@ -240,7 +240,7 @@ export const StatCardsGrid: React.FC<StatCardsGridProps> = ({
             >
               <div className="stat-card-header">
                 <span className="stat-card-title">SESSION BUDGET</span>
-                <ShieldCheckIcon className="size-3.5 stat-card-icon text-muted-foreground" />
+                <ShieldCheckIcon className="w-3.5 h-3.5 stat-card-icon text-muted-foreground" />
               </div>
               <div className="stat-card-value font-mono">
                 {activeSession?.isActive
@@ -249,7 +249,7 @@ export const StatCardsGrid: React.FC<StatCardsGridProps> = ({
               </div>
               <div className="stat-card-footer">
                 <Badge variant="outline" className="font-mono text-[10px] text-muted-foreground bg-secondary/30 border-border/50 gap-1">
-                  <ShieldCheckIcon className={cn("size-2.5", activeSession?.isActive ? "text-emerald-400" : "text-muted-foreground")} />
+                  <ShieldCheckIcon className={cn("w-2.5 h-2.5", activeSession?.isActive ? "text-emerald-400" : "text-muted-foreground")} />
                   <span>{activeSession?.isActive ? 'ACTIVE DELEGATION' : 'DIRECT WALLET'}</span>
                 </Badge>
                 <span className="text-[11px] font-mono text-muted-foreground">
@@ -264,12 +264,12 @@ export const StatCardsGrid: React.FC<StatCardsGridProps> = ({
             <div className="stat-card">
               <div className="stat-card-header">
                 <span className="stat-card-title">SWARM EVAL SPEED</span>
-                <Squares2X2Icon className="size-3.5 stat-card-icon text-muted-foreground" />
+                <Squares2X2Icon className="w-3.5 h-3.5 stat-card-icon text-muted-foreground" />
               </div>
               <div className="stat-card-value font-mono text-foreground">{latencyMs}ms TICK</div>
               <div className="stat-card-footer">
                 <Badge variant="outline" className="font-mono text-[10px] text-muted-foreground bg-secondary/30 border-border/50 gap-1">
-                  <CpuChipIcon className="size-2.5" />
+                  <CpuChipIcon className="w-2.5 h-2.5" />
                   <span>SUB-100MS LOOP</span>
                 </Badge>
                 <span className="text-[11px] font-mono text-muted-foreground">Black-Scholes Φ(z) normal edge</span>
@@ -282,14 +282,14 @@ export const StatCardsGrid: React.FC<StatCardsGridProps> = ({
             <div className="stat-card">
               <div className="stat-card-header">
                 <span className="stat-card-title">SWARM 24H VOLUME</span>
-                <ChartBarIcon className="size-3.5 stat-card-icon text-muted-foreground" />
+                <ChartBarIcon className="w-3.5 h-3.5 stat-card-icon text-muted-foreground" />
               </div>
               <div className="stat-card-value font-mono text-cyan-400">
                 ${total24hVolume.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
               </div>
               <div className="stat-card-footer">
                 <Badge variant="outline" className="font-mono text-[10px] text-muted-foreground bg-secondary/30 border-border/50 gap-1">
-                  <BoltIcon className="size-2.5" />
+                  <BoltIcon className="w-2.5 h-2.5" />
                   <span>{totalSwarmFills > 0 ? `${totalSwarmFills} ON-CHAIN TRADES` : '8 ON-CHAIN TRADES'}</span>
                 </Badge>
                 <span className="text-[11px] font-mono text-muted-foreground">Somnia L1 High Throughput</span>
@@ -300,12 +300,12 @@ export const StatCardsGrid: React.FC<StatCardsGridProps> = ({
             <div className="stat-card">
               <div className="stat-card-header">
                 <span className="stat-card-title">EVENT CONTRACTS</span>
-                <Square3Stack3DIcon className="size-3.5 stat-card-icon text-muted-foreground" />
+                <Square3Stack3DIcon className="w-3.5 h-3.5 stat-card-icon text-muted-foreground" />
               </div>
               <div className="stat-card-value font-mono">{activeMarketsCount} ACTIVE</div>
               <div className="stat-card-footer">
                 <Badge variant="outline" className="font-mono text-[10px] text-muted-foreground bg-secondary/30 border-border/50 gap-1">
-                  <CheckCircleIcon className="size-2.5 text-emerald-400" />
+                  <CheckCircleIcon className="w-2.5 h-2.5 text-emerald-400" />
                   <span>5m • 15m • 1h</span>
                 </Badge>
                 <span className="text-[11px] font-mono text-muted-foreground">BTC, ETH, SOL, BNB, DOGE</span>
@@ -316,7 +316,7 @@ export const StatCardsGrid: React.FC<StatCardsGridProps> = ({
             <div className="stat-card">
               <div className="stat-card-header">
                 <span className="stat-card-title">SWARM REAL-TIME PnL</span>
-                <ArrowTrendingUpIcon className="size-3.5 stat-card-icon text-muted-foreground" />
+                <ArrowTrendingUpIcon className="w-3.5 h-3.5 stat-card-icon text-muted-foreground" />
               </div>
               <div className={cn(
                 "stat-card-value font-mono",
@@ -326,7 +326,7 @@ export const StatCardsGrid: React.FC<StatCardsGridProps> = ({
               </div>
               <div className="stat-card-footer">
                 <Badge variant="outline" className="font-mono text-[10px] text-muted-foreground bg-secondary/30 border-border/50 gap-1">
-                  <ArrowTrendingUpIcon className="size-2.5" />
+                  <ArrowTrendingUpIcon className="w-2.5 h-2.5" />
                   <span>{totalSwarmFills > 0 ? `${totalSwarmFills} FILLS` : 'READY TO TRADE'}</span>
                 </Badge>
                 <span className="text-[11px] font-mono text-muted-foreground">Volt, Oracle & Titan net PnL</span>
@@ -337,12 +337,12 @@ export const StatCardsGrid: React.FC<StatCardsGridProps> = ({
             <div className="stat-card">
               <div className="stat-card-header">
                 <span className="stat-card-title">PRICING & REASONING SPEED</span>
-                <Squares2X2Icon className="size-3.5 stat-card-icon text-muted-foreground" />
+                <Squares2X2Icon className="w-3.5 h-3.5 stat-card-icon text-muted-foreground" />
               </div>
               <div className="stat-card-value font-mono text-foreground">{latencyMs}ms TICK</div>
               <div className="stat-card-footer">
                 <Badge variant="outline" className="font-mono text-[10px] text-muted-foreground bg-secondary/30 border-border/50 gap-1">
-                  <CpuChipIcon className="size-2.5" />
+                  <CpuChipIcon className="w-2.5 h-2.5" />
                   <span>99.9% Φ(z)</span>
                 </Badge>
                 <span className="text-[11px] font-mono text-muted-foreground">Black-Scholes quant loop</span>

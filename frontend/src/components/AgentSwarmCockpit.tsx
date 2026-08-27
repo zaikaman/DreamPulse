@@ -151,23 +151,23 @@ export const AgentSwarmCockpit: React.FC<AgentSwarmCockpitProps> = ({
       {!isOperator ? (
         <div className="flex items-center justify-between gap-3 px-4 py-3 rounded-xl border bg-secondary/20 backdrop-blur-sm" style={{ borderColor: 'hsl(var(--border)/0.6)' }}>
           <div className="flex items-center gap-3 min-w-0">
-            <div className="size-8 rounded-lg bg-secondary/60 border border-border/50 grid place-items-center text-muted-foreground flex-shrink-0">
-              <LockClosedIcon className="size-4" />
+            <div className="w-8 h-8 rounded-lg bg-secondary/60 border border-border/50 grid place-items-center text-muted-foreground flex-shrink-0">
+              <LockClosedIcon className="w-4 h-4" />
             </div>
             <div className="min-w-0">
-              <div className="text-xs font-semibold text-foreground">Protocol Swarm Transparency</div>
-              <div className="text-[11px] text-muted-foreground leading-snug">Real-time quantitative policies of the Somnia L1 Autonomous Operator. Parameters are read-only in public mode.</div>
+              <div className="text-xs font-semibold text-foreground">Protocol Swarm — Transparency (Read-Only)</div>
+              <div className="text-[11px] text-muted-foreground leading-snug">The canonical operator swarm on Somnia Shannon. Traders mirror it via copy-trade by default — personalize below in <span className="font-semibold text-foreground">My Personal Swarm</span> to run an isolated strategy.</div>
             </div>
           </div>
           <Badge variant="outline" className="shrink-0 hidden sm:inline-flex bg-secondary/40 border-border/50 text-muted-foreground font-mono text-[10px] gap-1.5">
-            <span className="size-1.5 rounded-full bg-emerald-400 animate-pulse" /> Public Transparency Mode
+            <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" /> COPY-TRADING SOURCE
           </Badge>
         </div>
       ) : (
         <div className="flex items-center justify-between gap-3 px-4 py-3 rounded-xl border" style={{ background: 'rgba(245,158,11,0.07)', borderColor: 'rgba(245,158,11,0.22)' }}>
           <div className="flex items-center gap-3 min-w-0">
-            <div className="size-8 rounded-lg grid place-items-center flex-shrink-0" style={{ background: 'rgba(245,158,11,0.14)', border: '1px solid rgba(245,158,11,0.24)', color: '#fbbf24' }}>
-              <ShieldCheckIcon className="size-4" />
+            <div className="w-8 h-8 rounded-lg grid place-items-center flex-shrink-0" style={{ background: 'rgba(245,158,11,0.14)', border: '1px solid rgba(245,158,11,0.24)', color: '#fbbf24' }}>
+              <ShieldCheckIcon className="w-4 h-4" />
             </div>
             <div className="min-w-0">
               <div className="text-xs font-bold" style={{ color: '#fbbf24' }}>Operator Admin Active</div>
@@ -175,7 +175,7 @@ export const AgentSwarmCockpit: React.FC<AgentSwarmCockpitProps> = ({
             </div>
           </div>
           <Badge variant="outline" className="shrink-0 hidden sm:inline-flex gap-1.5 font-mono text-[10px]" style={{ background: 'rgba(245,158,11,0.12)', borderColor: 'rgba(245,158,11,0.28)', color: '#fbbf24' }}>
-            <span className="size-1.5 rounded-full bg-amber-400 animate-pulse" /> ADMIN CONTROLS UNLOCKED
+            <span className="w-1.5 h-1.5 rounded-full bg-amber-400 animate-pulse" /> ADMIN CONTROLS UNLOCKED
           </Badge>
         </div>
       )}
@@ -186,8 +186,8 @@ export const AgentSwarmCockpit: React.FC<AgentSwarmCockpitProps> = ({
         <div className="terminal-panel p-3.5 flex flex-col justify-between overflow-hidden relative">
           <div className="flex items-start justify-between gap-2">
             <div className="flex items-center gap-2">
-              <div className="size-8 rounded-lg grid place-items-center border bg-secondary/30 border-border/50 text-muted-foreground">
-                <CpuChipIcon className="size-4" />
+              <div className="w-8 h-8 rounded-lg grid place-items-center border bg-secondary/30 border-border/50 text-muted-foreground">
+                <CpuChipIcon className="w-4 h-4" />
               </div>
               <div className="flex flex-col">
                 <span className="text-[10px] font-mono font-semibold tracking-wider text-muted-foreground uppercase">Swarm Health</span>
@@ -195,12 +195,12 @@ export const AgentSwarmCockpit: React.FC<AgentSwarmCockpitProps> = ({
               </div>
             </div>
             <Badge variant="outline" className="font-mono text-[10px] px-1.5 py-0 bg-emerald-500/10 text-emerald-400 border-emerald-500/20 gap-1">
-              <span className="size-1.5 rounded-full bg-emerald-400 animate-pulse" /> LIVE
+              <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" /> LIVE
             </Badge>
           </div>
           <div className="mt-3 flex items-center gap-2 text-[11px] font-mono text-muted-foreground">
             <span className="inline-flex items-center gap-1.5 px-1.5 py-0.5 rounded border bg-secondary/30 border-border/40 text-[10px]">SOMNIA • 50312</span>
-            <span className="inline-flex items-center gap-1 text-[10px]"><ClockIcon className="size-3" /> 1000ms cycle</span>
+            <span className="inline-flex items-center gap-1 text-[10px]"><ClockIcon className="w-3 h-3" /> 1000ms cycle</span>
           </div>
         </div>
 
@@ -208,7 +208,7 @@ export const AgentSwarmCockpit: React.FC<AgentSwarmCockpitProps> = ({
         <div className="terminal-panel p-3.5 flex flex-col justify-between overflow-hidden relative" style={{ background: numericTotalPnl >= 0 ? 'linear-gradient(135deg, rgba(52,211,153,0.08) 0%, hsl(var(--card)/0.72) 60%)' : 'linear-gradient(135deg, rgba(244,63,94,0.08) 0%, hsl(var(--card)/0.72) 60%)', borderColor: numericTotalPnl >= 0 ? 'rgba(52,211,153,0.18)' : 'rgba(244,63,94,0.18)' }}>
           <div className="flex items-center justify-between">
             <span className="text-[10px] font-mono font-semibold tracking-wider uppercase" style={{ color: numericTotalPnl >= 0 ? '#6ee7b7' : '#fda4af' }}>Cumulative Swarm PnL</span>
-            <ArrowTrendingUpIcon className="size-4 text-muted-foreground/60" />
+            <ArrowTrendingUpIcon className="w-4 h-4 text-muted-foreground/60" />
           </div>
           <div className="font-mono text-xl font-extrabold tracking-tight mt-1" style={{ color: numericTotalPnl >= 0 ? '#6ee7b7' : '#fda4af' }}>{numericTotalPnl >= 0 ? `+${totalPnl}` : totalPnl} <span className="text-xs font-semibold">tUSDC</span></div>
           <div className="text-[10px] font-mono text-muted-foreground mt-1">Volt + Oracle + Titan • net realized</div>
@@ -218,7 +218,7 @@ export const AgentSwarmCockpit: React.FC<AgentSwarmCockpitProps> = ({
         <div className="terminal-panel p-3.5 flex flex-col justify-between overflow-hidden">
           <div className="flex items-center justify-between">
             <span className="text-[10px] font-mono font-semibold tracking-wider text-muted-foreground uppercase">Total Executions</span>
-            <BoltIcon className="size-4 text-muted-foreground/60" />
+            <BoltIcon className="w-4 h-4 text-muted-foreground/60" />
           </div>
           <div className="font-mono text-xl font-bold text-foreground mt-1">{totalFills} <span className="text-xs font-medium text-muted-foreground">fills</span></div>
           <div className="flex items-center gap-1.5 mt-1.5">
@@ -233,7 +233,7 @@ export const AgentSwarmCockpit: React.FC<AgentSwarmCockpitProps> = ({
         <div className="terminal-panel p-3.5 flex flex-col justify-between overflow-hidden">
           <div className="flex items-center justify-between">
             <span className="text-[10px] font-mono font-semibold tracking-wider text-muted-foreground uppercase">Eval Latency</span>
-            <SignalIcon className="size-4 text-muted-foreground/60" />
+            <SignalIcon className="w-4 h-4 text-muted-foreground/60" />
           </div>
           <div className="font-mono text-xl font-bold text-foreground mt-1">{avgLatency}ms <span className="text-xs font-medium text-muted-foreground">avg</span></div>
           <div className="text-[10px] font-mono text-muted-foreground mt-1">Sub-100ms loop • Black-Scholes Φ(z) • <span className="text-cyan-400">47ms tick</span></div>
@@ -244,21 +244,21 @@ export const AgentSwarmCockpit: React.FC<AgentSwarmCockpitProps> = ({
       <div className="terminal-panel p-0 overflow-hidden">
         <div className="flex items-center justify-between gap-3 px-4 py-3 border-b border-border/40 flex-wrap">
           <div className="flex items-center gap-3">
-            <div className="size-8 rounded-lg grid place-items-center border bg-secondary/30 border-border/50 text-muted-foreground">
-              <AdjustmentsHorizontalIcon className="size-4" />
+            <div className="w-8 h-8 rounded-lg grid place-items-center border bg-secondary/30 border-border/50 text-muted-foreground">
+              <AdjustmentsHorizontalIcon className="w-4 h-4" />
             </div>
             <div>
               <h2 className="text-sm font-bold text-foreground tracking-tight leading-none">Autonomous Swarm Strategy Cockpit</h2>
               <div className="flex items-center gap-2 mt-1 flex-wrap">
                 <Badge variant="outline" className="font-mono text-[10px] px-1.5 py-0 bg-secondary/40 border-border/40 text-muted-foreground gap-1.5">
-                  <span className="size-1.5 rounded-full bg-emerald-400 animate-pulse" /> SOMNIA SHANNON • Chain 50312
+                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" /> SOMNIA SHANNON • Chain 50312
                 </Badge>
                 <span className="text-[11px] font-mono text-muted-foreground hidden sm:inline">1000ms Evaluation Cycle • On-chain CLOB</span>
               </div>
             </div>
           </div>
           <div className="hidden md:flex items-center gap-2 text-[11px] font-mono text-muted-foreground">
-            <ChartBarIcon className="size-3.5" />
+            <ChartBarIcon className="w-3.5 h-3.5" />
             <span>Quantitative policies • Read-only transparency</span>
           </div>
         </div>
@@ -281,7 +281,7 @@ export const AgentSwarmCockpit: React.FC<AgentSwarmCockpitProps> = ({
                   )}
                   style={isActive && accent ? { background: accent, color: tab.id === 'ALL' ? '#09090b' : '#09090b', border: '1px solid transparent' } : undefined}
                 >
-                  {tab.id !== 'ALL' && accent && <span className="size-1.5 rounded-full" style={{ background: isActive ? '#09090b' : accent }} />}
+                  {tab.id !== 'ALL' && accent && <span className="w-1.5 h-1.5 rounded-full" style={{ background: isActive ? '#09090b' : accent }} />}
                   <span>{tab.label}</span>
                   {tab.count && <span className={cn('text-[10px] font-mono', isActive ? 'text-primary-foreground/80' : 'text-muted-foreground')}>{tab.count}</span>}
                 </button>
@@ -289,7 +289,7 @@ export const AgentSwarmCockpit: React.FC<AgentSwarmCockpitProps> = ({
             })}
           </div>
           <span className="ml-auto hidden lg:inline-flex items-center gap-1.5 text-[10px] font-mono text-muted-foreground">
-            <span className="size-1.5 rounded-full bg-amber-400" /> {activeCount} agents live • {isOperator ? 'Operator controls unlocked' : 'Fork to Strategy Studio to simulate'}
+            <span className="w-1.5 h-1.5 rounded-full bg-amber-400" /> {activeCount} agents live • {isOperator ? 'Operator controls unlocked' : 'Simulate in Strategy Studio → deploy to My Personal Swarm'}
           </span>
         </div>
       </div>
@@ -371,8 +371,8 @@ export const AgentSwarmCockpit: React.FC<AgentSwarmCockpitProps> = ({
           <AgentCardFrame theme={AGENT_THEME.sweeper} enabled={sweeperData.isEnabled}>
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2.5">
-                <div className="size-7 rounded-lg grid place-items-center border flex-shrink-0 bg-secondary/30 border-border/50 text-muted-foreground">
-                  <SparklesIcon className="size-3.5" />
+                <div className="w-7 h-7 rounded-lg grid place-items-center border flex-shrink-0 bg-secondary/30 border-border/50 text-muted-foreground">
+                  <SparklesIcon className="w-3.5 h-3.5" />
                 </div>
                 <div>
                   <div className="flex items-center gap-1.5">
@@ -382,8 +382,8 @@ export const AgentSwarmCockpit: React.FC<AgentSwarmCockpitProps> = ({
                   <div className="text-[10px] text-muted-foreground font-medium">{AGENT_THEME.sweeper.sub}</div>
                 </div>
               </div>
-              <div className="size-7 rounded-full grid place-items-center border bg-secondary/30 border-border/50 text-muted-foreground">
-                <CheckCircleIcon className="size-3.5" />
+              <div className="w-7 h-7 rounded-full grid place-items-center border bg-secondary/30 border-border/50 text-muted-foreground">
+                <CheckCircleIcon className="w-3.5 h-3.5" />
               </div>
             </div>
 
@@ -403,8 +403,8 @@ export const AgentSwarmCockpit: React.FC<AgentSwarmCockpitProps> = ({
             </div>
 
             <div className="p-3 rounded-xl border bg-secondary/20 border-border/50 flex gap-2.5 items-start">
-              <div className="size-7 rounded-lg bg-secondary/30 border border-border/50 grid place-items-center text-muted-foreground flex-shrink-0 mt-0.5">
-                <ShieldCheckIcon className="size-3.5" />
+              <div className="w-7 h-7 rounded-lg bg-secondary/30 border border-border/50 grid place-items-center text-muted-foreground flex-shrink-0 mt-0.5">
+                <ShieldCheckIcon className="w-3.5 h-3.5" />
               </div>
               <p className="text-[11px] leading-relaxed text-muted-foreground m-0">
                 Background daemon continuously scans Somnia contracts for finalized markets with positive payouts, automatically claiming and transferring <span className="font-semibold text-foreground">100% of proceeds directly</span> to user wallets.
@@ -412,7 +412,7 @@ export const AgentSwarmCockpit: React.FC<AgentSwarmCockpitProps> = ({
             </div>
 
             <div className="flex items-center gap-2 text-[11px] font-mono text-muted-foreground pt-1 border-t border-border/30 mt-1">
-              <span className="size-1.5 rounded-full bg-emerald-400 animate-pulse" />
+              <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
               <span>Auto-settlement active • Non-custodial • Verified on-chain</span>
             </div>
           </AgentCardFrame>
@@ -442,8 +442,8 @@ const AgentCardHeader: React.FC<{
   return (
     <div className="flex items-start justify-between gap-2">
       <div className="flex items-center gap-2 min-w-0">
-        <div className="size-7 rounded-lg grid place-items-center border flex-shrink-0 bg-secondary/30 border-border/50 text-muted-foreground">
-          <Icon className="size-3.5" />
+        <div className="w-7 h-7 rounded-lg grid place-items-center border flex-shrink-0 bg-secondary/30 border-border/50 text-muted-foreground">
+          <Icon className="w-3.5 h-3.5" />
         </div>
         <div className="min-w-0">
           <div className="flex items-center gap-1.5 flex-wrap">
@@ -467,12 +467,12 @@ const AgentCardHeader: React.FC<{
             boxShadow: enabled ? `0 0 10px ${theme.color}30` : 'none',
           }}
         >
-          <PowerIcon className="size-3" />
+          <PowerIcon className="w-3 h-3" />
           <span>{enabled ? 'ON' : 'OFF'}</span>
         </button>
       ) : (
         <span className="inline-flex items-center gap-1 px-2 py-1 rounded-full border text-[10px] font-mono font-bold flex-shrink-0" style={{ background: enabled ? 'rgba(52,211,153,0.10)' : 'rgba(113,113,122,0.12)', color: enabled ? '#6ee7b7' : '#a1a1aa', borderColor: enabled ? 'rgba(52,211,153,0.22)' : 'rgba(113,113,122,0.18)' }}>
-          <span className="size-1.5 rounded-full" style={{ background: enabled ? '#34d399' : '#71717a' }} />
+          <span className="w-1.5 h-1.5 rounded-full" style={{ background: enabled ? '#34d399' : '#71717a' }} />
           {enabled ? 'AUTONOMOUS' : 'PAUSED'}
         </span>
       )}
@@ -484,7 +484,7 @@ const AgentMetrics: React.FC<{ latency: number; latencyColor: string; midLabel: 
   <div className="grid grid-cols-3 gap-2">
     <div className="p-2.5 rounded-lg border bg-secondary/30 border-border/50 flex flex-col gap-0.5">
       <span className="text-[10px] font-mono text-muted-foreground uppercase tracking-wider flex items-center gap-1">
-        <SignalIcon className="size-3" /> Eval Latency
+        <SignalIcon className="w-3 h-3" /> Eval Latency
       </span>
       <span className="text-xs font-mono font-bold" style={{ color: latencyColor }}>
         {latency}ms
@@ -533,16 +533,16 @@ const AgentActionButton: React.FC<{ isOperator: boolean; isSaving: boolean; save
     <button type="button" onClick={onApply} disabled={isSaving} className="w-full inline-flex items-center justify-center gap-1.5 py-2 rounded-lg border text-xs font-semibold transition-all cursor-pointer" style={{ background: saveSuccess ? 'rgba(52,211,153,0.12)' : color, color: saveSuccess ? '#6ee7b7' : '#09090b', borderColor: saveSuccess ? 'rgba(52,211,153,0.22)' : color, opacity: isSaving ? 0.7 : 1 }}>
       {saveSuccess ? (
         <>
-          <CheckCircleIcon className="size-3.5" /> Parameters Synced
+          <CheckCircleIcon className="w-3.5 h-3.5" /> Parameters Synced
         </>
       ) : (
         <>
-          {isSaving ? <Spinner size="xs" variant="amber" /> : <AdjustmentsHorizontalIcon className="size-3.5" />} {isSaving ? 'Saving...' : 'Apply Strategy Parameters'}
+          {isSaving ? <Spinner size="xs" variant="amber" /> : <AdjustmentsHorizontalIcon className="w-3.5 h-3.5" />} {isSaving ? 'Saving...' : 'Apply Strategy Parameters'}
         </>
       )}
     </button>
   ) : (
     <button type="button" onClick={onFork} className="w-full inline-flex items-center justify-center gap-1.5 py-2 rounded-lg border text-xs font-semibold transition-colors cursor-pointer bg-secondary/30 hover:bg-secondary/50" style={{ color, borderColor: `${color}2a` }}>
-      <ArrowUpRightIcon className="size-3.5" /> Fork to My Strategy Studio
+      <ArrowUpRightIcon className="w-3.5 h-3.5" /> Simulate in Strategy Studio
     </button>
   );

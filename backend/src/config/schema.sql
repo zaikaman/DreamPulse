@@ -203,3 +203,29 @@ INSERT INTO public.system_state (key, value, description)
 VALUES ('groq_key_rotation', '{"current_index": 0, "total_keys": 20}'::jsonb, 'Tracks round-robin Groq key index across server restarts')
 ON CONFLICT (key) DO NOTHING;
 
+-- ------------------------------------------------------------------------------
+-- 9. Personal Swarm Configs (Per-Wallet Isolated Strategy)
+--    Mode: COPY (mirror operator) vs PERSONAL (user-owned independent swarm)
+-- ------------------------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS public.user_swarm_configs (
+    user_address VARCHAR(42) PRIMARY KEY,
+    mode VARCHAR(16) NOT NULL DEFAULT 'COPY' CHECK (mode IN ('COPY', 'PERSONAL')),
+    volt_enabled BOOLEAN NOT NULL DEFAULT TRUE,
+    oracle_enabled BOOLEAN NOT NULL DEFAULT TRUE,
+    titan_enabled BOOLEAN NOT NULL DEFAULT TRUE,
+    sweeper_enabled BOOLEAN NOT NULL DEFAULT TRUE,
+    volt_config JSONB NOT NULL DEFAULT '{"driftThreshold": 0.002, "minEdge": 0.03, "lotSize": 5, "maxTradeSize": 20}'::jsonb,
+    oracle_config JSONB NOT NULL DEFAULT '{"minEdge": 0.035, "lotSize": 5, "maxTradeSize": 20}'::jsonb,
+    titan_config JSONB NOT NULL DEFAULT '{"targetSpread": 0.04, "inventoryAversion": 0.015, "lotSize": 2}'::jsonb,
+    customized_at TIMESTAMPTZ,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    CONSTRAINT valid_user_swarm_address CHECK (user_address ~ '^0x[a-fA-F0-9]{40}$')
+);
+
+CREATE INDEX IF NOT EXISTS idx_user_swarm_mode ON public.user_swarm_configs(mode);
+
+ALTER TABLE public.user_swarm_configs ENABLE ROW LEVEL SECURITY;
+CREATE POLICY "Public Read Swarm Configs" ON public.user_swarm_configs FOR SELECT USING (true);
+CREATE POLICY "User Modify Own Swarm Config" ON public.user_swarm_configs FOR ALL USING (true);
+

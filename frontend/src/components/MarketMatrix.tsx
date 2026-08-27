@@ -89,12 +89,12 @@ export const MarketMatrix: React.FC<MarketMatrixProps> = ({
       <div className="p-4 pb-3 border-b border-border/40 flex flex-col gap-3 flex-shrink-0">
         <div className="flex items-center justify-between flex-wrap gap-2">
           <div className="flex items-center gap-2">
-            <Square3Stack3DIcon className="size-4 text-muted-foreground" />
+            <Square3Stack3DIcon className="w-4 h-4 text-muted-foreground" />
             <span className="text-xs font-semibold text-foreground tracking-wide">
               ACTIVE PREDICTION MARKETS
             </span>
             <Badge variant="outline" className="font-mono text-[10px] text-muted-foreground bg-secondary/40 border-border/50 gap-1 px-1.5 py-0">
-              <span className="size-1.5 rounded-full bg-emerald-400 animate-pulse" />
+              <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
               <span>{filteredMarkets.length} LIVE</span>
             </Badge>
           </div>
@@ -114,7 +114,7 @@ export const MarketMatrix: React.FC<MarketMatrixProps> = ({
                 )}
                 title="Grid View"
               >
-                <Squares2X2Icon className="size-3.5" />
+                <Squares2X2Icon className="w-3.5 h-3.5" />
               </button>
               <button
                 type="button"
@@ -127,13 +127,13 @@ export const MarketMatrix: React.FC<MarketMatrixProps> = ({
                 )}
                 title="Table View"
               >
-                <Bars3Icon className="size-3.5" />
+                <Bars3Icon className="w-3.5 h-3.5" />
               </button>
             </div>
 
             {/* Search Box */}
             <div className="relative flex items-center min-w-[180px]">
-              <MagnifyingGlassIcon className="size-3.5 absolute left-2.5 text-muted-foreground pointer-events-none" />
+              <MagnifyingGlassIcon className="w-3.5 h-3.5 absolute left-2.5 text-muted-foreground pointer-events-none" />
               <input
                 type="text"
                 placeholder="Search contract..."
@@ -147,7 +147,7 @@ export const MarketMatrix: React.FC<MarketMatrixProps> = ({
                   className="absolute right-2 text-muted-foreground hover:text-foreground cursor-pointer"
                   onClick={() => setSearchQuery('')}
                 >
-                  <XMarkIcon className="size-3" />
+                  <XMarkIcon className="w-3 h-3" />
                 </button>
               )}
             </div>
@@ -370,7 +370,7 @@ export const MarketMatrix: React.FC<MarketMatrixProps> = ({
                     </div>
                     <div className="flex items-center gap-2">
                       <div className="flex items-center gap-1 font-mono text-[11px] text-muted-foreground bg-secondary/30 px-2 py-0.5 rounded-md border border-border/30">
-                        <ClockIcon className="size-3 text-muted-foreground" />
+                        <ClockIcon className="w-3 h-3 text-muted-foreground" />
                         <span>{market.windowDuration}</span>
                       </div>
                       <Badge
@@ -412,9 +412,9 @@ export const MarketMatrix: React.FC<MarketMatrixProps> = ({
                         </span>
                         <span className="text-[10px] font-mono text-muted-foreground flex items-center gap-0.5">
                           {strikeDelta >= 0 ? (
-                            <ArrowTrendingUpIcon className="size-2.5 text-emerald-400" />
+                            <ArrowTrendingUpIcon className="w-2.5 h-2.5 text-emerald-400" />
                           ) : (
-                            <ArrowTrendingDownIcon className="size-2.5 text-rose-400" />
+                            <ArrowTrendingDownIcon className="w-2.5 h-2.5 text-rose-400" />
                           )}
                           {Math.abs(strikeDelta).toFixed(1)}
                         </span>

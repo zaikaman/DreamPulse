@@ -27,12 +27,12 @@ export const BrandIcon: React.FC<{
   interactive?: boolean;
 }> = ({ size = "md", theme = "auto", className, glow = false }) => {
   const sizeClasses = {
-    xs: "size-4 min-w-4 min-h-4",
-    sm: "size-5 min-w-5 min-h-5",
-    md: "size-6 min-w-6 min-h-6",
-    lg: "size-7 min-w-7 min-h-7",
-    xl: "size-8 min-w-8 min-h-8",
-    hero: "size-10 min-w-10 min-h-10 md:size-12 md:min-w-12 md:min-h-12",
+    xs: "w-4 h-4 min-w-4 min-h-4",
+    sm: "w-5 h-5 min-w-5 min-h-5",
+    md: "w-6 h-6 min-w-6 min-h-6",
+    lg: "w-7 h-7 min-w-7 min-h-7",
+    xl: "w-8 h-8 min-w-8 min-h-8",
+    hero: "w-10 h-10 min-w-10 min-h-10 md:w-12 h-12 md:min-w-12 md:min-h-12",
   };
 
   const isLight = theme === "light";

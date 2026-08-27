@@ -153,6 +153,22 @@ export const useBacktest = (userAddress?: string) => {
     [],
   );
 
+  const deployToPersonalSwarm = useCallback(
+    async (result: BacktestDetailedResult): Promise<boolean> => {
+      if (!userAddress) return false;
+      try {
+        const agentType = result.agentType;
+        const config = result.strategyConfig;
+        const res = await apiClient.updatePersonalAgentConfig(userAddress, agentType, config as Record<string, unknown>);
+        return res.success;
+      } catch (err: any) {
+        console.warn('[useBacktest] Error deploying strategy to personal swarm:', err);
+        return false;
+      }
+    },
+    [userAddress],
+  );
+
   return {
     isLoading,
     currentResult,
@@ -160,6 +176,7 @@ export const useBacktest = (userAddress?: string) => {
     error,
     runSimulation,
     deployToSwarm,
+    deployToPersonalSwarm,
     fetchHistory,
   };
 };

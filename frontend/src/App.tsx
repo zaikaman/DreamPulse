@@ -321,8 +321,10 @@ export const App: React.FC = () => {
           <React.Suspense fallback={<div className="glass-card" style={{ minHeight: '340px', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: '12px' }}><Spinner size="lg" /><span style={{ fontSize: '13px', color: 'var(--muted-foreground)' }}>Loading Swarm Cockpit...</span></div>}>
             <SwarmCockpitView
               wallet={wallet}
+              activeSession={activeSession}
               onForkToStudio={handleForkToStudio}
               onConnectWallet={connectWallet}
+              onOpenSessionModal={() => setIsSessionModalOpen(true)}
             />
           </React.Suspense>
         ) : activeNav === 'Strategy Studio' ? (
@@ -348,7 +350,7 @@ export const App: React.FC = () => {
           </React.Suspense>
         ) : (
           <div className="glass-card p-8 rounded-xl text-center flex flex-col items-center justify-center">
-            <CommandLineIcon className="size-9 text-cyan-400 mb-4" />
+            <CommandLineIcon className="w-9 h-9 text-cyan-400 mb-4" />
             <h2 className="text-lg font-bold mb-2">{activeNav} Module</h2>
             <p className="text-muted-foreground text-xs max-w-sm">
               Configured for upcoming protocol phases. You can explore the live <strong>Terminal</strong> anytime.
@@ -362,7 +364,7 @@ export const App: React.FC = () => {
               }}
             >
               <span>Back to Terminal</span>
-              <ArrowRightIcon className="size-3.5" />
+              <ArrowRightIcon className="w-3.5 h-3.5" />
             </button>
           </div>
         )}

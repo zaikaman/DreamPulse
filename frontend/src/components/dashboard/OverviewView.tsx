@@ -153,7 +153,7 @@ const OverviewViewComponent: React.FC<OverviewViewProps> = ({
           }}
         >
           <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-            <BoltIcon className="size-4 text-muted-foreground" />
+            <BoltIcon className="w-4 h-4 text-muted-foreground" />
             <span style={{ fontWeight: 600, fontSize: '13px' }} className="text-foreground">Top Arbitrage & Mispricing Opportunities</span>
             <Badge variant="outline" className="font-mono text-[10px] text-muted-foreground bg-secondary/40 border-border/50">
               {opportunities.filter((o) => o.absEdge >= 0.03).length} ANOMALIES
@@ -167,7 +167,7 @@ const OverviewViewComponent: React.FC<OverviewViewProps> = ({
             onClick={() => onNavigateToTab('Edge Radar')}
           >
             <span>Open Full Radar</span>
-            <ArrowRightIcon className="size-3" />
+            <ArrowRightIcon className="w-3 h-3" />
           </Button>
         </div>
 
@@ -259,7 +259,7 @@ const OverviewViewComponent: React.FC<OverviewViewProps> = ({
                             }}
                           >
                             <span>Inspect</span>
-                            <ArrowTopRightOnSquareIcon className="size-2.5" />
+                            <ArrowTopRightOnSquareIcon className="w-2.5 h-2.5" />
                           </Button>
                         </td>
                       </tr>
@@ -278,7 +278,7 @@ const OverviewViewComponent: React.FC<OverviewViewProps> = ({
         <div className="terminal-panel flex flex-col min-h-0 overflow-hidden" style={{ padding: '12px 14px' }}>
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '12px' }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-              <QueueListIcon className="size-4 text-muted-foreground" />
+              <QueueListIcon className="w-4 h-4 text-muted-foreground" />
               <span style={{ fontWeight: 600, fontSize: '13px' }} className="text-foreground">Active Prediction Catalog</span>
               <Badge variant="outline" className="font-mono text-[10px] text-muted-foreground bg-secondary/40 border-border/50">
                 {markets.length} Markets
@@ -291,7 +291,7 @@ const OverviewViewComponent: React.FC<OverviewViewProps> = ({
               onClick={() => onNavigateToTab('Markets & Depth')}
             >
               <span>View Full CLOB</span>
-              <ArrowRightIcon className="size-3" />
+              <ArrowRightIcon className="w-3 h-3" />
             </Button>
           </div>
 
@@ -365,7 +365,7 @@ const OverviewViewComponent: React.FC<OverviewViewProps> = ({
                         }}
                       >
                         <span>Trade</span>
-                        <ArrowRightIcon className="size-2.5" />
+                        <ArrowRightIcon className="w-2.5 h-2.5" />
                       </Button>
                     </div>
                   </div>
@@ -384,10 +384,10 @@ const OverviewViewComponent: React.FC<OverviewViewProps> = ({
         >
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '12px' }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-              <CpuChipIcon className="size-4 text-muted-foreground" />
+              <CpuChipIcon className="w-4 h-4 text-muted-foreground" />
               <span style={{ fontWeight: 600, fontSize: '13px' }} className="text-foreground">Live Swarm Intelligence</span>
               <Badge variant="outline" className="font-mono text-[10px] text-muted-foreground bg-secondary/40 border-border/50 gap-1.5">
-                <div className={cn("size-1.5 rounded-full", isHovered ? "bg-amber-400" : "bg-emerald-400")} />
+                <div className={cn("w-1.5 h-1.5 rounded-full", isHovered ? "bg-amber-400" : "bg-emerald-400")} />
                 <span>{isHovered ? 'PAUSED' : 'STREAMING'}</span>
               </Badge>
             </div>
@@ -398,7 +398,7 @@ const OverviewViewComponent: React.FC<OverviewViewProps> = ({
               onClick={() => onNavigateToTab('AI Swarm Feed')}
             >
               <span>Full Stream</span>
-              <ArrowRightIcon className="size-3" />
+              <ArrowRightIcon className="w-3 h-3" />
             </Button>
           </div>
 

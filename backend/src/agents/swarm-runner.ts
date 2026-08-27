@@ -6,6 +6,7 @@ import { marketService } from '../services/market-service.js';
 import { sessionService, type SessionRecord } from '../services/session-service.js';
 import { orderService, isOnChainCircuitBroken } from '../services/order-service.js';
 import { settlementService } from '../services/settlement-service.js';
+import { userSwarmService } from '../services/user-swarm-service.js';
 import { operatorAccount, hasOperatorGas } from '../config/somnia.js';
 import { telemetryWsGateway } from '../websocket/server.js';
 import type { IAgentContext, IAgentDecision } from './base-agent.js';
@@ -32,6 +33,9 @@ export class MultiAgentSwarmRunner {
   private lastThoughtTimes = new Map<AgentType, number>(); // Rate limiting per agent
   private lastThoughtTexts = new Map<AgentType, string>(); // Deduplication
   private copyTradeCursor: number = 0; // Fair round-robin rotation for delegated copy-trading
+  // Personal swarm isolated state per wallet
+  private personalLastTradeTimes = new Map<string, number>(); // key: `${userAddress}:${agentType}`
+  private personalLastOpportunityKeys = new Map<string, number>(); // key: `${userAddress}:${marketId}:${agentType}:${action}:${outcome}:${price}`
 
   private telemetry: Record<AgentType, AgentTelemetryState> = {
     Volt: {
@@ -329,7 +333,7 @@ export class MultiAgentSwarmRunner {
             // Trigger non-blocking background authorization refresh
             sessionService.refreshOnChainAuthorizations(systemOperatorAddress).catch(() => {});
 
-            // Fetch active on-chain-authorized copy-trade targets immediately from memory cache
+            // Fetch active on-chain-authorized copy-trade targets (personal swarm users are excluded — they run isolated strategies)
             const delegated = sessionService.getDelegatedCopyTradeSessions(systemOperatorAddress);
             const sortedDelegated = [...delegated].sort(
               (a, b) => new Date(b.updatedAt || b.createdAt).getTime() - new Date(a.updatedAt || a.createdAt).getTime(),
@@ -340,6 +344,11 @@ export class MultiAgentSwarmRunner {
             for (const userSession of sortedDelegated) {
               if (eligibleCopySessions.length >= MAX_COPIES_PER_SIGNAL) break;
               if (userSession.onChainAuthorized !== true || !userSession.isActive) continue;
+              // Personal swarm isolation: skip copy-trade for users who customized to PERSONAL mode
+              try {
+                const personalCfg = userSwarmService.getConfig(userSession.userAddress);
+                if (personalCfg.mode === 'PERSONAL') continue;
+              } catch {}
               const estCost = (decision.price ?? 0.5) * (decision.lotSize ?? 1.0);
               const allowance = sessionService.validateTradeAllowance(userSession.id, estCost);
               if (!allowance.allowed) {
@@ -488,6 +497,164 @@ export class MultiAgentSwarmRunner {
         } catch (sweeperErr: any) {
           sweeperState.consecutiveErrors++;
           console.warn('[SwarmRunner] Sweeper evaluation cycle error:', sweeperErr.message);
+        }
+      }
+    }
+
+    // 3. Personal Swarm Evaluation — isolated per-wallet strategy execution (non-copy mode)
+    await this.evaluatePersonalSwarms(openMarkets, spotTickers);
+  }
+
+  private async evaluatePersonalSwarms(
+    openMarkets: ReturnType<typeof marketService.getActiveMarkets>,
+    spotTickers: Record<string, any>,
+  ): Promise<void> {
+    if (openMarkets.length === 0) return;
+    if (isOnChainCircuitBroken()) return;
+    let personalConfigs: ReturnType<typeof userSwarmService.getAllPersonalConfigs> = [];
+    try {
+      personalConfigs = userSwarmService.getAllPersonalConfigs();
+    } catch {
+      return;
+    }
+    if (personalConfigs.length === 0) return;
+
+    // Bound concurrency: max 30 personal users per cycle to preserve 100ms loop SLA
+    const slice = personalConfigs.slice(0, 30);
+
+    for (const personal of slice) {
+      const userAddr = personal.userAddress;
+      // Must have active delegated session
+      let session: SessionRecord | null = null;
+      try {
+        session = await sessionService.getUserActiveSession(userAddr);
+      } catch {
+        continue;
+      }
+      if (!session || !session.isActive || session.onChainAuthorized !== true) continue;
+
+      const sessionGrant: SessionGrant = {
+        id: session.id,
+        userAddress: session.userAddress,
+        operatorAddress: session.operatorAddress,
+        permissions: session.permissions as any,
+        maxTradeSize: session.maxTradeSize,
+        dailyVolumeCap: session.dailyVolumeCap,
+        spentToday: session.spentToday,
+        expiresAt: session.expiresAt,
+        isActive: session.isActive,
+        onChainTxHash: session.onChainTxHash,
+        vaultDepositAmount: session.vaultDepositAmount,
+        targetPoolAddress: session.targetPoolAddress,
+        onChainAuthorized: session.onChainAuthorized,
+      };
+
+      // Per-user per-agent enabled checks
+      const agentsToEval: Array<{ type: AgentType; enabled: boolean }> = [
+        { type: 'Volt', enabled: personal.voltEnabled },
+        { type: 'Oracle', enabled: personal.oracleEnabled },
+        { type: 'Titan', enabled: personal.titanEnabled },
+      ];
+
+      for (const market of openMarkets) {
+        // Per-user single-market guard: one active position per market across entire personal portfolio
+        const hasPositionOnMarket = orderService.getOrders({ userAddress: userAddr, status: 'FILLED' }).some((o) => o.marketId.toLowerCase() === market.id.toLowerCase() && !o.isSettled) ||
+          orderService.getOrders({ userAddress: userAddr, status: 'PENDING' }).some((o) => o.marketId.toLowerCase() === market.id.toLowerCase());
+        // Use lighter check: if any unsettled fill exists for this user+market, skip
+        if (hasPositionOnMarket) {
+          // verify market not finalized
+          const m = marketService.getMarketById(market.id);
+          if (m && m.status !== 'Finalized') continue;
+        }
+        // Global per-user active position limit (3 concurrent)
+        if (orderService.getActivePositionCount(undefined, userAddr) >= 3) break;
+
+        for (const { type, enabled } of agentsToEval) {
+          if (!enabled) continue;
+          // Per-agent active position limit
+          if (orderService.getActivePositionCount(type, userAddr) >= 1) continue;
+
+          const key = `${userAddr.toLowerCase()}:${type}`;
+          const now = Date.now();
+          const lastTrade = this.personalLastTradeTimes.get(key) || 0;
+          if (now - lastTrade < 60000) continue;
+
+          // Prepare ephemeral agent with personal config
+          let agentInstance: VoltSniperAgent | OracleArbAgent | TitanMMAgent | null = null;
+          if (type === 'Volt') {
+            agentInstance = new VoltSniperAgent({
+              driftThreshold: personal.voltConfig.driftThreshold,
+              minEdge: personal.voltConfig.minEdge,
+              lotSize: personal.voltConfig.lotSize,
+              maxTradeSize: personal.voltConfig.maxTradeSize ?? 20,
+            });
+          } else if (type === 'Oracle') {
+            agentInstance = new OracleArbAgent({
+              minEdge: personal.oracleConfig.minEdge,
+              lotSize: personal.oracleConfig.lotSize,
+              maxTradeSize: personal.oracleConfig.maxTradeSize,
+            });
+          } else if (type === 'Titan') {
+            agentInstance = new TitanMMAgent({
+              targetSpread: personal.titanConfig.targetSpread,
+              inventoryAversion: personal.titanConfig.inventoryAversion,
+              lotSize: personal.titanConfig.lotSize,
+            });
+            // Personal inventory: aggregate user's own unsettled fills on this market
+            const userSwarmOrders = orderService.getOrders({ marketId: market.id, userAddress: userAddr, status: 'FILLED' }).filter((o) => !o.isSettled);
+            const netDelta = userSwarmOrders.reduce((acc, o) => acc + (o.outcome === 'YES' ? o.lotSize : -o.lotSize), 0);
+            (agentInstance as TitanMMAgent).setInventory(market.id, netDelta);
+          }
+          if (!agentInstance) continue;
+
+          const spot = spotTickers[market.symbol] || { symbol: market.symbol, price: market.strikePrice, change1m: 0, change5m: 0, timestamp: Date.now() };
+          const rawDepth = marketService.getMarketDepth(market.id) || { yesBids: [{ price: market.bestBidYes || 0.49, quantity: 200, total: 98 }], yesAsks: [{ price: market.bestAskYes || 0.51, quantity: 200, total: 102 }] };
+          const depth = type === 'Volt' || type === 'Oracle' ? orderService.sanitizeDepthForSelfTrade(rawDepth, market.id, userAddr) : rawDepth;
+
+          const context: IAgentContext = { spotTicker: spot, market, depth, activeSessions: [] };
+          let decision: IAgentDecision;
+          try {
+            decision = await agentInstance.evaluate(context);
+          } catch (e) {
+            continue;
+          }
+          if (!decision || decision.action === 'HOLD' || decision.action === 'CANCEL_QUOTE' || decision.confidence < 0.88) continue;
+
+          const oppKey = `${userAddr.toLowerCase()}:${market.id}:${type}:${decision.action}:${decision.targetOutcome || 'YES'}:${decision.price || 0}`;
+          const lastOpp = this.personalLastOpportunityKeys.get(oppKey) || 0;
+          if (now - lastOpp < 120000) continue;
+
+          // Validate allowance before execution
+          const estCost = (decision.price ?? 0.5) * (decision.lotSize ?? 1.0);
+          const allowance = sessionService.validateTradeAllowance(session.id, estCost);
+          if (!allowance.allowed) continue;
+
+          this.personalLastTradeTimes.set(key, now);
+          this.personalLastOpportunityKeys.set(oppKey, now);
+
+          try {
+            const result = await orderService.executeAgentDecision(decision, sessionGrant);
+            if (result && 'txHash' in result && result.txHash) {
+              telemetryWsGateway.broadcastAgentThought({
+                id: `personal-${result.id}`,
+                agent: decision.agentType,
+                marketId: decision.targetMarketId,
+                confidence: decision.confidence,
+                action: `${decision.action}_${decision.targetOutcome || 'YES'}_PERSONAL`,
+                thought: `[PERSONAL SWARM ${userAddr.slice(0, 6)}...] ${decision.rationale}`,
+                txHash: result.txHash,
+                price: result.price ?? decision.price,
+                lotSize: result.lotSize ?? decision.lotSize,
+                outcome: decision.targetOutcome || 'YES',
+                isExecution: true,
+                timestamp: Date.now(),
+              });
+            }
+          } catch (err: any) {
+            console.warn(`[SwarmRunner] Personal swarm error for ${userAddr} ${type}:`, err.message?.slice(0, 300));
+          }
+          // One trade per market per user per cycle to avoid spam
+          break;
         }
       }
     }
@@ -712,6 +879,53 @@ export class MultiAgentSwarmRunner {
       },
       isRunning: this.isRunning,
       intervalMs: this.intervalMs,
+    };
+  }
+
+  // --------------------------------------------------------------------------
+  // Personal Swarm: per-wallet isolated telemetry & config exposure
+  // --------------------------------------------------------------------------
+  public getPersonalSwarmStatus(userAddress: string): any {
+    const cfg = userSwarmService.getConfig(userAddress);
+    const voltPnl = orderService.getTotalRealizedPnl('Volt', userAddress);
+    const oraclePnl = orderService.getTotalRealizedPnl('Oracle', userAddress);
+    const titanPnl = orderService.getTotalRealizedPnl('Titan', userAddress);
+    const voltFills = orderService.getOrders({ agentType: 'Volt', userAddress }).length;
+    const oracleFills = orderService.getOrders({ agentType: 'Oracle', userAddress }).length;
+    const titanFills = orderService.getOrders({ agentType: 'Titan', userAddress }).length;
+    const sweeperSweeps = settlementService.getSweepHistory(userAddress).filter((s) => s.status === 'CONFIRMED');
+    const sweeperPnl = sweeperSweeps.reduce((acc, s) => acc + (s.claimableAmount || 0), 0);
+    return {
+      mode: cfg.mode,
+      volt: { enabled: cfg.voltEnabled, config: cfg.voltConfig, pnl: voltPnl, tradesToday: voltFills },
+      oracle: { enabled: cfg.oracleEnabled, config: cfg.oracleConfig, pnl: oraclePnl, tradesToday: oracleFills },
+      titan: { enabled: cfg.titanEnabled, config: cfg.titanConfig, pnl: titanPnl, tradesToday: titanFills },
+      sweeper: { enabled: cfg.sweeperEnabled, pnl: sweeperPnl, sweeps: sweeperSweeps.length },
+      customizedAt: cfg.customizedAt,
+      isCopyMode: cfg.mode === 'COPY',
+    };
+  }
+
+  public async getPersonalSwarmStatusAsync(userAddress: string): Promise<any> {
+    const cfg = userSwarmService.getConfig(userAddress);
+    const [voltPnl, oraclePnl, titanPnl] = await Promise.all([
+      orderService.getTotalRealizedPnlAsync('Volt', userAddress),
+      orderService.getTotalRealizedPnlAsync('Oracle', userAddress),
+      orderService.getTotalRealizedPnlAsync('Titan', userAddress),
+    ]);
+    const voltFills = orderService.getOrders({ agentType: 'Volt', userAddress }).length;
+    const oracleFills = orderService.getOrders({ agentType: 'Oracle', userAddress }).length;
+    const titanFills = orderService.getOrders({ agentType: 'Titan', userAddress }).length;
+    const sweeperSweeps = settlementService.getSweepHistory(userAddress).filter((s) => s.status === 'CONFIRMED');
+    const sweeperPnl = sweeperSweeps.reduce((acc, s) => acc + (s.claimableAmount || 0), 0);
+    return {
+      mode: cfg.mode,
+      volt: { enabled: cfg.voltEnabled, config: cfg.voltConfig, pnl: voltPnl, tradesToday: voltFills },
+      oracle: { enabled: cfg.oracleEnabled, config: cfg.oracleConfig, pnl: oraclePnl, tradesToday: oracleFills },
+      titan: { enabled: cfg.titanEnabled, config: cfg.titanConfig, pnl: titanPnl, tradesToday: titanFills },
+      sweeper: { enabled: cfg.sweeperEnabled, pnl: sweeperPnl, sweeps: sweeperSweeps.length },
+      customizedAt: cfg.customizedAt,
+      isCopyMode: cfg.mode === 'COPY',
     };
   }
 }

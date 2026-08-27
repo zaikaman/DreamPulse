@@ -95,7 +95,7 @@ export const SessionStatusBar: React.FC<SessionStatusBarProps> = ({
       <div className="session-status-banner unlinked">
         <div className="session-banner-left">
           <div className="status-badge-dot neutral">
-            <ShieldExclamationIcon className="size-3.5" />
+            <ShieldExclamationIcon className="w-3.5 h-3.5" />
           </div>
           <div className="session-banner-text">
             <span className="session-banner-title">Non-Custodial Session Inactive</span>
@@ -109,7 +109,7 @@ export const SessionStatusBar: React.FC<SessionStatusBarProps> = ({
           className="btn-banner-action primary"
           onClick={onConnectWallet}
         >
-          <WalletIcon className="size-3" />
+          <WalletIcon className="w-3 h-3" />
           <span>Connect Wallet</span>
         </button>
       </div>
@@ -122,7 +122,7 @@ export const SessionStatusBar: React.FC<SessionStatusBarProps> = ({
       <div className="session-status-banner warning">
         <div className="session-banner-left">
           <div className="status-badge-dot warning">
-            <BoltIcon className="size-3.5" />
+            <BoltIcon className="w-3.5 h-3.5" />
           </div>
           <div className="session-banner-text">
             <span className="session-banner-title">Wrong Network Detected</span>
@@ -136,7 +136,7 @@ export const SessionStatusBar: React.FC<SessionStatusBarProps> = ({
           className="btn-banner-action warning"
           onClick={onSwitchNetwork}
         >
-          <BoltIcon className="size-3" />
+          <BoltIcon className="w-3 h-3" />
           <span>Switch to Somnia (50312)</span>
         </button>
       </div>
@@ -154,7 +154,7 @@ export const SessionStatusBar: React.FC<SessionStatusBarProps> = ({
         <div className="session-banner-left">
           <div className="status-badge-dot active" title="Active Non-Custodial Session">
             <span className="live-dot-green"></span>
-            <ShieldCheckIcon className="size-3.5" />
+            <ShieldCheckIcon className="w-3.5 h-3.5" />
           </div>
 
           <div className="session-banner-metrics">
@@ -166,7 +166,7 @@ export const SessionStatusBar: React.FC<SessionStatusBarProps> = ({
                 title="Click to copy Somnia Delegated Operator address"
               >
                 <code>{SOMNIA_ADDRESSES.operatorAccount.slice(0, 6)}...{SOMNIA_ADDRESSES.operatorAccount.slice(-4)}</code>
-                {copied ? <CheckIcon className="size-3 copy-success-icon" /> : <DocumentDuplicateIcon className="size-3" />}
+                {copied ? <CheckIcon className="w-3 h-3 copy-success-icon" /> : <DocumentDuplicateIcon className="w-3 h-3" />}
               </div>
             </div>
 
@@ -207,7 +207,7 @@ export const SessionStatusBar: React.FC<SessionStatusBarProps> = ({
             <div className="session-metric-item">
               <span className="metric-label">EXPIRES</span>
               <div className="expiry-chip">
-                <ClockIcon className="size-3" />
+                <ClockIcon className="w-3 h-3" />
                 <span className="tabular-num">{timeRemaining}</span>
               </div>
             </div>
@@ -216,7 +216,7 @@ export const SessionStatusBar: React.FC<SessionStatusBarProps> = ({
               <>
                 <div className="session-metric-divider"></div>
                 <div className="session-metric-item" style={{ color: 'var(--muted-foreground)', display: 'flex', alignItems: 'center', gap: '6px' }}>
-                  <ExclamationTriangleIcon className="size-3 text-amber-400" />
+                  <ExclamationTriangleIcon className="w-3 h-3 text-amber-400" />
                   <span style={{ fontSize: '11px', fontWeight: 500 }} className="font-mono text-muted-foreground">0.00 tUSDC Collateral</span>
                   <button
                     type="button"
@@ -224,7 +224,7 @@ export const SessionStatusBar: React.FC<SessionStatusBarProps> = ({
                     disabled={isFauceting}
                     className="px-2 py-0.5 text-[10px] font-mono rounded bg-secondary/80 text-foreground border border-border/60 hover:bg-secondary cursor-pointer inline-flex items-center gap-1 transition-colors ml-1"
                   >
-                    {isFauceting ? <Spinner size="xs" variant="amber" /> : <CurrencyDollarIcon className="size-2.5" />}
+                    {isFauceting ? <Spinner size="xs" variant="amber" /> : <CurrencyDollarIcon className="w-2.5 h-2.5" />}
                     <span>Claim 1k tUSDC</span>
                   </button>
                 </div>
@@ -240,7 +240,7 @@ export const SessionStatusBar: React.FC<SessionStatusBarProps> = ({
             onClick={onOpenModal}
             title="Configure Session Limits"
           >
-            <AdjustmentsHorizontalIcon className="size-3" />
+            <AdjustmentsHorizontalIcon className="w-3 h-3" />
             <span>Limits</span>
           </button>
           <button
@@ -249,7 +249,7 @@ export const SessionStatusBar: React.FC<SessionStatusBarProps> = ({
             onClick={onRevokeSession}
             title="Instantly Revoke Session Authorization"
           >
-            <XCircleIcon className="size-3" />
+            <XCircleIcon className="w-3 h-3" />
             <span>Revoke</span>
           </button>
         </div>
@@ -262,7 +262,7 @@ export const SessionStatusBar: React.FC<SessionStatusBarProps> = ({
     <div className="session-status-banner inactive">
       <div className="session-banner-left">
         <div className="status-badge-dot neutral">
-          <KeyIcon className="size-3.5" />
+          <KeyIcon className="w-3.5 h-3.5" />
         </div>
         <div className="session-banner-text">
           <span className="session-banner-title">
@@ -282,7 +282,7 @@ export const SessionStatusBar: React.FC<SessionStatusBarProps> = ({
             disabled={isFauceting}
             style={{ background: 'rgba(245, 158, 11, 0.15)', borderColor: 'rgba(245, 158, 11, 0.4)', color: 'var(--color-anomaly)' }}
           >
-            {isFauceting ? <Spinner size="xs" variant="amber" /> : <CurrencyDollarIcon className="size-3.5" />}
+            {isFauceting ? <Spinner size="xs" variant="amber" /> : <CurrencyDollarIcon className="w-3.5 h-3.5" />}
             <span>Claim 1,000 tUSDC Faucet</span>
           </button>
         )}
@@ -291,9 +291,9 @@ export const SessionStatusBar: React.FC<SessionStatusBarProps> = ({
           className="btn-banner-action primary"
           onClick={onOpenModal}
         >
-          <KeyIcon className="size-3" />
+          <KeyIcon className="w-3 h-3" />
           <span>Authorize Session</span>
-          <ChevronRightIcon className="size-3" />
+          <ChevronRightIcon className="w-3 h-3" />
         </button>
       </div>
     </div>

@@ -68,7 +68,7 @@ const EdgeRadarViewComponent: React.FC<EdgeRadarViewProps> = ({
           {/* Inspector Header */}
           <div className="flex items-center justify-between pb-3 mb-3 border-b border-border/40 flex-wrap gap-2">
             <div className="flex items-center gap-2.5">
-              <ViewfinderCircleIcon className="size-4 text-muted-foreground" />
+              <ViewfinderCircleIcon className="w-4 h-4 text-muted-foreground" />
               <div>
                 <h4 className="text-xs font-semibold text-foreground tracking-wide">
                   PRICING MODEL INSPECTOR: {selectedMarket.symbol}
@@ -86,7 +86,7 @@ const EdgeRadarViewComponent: React.FC<EdgeRadarViewProps> = ({
               className="gap-1.5 text-xs text-muted-foreground hover:text-foreground border-border/60"
             >
               <span>Execute Order on CLOB</span>
-              <ArrowRightIcon className="size-3" />
+              <ArrowRightIcon className="w-3 h-3" />
             </Button>
           </div>
 
@@ -188,7 +188,7 @@ const EdgeRadarViewComponent: React.FC<EdgeRadarViewProps> = ({
                       : "bg-secondary/40 text-muted-foreground border-border/50"
                   )}
                 >
-                  {Math.abs(edge) >= 0.03 && <BoltIcon className="size-3" />}
+                  {Math.abs(edge) >= 0.03 && <BoltIcon className="w-3 h-3" />}
                   <span>
                     {Math.abs(edge) >= 0.03
                       ? isYesEdge

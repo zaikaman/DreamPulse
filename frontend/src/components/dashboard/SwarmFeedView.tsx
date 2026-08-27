@@ -83,8 +83,8 @@ export const SwarmFeedView: React.FC<SwarmFeedViewProps> = ({
               <div className="absolute top-0 left-0 right-0 h-[2.5px]" style={{ background: ag.color, opacity: 0.85 }} />
               <div className="flex items-center justify-between mb-2">
                 <div className="flex items-center gap-2">
-                  <div className="size-7 rounded-lg grid place-items-center border bg-secondary/30 border-border/50 text-muted-foreground">
-                    <Icon className="size-3.5" />
+                  <div className="w-7 h-7 rounded-lg grid place-items-center border bg-secondary/30 border-border/50 text-muted-foreground">
+                    <Icon className="w-3.5 h-3.5" />
                   </div>
                   <span className="text-sm font-semibold text-foreground tracking-tight">{ag.name}</span>
                 </div>

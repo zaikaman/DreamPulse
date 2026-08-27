@@ -11,6 +11,7 @@ import { operatorAccount, SOMNIA_ADDRESSES, publicClient, somniaExchange } from 
 import type { MarketStatus, AgentType, OrderStatus } from '../types/index.js';
 import { type Address, isAddress, getAddress, parseAbi } from 'viem';
 import { analyticsService, type AnalyticsRange } from '../services/analytics-service.js';
+import { userSwarmService } from '../services/user-swarm-service.js';
 
 export const apiRouter = Router();
 
@@ -556,6 +557,118 @@ apiRouter.get('/agents/logs', (req: Request, res: Response) => {
     count: filtered.length,
     logs: filtered,
   });
+});
+
+// ------------------------------------------------------------------------------
+// 3b. Personal Swarm — Per-Wallet Isolated Strategy (COPY vs PERSONAL)
+// ------------------------------------------------------------------------------
+apiRouter.get('/swarm/my-config', (req: Request, res: Response) => {
+  try {
+    const userAddress = (req.query.userAddress as string) || (req.headers['x-user-address'] as string);
+    if (!userAddress || !isAddress(userAddress)) {
+      return res.status(400).json({ success: false, error: 'Missing or invalid userAddress' });
+    }
+    const cfg = userSwarmService.getConfig(userAddress);
+    return res.json({ success: true, config: cfg });
+  } catch (err: any) {
+    return res.status(400).json({ success: false, error: err.message });
+  }
+});
+
+apiRouter.put('/swarm/my-config', async (req: Request, res: Response) => {
+  try {
+    const { userAddress, mode, voltEnabled, oracleEnabled, titanEnabled, sweeperEnabled, voltConfig, oracleConfig, titanConfig } = req.body;
+    if (!userAddress || !isAddress(userAddress)) {
+      return res.status(400).json({ success: false, error: 'Missing or invalid userAddress' });
+    }
+    const updated = await userSwarmService.upsertConfig(userAddress, {
+      mode,
+      voltEnabled,
+      oracleEnabled,
+      titanEnabled,
+      sweeperEnabled,
+      voltConfig,
+      oracleConfig,
+      titanConfig,
+    });
+    return res.json({ success: true, config: updated });
+  } catch (err: any) {
+    return res.status(400).json({ success: false, error: err.message });
+  }
+});
+
+apiRouter.post('/swarm/mode', async (req: Request, res: Response) => {
+  try {
+    const { userAddress, mode } = req.body;
+    if (!userAddress || !isAddress(userAddress)) {
+      return res.status(400).json({ success: false, error: 'Missing or invalid userAddress' });
+    }
+    if (mode !== 'COPY' && mode !== 'PERSONAL') {
+      return res.status(400).json({ success: false, error: 'mode must be COPY or PERSONAL' });
+    }
+    const updated = await userSwarmService.setMode(userAddress, mode);
+    return res.json({ success: true, config: updated });
+  } catch (err: any) {
+    return res.status(400).json({ success: false, error: err.message });
+  }
+});
+
+apiRouter.post('/swarm/toggle', async (req: Request, res: Response) => {
+  try {
+    const { userAddress, agentType, enabled } = req.body;
+    if (!userAddress || !isAddress(userAddress)) {
+      return res.status(400).json({ success: false, error: 'Missing or invalid userAddress' });
+    }
+    if (!agentType || typeof enabled !== 'boolean') {
+      return res.status(400).json({ success: false, error: 'Missing agentType or enabled boolean' });
+    }
+    const updated = await userSwarmService.toggleAgent(userAddress, agentType as AgentType, enabled);
+    return res.json({ success: true, config: updated });
+  } catch (err: any) {
+    return res.status(400).json({ success: false, error: err.message });
+  }
+});
+
+apiRouter.post('/swarm/config', async (req: Request, res: Response) => {
+  try {
+    const { userAddress, agentType, config } = req.body;
+    if (!userAddress || !isAddress(userAddress)) {
+      return res.status(400).json({ success: false, error: 'Missing or invalid userAddress' });
+    }
+    if (!agentType || !config || typeof config !== 'object') {
+      return res.status(400).json({ success: false, error: 'Missing agentType or config' });
+    }
+    const updated = await userSwarmService.updateAgentConfig(userAddress, agentType as AgentType, config);
+    return res.json({ success: true, config: updated });
+  } catch (err: any) {
+    return res.status(400).json({ success: false, error: err.message });
+  }
+});
+
+apiRouter.get('/swarm/my-status', async (req: Request, res: Response) => {
+  try {
+    const userAddress = (req.query.userAddress as string) || (req.headers['x-user-address'] as string);
+    if (!userAddress || !isAddress(userAddress)) {
+      return res.status(400).json({ success: false, error: 'Missing or invalid userAddress' });
+    }
+    const status = await swarmRunner.getPersonalSwarmStatusAsync(userAddress);
+    return res.json({ success: true, status });
+  } catch (err: any) {
+    return res.status(400).json({ success: false, error: err.message });
+  }
+});
+
+apiRouter.post('/swarm/reset', async (req: Request, res: Response) => {
+  try {
+    const { userAddress } = req.body;
+    if (!userAddress || !isAddress(userAddress)) {
+      return res.status(400).json({ success: false, error: 'Missing or invalid userAddress' });
+    }
+    const updated = await userSwarmService.resetToCopy(userAddress);
+    return res.json({ success: true, config: updated, message: 'Reset to COPY mode — now mirroring protocol swarm via copy-trade' });
+  } catch (err: any) {
+    return res.status(400).json({ success: false, error: err.message });
+  }
 });
 
 // ------------------------------------------------------------------------------

@@ -68,7 +68,7 @@ const MarketsDepthViewComponent: React.FC<MarketsDepthViewProps> = ({
           <span className="text-base font-mono font-bold text-foreground mt-0.5">
             {markets.length}
           </span>
-          <ChartBarIcon className="size-4 text-muted-foreground/60 mt-1.5" />
+          <ChartBarIcon className="w-4 h-4 text-muted-foreground/60 mt-1.5" />
         </div>
 
         {/* KPI 2: Top Alpha Mispricing */}
@@ -88,7 +88,7 @@ const MarketsDepthViewComponent: React.FC<MarketsDepthViewProps> = ({
               )}
             </div>
           </div>
-          <BoltIcon className="size-5 text-emerald-400/60" />
+          <BoltIcon className="w-5 h-5 text-emerald-400/60" />
         </div>
 
         {/* KPI 3: CLOB Avg Spread */}
@@ -101,7 +101,7 @@ const MarketsDepthViewComponent: React.FC<MarketsDepthViewProps> = ({
               ${avgSpread.toFixed(2)} USDC
             </span>
           </div>
-          <ScaleIcon className="size-5 text-muted-foreground/60" />
+          <ScaleIcon className="w-5 h-5 text-muted-foreground/60" />
         </div>
 
         {/* KPI 4: Underlyings Tracked */}
@@ -112,7 +112,7 @@ const MarketsDepthViewComponent: React.FC<MarketsDepthViewProps> = ({
           <span className="text-xs font-mono font-bold text-foreground mt-1">
             BTC • ETH • SOL • BNB • DOGE
           </span>
-          <CurrencyDollarIcon className="size-4 text-muted-foreground/60 mt-1.5" />
+          <CurrencyDollarIcon className="w-4 h-4 text-muted-foreground/60 mt-1.5" />
         </div>
       </div>
 

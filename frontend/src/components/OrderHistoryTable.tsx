@@ -268,21 +268,21 @@ export const OrderHistoryTable: React.FC<OrderHistoryTableProps> = ({
       case 'Volt':
         return (
           <span style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', padding: '2px 6px', borderRadius: '4px', background: 'rgba(255, 170, 0, 0.12)', border: '1px solid rgba(255, 170, 0, 0.3)', color: '#ffaa00', fontSize: '11px', fontWeight: 700 }}>
-            <BoltIcon className="size-3" />
+            <BoltIcon className="w-3 h-3" />
             <span>Volt</span>
           </span>
         );
       case 'Oracle':
         return (
           <span style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', padding: '2px 6px', borderRadius: '4px', background: 'rgba(0, 240, 255, 0.12)', border: '1px solid rgba(0, 240, 255, 0.3)', color: 'var(--brand-cyan)', fontSize: '11px', fontWeight: 700 }}>
-            <ArrowTrendingUpIcon className="size-3" />
+            <ArrowTrendingUpIcon className="w-3 h-3" />
             <span>Oracle</span>
           </span>
         );
       case 'Titan':
         return (
           <span style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', padding: '2px 6px', borderRadius: '4px', background: 'rgba(168, 85, 247, 0.12)', border: '1px solid rgba(168, 85, 247, 0.3)', color: '#a855f7', fontSize: '11px', fontWeight: 700 }}>
-            <Square3Stack3DIcon className="size-3" />
+            <Square3Stack3DIcon className="w-3 h-3" />
             <span>Titan</span>
           </span>
         );
@@ -295,14 +295,14 @@ export const OrderHistoryTable: React.FC<OrderHistoryTableProps> = ({
     if (outcome === 'YES') {
       return (
         <span style={{ display: 'inline-flex', alignItems: 'center', gap: '3px', padding: '2px 6px', borderRadius: '4px', background: 'rgba(0, 255, 102, 0.12)', border: '1px solid rgba(0, 255, 102, 0.3)', color: 'var(--trade-buy)', fontSize: '11px', fontWeight: 700, fontFamily: 'var(--font-mono)' }}>
-          <ArrowUpRightIcon className="size-3" />
+          <ArrowUpRightIcon className="w-3 h-3" />
           <span>YES</span>
         </span>
       );
     }
     return (
       <span style={{ display: 'inline-flex', alignItems: 'center', gap: '3px', padding: '2px 6px', borderRadius: '4px', background: 'rgba(255, 51, 102, 0.12)', border: '1px solid rgba(255, 51, 102, 0.3)', color: 'var(--trade-sell)', fontSize: '11px', fontWeight: 700, fontFamily: 'var(--font-mono)' }}>
-        <ArrowDownRightIcon className="size-3" />
+        <ArrowDownRightIcon className="w-3 h-3" />
         <span>NO</span>
       </span>
     );
@@ -313,23 +313,23 @@ export const OrderHistoryTable: React.FC<OrderHistoryTableProps> = ({
       <div className="terminal-panel-header" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '12px', padding: '14px 20px', borderBottom: '1px solid var(--border)' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: '12px', flexWrap: 'wrap' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-            <QueueListIcon className="size-4" style={{ color: 'var(--brand-cyan)' }} />
+            <QueueListIcon className="w-4 h-4" style={{ color: 'var(--brand-cyan)' }} />
             <h3 style={{ fontSize: '14px', fontWeight: 700, margin: 0, color: 'var(--foreground)' }}>On-Chain Order Executions</h3>
           </div>
           <div style={{ display: 'flex', gap: '4px', background: 'rgba(0, 0, 0, 0.3)', padding: '2px', borderRadius: '6px', border: '1px solid var(--border)' }}>
             <button id="btn-public-swarm-ledger" type="button" className={`shadcn-tab-btn ${scope === 'ALL_SWARM' ? 'active' : ''}`} onClick={() => handleScope('ALL_SWARM')} style={{ fontSize: '11px', padding: '3px 8px' }} title="Canonical autonomous swarm trades executed by Somnia Operator (0x93e3...59Cf)">
-              <CpuChipIcon className="size-3" />
+              <CpuChipIcon className="w-3 h-3" />
               <span>Public Swarm Ledger</span>
             </button>
             <button id="btn-my-orders-fills" type="button" className={`shadcn-tab-btn ${scope === 'MY_ORDERS' ? 'active' : ''}`} onClick={() => handleScope('MY_ORDERS')} style={{ fontSize: '11px', padding: '3px 8px' }} title="Personal autonomous copy-trade fills for your connected wallet">
-              <UserIcon className="size-3" />
+              <UserIcon className="w-3 h-3" />
               <span>My Orders & Fills</span>
             </button>
           </div>
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: '12px', flexWrap: 'wrap' }}>
           <div style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', padding: '4px 10px', borderRadius: '6px', background: 'rgba(0, 240, 255, 0.06)', border: '1px solid rgba(0, 240, 255, 0.2)', fontSize: '11px', color: 'var(--muted-foreground)', fontFamily: 'var(--font-mono)' }}>
-            <DocumentCheckIcon className="size-3" style={{ color: 'var(--brand-cyan)' }} />
+            <DocumentCheckIcon className="w-3 h-3" style={{ color: 'var(--brand-cyan)' }} />
             {isFetching && !isInitialLoading && <Spinner size="xs" variant="cyan" />}
             {isFiltered ? (
               <span>
@@ -348,7 +348,7 @@ export const OrderHistoryTable: React.FC<OrderHistoryTableProps> = ({
 
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '12px', padding: '12px 20px', background: 'rgba(255, 255, 255, 0.01)', borderBottom: '1px solid var(--border)' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
-          <FunnelIcon className="size-3.5" style={{ color: 'var(--muted-foreground)', marginRight: '4px' }} />
+          <FunnelIcon className="w-3.5 h-3.5" style={{ color: 'var(--muted-foreground)', marginRight: '4px' }} />
           {(['ALL', 'VOLT', 'ORACLE', 'TITAN'] as const).map((agent) => (
             <button key={agent} id={`filter-agent-${agent.toLowerCase()}`} type="button" className={`filter-btn ${selectedAgent === agent ? 'active' : ''}`} onClick={() => handleAgent(agent)} style={{ fontSize: '11px', padding: '4px 10px' }}>{agent}</button>
           ))}
@@ -358,13 +358,13 @@ export const OrderHistoryTable: React.FC<OrderHistoryTableProps> = ({
           ))}
           {isFiltered && (
             <button type="button" onClick={clearFilters} className="btn-secondary" style={{ fontSize: '10px', padding: '3px 8px', display: 'inline-flex', alignItems: 'center', gap: '4px', marginLeft: '6px', color: 'var(--muted-foreground)' }} title="Reset all filters">
-              <ArrowPathIcon className="size-2.5" />
+              <ArrowPathIcon className="w-2.5 h-2.5" />
               <span>Reset</span>
             </button>
           )}
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: '6px', background: 'rgba(0, 0, 0, 0.3)', border: '1px solid var(--border)', borderRadius: '6px', padding: '4px 10px', minWidth: '240px' }}>
-          <MagnifyingGlassIcon className="size-3.5" style={{ color: 'var(--muted-foreground)' }} />
+          <MagnifyingGlassIcon className="w-3.5 h-3.5" style={{ color: 'var(--muted-foreground)' }} />
           <input id="input-orders-search" type="text" placeholder="Search address or tx hash..." value={searchInput} onChange={(e) => setSearchInput(e.target.value)} style={{ background: 'transparent', border: 'none', outline: 'none', color: 'var(--foreground)', fontSize: '11px', fontFamily: 'var(--font-mono)', width: '100%' }} />
           {searchInput && (
             <button type="button" onClick={() => { setSearchInput(''); setDebouncedSearch(''); setCurrentPage(1); }} style={{ background: 'transparent', border: 'none', color: 'var(--muted-foreground)', cursor: 'pointer', fontSize: '12px', padding: '0 2px' }}>×</button>
@@ -375,13 +375,13 @@ export const OrderHistoryTable: React.FC<OrderHistoryTableProps> = ({
       {scope === 'MY_ORDERS' && !userAddress ? (
         <div style={{ textAlign: 'center', padding: '48px 24px', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '12px' }}>
           <div style={{ width: '42px', height: '42px', borderRadius: '12px', background: 'rgba(0, 240, 255, 0.08)', border: '1px solid rgba(0, 240, 255, 0.25)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--brand-cyan)' }}>
-            <WalletIcon className="size-5" />
+            <WalletIcon className="w-5 h-5" />
           </div>
           <h4 style={{ margin: 0, fontSize: '15px', color: 'var(--foreground)' }}>Connect Wallet to View Personal Fills</h4>
           <p style={{ margin: 0, fontSize: '12px', color: 'var(--muted-foreground)', maxWidth: '380px' }}>When connected, your personal automated session bot executions, manual trades, and settlement payouts will be cataloged here.</p>
           {onConnectWallet && (
             <button id="btn-orders-connect-wallet" type="button" onClick={onConnectWallet} className="btn-glow" style={{ marginTop: '6px', padding: '8px 16px', fontSize: '12px' }}>
-              <WalletIcon className="size-3" />
+              <WalletIcon className="w-3 h-3" />
               <span>Connect Wallet</span>
             </button>
           )}
@@ -471,7 +471,7 @@ export const OrderHistoryTable: React.FC<OrderHistoryTableProps> = ({
                       </td>
                       <td style={{ padding: '12px 16px', textAlign: 'center' }}>
                         <span style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', padding: '2px 6px', borderRadius: '4px', background: order.status === 'FILLED' ? 'rgba(0, 255, 102, 0.1)' : 'rgba(255, 170, 0, 0.1)', border: order.status === 'FILLED' ? '1px solid rgba(0, 255, 102, 0.25)' : '1px solid rgba(255, 170, 0, 0.25)', color: order.status === 'FILLED' ? 'var(--trade-buy)' : 'var(--trade-anomaly)', fontSize: '10px', fontWeight: 700 }}>
-                          <CheckCircleIcon className="size-2.5" />
+                          <CheckCircleIcon className="w-2.5 h-2.5" />
                           <span>{order.status}</span>
                         </span>
                       </td>
@@ -484,7 +484,7 @@ export const OrderHistoryTable: React.FC<OrderHistoryTableProps> = ({
                             style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', color: 'var(--brand-cyan)', fontSize: '11px', fontFamily: 'var(--font-mono)', textDecoration: 'none' }}
                           >
                             <span>{shortTx}</span>
-                            <ArrowTopRightOnSquareIcon className="size-3" />
+                            <ArrowTopRightOnSquareIcon className="w-3 h-3" />
                           </a>
                         ) : (
                           <span style={{ fontSize: '11px', color: 'var(--muted-foreground)' }}>-</span>

@@ -72,9 +72,9 @@ const AppSidebarComponent: React.FC<AppSidebarProps> = ({
     },
     {
       id: 'Swarm Cockpit',
-      label: 'Swarm Transparency',
+      label: isOperator ? 'Swarm Cockpit · Admin' : 'Swarm Cockpit · My Bot',
       Icon: CpuChipIcon,
-      badge: isOperator ? 'Admin' : 'Public',
+      badge: isOperator ? 'Admin' : 'Personal',
     },
   ];
 
@@ -135,7 +135,7 @@ const AppSidebarComponent: React.FC<AppSidebarProps> = ({
             onClick={onToggleCollapse}
             title="Collapse Sidebar"
           >
-            <ChevronDoubleLeftIcon className="size-3.5" />
+            <ChevronDoubleLeftIcon className="w-3.5 h-3.5" />
           </button>
         )}
       </div>
@@ -155,7 +155,7 @@ const AppSidebarComponent: React.FC<AppSidebarProps> = ({
                 onClick={() => onSelectTab(item.id)}
                 title={collapsed ? item.label : undefined}
               >
-                <Icon className="size-4 sidebar-nav-icon" />
+                <Icon className="w-4 h-4 sidebar-nav-icon" />
                 {!collapsed && <span className="sidebar-nav-label">{item.label}</span>}
                 {!collapsed && item.badge && (
                   <span
@@ -182,7 +182,7 @@ const AppSidebarComponent: React.FC<AppSidebarProps> = ({
                 onClick={() => onSelectTab(item.id)}
                 title={collapsed ? item.label : undefined}
               >
-                <Icon className="size-4 sidebar-nav-icon" />
+                <Icon className="w-4 h-4 sidebar-nav-icon" />
                 {!collapsed && <span className="sidebar-nav-label">{item.label}</span>}
                 {!collapsed && item.badge && (
                   <span className="sidebar-nav-badge">{item.badge}</span>
@@ -212,15 +212,15 @@ const AppSidebarComponent: React.FC<AppSidebarProps> = ({
             }}
           >
             {isOperator ? (
-              <CpuChipIcon className="size-4" />
+              <CpuChipIcon className="w-4 h-4" />
             ) : isTrader ? (
               activeSession?.isActive ? (
-                <ShieldCheckIcon className="size-4" />
+                <ShieldCheckIcon className="w-4 h-4" />
               ) : (
-                <WalletIcon className="size-4" />
+                <WalletIcon className="w-4 h-4" />
               )
             ) : (
-              <EyeIcon className="size-4" />
+              <EyeIcon className="w-4 h-4" />
             )}
           </div>
           {!collapsed ? (
@@ -244,7 +244,7 @@ const AppSidebarComponent: React.FC<AppSidebarProps> = ({
                         marginTop: '2px',
                       }}
                     >
-                      <WalletIcon className="size-3" />
+                      <WalletIcon className="w-3 h-3" />
                       <span>Connect Wallet</span>
                     </button>
                   )}
@@ -292,7 +292,7 @@ const AppSidebarComponent: React.FC<AppSidebarProps> = ({
                         onMouseEnter={(e) => (e.currentTarget.style.color = 'var(--trade-no)')}
                         onMouseLeave={(e) => (e.currentTarget.style.color = 'var(--muted-foreground)')}
                       >
-                        <ArrowLeftEndOnRectangleIcon className="size-3" />
+                        <ArrowLeftEndOnRectangleIcon className="w-3 h-3" />
                       </button>
                     )}
                   </div>
@@ -325,7 +325,7 @@ const AppSidebarComponent: React.FC<AppSidebarProps> = ({
                         onMouseEnter={(e) => (e.currentTarget.style.color = 'var(--trade-no)')}
                         onMouseLeave={(e) => (e.currentTarget.style.color = 'var(--muted-foreground)')}
                       >
-                        <ArrowLeftEndOnRectangleIcon className="size-3" />
+                        <ArrowLeftEndOnRectangleIcon className="w-3 h-3" />
                       </button>
                     )}
                   </div>
@@ -340,7 +340,7 @@ const AppSidebarComponent: React.FC<AppSidebarProps> = ({
               onClick={onToggleCollapse}
               title="Expand Sidebar"
             >
-              <ChevronDoubleRightIcon className="size-3.5" />
+              <ChevronDoubleRightIcon className="w-3.5 h-3.5" />
             </button>
           )}
         </div>

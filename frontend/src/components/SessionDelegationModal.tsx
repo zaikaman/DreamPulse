@@ -151,7 +151,7 @@ export const SessionDelegationModal: React.FC<SessionDelegationModalProps> = ({
         <div className="modal-header">
           <div className="modal-title-row">
             <div className="modal-title-badge">
-              <KeyIcon className="size-4.5 modal-badge-icon" />
+              <KeyIcon className="w-[18px] h-[18px] modal-badge-icon" />
             </div>
             <div>
               <h2 id="session-modal-title" className="modal-heading">
@@ -168,7 +168,7 @@ export const SessionDelegationModal: React.FC<SessionDelegationModalProps> = ({
             onClick={onClose}
             aria-label="Close delegation modal"
           >
-            <XMarkIcon className="size-4.5" />
+            <XMarkIcon className="w-[18px] h-[18px]" />
           </button>
         </div>
 
@@ -190,8 +190,8 @@ export const SessionDelegationModal: React.FC<SessionDelegationModalProps> = ({
                   display: 'flex',
                   alignItems: 'center',
                   justifyContent: 'space-between',
-                  background: parseFloat(wallet.balanceCollateral || '0') === 0 ? 'rgba(245, 158, 11, 0.1)' : 'rgba(0, 255, 102, 0.06)',
-                  border: `1px solid ${parseFloat(wallet.balanceCollateral || '0') === 0 ? 'rgba(245, 158, 11, 0.3)' : 'rgba(0, 255, 102, 0.2)'}`,
+                  background: parseFloat(wallet.balanceCollateral || '0') === 0 ? 'hsl(var(--secondary) / 0.5)' : 'hsl(var(--secondary) / 0.35)',
+                  border: `1px solid ${parseFloat(wallet.balanceCollateral || '0') === 0 ? 'rgba(245, 158, 11, 0.28)' : 'hsl(var(--border) / 0.5)'}`,
                   borderRadius: '6px',
                   padding: '8px 12px',
                   margin: '10px 0',
@@ -199,15 +199,15 @@ export const SessionDelegationModal: React.FC<SessionDelegationModalProps> = ({
               >
                 <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                   {parseFloat(wallet.balanceCollateral || '0') === 0 ? (
-                    <ExclamationTriangleIcon className="size-4" style={{ color: 'var(--color-anomaly)' }} />
+                    <ExclamationTriangleIcon className="w-4 h-4" style={{ color: '#f59e0b' }} />
                   ) : (
-                    <CheckCircleIcon className="size-4" style={{ color: 'var(--color-yes)' }} />
+                    <CheckCircleIcon className="w-4 h-4" style={{ color: 'var(--trade-yes)' }} />
                   )}
                   <div>
-                    <div style={{ fontSize: '11px', fontWeight: 600, color: 'var(--foreground)' }}>
+                    <div style={{ fontSize: '11px', fontWeight: 600, color: 'hsl(var(--foreground))' }}>
                       Trading Collateral: <span className="tabular-num">{wallet.balanceCollateral || '0.00'} tUSDC</span>
                     </div>
-                    <div style={{ fontSize: '10px', color: 'var(--muted-foreground)' }}>
+                    <div style={{ fontSize: '10px', color: 'hsl(var(--muted-foreground))' }}>
                       {parseFloat(wallet.balanceCollateral || '0') === 0
                         ? 'Zero collateral will cause autonomous transactions to revert. Claim faucet below.'
                         : 'Collateral is ready for automated multi-agent order book execution.'}
@@ -223,9 +223,9 @@ export const SessionDelegationModal: React.FC<SessionDelegationModalProps> = ({
                     }}
                     disabled={isFauceting}
                     style={{
-                      background: 'rgba(0, 240, 255, 0.15)',
-                      border: '1px solid rgba(0, 240, 255, 0.4)',
-                      color: 'var(--brand-cyan)',
+                      background: 'hsl(var(--secondary) / 0.8)',
+                      border: '1px solid hsl(var(--border) / 0.6)',
+                      color: 'hsl(var(--foreground))',
                       borderRadius: '5px',
                       padding: '4px 10px',
                       fontSize: '11px',
@@ -236,7 +236,7 @@ export const SessionDelegationModal: React.FC<SessionDelegationModalProps> = ({
                       gap: '4px',
                     }}
                   >
-                    {isFauceting ? <ArrowPathIcon className="size-3 spin" /> : <CurrencyDollarIcon className="size-3" />}
+                    {isFauceting ? <ArrowPathIcon className="w-3 h-3 spin" /> : <CurrencyDollarIcon className="w-3 h-3" />}
                     <span>+1,000 tUSDC Faucet</span>
                   </button>
                 )}
@@ -248,17 +248,17 @@ export const SessionDelegationModal: React.FC<SessionDelegationModalProps> = ({
                   display: 'flex',
                   alignItems: 'center',
                   justifyContent: 'space-between',
-                  background: 'rgba(0, 255, 102, 0.08)',
-                  border: '1px solid rgba(0, 255, 102, 0.25)',
+                  background: 'hsl(var(--secondary) / 0.3)',
+                  border: '1px solid hsl(var(--border) / 0.5)',
                   borderRadius: '6px',
                   padding: '8px 12px',
                   margin: '8px 0',
                 }}
               >
                 <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                  <ShieldCheckIcon className="size-3.5" style={{ color: 'var(--trade-buy)' }} />
-                  <div style={{ fontSize: '11px', color: 'var(--foreground)' }}>
-                    <span style={{ fontWeight: 700, color: 'var(--trade-buy)' }}>100% Direct Wallet Payout: </span>
+                  <ShieldCheckIcon className="w-3.5 h-3.5" style={{ color: 'hsl(var(--muted-foreground))' }} />
+                  <div style={{ fontSize: '11px', color: 'hsl(var(--foreground))' }}>
+                    <span style={{ fontWeight: 700, color: 'hsl(var(--foreground))' }}>100% Direct Wallet Payout: </span>
                     <span>All winnings & settlements are sent directly to your connected wallet</span>
                   </div>
                 </div>
@@ -267,10 +267,10 @@ export const SessionDelegationModal: React.FC<SessionDelegationModalProps> = ({
                     href={`https://shannon-explorer.somnia.network/tx/${activeSession.onChainTxHash}`}
                     target="_blank"
                     rel="noopener noreferrer"
-                    style={{ fontSize: '10.5px', color: 'var(--brand-cyan)', display: 'inline-flex', alignItems: 'center', gap: '3px', textDecoration: 'none' }}
+                    style={{ fontSize: '10.5px', color: 'hsl(var(--muted-foreground))', display: 'inline-flex', alignItems: 'center', gap: '3px', textDecoration: 'none' }}
                   >
                     <span>Explorer</span>
-                    <ArrowTopRightOnSquareIcon className="size-2.5" />
+                    <ArrowTopRightOnSquareIcon className="w-2.5 h-2.5" />
                   </a>
                 )}
               </div>
@@ -294,7 +294,7 @@ export const SessionDelegationModal: React.FC<SessionDelegationModalProps> = ({
                       checked={revokeOnChainOption}
                       onChange={(e) => setRevokeOnChainOption(e.target.checked)}
                     />
-                    <label htmlFor="revoke-onchain-checkbox" style={{ color: 'var(--foreground)', cursor: 'pointer' }}>
+                    <label htmlFor="revoke-onchain-checkbox" style={{ color: 'hsl(var(--foreground))', cursor: 'pointer' }}>
                       Submit On-Chain Revocation to OperatorPermissionsRegistry
                     </label>
                   </div>
@@ -305,7 +305,7 @@ export const SessionDelegationModal: React.FC<SessionDelegationModalProps> = ({
                       onClick={handleRevoke}
                       disabled={isLoading}
                     >
-                      {isLoading ? <ArrowPathIcon className="size-3.5 spin" /> : 'Yes, Revoke Now'}
+                      {isLoading ? <ArrowPathIcon className="w-3.5 h-3.5 spin" /> : 'Yes, Revoke Now'}
                     </button>
                     <button
                       type="button"
@@ -328,7 +328,7 @@ export const SessionDelegationModal: React.FC<SessionDelegationModalProps> = ({
                       style={{
                         background: 'none',
                         border: 'none',
-                        color: 'var(--muted-foreground)',
+                        color: 'hsl(var(--muted-foreground))',
                         fontSize: '11px',
                         fontWeight: 600,
                         cursor: 'pointer',
@@ -341,7 +341,7 @@ export const SessionDelegationModal: React.FC<SessionDelegationModalProps> = ({
                       onMouseEnter={(e) => (e.currentTarget.style.color = 'var(--trade-no)')}
                       onMouseLeave={(e) => (e.currentTarget.style.color = 'var(--muted-foreground)')}
                     >
-                      <ArrowLeftEndOnRectangleIcon className="size-3" />
+                      <ArrowLeftEndOnRectangleIcon className="w-3 h-3" />
                       <span>Disconnect Wallet</span>
                     </button>
                   ) : <div />}
@@ -365,17 +365,17 @@ export const SessionDelegationModal: React.FC<SessionDelegationModalProps> = ({
                 padding: '12px 14px',
                 marginBottom: '14px',
                 borderRadius: '8px',
-                background: 'rgba(239, 68, 68, 0.08)',
-                border: '1px solid rgba(239, 68, 68, 0.35)',
+                background: 'hsl(var(--destructive) / 0.08)',
+                border: '1px solid hsl(var(--destructive) / 0.35)',
               }}
             >
               <div style={{ display: 'flex', alignItems: 'flex-start', gap: '10px' }}>
-                <ExclamationTriangleIcon className="size-4 text-red-500 shrink-0 mt-0.5" />
+                <ExclamationTriangleIcon className="w-4 h-4 text-red-500 shrink-0 mt-0.5" />
                 <div style={{ flex: 1 }}>
-                  <div style={{ fontWeight: 700, fontSize: '12px', color: '#ef4444', marginBottom: '4px' }}>
+                  <div style={{ fontWeight: 700, fontSize: '12px', color: 'hsl(var(--destructive))', marginBottom: '4px' }}>
                     Action Required: Operator TestUSDC Authorization
                   </div>
-                  <div style={{ fontSize: '11px', color: 'var(--muted-foreground)', lineHeight: 1.4, marginBottom: '8px' }}>
+                  <div style={{ fontSize: '11px', color: 'hsl(var(--muted-foreground))', lineHeight: 1.4, marginBottom: '8px' }}>
                     {allowanceStatus.guidance || 'Your wallet needs to grant TestUSDC allowance to the operator for seamless copy-trading. Click Authorize Operator below to complete 1-time setup.'}
                   </div>
                   <div style={{ display: 'flex', gap: '8px' }}>
@@ -389,7 +389,7 @@ export const SessionDelegationModal: React.FC<SessionDelegationModalProps> = ({
                       }}
                       disabled={isFixingAllowance || isSigning}
                       style={{
-                        background: '#ef4444',
+                        background: 'hsl(var(--destructive))',
                         color: '#fff',
                         fontWeight: 700,
                         fontSize: '11px',
@@ -402,7 +402,7 @@ export const SessionDelegationModal: React.FC<SessionDelegationModalProps> = ({
                         gap: '6px',
                       }}
                     >
-                      {isFixingAllowance ? <Spinner size="xs" variant="white" /> : <CheckCircleIcon className="size-3" />}
+                      {isFixingAllowance ? <Spinner size="xs" variant="white" /> : <CheckCircleIcon className="w-3 h-3" />}
                       Authorize Operator
                     </button>
                     <button
@@ -411,12 +411,12 @@ export const SessionDelegationModal: React.FC<SessionDelegationModalProps> = ({
                       disabled={isFixingAllowance}
                       style={{
                         background: 'transparent',
-                        color: 'var(--muted-foreground)',
+                        color: 'hsl(var(--muted-foreground))',
                         fontWeight: 600,
                         fontSize: '11px',
                         padding: '7px 10px',
                         borderRadius: '6px',
-                        border: '1px solid rgba(255,255,255,0.1)',
+                        border: '1px solid hsl(var(--border) / 0.6)',
                         cursor: 'pointer',
                       }}
                     >
@@ -431,34 +431,34 @@ export const SessionDelegationModal: React.FC<SessionDelegationModalProps> = ({
           {/* 3-Step Onboarding Architecture Banner */}
           <div className="safety-guarantees-card" style={{ padding: '12px 14px', marginBottom: '14px' }}>
             <div className="safety-card-title" style={{ marginBottom: '10px' }}>
-              <Square3Stack3DIcon className="size-4 safety-icon-cyan" />
+              <Square3Stack3DIcon className="w-4 h-4 safety-icon-cyan" />
               <span>3-Step Autonomous Copy-Trading Setup</span>
             </div>
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '8px', fontSize: '11px' }}>
-              <div style={{ background: 'rgba(255, 255, 255, 0.03)', padding: '8px', borderRadius: '6px', border: '1px solid rgba(255, 255, 255, 0.06)' }}>
-                <strong style={{ display: 'flex', alignItems: 'center', gap: '4px', color: 'var(--brand-cyan)' }}>
-                  <CurrencyDollarIcon className="size-3" />
+              <div style={{ background: 'hsl(var(--card) / 0.5)', padding: '8px', borderRadius: '6px', border: '1px solid hsl(var(--border) / 0.5)' }}>
+                <strong style={{ display: 'flex', alignItems: 'center', gap: '4px', color: 'hsl(var(--foreground))' }}>
+                  <CurrencyDollarIcon className="w-3 h-3" />
                   <span>1. Mint Collateral</span>
                 </strong>
-                <p style={{ margin: '4px 0 0 0', color: 'var(--muted-foreground)', lineHeight: 1.3 }}>
+                <p style={{ margin: '4px 0 0 0', color: 'hsl(var(--muted-foreground))', lineHeight: 1.3 }}>
                   Hold TestUSDC collateral (or deposit working capital) to fund DreamDEX order fills.
                 </p>
               </div>
-              <div style={{ background: 'rgba(255, 255, 255, 0.03)', padding: '8px', borderRadius: '6px', border: '1px solid rgba(255, 255, 255, 0.06)' }}>
-                <strong style={{ display: 'flex', alignItems: 'center', gap: '4px', color: 'var(--brand-cyan)' }}>
-                  <ShieldCheckIcon className="size-3" />
+              <div style={{ background: 'hsl(var(--card) / 0.5)', padding: '8px', borderRadius: '6px', border: '1px solid hsl(var(--border) / 0.5)' }}>
+                <strong style={{ display: 'flex', alignItems: 'center', gap: '4px', color: 'hsl(var(--foreground))' }}>
+                  <ShieldCheckIcon className="w-3 h-3" />
                   <span>2. On-Chain Auth</span>
                 </strong>
-                <p style={{ margin: '4px 0 0 0', color: 'var(--muted-foreground)', lineHeight: 1.3 }}>
+                <p style={{ margin: '4px 0 0 0', color: 'hsl(var(--muted-foreground))', lineHeight: 1.3 }}>
                   Authorizes operator key on <code>OperatorPermissionsRegistry</code> for <code>placeOrderFor</code>.
                 </p>
               </div>
-              <div style={{ background: 'rgba(255, 255, 255, 0.03)', padding: '8px', borderRadius: '6px', border: '1px solid rgba(255, 255, 255, 0.06)' }}>
-                <strong style={{ display: 'flex', alignItems: 'center', gap: '4px', color: 'var(--brand-cyan)' }}>
-                  <DocumentCheckIcon className="size-3" />
+              <div style={{ background: 'hsl(var(--card) / 0.5)', padding: '8px', borderRadius: '6px', border: '1px solid hsl(var(--border) / 0.5)' }}>
+                <strong style={{ display: 'flex', alignItems: 'center', gap: '4px', color: 'hsl(var(--foreground))' }}>
+                  <DocumentCheckIcon className="w-3 h-3" />
                   <span>3. EIP-712 Caps</span>
                 </strong>
-                <p style={{ margin: '4px 0 0 0', color: 'var(--muted-foreground)', lineHeight: 1.3 }}>
+                <p style={{ margin: '4px 0 0 0', color: 'hsl(var(--muted-foreground))', lineHeight: 1.3 }}>
                   Binds maximum trade size and 24h daily spend ceilings without custody of your wallet.
                 </p>
               </div>
@@ -471,9 +471,9 @@ export const SessionDelegationModal: React.FC<SessionDelegationModalProps> = ({
             <div className="operator-address-chip" onClick={handleCopyOperator} title="Click to copy operator address">
               <code>{SOMNIA_ADDRESSES.operatorAccount}</code>
               {copiedOperator ? (
-                <CheckIcon className="size-3" style={{ color: 'var(--color-yes)' }} />
+                <CheckIcon className="w-3 h-3" style={{ color: 'var(--trade-yes)' }} />
               ) : (
-                <DocumentDuplicateIcon className="size-3" />
+                <DocumentDuplicateIcon className="w-3 h-3" />
               )}
             </div>
             <a
@@ -483,7 +483,7 @@ export const SessionDelegationModal: React.FC<SessionDelegationModalProps> = ({
               className="operator-explorer-link"
               title="View Delegated Operator on Somnia Explorer"
             >
-              <ArrowTopRightOnSquareIcon className="size-3" />
+              <ArrowTopRightOnSquareIcon className="w-3 h-3" />
             </a>
           </div>
 
@@ -495,7 +495,7 @@ export const SessionDelegationModal: React.FC<SessionDelegationModalProps> = ({
             <div className="config-group">
               <div className="config-header-row">
                 <label htmlFor="deposit-amount-slider" className="config-label" style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
-                  <CurrencyDollarIcon className="size-3.5" style={{ color: 'var(--brand-cyan)' }} />
+                  <CurrencyDollarIcon className="w-3.5 h-3.5" style={{ color: 'hsl(var(--muted-foreground))' }} />
                   <span>Working Capital Vault Deposit</span>
                 </label>
                 <span className="config-value-badge">{depositAmount} tUSDC</span>
@@ -609,7 +609,7 @@ export const SessionDelegationModal: React.FC<SessionDelegationModalProps> = ({
                     className={`duration-card ${durationHours === opt.hours ? 'active' : ''}`}
                     onClick={() => setDurationHours(opt.hours)}
                   >
-                    <ClockIcon className="size-3.5" />
+                    <ClockIcon className="w-3.5 h-3.5" />
                     <span>{opt.label}</span>
                   </button>
                 ))}
@@ -620,33 +620,33 @@ export const SessionDelegationModal: React.FC<SessionDelegationModalProps> = ({
           {/* Zero-Custody Safety Guarantees */}
           <div className="safety-guarantees-card">
             <div className="safety-card-title">
-              <ShieldCheckIcon className="size-4 safety-icon-cyan" />
+              <ShieldCheckIcon className="w-4 h-4 safety-icon-cyan" />
               <span>Mathematical Zero-Withdrawal Invariant</span>
             </div>
             <div className="safety-grid">
               <div className="safety-item">
-                <LockClosedIcon className="size-3.5 safety-mini-icon" />
+                <LockClosedIcon className="w-3.5 h-3.5 safety-mini-icon" />
                 <div>
                   <strong>Zero Fund Access</strong>
                   <p>The operator key cannot transfer, withdraw, or approve ERC20 balances.</p>
                 </div>
               </div>
               <div className="safety-item">
-                <BoltIcon className="size-3.5 safety-mini-icon" />
+                <BoltIcon className="w-3.5 h-3.5 safety-mini-icon" />
                 <div>
                   <strong>Direct Settlement</strong>
                   <p>All position payouts settle directly to your connected wallet.</p>
                 </div>
               </div>
               <div className="safety-item">
-                <ClockIcon className="size-3.5 safety-mini-icon" />
+                <ClockIcon className="w-3.5 h-3.5 safety-mini-icon" />
                 <div>
                   <strong>Hard Time Expiry</strong>
                   <p>Session automatically dissolves when duration expires.</p>
                 </div>
               </div>
               <div className="safety-item">
-                <AdjustmentsHorizontalIcon className="size-3.5 safety-mini-icon" />
+                <AdjustmentsHorizontalIcon className="w-3.5 h-3.5 safety-mini-icon" />
                 <div>
                   <strong>Enforced Caps</strong>
                   <p>Trades exceeding your single or daily limits are rejected on-chain.</p>
@@ -658,7 +658,7 @@ export const SessionDelegationModal: React.FC<SessionDelegationModalProps> = ({
           {/* Error Alert */}
           {error && (
             <div className="error-alert-box">
-              <ExclamationTriangleIcon className="size-4 error-icon" />
+              <ExclamationTriangleIcon className="w-4 h-4 error-icon" />
               <span>{error}</span>
             </div>
           )}
@@ -680,7 +680,7 @@ export const SessionDelegationModal: React.FC<SessionDelegationModalProps> = ({
                 </>
               ) : (
                 <>
-                  <KeyIcon className="size-4" />
+                  <KeyIcon className="w-4 h-4" />
                   <span>Connect Web3 Wallet</span>
                 </>
               )}
@@ -699,7 +699,7 @@ export const SessionDelegationModal: React.FC<SessionDelegationModalProps> = ({
                 </>
               ) : (
                 <>
-                  <BoltIcon className="size-4" />
+                  <BoltIcon className="w-4 h-4" />
                   <span>Switch to Somnia Shannon (50312)</span>
                 </>
               )}
@@ -718,7 +718,7 @@ export const SessionDelegationModal: React.FC<SessionDelegationModalProps> = ({
                 </>
               ) : (
                 <>
-                  <CheckCircleIcon className="size-4" />
+                  <CheckCircleIcon className="w-4 h-4" />
                   <span>
                     {activeSession?.isActive
                       ? 'Update Session & On-Chain Permissions'

@@ -87,7 +87,7 @@ export const CommandDialog: React.FC<CommandDialogProps> = ({
       >
         {/* Search Input Bar */}
         <div className="flex items-center border-b border-border px-3 py-2.5">
-          <MagnifyingGlassIcon className="size-4 text-muted-foreground mr-2 shrink-0" />
+          <MagnifyingGlassIcon className="w-4 h-4 text-muted-foreground mr-2 shrink-0" />
           <input
             autoFocus
             type="text"
@@ -121,7 +121,7 @@ export const CommandDialog: React.FC<CommandDialogProps> = ({
                     }}
                     className="flex items-center gap-2 p-2 rounded-lg border border-border/60 bg-card/40 hover:bg-card/90 transition-colors text-left text-xs cursor-pointer"
                   >
-                    <ShieldCheckIcon className="size-4 text-emerald-400 shrink-0" />
+                    <ShieldCheckIcon className="w-4 h-4 text-emerald-400 shrink-0" />
                     <div className="truncate">
                       <div className="font-medium text-foreground">Session Key</div>
                       <div className="text-[10px] text-muted-foreground">Manage delegation</div>
@@ -136,7 +136,7 @@ export const CommandDialog: React.FC<CommandDialogProps> = ({
                     }}
                     className="flex items-center gap-2 p-2 rounded-lg border border-border/60 bg-card/40 hover:bg-card/90 transition-colors text-left text-xs cursor-pointer"
                   >
-                    <CurrencyDollarIcon className="size-4 text-cyan-400 shrink-0" />
+                    <CurrencyDollarIcon className="w-4 h-4 text-cyan-400 shrink-0" />
                     <div className="truncate">
                       <div className="font-medium text-foreground">Claim Faucet</div>
                       <div className="text-[10px] text-muted-foreground">+1,000 tUSDC</div>
@@ -165,7 +165,7 @@ export const CommandDialog: React.FC<CommandDialogProps> = ({
                   className="flex items-center justify-between p-2 rounded-lg hover:bg-muted/70 transition-colors cursor-pointer group"
                 >
                   <div className="flex items-center gap-2.5 truncate">
-                    <BoltIcon className="size-4 text-cyan-400 shrink-0" />
+                    <BoltIcon className="w-4 h-4 text-cyan-400 shrink-0" />
                     <div className="truncate">
                       <div className="text-xs font-medium text-foreground truncate">
                         {market.symbol} &gt; ${market.strikePrice?.toLocaleString()}
@@ -199,7 +199,7 @@ export const CommandDialog: React.FC<CommandDialogProps> = ({
                     className="w-full flex items-center justify-between p-2 rounded-lg hover:bg-muted/70 transition-colors text-left group cursor-pointer"
                   >
                     <div className="flex items-center gap-2.5">
-                      <Icon className="size-4 text-muted-foreground group-hover:text-foreground" />
+                      <Icon className="w-4 h-4 text-muted-foreground group-hover:text-foreground" />
                       <div>
                         <div className="text-xs font-medium text-foreground">{view.label}</div>
                         <div className="text-[10px] text-muted-foreground">{view.desc}</div>

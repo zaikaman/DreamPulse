@@ -189,3 +189,30 @@ export interface PortfolioSummary {
   maxTradeSize: number;
   hasActiveSession: boolean;
 }
+
+export type SwarmMode = 'COPY' | 'PERSONAL';
+
+export interface PersonalSwarmConfig {
+  userAddress: `0x${string}`;
+  mode: SwarmMode;
+  voltEnabled: boolean;
+  oracleEnabled: boolean;
+  titanEnabled: boolean;
+  sweeperEnabled: boolean;
+  voltConfig: { driftThreshold: number; minEdge: number; lotSize: number; maxTradeSize?: number };
+  oracleConfig: { minEdge: number; lotSize: number; maxTradeSize: number };
+  titanConfig: { targetSpread: number; inventoryAversion: number; lotSize: number };
+  customizedAt?: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface PersonalSwarmStatus {
+  mode: SwarmMode;
+  volt: { enabled: boolean; config: PersonalSwarmConfig['voltConfig']; pnl: number; tradesToday: number };
+  oracle: { enabled: boolean; config: PersonalSwarmConfig['oracleConfig']; pnl: number; tradesToday: number };
+  titan: { enabled: boolean; config: PersonalSwarmConfig['titanConfig']; pnl: number; tradesToday: number };
+  sweeper: { enabled: boolean; pnl: number; sweeps: number };
+  customizedAt?: string;
+  isCopyMode: boolean;
+}

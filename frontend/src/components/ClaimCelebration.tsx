@@ -100,7 +100,7 @@ export const ClaimCelebration: React.FC<ClaimCelebrationProps> = ({
             cursor: 'pointer',
           }}
         >
-          <XMarkIcon className="size-4" />
+          <XMarkIcon className="w-4 h-4" />
         </button>
 
         <div
@@ -117,7 +117,7 @@ export const ClaimCelebration: React.FC<ClaimCelebrationProps> = ({
             color: 'var(--trade-buy)',
           }}
         >
-          <SparklesIcon className="size-6" />
+          <SparklesIcon className="w-6 h-6" />
         </div>
 
         <h3 style={{ fontSize: '18px', fontWeight: 700, margin: '0 0 6px 0', color: 'var(--foreground)' }}>
@@ -147,7 +147,7 @@ export const ClaimCelebration: React.FC<ClaimCelebrationProps> = ({
               gap: '4px',
             }}
           >
-            <CheckCircleIcon className="size-3" />
+            <CheckCircleIcon className="w-3 h-3" />
             <span>View Somnia Shannon Tx: {shortTx}</span>
           </a>
         )}

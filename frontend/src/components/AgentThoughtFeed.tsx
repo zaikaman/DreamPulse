@@ -252,13 +252,13 @@ export const AgentThoughtFeed: React.FC<AgentThoughtFeedProps> = ({
         }}
       >
         <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-          <CommandLineIcon className="size-4 text-muted-foreground" />
+          <CommandLineIcon className="w-4 h-4 text-muted-foreground" />
           <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
             <h3 className="text-xs font-semibold text-foreground tracking-wide m-0">
               AI SWARM REASONING FEED
             </h3>
             <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full border border-border/50 bg-secondary/40 text-[10px] font-mono font-medium text-muted-foreground">
-              <span className={`size-1.5 rounded-full ${isPaused ? 'bg-amber-400' : isConnected ? 'bg-emerald-400' : 'bg-muted-foreground'}`} />
+              <span className={`w-1.5 h-1.5 rounded-full ${isPaused ? 'bg-amber-400' : isConnected ? 'bg-emerald-400' : 'bg-muted-foreground'}`} />
               <span>{isPaused ? (isPausedManual ? 'PAUSED' : 'HOVER PAUSED') : isConnected ? 'LIVE' : 'OFFLINE'}</span>
             </span>
           </div>
@@ -273,13 +273,13 @@ export const AgentThoughtFeed: React.FC<AgentThoughtFeedProps> = ({
               title={isDebugEnabled ? "Showing sub-second evaluation loops + trade reasoning" : "Filter to confirmed on-chain trade reasons only"}
               className={`inline-flex items-center gap-1.5 px-2.5 py-1 text-[11px] font-mono font-medium rounded-md border transition-colors ${isDebugEnabled ? 'bg-secondary text-foreground border-border' : 'bg-secondary/40 text-muted-foreground border-border/50 hover:text-foreground hover:bg-secondary/60'}`}
             >
-              <CpuChipIcon className="size-3" />
+              <CpuChipIcon className="w-3 h-3" />
               <span>{isDebugEnabled ? 'All Loops' : 'Executions Only'}</span>
             </button>
           )}
 
           <div className="relative flex items-center">
-            <MagnifyingGlassIcon className="size-3.5 absolute left-2.5 text-muted-foreground" />
+            <MagnifyingGlassIcon className="w-3.5 h-3.5 absolute left-2.5 text-muted-foreground" />
             <input
               id="input-search-thoughts"
               type="text"
@@ -306,7 +306,7 @@ export const AgentThoughtFeed: React.FC<AgentThoughtFeedProps> = ({
             title={isPausedManual ? 'Resume streaming' : 'Pause autoscroll to inspect'}
             className={`inline-flex items-center gap-1.5 px-2.5 py-1 text-[11px] font-mono font-medium rounded-md border transition-colors ${isPausedManual ? 'bg-secondary text-foreground border-border' : 'bg-secondary/40 text-muted-foreground border-border/50 hover:text-foreground hover:bg-secondary/60'}`}
           >
-            {isPausedManual ? <PlayIcon className="size-3" /> : <PauseIcon className="size-3" />}
+            {isPausedManual ? <PlayIcon className="w-3 h-3" /> : <PauseIcon className="w-3 h-3" />}
             <span>{isPausedManual ? 'Resume' : 'Pause'}</span>
           </button>
         </div>
@@ -324,7 +324,7 @@ export const AgentThoughtFeed: React.FC<AgentThoughtFeedProps> = ({
           overflowX: 'auto',
         }}
       >
-        <FunnelIcon className="size-3.5 text-muted-foreground mr-1 flex-shrink-0" />
+        <FunnelIcon className="w-3.5 h-3.5 text-muted-foreground mr-1 flex-shrink-0" />
         {[
           { id: 'ALL', label: `Executions (${thoughts.length})`, Icon: BoltIcon },
           { id: 'HIGH_CONVICTION', label: 'High Conviction (≥80%)', Icon: FireIcon },
@@ -343,7 +343,7 @@ export const AgentThoughtFeed: React.FC<AgentThoughtFeedProps> = ({
               onClick={() => setSelectedFilter(tab.id)}
               className={`inline-flex items-center gap-1.5 px-3 py-1 text-[11px] font-mono font-medium rounded-full border whitespace-nowrap transition-colors ${isActive ? 'bg-secondary text-foreground border-border' : 'bg-transparent text-muted-foreground border-transparent hover:text-foreground hover:bg-secondary/40'}`}
             >
-              <TabIcon className="size-3" />
+              <TabIcon className="w-3 h-3" />
               <span>{tab.label}</span>
             </button>
           );
@@ -374,7 +374,7 @@ export const AgentThoughtFeed: React.FC<AgentThoughtFeedProps> = ({
               <div className="absolute top-0 left-0 right-0 h-[2px]" style={{ background: theme.color, opacity: 0.7 }} />
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-1.5">
-                  <Icon className="size-3.5 text-muted-foreground" />
+                  <Icon className="w-3.5 h-3.5 text-muted-foreground" />
                   <span className="font-mono text-xs font-semibold text-foreground">
                     {agentKey}
                   </span>
@@ -410,7 +410,7 @@ export const AgentThoughtFeed: React.FC<AgentThoughtFeedProps> = ({
           <AgentThoughtFeedSkeleton />
         ) : filteredThoughts.length === 0 ? (
           <div className="py-12 px-6 text-center flex flex-col items-center gap-3 text-muted-foreground">
-            <ChartBarIcon className="size-7 text-muted-foreground/40" />
+            <ChartBarIcon className="w-7 h-7 text-muted-foreground/40" />
             <div>
               <p className="font-semibold text-[13px] mb-1 text-foreground">
                 {searchQuery
@@ -454,18 +454,18 @@ export const AgentThoughtFeed: React.FC<AgentThoughtFeedProps> = ({
                       className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-md border text-[10px] font-mono font-semibold"
                       style={{ background: theme.bg, borderColor: theme.border, color: theme.color }}
                     >
-                      <Icon className="size-3" style={{ color: theme.color }} />
+                      <Icon className="w-3 h-3" style={{ color: theme.color }} />
                       <span>{thought.agentType.toUpperCase()}</span>
                     </span>
 
                     {isExec ? (
                       <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md border text-[10px] font-mono font-medium" style={{ background: 'rgba(52,211,153,0.08)', borderColor: 'rgba(52,211,153,0.18)', color: '#6ee7b7' }}>
-                        <CheckCircleIcon className="size-2.5" style={{ color: '#6ee7b7' }} />
+                        <CheckCircleIcon className="w-2.5 h-2.5" style={{ color: '#6ee7b7' }} />
                         <span>EXECUTED</span>
                       </span>
                     ) : (
                       <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md border border-border/30 bg-secondary/20 text-[10px] font-mono text-muted-foreground">
-                        <SignalIcon className="size-2.5" />
+                        <SignalIcon className="w-2.5 h-2.5" />
                         <span>EVAL</span>
                       </span>
                     )}
@@ -506,7 +506,7 @@ export const AgentThoughtFeed: React.FC<AgentThoughtFeedProps> = ({
                         style={{ background: 'rgba(45,212,191,0.07)', borderColor: 'rgba(45,212,191,0.16)', color: '#5eead4' }}
                       >
                         <span>Tx: {thought.txHash.slice(0, 6)}...{thought.txHash.slice(-4)}</span>
-                        <ArrowTopRightOnSquareIcon className="size-2.5" />
+                        <ArrowTopRightOnSquareIcon className="w-2.5 h-2.5" />
                       </a>
                     )}
 
@@ -518,7 +518,7 @@ export const AgentThoughtFeed: React.FC<AgentThoughtFeedProps> = ({
                           : { background: 'rgba(251,191,36,0.07)', borderColor: 'rgba(251,191,36,0.16)', color: '#fcd34d' }
                       }
                     >
-                      <ArrowTrendingUpIcon className="size-3" style={{ color: confidencePct >= 80 ? '#6ee7b7' : '#fcd34d' }} />
+                      <ArrowTrendingUpIcon className="w-3 h-3" style={{ color: confidencePct >= 80 ? '#6ee7b7' : '#fcd34d' }} />
                       <span>{confidencePct}%</span>
                     </span>
 
