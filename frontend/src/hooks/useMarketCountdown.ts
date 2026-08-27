@@ -47,6 +47,6 @@ export function useMarketCountdown(
     formattedExpiry,
     secondsLeft: diff,
     isExpired: diff <= 0,
-    isLocked: diff <= 30,
+    isLocked: diff <= 0,
   };
 }

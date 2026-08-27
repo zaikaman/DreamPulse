@@ -1173,11 +1173,11 @@ export class OrderService {
       throw new Error(`Market '${params.marketId}' not found.`);
     }
 
-    // Enforce trading lockout window during the final resolution phase
+    // Enforce market active status (DreamDEX P2P CLOB allows trading right up to expiry)
     const closeTimeMs = new Date(market.closeTimestamp).getTime();
     const timeLeftSec = Math.floor((closeTimeMs - Date.now()) / 1000);
-    if (market.status !== 'Open' || (!isNaN(timeLeftSec) && timeLeftSec <= 15)) {
-      throw new Error(`Trading is locked for market ${market.symbol} during the final resolution phase (${Math.max(0, timeLeftSec)}s remaining).`);
+    if (market.status !== 'Open' || (!isNaN(timeLeftSec) && timeLeftSec <= 0)) {
+      throw new Error(`Market ${market.symbol} is closed and resolving. Orders are no longer accepted for this round.`);
     }
 
     // Check risk limits directly
