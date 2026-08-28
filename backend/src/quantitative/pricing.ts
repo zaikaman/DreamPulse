@@ -339,16 +339,30 @@ export function calculateConfluenceProbability(
   spotDrift5m: number = 0,
   orderBookSkew: number = 0,
 ): number {
-  // Momentum sigmoid: transforms percentage drift into a probability modifier [0, 1]
-  const momentumSignal = 1 / (1 + Math.exp(-(spotDrift1m * 250 + spotDrift5m * 150)));
+  // Clamp input probability to safe domain for log-odds conversion
+  const clampedProb = Math.min(0.999, Math.max(0.001, bsmProbYes));
 
-  // Depth imbalance modifier in [0.35, 0.65]
-  const depthSignal = 0.5 + Math.max(-1, Math.min(1, orderBookSkew)) * 0.15;
+  // Base logit (log-odds) from theoretical Black-Scholes probability
+  const baseLogit = Math.log(clampedProb / (1.0 - clampedProb));
 
-  // Multi-factor blend: 60% BSM Model + 28% Spot Momentum + 12% Depth Imbalance
-  const blended = 0.60 * bsmProbYes + 0.28 * momentumSignal + 0.12 * depthSignal;
+  // Clamp raw drift inputs to institutional bounds (max ±1.0%)
+  const clampedDrift1m = Math.max(-0.010, Math.min(0.010, spotDrift1m));
+  const clampedDrift5m = Math.max(-0.010, Math.min(0.010, spotDrift5m));
 
-  return Number(Math.min(0.99, Math.max(0.01, blended)).toFixed(4));
+  // Dynamic momentum adjustment in log-odds space (capped to ±0.60 logit ≈ ±12% max probability shift around ATM)
+  const rawMomentum = clampedDrift1m * 60 + clampedDrift5m * 40;
+  const momentumAdjustment = Math.max(-0.60, Math.min(0.60, rawMomentum));
+
+  // Depth imbalance modifier in log-odds space (normalized in [-1, 1], max ±0.20 logit)
+  const depthAdjustment = Math.max(-1, Math.min(1, orderBookSkew)) * 0.20;
+
+  // Combined log-odds
+  const totalLogit = baseLogit + momentumAdjustment + depthAdjustment;
+
+  // Sigmoid conversion back to probability domain [0.001, 0.999]
+  const blended = 1.0 / (1.0 + Math.exp(-Math.max(-8, Math.min(8, totalLogit))));
+
+  return Number(Math.min(0.999, Math.max(0.001, blended)).toFixed(4));
 }
 
 export interface EdgeEvaluation {
