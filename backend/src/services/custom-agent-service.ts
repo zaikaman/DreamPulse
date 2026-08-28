@@ -208,85 +208,135 @@ export class CustomAgentService {
     }
   }
 
+  public mapDbRowToAgent(row: any, defaultTemplate?: CustomAgentDefinition): CustomAgentDefinition {
+    return {
+      id: row.id,
+      userAddress: row.user_address,
+      name: row.name,
+      description: row.description || '',
+      symbol: row.symbol,
+      timeframe: row.timeframe,
+      strategyType: row.strategy_type,
+      rules: row.rules,
+      color: row.color,
+      icon: row.icon,
+      isActive: row.is_active !== false,
+      isDeployed: Boolean(row.is_deployed),
+      allocatedAllowance:
+        row.allocated_allowance !== undefined && row.allocated_allowance !== null
+          ? Number(row.allocated_allowance)
+          : (defaultTemplate?.allocatedAllowance ?? 100),
+      spentAllowance:
+        row.spent_allowance !== undefined && row.spent_allowance !== null
+          ? Number(row.spent_allowance)
+          : (defaultTemplate?.spentAllowance ?? 0),
+      pnl:
+        row.pnl !== undefined && row.pnl !== null
+          ? Number(row.pnl)
+          : (defaultTemplate?.pnl ?? 0),
+      winRate:
+        row.win_rate !== undefined && row.win_rate !== null
+          ? Number(row.win_rate)
+          : (defaultTemplate?.winRate ?? 0),
+      tradesCount:
+        row.trades_count !== undefined && row.trades_count !== null
+          ? Number(row.trades_count)
+          : (defaultTemplate?.tradesCount ?? 0),
+      createdAt: row.created_at,
+      updatedAt: row.updated_at,
+    };
+  }
+
   /**
    * Retrieves all agents: Starter templates + user-specific created/deployed agents.
+   * Ensures pristine templates are preserved and not polluted across wallets.
    */
   public async getCustomAgents(userAddress?: string): Promise<CustomAgentDefinition[]> {
-    const agentMap = new Map<string, CustomAgentDefinition>();
+    const cleanAddr = userAddress?.toLowerCase();
+    const result: CustomAgentDefinition[] = [];
+    const seenIds = new Set<string>();
 
-    // 1. Seed base starter templates into map
-    for (const t of STARTER_TEMPLATES) {
-      agentMap.set(t.id, JSON.parse(JSON.stringify(t)));
+    // 1. Fetch user-owned custom agents from DB
+    if (cleanAddr) {
+      try {
+        const { data, error } = await supabase
+          .from('custom_agents')
+          .select('*')
+          .eq('user_address', cleanAddr)
+          .order('created_at', { ascending: false });
+
+        if (!error && Array.isArray(data)) {
+          for (const row of data) {
+            const mapped = this.mapDbRowToAgent(row);
+            result.push(mapped);
+            seenIds.add(mapped.id);
+            this.inMemoryAgents.set(mapped.id, mapped);
+          }
+        }
+      } catch (_err) {
+        // Fall back to memory
+      }
+
+      // Check memory for user-owned agents
+      for (const [id, agent] of this.inMemoryAgents.entries()) {
+        if (agent.userAddress.toLowerCase() === cleanAddr && !seenIds.has(id)) {
+          result.push(agent);
+          seenIds.add(id);
+        }
+      }
     }
 
-    // 2. Read from DB and override/merge
-    try {
-      let query = supabase.from('custom_agents').select('*').order('created_at', { ascending: false });
-      if (userAddress) {
-        const cleanAddr = userAddress.toLowerCase();
-        query = query.or(
-          `user_address.eq.${cleanAddr},user_address.eq.0x0000000000000000000000000000000000000000,id.in.(${STARTER_TEMPLATE_IDS.join(',')})`
-        );
+    // 2. Always append pristine starter templates if not already in user's list
+    for (const t of STARTER_TEMPLATES) {
+      if (!seenIds.has(t.id)) {
+        result.push(JSON.parse(JSON.stringify(t)));
+        seenIds.add(t.id);
       }
-      const { data, error } = await query;
+    }
+
+    return result;
+  }
+
+  /**
+   * Retrieves all currently active and deployed custom agents across all users.
+   */
+  public async getActiveDeployedAgents(): Promise<CustomAgentDefinition[]> {
+    const deployed: CustomAgentDefinition[] = [];
+    const seenIds = new Set<string>();
+
+    try {
+      const { data, error } = await supabase
+        .from('custom_agents')
+        .select('*')
+        .eq('is_deployed', true)
+        .eq('is_active', true);
+
       if (!error && Array.isArray(data)) {
         for (const row of data) {
-          const defaultTemplate = agentMap.get(row.id);
-          const mapped: CustomAgentDefinition = {
-            id: row.id,
-            userAddress: row.user_address,
-            name: row.name,
-            description: row.description || '',
-            symbol: row.symbol,
-            timeframe: row.timeframe,
-            strategyType: row.strategy_type,
-            rules: row.rules,
-            color: row.color,
-            icon: row.icon,
-            isActive: row.is_active !== false,
-            isDeployed: Boolean(row.is_deployed),
-            allocatedAllowance:
-              row.allocated_allowance !== undefined && row.allocated_allowance !== null
-                ? Number(row.allocated_allowance)
-                : (defaultTemplate?.allocatedAllowance ?? 100),
-            spentAllowance:
-              row.spent_allowance !== undefined && row.spent_allowance !== null
-                ? Number(row.spent_allowance)
-                : (defaultTemplate?.spentAllowance ?? 0),
-            pnl:
-              row.pnl !== undefined && row.pnl !== null
-                ? Number(row.pnl)
-                : (defaultTemplate?.pnl ?? 0),
-            winRate:
-              row.win_rate !== undefined && row.win_rate !== null
-                ? Number(row.win_rate)
-                : (defaultTemplate?.winRate ?? 0),
-            tradesCount:
-              row.trades_count !== undefined && row.trades_count !== null
-                ? Number(row.trades_count)
-                : (defaultTemplate?.tradesCount ?? 0),
-            createdAt: row.created_at,
-            updatedAt: row.updated_at,
-          };
-          // Persisted state in DB takes priority over defaults
-          agentMap.set(mapped.id, mapped);
+          if (row.user_address === '0x0000000000000000000000000000000000000000') continue;
+          const mapped = this.mapDbRowToAgent(row);
+          deployed.push(mapped);
+          seenIds.add(mapped.id);
           this.inMemoryAgents.set(mapped.id, mapped);
         }
       }
-    } catch (_err) {
-      // Fall back to memory
+    } catch (err: any) {
+      console.warn('[CustomAgentService] Error loading active deployed agents:', err.message);
     }
 
-    // 3. Merge non-template in-memory agents
-    for (const [id, agent] of this.inMemoryAgents.entries()) {
-      if (!agentMap.has(id)) {
-        if (!userAddress || agent.userAddress.toLowerCase() === userAddress.toLowerCase()) {
-          agentMap.set(id, agent);
-        }
+    for (const agent of this.inMemoryAgents.values()) {
+      if (
+        agent.isDeployed &&
+        agent.isActive &&
+        agent.userAddress !== '0x0000000000000000000000000000000000000000' &&
+        !seenIds.has(agent.id)
+      ) {
+        deployed.push(agent);
+        seenIds.add(agent.id);
       }
     }
 
-    return Array.from(agentMap.values());
+    return deployed;
   }
 
   public async getCustomAgentById(id: string): Promise<CustomAgentDefinition | null> {
@@ -462,18 +512,113 @@ export class CustomAgentService {
     userAddress: string,
     allowance?: number
   ): Promise<CustomAgentDefinition | null> {
+    const cleanUser = userAddress.toLowerCase();
     const existing = await this.getCustomAgentById(id);
     if (!existing) return null;
+
+    const isStarterTemplate =
+      STARTER_TEMPLATE_IDS.includes(id) &&
+      existing.userAddress === '0x0000000000000000000000000000000000000000';
+
+    if (isStarterTemplate) {
+      // Check if user already cloned this template
+      const userAgents = await this.getCustomAgents(cleanUser);
+      const alreadyCloned = userAgents.find(
+        (a) => a.userAddress.toLowerCase() === cleanUser && a.name === existing.name && a.id !== id
+      );
+      if (alreadyCloned) {
+        return this.updateCustomAgent(alreadyCloned.id, {
+          isDeployed: true,
+          isActive: true,
+          ...(allowance !== undefined ? { allocatedAllowance: Math.max(0, allowance) } : {}),
+        });
+      }
+
+      // Clone a dedicated custom agent instance for this user so the starter template remains pristine
+      return this.createCustomAgent({
+        userAddress: cleanUser,
+        name: existing.name,
+        description: existing.description,
+        symbol: existing.symbol,
+        timeframe: existing.timeframe,
+        strategyType: existing.strategyType,
+        rules: JSON.parse(JSON.stringify(existing.rules)),
+        color: existing.color,
+        icon: existing.icon,
+        isActive: true,
+        isDeployed: true,
+        allocatedAllowance: allowance !== undefined ? Math.max(0, allowance) : (existing.allocatedAllowance ?? 100),
+        spentAllowance: 0,
+      });
+    }
 
     const updates: Partial<CustomAgentDefinition> = {
       isDeployed: true,
       isActive: true,
       ...(existing.userAddress === '0x0000000000000000000000000000000000000000' && userAddress
-        ? { userAddress: userAddress.toLowerCase() }
+        ? { userAddress: cleanUser }
         : {}),
       ...(allowance !== undefined ? { allocatedAllowance: Math.max(0, allowance) } : {}),
     };
     return this.updateCustomAgent(id, updates);
+  }
+
+  public async recordTradeFill(agentId: string, tradeCost: number): Promise<void> {
+    const agent = await this.getCustomAgentById(agentId);
+    if (!agent) return;
+
+    const newSpent = Number(((agent.spentAllowance || 0) + tradeCost).toFixed(4));
+    const newTradesCount = (agent.tradesCount || 0) + 1;
+
+    agent.spentAllowance = newSpent;
+    agent.tradesCount = newTradesCount;
+    agent.updatedAt = new Date().toISOString();
+    this.inMemoryAgents.set(agentId, agent);
+
+    try {
+      await supabase.from('custom_agents').update({
+        spent_allowance: newSpent,
+        trades_count: newTradesCount,
+        updated_at: agent.updatedAt,
+      }).eq('id', agentId);
+    } catch (err: any) {
+      console.warn(`[CustomAgentService] Failed to persist trade fill for agent ${agentId}:`, err.message);
+    }
+  }
+
+  public async recordTradeSettlement(agentId: string, realizedPnl: number, isWin: boolean): Promise<void> {
+    const agent = await this.getCustomAgentById(agentId);
+    if (!agent) return;
+
+    const newPnl = Number(((agent.pnl || 0) + realizedPnl).toFixed(2));
+    const totalTrades = Math.max(1, agent.tradesCount || 1);
+    const prevWins = Math.round(((agent.winRate || 0) / 100) * Math.max(0, totalTrades - 1));
+    const newWins = prevWins + (isWin ? 1 : 0);
+    const newWinRate = Number(((newWins / totalTrades) * 100).toFixed(1));
+
+    agent.pnl = newPnl;
+    agent.winRate = newWinRate;
+    agent.updatedAt = new Date().toISOString();
+    this.inMemoryAgents.set(agentId, agent);
+
+    try {
+      await supabase.from('custom_agents').update({
+        pnl: newPnl,
+        win_rate: newWinRate,
+        updated_at: agent.updatedAt,
+      }).eq('id', agentId);
+    } catch (err: any) {
+      console.warn(`[CustomAgentService] Failed to persist trade settlement for agent ${agentId}:`, err.message);
+    }
+  }
+
+  public async findAgentForUserAndSymbol(userAddress: string, symbol: string): Promise<CustomAgentDefinition | null> {
+    const cleanUser = userAddress.toLowerCase();
+    const deployed = await this.getActiveDeployedAgents();
+    const match = deployed.find(
+      (a) => a.userAddress.toLowerCase() === cleanUser && a.symbol.toUpperCase() === symbol.toUpperCase()
+    );
+    return match || null;
   }
 
   public async pauseAgent(

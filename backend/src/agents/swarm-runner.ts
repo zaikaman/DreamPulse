@@ -7,10 +7,12 @@ import { sessionService, type SessionRecord } from '../services/session-service.
 import { orderService, isOnChainCircuitBroken } from '../services/order-service.js';
 import { settlementService } from '../services/settlement-service.js';
 import { userSwarmService } from '../services/user-swarm-service.js';
+import { customAgentService } from '../services/custom-agent-service.js';
+import { customAgentEvaluator } from './custom-agent-evaluator.js';
 import { operatorAccount, hasOperatorGas } from '../config/somnia.js';
 import { telemetryWsGateway } from '../websocket/server.js';
 import type { IAgentContext, IAgentDecision } from './base-agent.js';
-import type { AgentType, SwarmAgentType, SessionGrant, SwarmStatusSummary } from '../types/index.js';
+import type { AgentType, SwarmAgentType, SessionGrant, SwarmStatusSummary, CustomAgentDefinition } from '../types/index.js';
 
 export interface AgentTelemetryState {
   agentType: SwarmAgentType;
@@ -36,6 +38,9 @@ export class MultiAgentSwarmRunner {
   // Personal swarm isolated state per wallet
   private personalLastTradeTimes = new Map<string, number>(); // key: `${userAddress}:${agentType}`
   private personalLastOpportunityKeys = new Map<string, number>(); // key: `${userAddress}:${marketId}:${agentType}:${action}:${outcome}:${price}`
+  // Custom deployed agents state per wallet/agent
+  private customAgentLastTradeTimes = new Map<string, number>(); // key: `${agentId}`
+  private customAgentLastOppKeys = new Map<string, number>(); // key: `${agentId}:${marketId}:${outcome}:${price}`
 
   private telemetry: Record<SwarmAgentType, AgentTelemetryState> = {
     Volt: {
@@ -497,6 +502,9 @@ export class MultiAgentSwarmRunner {
 
     // 3. Personal Swarm Evaluation — isolated per-wallet strategy execution (non-copy mode)
     await this.evaluatePersonalSwarms(openMarkets, spotTickers);
+
+    // 4. Custom Strategy Agents Evaluation — user-deployed AST agents (e.g. Fast EMA Momentum Rider)
+    await this.evaluateCustomAgents(openMarkets, spotTickers);
   }
 
   private async evaluatePersonalSwarms(
@@ -650,6 +658,156 @@ export class MultiAgentSwarmRunner {
           // One trade per market per user per cycle to avoid spam
           break;
         }
+      }
+    }
+  }
+
+  private async evaluateCustomAgents(
+    openMarkets: ReturnType<typeof marketService.getActiveMarkets>,
+    spotTickers: Record<string, any>,
+  ): Promise<void> {
+    if (openMarkets.length === 0) return;
+    if (isOnChainCircuitBroken()) return;
+
+    let deployedAgents: CustomAgentDefinition[] = [];
+    try {
+      deployedAgents = await customAgentService.getActiveDeployedAgents();
+    } catch {
+      return;
+    }
+    if (deployedAgents.length === 0) return;
+
+    // Bound concurrency: evaluate up to 20 custom agents per cycle
+    const candidateAgents = deployedAgents.slice(0, 20);
+
+    for (const agent of candidateAgents) {
+      const userAddr = agent.userAddress;
+      if (!userAddr || userAddr === '0x0000000000000000000000000000000000000000') continue;
+
+      // 1. Fetch user active delegated session
+      let session: SessionRecord | null = null;
+      try {
+        session = await sessionService.getUserActiveSession(userAddr);
+      } catch {
+        continue;
+      }
+      if (!session || !session.isActive || session.onChainAuthorized !== true) {
+        continue;
+      }
+
+      // Check allowance remaining
+      const allocated = agent.allocatedAllowance ?? 100;
+      const spent = agent.spentAllowance ?? 0;
+      if (allocated - spent < 1.0) continue;
+
+      // Filter markets matching agent symbol (e.g. SOL/USD)
+      const matchingMarkets = openMarkets.filter(
+        (m) => m.symbol.toUpperCase() === agent.symbol.toUpperCase()
+      );
+      if (matchingMarkets.length === 0) continue;
+
+      const sessionGrant: SessionGrant = {
+        id: session.id,
+        userAddress: session.userAddress,
+        operatorAddress: session.operatorAddress,
+        permissions: session.permissions as any,
+        maxTradeSize: session.maxTradeSize,
+        dailyVolumeCap: session.dailyVolumeCap,
+        spentToday: session.spentToday,
+        expiresAt: session.expiresAt,
+        isActive: session.isActive,
+        onChainTxHash: session.onChainTxHash,
+        vaultDepositAmount: session.vaultDepositAmount,
+        targetPoolAddress: session.targetPoolAddress,
+        onChainAuthorized: session.onChainAuthorized,
+      };
+
+      for (const market of matchingMarkets) {
+        // Per-user single-market position guard: avoid duplicate open positions on same market
+        const hasPosition = orderService.getOrders({ userAddress: userAddr, status: 'FILLED' })
+          .some((o) => o.marketId.toLowerCase() === market.id.toLowerCase() && !o.isSettled) ||
+          orderService.getOrders({ userAddress: userAddr, status: 'PENDING' })
+          .some((o) => o.marketId.toLowerCase() === market.id.toLowerCase());
+        if (hasPosition) continue;
+
+        // Per-agent rate limiting & cooldown:
+        const now = Date.now();
+        const lastTrade = this.customAgentLastTradeTimes.get(agent.id) || 0;
+        const cooldownMs = (agent.rules?.risk?.cooldownMinutes || 3) * 60000;
+        if (now - lastTrade < cooldownMs) continue;
+
+        const spot = spotTickers[market.symbol] || {
+          symbol: market.symbol,
+          price: market.strikePrice,
+          change1m: 0,
+          change5m: 0,
+          timestamp: Date.now(),
+        };
+
+        const rawDepth = marketService.getMarketDepth(market.id) || {
+          yesBids: [{ price: market.bestBidYes || 0.49, quantity: 200, total: 98 }],
+          yesAsks: [{ price: market.bestAskYes || 0.51, quantity: 200, total: 102 }],
+        };
+
+        const depth = orderService.sanitizeDepthForSelfTrade(rawDepth, market.id, userAddr);
+        const context: IAgentContext = { spotTicker: spot, market, depth, activeSessions: [] };
+
+        let decision: IAgentDecision;
+        try {
+          decision = await customAgentEvaluator.evaluate(agent, context, sessionGrant);
+        } catch (_evalErr) {
+          continue;
+        }
+
+        if (!decision || decision.action === 'HOLD' || decision.action === 'CANCEL_QUOTE' || decision.confidence < 0.85) {
+          continue;
+        }
+
+        // Deduplication guard
+        const oppKey = `${agent.id}:${market.id}:${decision.targetOutcome || 'YES'}:${decision.price || 0}`;
+        const lastOpp = this.customAgentLastOppKeys.get(oppKey) || 0;
+        if (now - lastOpp < 120000) continue;
+
+        // Allowance check with order service
+        const estCost = (decision.price ?? 0.5) * (decision.lotSize ?? 1.0);
+        const allowance = sessionService.validateTradeAllowance(session.id, estCost);
+        if (!allowance.allowed) continue;
+
+        this.customAgentLastTradeTimes.set(agent.id, now);
+        this.customAgentLastOppKeys.set(oppKey, now);
+        customAgentEvaluator.recordTradeAttempt(agent.id, now);
+
+        try {
+          const result = await orderService.executeAgentDecision(decision, sessionGrant);
+          if (result) {
+            const executedCost = result.totalCost || estCost;
+            await customAgentService.recordTradeFill(agent.id, executedCost);
+
+            telemetryWsGateway.broadcastAgentThought({
+              id: `custom-${result.id}`,
+              agent: 'CUSTOM',
+              marketId: decision.targetMarketId,
+              confidence: decision.confidence,
+              action: `${decision.action}_${decision.targetOutcome || 'YES'}_CUSTOM`,
+              thought: `[CUSTOM AGENT: ${agent.name}] ${decision.rationale}`,
+              txHash: result.txHash,
+              price: result.price ?? decision.price,
+              lotSize: result.lotSize ?? decision.lotSize,
+              outcome: decision.targetOutcome || 'YES',
+              isExecution: true,
+              timestamp: Date.now(),
+            });
+
+            console.log(
+              `[SwarmRunner] Custom Agent "${agent.name}" executed trade on ${market.symbol} for ${userAddr} (Order: ${result.id}, tx: ${result.txHash || 'filled'})`
+            );
+          }
+        } catch (err: any) {
+          console.warn(`[SwarmRunner] Custom Agent error for ${agent.name} (${userAddr}):`, err.message?.slice(0, 300));
+        }
+
+        // Limit to one trade per agent per cycle
+        break;
       }
     }
   }
