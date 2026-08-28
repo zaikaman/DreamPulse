@@ -1139,7 +1139,8 @@ export const StrategyStudioView: React.FC<StrategyStudioViewProps> = ({
                 <div className="p-2.5 rounded-xl bg-secondary/30 border border-border/40">
                   <span className="text-[10px] font-mono text-muted-foreground uppercase block">Est. Win Rate</span>
                   <span className={cn(
-                    "text-lg font-bold font-mono mt-1 block",
+                    "text-lg font-bold font-mono mt-1 block transition-all",
+                    liveMetrics.isSimulating && "opacity-50 animate-pulse",
                     liveMetrics.winRate >= 50 ? "text-emerald-400" : "text-amber-400"
                   )}>
                     {liveMetrics.trades > 0 ? `${liveMetrics.winRate.toFixed(1)}%` : '0.0%'}
@@ -1147,14 +1148,18 @@ export const StrategyStudioView: React.FC<StrategyStudioViewProps> = ({
                 </div>
                 <div className="p-2.5 rounded-xl bg-secondary/30 border border-border/40">
                   <span className="text-[10px] font-mono text-muted-foreground uppercase block">Trades / 24h</span>
-                  <span className="text-lg font-bold font-mono text-foreground mt-1 block">
+                  <span className={cn(
+                    "text-lg font-bold font-mono text-foreground mt-1 block transition-all",
+                    liveMetrics.isSimulating && "opacity-50 animate-pulse"
+                  )}>
                     {liveMetrics.trades}
                   </span>
                 </div>
                 <div className="p-2.5 rounded-xl bg-secondary/30 border border-border/40">
                   <span className="text-[10px] font-mono text-muted-foreground uppercase block">Simulated PnL</span>
                   <span className={cn(
-                    'text-lg font-bold font-mono mt-1 block',
+                    'text-lg font-bold font-mono mt-1 block transition-all',
+                    liveMetrics.isSimulating && "opacity-50 animate-pulse",
                     liveMetrics.pnl >= 0 ? 'text-emerald-400' : 'text-rose-400'
                   )}>
                     {liveMetrics.pnl >= 0 ? '+' : ''}${liveMetrics.pnl.toFixed(1)}
@@ -1163,7 +1168,8 @@ export const StrategyStudioView: React.FC<StrategyStudioViewProps> = ({
                 <div className="p-2.5 rounded-xl bg-secondary/30 border border-border/40">
                   <span className="text-[10px] font-mono text-muted-foreground uppercase block">Profit Factor</span>
                   <span className={cn(
-                    "text-lg font-bold font-mono mt-1 block",
+                    "text-lg font-bold font-mono mt-1 block transition-all",
+                    liveMetrics.isSimulating && "opacity-50 animate-pulse",
                     liveMetrics.profitFactor >= 1.0 ? "text-cyan-400" : "text-zinc-400"
                   )}>
                     {liveMetrics.profitFactor.toFixed(2)}x

@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import type { AgentType, CustomAgentRules } from '../types/index.js';
 import { apiClient } from '../services/api.js';
 
@@ -90,6 +90,7 @@ export const useBacktest = (userAddress?: string) => {
   const [currentResult, setCurrentResult] = useState<BacktestDetailedResult | null>(null);
   const [history, setHistory] = useState<BacktestDetailedResult[]>([]);
   const [error, setError] = useState<string | null>(null);
+  const activeRequestIdRef = useRef<number>(0);
 
   const fetchHistory = useCallback(async () => {
     try {
@@ -108,6 +109,7 @@ export const useBacktest = (userAddress?: string) => {
 
   const runSimulation = useCallback(
     async (params: BacktestParams): Promise<BacktestDetailedResult | null> => {
+      const requestId = ++activeRequestIdRef.current;
       setIsLoading(true);
       setError(null);
 
@@ -119,18 +121,26 @@ export const useBacktest = (userAddress?: string) => {
 
         const response = await apiClient.runBacktest(payload);
 
-        if (response?.success && response.result) {
-          setCurrentResult(response.result as BacktestDetailedResult);
-          setHistory((prev) => [response.result as BacktestDetailedResult, ...prev]);
-          return response.result as BacktestDetailedResult;
-        } else {
-          throw new Error('Simulation failed');
+        if (requestId === activeRequestIdRef.current) {
+          if (response?.success && response.result) {
+            const res = response.result as BacktestDetailedResult;
+            setCurrentResult(res);
+            setHistory((prev) => [res, ...prev]);
+            return res;
+          } else {
+            throw new Error('Simulation failed');
+          }
         }
+        return null;
       } catch (err: any) {
-        setError(err.message || 'Simulation execution error');
+        if (requestId === activeRequestIdRef.current) {
+          setError(err.message || 'Simulation execution error');
+        }
         return null;
       } finally {
-        setIsLoading(false);
+        if (requestId === activeRequestIdRef.current) {
+          setIsLoading(false);
+        }
       }
     },
     [userAddress],

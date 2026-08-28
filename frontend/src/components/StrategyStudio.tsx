@@ -80,7 +80,7 @@ export const StrategyStudio: React.FC<StrategyStudioProps> = ({
   onConnectWallet,
 }) => {
   const { isGuest, isTrader, isOperator } = useUserRole(wallet);
-  const { isLoading, currentResult, runSimulation, deployToSwarm } = useBacktest(wallet.address || undefined);
+  const { isLoading, currentResult, error, runSimulation, deployToSwarm } = useBacktest(wallet.address || undefined);
 
   const initialAgent: BacktestAgentType = (initialConfig?.agentType === 'Oracle' || initialConfig?.agentType === 'Titan')
     ? initialConfig.agentType
@@ -536,13 +536,13 @@ export const StrategyStudio: React.FC<StrategyStudioProps> = ({
             </div>
           </div>
           <div className="flex items-center gap-2 flex-shrink-0">
-            <button type="button" onClick={handleExportCsv} disabled={!currentResult || currentResult.trades.length === 0} className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border bg-secondary/30 border-border/50 text-xs font-medium text-muted-foreground hover:text-foreground hover:bg-secondary/50 disabled:opacity-40 disabled:cursor-not-allowed transition-colors">
+            <button type="button" onClick={handleExportCsv} disabled={!currentResult || currentResult.trades.length === 0 || isLoading} className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border bg-secondary/30 border-border/50 text-xs font-medium text-muted-foreground hover:text-foreground hover:bg-secondary/50 disabled:opacity-40 disabled:cursor-not-allowed transition-colors">
               <ArrowDownTrayIcon className="w-3.5 h-3.5" />
               <span>Export CSV</span>
             </button>
-            <button type="button" onClick={handleRunSimulation} disabled={isLoading} className="inline-flex items-center gap-1.5 px-4 py-1.5 rounded-lg border text-xs font-bold transition-all disabled:opacity-60" style={{ background: activeColor, color: '#09090b', borderColor: activeColor, boxShadow: `0 0 12px ${activeColor}28` }}>
+            <button type="button" onClick={handleRunSimulation} disabled={isLoading} className="inline-flex items-center gap-1.5 px-4 py-1.5 rounded-lg border text-xs font-bold transition-all disabled:opacity-60 cursor-pointer" style={{ background: activeColor, color: '#09090b', borderColor: activeColor, boxShadow: `0 0 12px ${activeColor}28` }}>
               {isLoading ? <Spinner size="xs" variant="amber" /> : <PlayIcon className="w-3.5 h-3.5 fill-current" />}
-              <span>{isLoading ? 'Simulating…' : 'Run Backtest Replay'}</span>
+              <span>{isLoading ? 'Simulating Replay…' : 'Run Backtest Replay'}</span>
             </button>
           </div>
         </div>
@@ -554,7 +554,7 @@ export const StrategyStudio: React.FC<StrategyStudioProps> = ({
               type="button"
               onClick={() => setAgentCategory('PROTOCOL')}
               className={cn(
-                'px-3 py-1 rounded-lg text-xs font-semibold transition-all',
+                'px-3 py-1 rounded-lg text-xs font-semibold transition-all cursor-pointer',
                 agentCategory === 'PROTOCOL' ? 'bg-primary/20 text-primary border border-primary/30 shadow-sm' : 'text-muted-foreground hover:text-foreground'
               )}
             >
@@ -564,7 +564,7 @@ export const StrategyStudio: React.FC<StrategyStudioProps> = ({
               type="button"
               onClick={() => setAgentCategory('CUSTOM')}
               className={cn(
-                'px-3 py-1 rounded-lg text-xs font-semibold transition-all flex items-center gap-1.5',
+                'px-3 py-1 rounded-lg text-xs font-semibold transition-all flex items-center gap-1.5 cursor-pointer',
                 agentCategory === 'CUSTOM' ? 'bg-primary/20 text-primary border border-primary/30 shadow-sm' : 'text-muted-foreground hover:text-foreground'
               )}
             >
@@ -590,16 +590,20 @@ export const StrategyStudio: React.FC<StrategyStudioProps> = ({
               const th = STRATEGY_THEME[key];
               const Icon = th.Icon;
               const isActive = selectedAgent === key;
+              const isCalculating = isActive && isLoading;
               return (
                 <button
                   key={key}
                   type="button"
                   onClick={() => setSelectedAgent(key)}
-                  className={cn('relative text-left p-3.5 rounded-xl border flex flex-col gap-2 transition-all overflow-hidden')}
+                  className={cn(
+                    'relative text-left p-3.5 rounded-xl border flex flex-col gap-2 transition-all overflow-hidden cursor-pointer',
+                    isCalculating && 'animate-pulse'
+                  )}
                   style={{
                     background: isActive ? th.bg : 'hsl(var(--secondary)/0.22)',
                     borderColor: isActive ? th.border : 'hsl(var(--border)/0.5)',
-                    boxShadow: isActive ? `0 0 0 1px ${th.border}` : 'none',
+                    boxShadow: isActive ? (isCalculating ? `0 0 16px ${th.color}40` : `0 0 0 1px ${th.border}`) : 'none',
                   }}
                 >
                   <div className="absolute top-0 left-0 right-0 h-[2.5px]" style={{ background: th.color, opacity: isActive ? 1 : 0.35 }} />
@@ -610,9 +614,16 @@ export const StrategyStudio: React.FC<StrategyStudioProps> = ({
                       </div>
                       <span className="text-xs font-bold tracking-tight text-foreground">{key} {key === 'Volt' ? 'Sniper' : key === 'Oracle' ? 'Vol Arb' : 'Market Maker'}</span>
                     </div>
-                    <Badge variant="outline" className="text-[9px] font-mono px-1.5 py-0 border font-semibold" style={{ background: th.bg, borderColor: th.border, color: th.color }}>
-                      {th.tag}
-                    </Badge>
+                    {isCalculating ? (
+                      <Badge variant="outline" className="text-[9px] font-mono px-1.5 py-0 border font-semibold flex items-center gap-1" style={{ background: `${th.color}20`, borderColor: th.border, color: th.color }}>
+                        <Spinner size="xs" style={{ color: th.color }} />
+                        <span>Simulating...</span>
+                      </Badge>
+                    ) : (
+                      <Badge variant="outline" className="text-[9px] font-mono px-1.5 py-0 border font-semibold" style={{ background: th.bg, borderColor: th.border, color: th.color }}>
+                        {th.tag}
+                      </Badge>
+                    )}
                   </div>
                   <p className="text-[11px] leading-relaxed text-muted-foreground line-clamp-2 m-0">{th.desc}</p>
                 </button>
@@ -632,16 +643,20 @@ export const StrategyStudio: React.FC<StrategyStudioProps> = ({
               const isActive = activeCustomAgent?.id === agent.id;
               const agentColor = agent.color || '#2dd4bf';
               const isDraft = agent.id === 'draft-preview';
+              const isCalculating = isActive && isLoading;
               return (
                 <button
                   key={agent.id}
                   type="button"
                   onClick={() => setSelectedCustomAgentId(agent.id)}
-                  className={cn('relative text-left p-3.5 rounded-xl border flex flex-col gap-2 transition-all overflow-hidden')}
+                  className={cn(
+                    'relative text-left p-3.5 rounded-xl border flex flex-col gap-2 transition-all overflow-hidden cursor-pointer',
+                    isCalculating && 'animate-pulse'
+                  )}
                   style={{
                     background: isActive ? `${agentColor}12` : 'hsl(var(--secondary)/0.22)',
                     borderColor: isActive ? agentColor : 'hsl(var(--border)/0.5)',
-                    boxShadow: isActive ? `0 0 12px ${agentColor}25` : 'none',
+                    boxShadow: isActive ? (isCalculating ? `0 0 16px ${agentColor}40` : `0 0 12px ${agentColor}25`) : 'none',
                   }}
                 >
                   <div className="absolute top-0 left-0 right-0 h-[2.5px]" style={{ background: agentColor, opacity: isActive ? 1 : 0.4 }} />
@@ -658,9 +673,16 @@ export const StrategyStudio: React.FC<StrategyStudioProps> = ({
                           Active Draft
                         </Badge>
                       )}
-                      <Badge variant="outline" className="text-[9px] font-mono px-1.5 py-0 border font-semibold" style={{ borderColor: `${agentColor}50`, color: agentColor }}>
-                        {agent.strategyType}
-                      </Badge>
+                      {isCalculating ? (
+                        <Badge variant="outline" className="text-[9px] font-mono px-1.5 py-0 border font-semibold flex items-center gap-1" style={{ borderColor: `${agentColor}70`, color: agentColor, background: `${agentColor}20` }}>
+                          <Spinner size="xs" style={{ color: agentColor }} />
+                          <span>Replaying...</span>
+                        </Badge>
+                      ) : (
+                        <Badge variant="outline" className="text-[9px] font-mono px-1.5 py-0 border font-semibold" style={{ borderColor: `${agentColor}50`, color: agentColor }}>
+                          {agent.strategyType}
+                        </Badge>
+                      )}
                     </div>
                   </div>
                   <p className="text-[11px] leading-relaxed text-muted-foreground line-clamp-2 m-0">{agent.description || 'Custom user strategy'}</p>
@@ -857,239 +879,264 @@ export const StrategyStudio: React.FC<StrategyStudioProps> = ({
         </div>
       </div>
 
-      {/* ---------- 2. Metrics Grid ---------- */}
-      {isLoading && !currentResult ? (
-        <StrategyStudioSkeleton />
-      ) : currentResult ? (
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
-          <MetricCard label="Net Strategy PnL" value={`${currentResult.netPnl >= 0 ? '+' : ''}$${currentResult.netPnl.toFixed(2)}`} sub={`${((currentResult.netPnl / currentResult.initialCapital) * 100).toFixed(1)}% Total Return`} color={currentResult.netPnl >= 0 ? '#6ee7b7' : '#fda4af'} icon={ArrowTrendingUpIcon} />
-          <MetricCard label="Win Rate" value={`${currentResult.winRate.toFixed(1)}%`} sub={`${currentResult.totalWins ?? Math.round((currentResult.winRate / 100) * currentResult.totalTrades)} of ${currentResult.totalTrades} Wins`} color="#2dd4bf" icon={CheckCircleIcon} />
-          <MetricCard label="Sharpe Ratio" value={currentResult.sharpeRatio.toFixed(2)} sub="Risk-Adjusted Alpha" color="#a78bfa" icon={SparklesIcon} />
-          <MetricCard label="Sortino Ratio" value={(currentResult.sortinoRatio ?? currentResult.sharpeRatio * 1.25).toFixed(2)} sub="Downside Semivariance" color="#7dd3fc" icon={ChartBarIcon} />
-          <MetricCard label="Max Drawdown" value={`${currentResult.maxDrawdown.toFixed(2)}%`} sub="Peak-to-Trough Dip" color="#fda4af" icon={ArrowUpRightIcon} />
-          <MetricCard label="Profit Factor" value={(currentResult.profitFactor ?? 1.85).toFixed(2)} sub="Gross Gains / Losses" color="#6ee7b7" icon={CurrencyDollarIcon} />
-          <MetricCard label="Trade Expectancy" value={`${(currentResult.expectancy ?? 0.85) >= 0 ? '+' : ''}$${(currentResult.expectancy ?? 0.85).toFixed(2)}`} sub="Expected Net / Trade" color="#2dd4bf" icon={CurrencyDollarIcon} />
-          <div className="terminal-panel p-3.5 flex flex-col justify-between">
-            <div className="flex items-center justify-between">
-              <span className="text-[10px] font-mono font-semibold tracking-wider text-muted-foreground uppercase">{isOperator ? 'Global Swarm (Operator)' : isTrader ? 'My Personal Swarm' : 'Automation'}</span>
-              {isOperator ? <CpuChipIcon className="w-3.5 h-3.5 text-muted-foreground/60" /> : isTrader ? <BoltIcon className="w-3.5 h-3.5 text-muted-foreground/60" /> : <WalletIcon className="w-3.5 h-3.5 text-muted-foreground/60" />}
-            </div>
-            <button type="button" onClick={handleDeploy} disabled={isDeploying || deployedSuccess} className="mt-3 w-full inline-flex items-center justify-center gap-1.5 py-2 rounded-lg border text-xs font-bold transition-colors disabled:opacity-60" style={{ background: deployedSuccess ? 'rgba(52,211,153,0.12)' : isGuest ? 'hsl(var(--secondary)/0.4)' : theme.color, color: deployedSuccess ? '#6ee7b7' : isGuest ? 'var(--muted-foreground)' : '#09090b', borderColor: deployedSuccess ? 'rgba(52,211,153,0.22)' : isGuest ? 'hsl(var(--border)/0.5)' : theme.color }}>
-              {deployedSuccess ? <><CheckCircleIcon className="w-3.5 h-3.5" /> {isOperator ? 'Applied to Global Swarm!' : 'Deployed to My Swarm!'}</> : isGuest ? <><WalletIcon className="w-3.5 h-3.5" /> Connect to Deploy</> : isTrader && !activeSession?.isActive ? <><KeyIcon className="w-3.5 h-3.5" /> Delegate Session First</> : isTrader ? <>{isDeploying ? <Spinner size="xs" variant="cyan" /> : <BoltIcon className="w-3.5 h-3.5" />}{isDeploying ? 'Deploying…' : 'Deploy to My Personal Swarm'}</> : <>{isDeploying ? <Spinner size="xs" variant="amber" /> : <CpuChipIcon className="w-3.5 h-3.5" />}{isDeploying ? 'Updating…' : 'Deploy to Global Swarm'}</>}
-            </button>
-            {isTrader && !deployedSuccess && (
-              <div className="text-[10px] text-muted-foreground mt-1.5 leading-snug">Activates your isolated swarm — copy-trading is disabled once personalized. Revert in Swarm Cockpit.</div>
-            )}
-          </div>
-        </div>
-      ) : null}
-
-      {/* ---------- High-Impact Fleet Deployment Action Card ---------- */}
-      {currentResult && (
-        <div className="terminal-panel p-4 border border-primary/40 bg-gradient-to-r from-primary/10 via-secondary/20 to-card/60 rounded-xl flex flex-col md:flex-row items-start md:items-center justify-between gap-4 shadow-lg">
-          <div className="flex items-start gap-3.5 min-w-0">
-            <div className="w-10 h-10 rounded-xl bg-primary/20 border border-primary/40 text-primary grid place-items-center flex-shrink-0 mt-0.5">
-              <RocketLaunchIcon className="w-5 h-5" />
+      {/* ---------- 2. Metrics Grid, Chart Deck, & Executions Table ---------- */}
+      {isLoading ? (
+        <StrategyStudioSkeleton
+          agentName={
+            agentCategory === 'CUSTOM'
+              ? activeCustomAgent?.name || 'Custom Strategy'
+              : `${selectedAgent} ${selectedAgent === 'Volt' ? 'Sniper' : selectedAgent === 'Oracle' ? 'Vol Arb' : 'Market Maker'}`
+          }
+          symbol={symbol}
+          timeframe={timeframe}
+          period={period}
+          color={activeColor}
+        />
+      ) : error ? (
+        <div className="terminal-panel p-6 border border-rose-500/30 bg-rose-500/10 rounded-xl flex flex-col sm:flex-row items-center justify-between gap-4">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-xl bg-rose-500/20 text-rose-400 grid place-items-center flex-shrink-0">
+              <ShieldExclamationIcon className="w-5 h-5" />
             </div>
             <div>
-              <div className="flex items-center gap-2 flex-wrap">
-                <h3 className="text-sm font-bold text-foreground">
-                  Satisfied with this strategy's historical metrics?
-                </h3>
-                <Badge variant="outline" className="text-[9px] font-mono border-primary/40 text-primary bg-primary/10">
-                  Fleet Command Bridge
-                </Badge>
-              </div>
-              <p className="text-xs text-muted-foreground mt-0.5 max-w-xl leading-relaxed">
-                Instantly deploy this configuration to your active running fleet with a dedicated tUSDC bankroll allowance. Autonomous evaluation begins immediately on Somnia CLOB.
-              </p>
+              <h3 className="text-sm font-bold text-foreground">Replay Simulation Error</h3>
+              <p className="text-xs text-muted-foreground mt-0.5">{error}</p>
             </div>
           </div>
-
-          <div className="flex flex-col sm:flex-row items-start sm:items-center gap-3 w-full md:w-auto">
-            {/* Allowance Preset Buttons */}
-            <div className="flex items-center gap-1.5 p-1 rounded-lg bg-background/80 border border-border/60">
-              <span className="text-[10px] font-mono text-muted-foreground pl-1.5 pr-1 flex items-center gap-1">
-                <BanknotesIcon className="w-3.5 h-3.5 text-emerald-400" />
-                <span>Allowance:</span>
-              </span>
-              {[50, 100, 250, 500].map((amt) => (
-                <button
-                  key={amt}
-                  type="button"
-                  onClick={() => setDeploymentAllowance(amt)}
-                  className={cn(
-                    'px-2 py-0.5 rounded text-xs font-mono font-bold transition-all cursor-pointer',
-                    deploymentAllowance === amt
-                      ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/40'
-                      : 'text-muted-foreground hover:text-foreground'
-                  )}
-                >
-                  ${amt}
-                </button>
-              ))}
-              <div className="flex items-center gap-1 border-l border-border/40 pl-1.5">
-                <input
-                  type="number"
-                  min={10}
-                  max={10000}
-                  value={deploymentAllowance}
-                  onChange={(e) => setDeploymentAllowance(Math.max(1, Number(e.target.value)))}
-                  className="w-16 px-1 py-0.5 rounded bg-secondary/40 border border-border/60 text-xs font-mono font-bold text-foreground text-right"
-                />
-                <span className="text-[10px] font-mono text-muted-foreground pr-1">tUSDC</span>
-              </div>
-            </div>
-
-            {/* Deployment Actions */}
-            <div className="flex items-center gap-2 w-full sm:w-auto">
-              <button
-                type="button"
-                onClick={handleDeployToFleet}
-                disabled={isDeployingToFleet || Boolean(fleetDeploySuccessMsg)}
-                className="flex-1 sm:flex-none inline-flex items-center justify-center gap-2 px-4 py-2 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-zinc-950 text-xs font-bold transition-all cursor-pointer disabled:opacity-60 shadow-md whitespace-nowrap"
-              >
-                {isDeployingToFleet ? (
-                  <Spinner size="xs" />
-                ) : fleetDeploySuccessMsg ? (
-                  <CheckCircleIcon className="w-4 h-4 text-zinc-950" />
-                ) : (
-                  <RocketLaunchIcon className="w-4 h-4" />
-                )}
-                <span>
-                  {fleetDeploySuccessMsg
-                    ? 'Deployed! Redirecting...'
-                    : `Deploy to Active Fleet ($${deploymentAllowance} tUSDC)`}
-                </span>
-              </button>
-
-              <button
-                type="button"
-                onClick={() => {
-                  window.location.hash = '#studio';
-                }}
-                className="inline-flex items-center justify-center gap-1.5 px-3 py-2 rounded-xl border border-border/60 bg-secondary/40 hover:bg-secondary/70 text-xs font-bold text-muted-foreground hover:text-foreground transition-all cursor-pointer whitespace-nowrap"
-                title="Open Strategy Studio to customize indicator rules and logic capsules"
-              >
-                <AdjustmentsHorizontalIcon className="w-3.5 h-3.5" />
-                <span className="hidden sm:inline">Edit in Studio</span>
-              </button>
-            </div>
-          </div>
+          <button
+            type="button"
+            onClick={handleRunSimulation}
+            className="px-4 py-2 rounded-xl bg-rose-500 hover:bg-rose-600 text-slate-950 text-xs font-bold transition-all cursor-pointer"
+          >
+            Retry Replay
+          </button>
         </div>
-      )}
-
-      {/* ---------- 3. Chart Deck ---------- */}
-      {currentResult && (
-        <div className="terminal-panel p-0 overflow-hidden">
-          <div className="flex items-center justify-between gap-3 px-4 py-3 border-b border-border/40 flex-wrap">
-            <div className="flex items-center gap-1 bg-secondary/30 p-0.5 rounded-lg border border-border/40">
-              <button type="button" onClick={() => setChartView('equity')} className={cn('inline-flex items-center gap-1.5 px-3 py-1 rounded-md text-[11px] font-bold transition-colors', chartView === 'equity' ? 'bg-primary text-primary-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground')}>
-                <ArrowTrendingUpIcon className="w-3.5 h-3.5" /> Portfolio Equity ($)
+      ) : currentResult ? (
+        <>
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+            <MetricCard label="Net Strategy PnL" value={`${currentResult.netPnl >= 0 ? '+' : ''}$${currentResult.netPnl.toFixed(2)}`} sub={`${((currentResult.netPnl / currentResult.initialCapital) * 100).toFixed(1)}% Total Return`} color={currentResult.netPnl >= 0 ? '#6ee7b7' : '#fda4af'} icon={ArrowTrendingUpIcon} />
+            <MetricCard label="Win Rate" value={`${currentResult.winRate.toFixed(1)}%`} sub={`${currentResult.totalWins ?? Math.round((currentResult.winRate / 100) * currentResult.totalTrades)} of ${currentResult.totalTrades} Wins`} color="#2dd4bf" icon={CheckCircleIcon} />
+            <MetricCard label="Sharpe Ratio" value={currentResult.sharpeRatio.toFixed(2)} sub="Risk-Adjusted Alpha" color="#a78bfa" icon={SparklesIcon} />
+            <MetricCard label="Sortino Ratio" value={(currentResult.sortinoRatio ?? currentResult.sharpeRatio * 1.25).toFixed(2)} sub="Downside Semivariance" color="#7dd3fc" icon={ChartBarIcon} />
+            <MetricCard label="Max Drawdown" value={`${currentResult.maxDrawdown.toFixed(2)}%`} sub="Peak-to-Trough Dip" color="#fda4af" icon={ArrowUpRightIcon} />
+            <MetricCard label="Profit Factor" value={(currentResult.profitFactor ?? 1.85).toFixed(2)} sub="Gross Gains / Losses" color="#6ee7b7" icon={CurrencyDollarIcon} />
+            <MetricCard label="Trade Expectancy" value={`${(currentResult.expectancy ?? 0.85) >= 0 ? '+' : ''}$${(currentResult.expectancy ?? 0.85).toFixed(2)}`} sub="Expected Net / Trade" color="#2dd4bf" icon={CurrencyDollarIcon} />
+            <div className="terminal-panel p-3.5 flex flex-col justify-between">
+              <div className="flex items-center justify-between">
+                <span className="text-[10px] font-mono font-semibold tracking-wider text-muted-foreground uppercase">{isOperator ? 'Global Swarm (Operator)' : isTrader ? 'My Personal Swarm' : 'Automation'}</span>
+                {isOperator ? <CpuChipIcon className="w-3.5 h-3.5 text-muted-foreground/60" /> : isTrader ? <BoltIcon className="w-3.5 h-3.5 text-muted-foreground/60" /> : <WalletIcon className="w-3.5 h-3.5 text-muted-foreground/60" />}
+              </div>
+              <button type="button" onClick={handleDeploy} disabled={isDeploying || deployedSuccess} className="mt-3 w-full inline-flex items-center justify-center gap-1.5 py-2 rounded-lg border text-xs font-bold transition-colors disabled:opacity-60 cursor-pointer" style={{ background: deployedSuccess ? 'rgba(52,211,153,0.12)' : isGuest ? 'hsl(var(--secondary)/0.4)' : theme.color, color: deployedSuccess ? '#6ee7b7' : isGuest ? 'var(--muted-foreground)' : '#09090b', borderColor: deployedSuccess ? 'rgba(52,211,153,0.22)' : isGuest ? 'hsl(var(--border)/0.5)' : theme.color }}>
+                {deployedSuccess ? <><CheckCircleIcon className="w-3.5 h-3.5" /> {isOperator ? 'Applied to Global Swarm!' : 'Deployed to My Swarm!'}</> : isGuest ? <><WalletIcon className="w-3.5 h-3.5" /> Connect to Deploy</> : isTrader && !activeSession?.isActive ? <><KeyIcon className="w-3.5 h-3.5" /> Delegate Session First</> : isTrader ? <>{isDeploying ? <Spinner size="xs" variant="cyan" /> : <BoltIcon className="w-3.5 h-3.5" />}{isDeploying ? 'Deploying…' : 'Deploy to My Personal Swarm'}</> : <>{isDeploying ? <Spinner size="xs" variant="amber" /> : <CpuChipIcon className="w-3.5 h-3.5" />}{isDeploying ? 'Updating…' : 'Deploy to Global Swarm'}</>}
               </button>
-              <button type="button" onClick={() => setChartView('drawdown')} className={cn('inline-flex items-center gap-1.5 px-3 py-1 rounded-md text-[11px] font-bold transition-colors', chartView === 'drawdown' ? 'bg-rose-500 text-white shadow-sm' : 'text-muted-foreground hover:text-foreground')}>
-                <ChartBarIcon className="w-3.5 h-3.5" /> Underwater Drawdown (%)
-              </button>
-            </div>
-            <div className="flex items-center gap-3 text-[11px] font-mono text-muted-foreground flex-wrap">
-              <span>Total Fills: <strong className="text-foreground">{currentResult.totalTrades}</strong></span>
-              <span>Fees Paid: <strong style={{ color: '#fbbf24' }}>${(currentResult.totalFeesPaid ?? 0).toFixed(2)}</strong></span>
-              <span>Payoff Ratio: <strong className="text-teal-400">{(currentResult.payoffRatio ?? 1.6).toFixed(2)}x</strong></span>
-            </div>
-          </div>
-          <div className="p-4">
-            <div className="w-full h-[240px]">
-              {chartView === 'equity' ? (
-                <svg viewBox={`0 0 ${svgWidth} ${svgHeight}`} preserveAspectRatio="none" className="w-full h-full overflow-visible">
-                  <defs><linearGradient id="equityGrad2" x1="0%" y1="0%" x2="0%" y2="100%"><stop offset="0%" stopColor={theme.color} stopOpacity="0.28" /><stop offset="100%" stopColor={theme.color} stopOpacity="0" /></linearGradient></defs>
-                  <line x1={padding} y1={padding} x2={svgWidth - padding} y2={padding} stroke="rgba(255,255,255,0.05)" strokeDasharray="3 3" />
-                  <line x1={padding} y1={svgHeight / 2} x2={svgWidth - padding} y2={svgHeight / 2} stroke="rgba(255,255,255,0.05)" strokeDasharray="3 3" />
-                  <line x1={padding} y1={svgHeight - padding} x2={svgWidth - padding} y2={svgHeight - padding} stroke="rgba(255,255,255,0.1)" />
-                  {equityAreaPath && <path d={equityAreaPath} fill="url(#equityGrad2)" />}
-                  {equityLinePath && <path d={equityLinePath} fill="none" stroke={theme.color} strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" />}
-                </svg>
-              ) : (
-                <svg viewBox={`0 0 ${svgWidth} ${svgHeight}`} preserveAspectRatio="none" className="w-full h-full overflow-visible">
-                  <defs><linearGradient id="drawdownGrad2" x1="0%" y1="0%" x2="0%" y2="100%"><stop offset="0%" stopColor="#fda4af" stopOpacity="0.32" /><stop offset="100%" stopColor="#fda4af" stopOpacity="0" /></linearGradient></defs>
-                  <line x1={padding} y1={padding} x2={svgWidth - padding} y2={padding} stroke="rgba(244,63,94,0.3)" />
-                  <line x1={padding} y1={svgHeight / 2} x2={svgWidth - padding} y2={svgHeight / 2} stroke="rgba(255,255,255,0.05)" strokeDasharray="3 3" />
-                  <line x1={padding} y1={svgHeight - padding} x2={svgWidth - padding} y2={svgHeight - padding} stroke="rgba(255,255,255,0.05)" strokeDasharray="3 3" />
-                  {drawdownAreaPath && <path d={drawdownAreaPath} fill="url(#drawdownGrad2)" />}
-                  {drawdownLinePath && <path d={drawdownLinePath} fill="none" stroke="#fda4af" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" />}
-                </svg>
+              {isTrader && !deployedSuccess && (
+                <div className="text-[10px] text-muted-foreground mt-1.5 leading-snug">Activates your isolated swarm — copy-trading is disabled once personalized. Revert in Swarm Cockpit.</div>
               )}
             </div>
           </div>
-        </div>
-      )}
 
-      {/* ---------- 4. Executions Table ---------- */}
-      {currentResult && (
-        <div className="terminal-panel p-0 overflow-hidden">
-          <div className="flex items-center justify-between gap-3 px-4 py-3 border-b border-border/40 flex-wrap">
-            <div className="flex items-center gap-2">
-              <QueueListIcon className="w-4 h-4 text-muted-foreground" />
-              <h3 className="text-xs font-bold tracking-tight text-foreground">Replay Executions Breakdown</h3>
-              <Badge variant="outline" className="font-mono text-[10px] bg-secondary/40 border-border/50 text-muted-foreground">{currentResult.trades.length} trades</Badge>
+          {/* ---------- High-Impact Fleet Deployment Action Card ---------- */}
+          <div className="terminal-panel p-4 border border-primary/40 bg-gradient-to-r from-primary/10 via-secondary/20 to-card/60 rounded-xl flex flex-col md:flex-row items-start md:items-center justify-between gap-4 shadow-lg">
+            <div className="flex items-start gap-3.5 min-w-0">
+              <div className="w-10 h-10 rounded-xl bg-primary/20 border border-primary/40 text-primary grid place-items-center flex-shrink-0 mt-0.5">
+                <RocketLaunchIcon className="w-5 h-5" />
+              </div>
+              <div>
+                <div className="flex items-center gap-2 flex-wrap">
+                  <h3 className="text-sm font-bold text-foreground">
+                    Satisfied with this strategy's historical metrics?
+                  </h3>
+                  <Badge variant="outline" className="text-[9px] font-mono border-primary/40 text-primary bg-primary/10">
+                    Fleet Command Bridge
+                  </Badge>
+                </div>
+                <p className="text-xs text-muted-foreground mt-0.5 max-w-xl leading-relaxed">
+                  Instantly deploy this configuration to your active running fleet with a dedicated tUSDC bankroll allowance. Autonomous evaluation begins immediately on Somnia CLOB.
+                </p>
+              </div>
             </div>
-            <div className="flex items-center gap-1 bg-secondary/30 p-0.5 rounded-lg border border-border/40">
-              {(['ALL', 'WINS', 'LOSSES'] as const).map((f) => (
-                <button key={f} type="button" onClick={() => setTradeFilter(f)} className={cn('px-2.5 py-1 rounded-md text-[11px] font-semibold transition-colors', tradeFilter === f ? 'bg-primary text-primary-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground')}>
-                  {f === 'ALL' ? `All (${currentResult.trades.length})` : f === 'WINS' ? `Wins Only (${winsCount})` : `Losses Only (${lossesCount})`}
-                </button>
-              ))}
-            </div>
-          </div>
-          <div className="overflow-x-auto max-h-[420px] overflow-y-auto">
-            <table className="w-full border-collapse text-xs">
-              <thead className="sticky top-0 z-10 bg-[#111114] border-b border-border/60">
-                <tr className="text-[10px] font-mono text-muted-foreground uppercase tracking-wider">
-                  <th className="px-3 py-2.5 text-left font-semibold">Timestamp</th>
-                  <th className="px-3 py-2.5 text-left font-semibold">Strategy Action</th>
-                  <th className="px-3 py-2.5 text-center font-semibold">Outcome</th>
-                  <th className="px-3 py-2.5 text-right font-semibold">Fill Price</th>
-                  <th className="px-3 py-2.5 text-right font-semibold">Lots</th>
-                  <th className="px-3 py-2.5 text-right font-semibold">Gross PnL</th>
-                  <th className="px-3 py-2.5 text-right font-semibold">Fee</th>
-                  <th className="px-3 py-2.5 text-right font-semibold">Net PnL</th>
-                  <th className="px-3 py-2.5 text-right font-semibold">Cumulative Equity</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-border/20">
-                {paginatedTrades.map((t) => (
-                  <tr key={t.id} className="hover:bg-secondary/20 transition-colors">
-                    <td className="px-3 py-2 font-mono text-[11px] text-muted-foreground">{new Date(t.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })}</td>
-                    <td className="px-3 py-2 font-semibold text-foreground">{t.action}</td>
-                    <td className="px-3 py-2 text-center"><span className="inline-flex px-1.5 py-0.5 rounded text-[10px] font-bold border" style={{ background: t.outcome === 'YES' ? 'rgba(52,211,153,0.10)' : 'rgba(244,63,94,0.12)', color: t.outcome === 'YES' ? '#6ee7b7' : '#fda4af', borderColor: t.outcome === 'YES' ? 'rgba(52,211,153,0.22)' : 'rgba(244,63,94,0.22)' }}>{t.outcome}</span></td>
-                    <td className="px-3 py-2 text-right font-mono">${t.price.toFixed(2)}</td>
-                    <td className="px-3 py-2 text-right font-mono">{t.lots}</td>
-                    <td className="px-3 py-2 text-right font-mono" style={{ color: (t.grossPnl ?? t.pnl) >= 0 ? '#6ee7b7' : '#fda4af' }}>{(t.grossPnl ?? t.pnl) >= 0 ? '+' : ''}${(t.grossPnl ?? t.pnl).toFixed(2)}</td>
-                    <td className="px-3 py-2 text-right font-mono text-amber-400">${(t.fee ?? 0).toFixed(3)}</td>
-                    <td className="px-3 py-2 text-right font-mono font-bold" style={{ color: t.pnl >= 0 ? '#6ee7b7' : '#fda4af' }}>{t.pnl >= 0 ? '+' : ''}${t.pnl.toFixed(2)}</td>
-                    <td className="px-3 py-2 text-right font-mono font-semibold text-foreground">${(currentResult.initialCapital + t.cumulativePnl).toFixed(2)}</td>
-                  </tr>
+
+            <div className="flex flex-col sm:flex-row items-start sm:items-center gap-3 w-full md:w-auto">
+              {/* Allowance Preset Buttons */}
+              <div className="flex items-center gap-1.5 p-1 rounded-lg bg-background/80 border border-border/60">
+                <span className="text-[10px] font-mono text-muted-foreground pl-1.5 pr-1 flex items-center gap-1">
+                  <BanknotesIcon className="w-3.5 h-3.5 text-emerald-400" />
+                  <span>Allowance:</span>
+                </span>
+                {[50, 100, 250, 500].map((amt) => (
+                  <button
+                    key={amt}
+                    type="button"
+                    onClick={() => setDeploymentAllowance(amt)}
+                    className={cn(
+                      'px-2 py-0.5 rounded text-xs font-mono font-bold transition-all cursor-pointer',
+                      deploymentAllowance === amt
+                        ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/40'
+                        : 'text-muted-foreground hover:text-foreground'
+                    )}
+                  >
+                    ${amt}
+                  </button>
                 ))}
-              </tbody>
-            </table>
-          </div>
-          <div className="flex items-center justify-between gap-3 px-4 py-3 border-t border-border/40 bg-secondary/10 flex-wrap">
-            <span className="text-[11px] font-mono text-muted-foreground">Showing {(filteredTrades.length === 0 ? 0 : (tradePage - 1) * tradePageSize + 1)}–{Math.min(tradePage * tradePageSize, filteredTrades.length)} of {filteredTrades.length}{tradeFilter !== 'ALL' ? ` • ${currentResult.trades.length} total` : ''} • {totalTradePages} page{totalTradePages !== 1 ? 's' : ''}</span>
-            <div className="flex items-center gap-2">
-              <div className="flex items-center gap-1.5 text-[11px] text-muted-foreground">
-                <span>Rows:</span>
-                <select value={tradePageSize} onChange={(e) => { setTradePageSize(Number(e.target.value)); setTradePage(1); }} className="px-2 py-1 rounded-md bg-secondary/40 border border-border/50 text-xs text-foreground focus:outline-none">
-                  <option value={25}>25</option><option value={50}>50</option><option value={100}>100</option>
-                </select>
+                <div className="flex items-center gap-1 border-l border-border/40 pl-1.5">
+                  <input
+                    type="number"
+                    min={10}
+                    max={10000}
+                    value={deploymentAllowance}
+                    onChange={(e) => setDeploymentAllowance(Math.max(1, Number(e.target.value)))}
+                    className="w-16 px-1 py-0.5 rounded bg-secondary/40 border border-border/60 text-xs font-mono font-bold text-foreground text-right"
+                  />
+                  <span className="text-[10px] font-mono text-muted-foreground pr-1">tUSDC</span>
+                </div>
               </div>
-              <div className="flex items-center gap-1">
-                <button type="button" onClick={() => setTradePage((p) => Math.max(1, p - 1))} disabled={tradePage <= 1} className="px-3 py-1 rounded-md border bg-secondary/30 border-border/50 text-xs font-semibold disabled:opacity-40 disabled:cursor-not-allowed hover:bg-secondary/50">Prev</button>
-                <span className="px-2 text-xs font-mono text-muted-foreground min-w-[60px] text-center">{tradePage} / {totalTradePages}</span>
-                <button type="button" onClick={() => setTradePage((p) => Math.min(totalTradePages, p + 1))} disabled={tradePage >= totalTradePages} className="px-3 py-1 rounded-md border bg-secondary/30 border-border/50 text-xs font-semibold disabled:opacity-40 disabled:cursor-not-allowed hover:bg-secondary/50">Next</button>
+
+              {/* Deployment Actions */}
+              <div className="flex items-center gap-2 w-full sm:w-auto">
+                <button
+                  type="button"
+                  onClick={handleDeployToFleet}
+                  disabled={isDeployingToFleet || Boolean(fleetDeploySuccessMsg)}
+                  className="flex-1 sm:flex-none inline-flex items-center justify-center gap-2 px-4 py-2 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-zinc-950 text-xs font-bold transition-all cursor-pointer disabled:opacity-60 shadow-md whitespace-nowrap"
+                >
+                  {isDeployingToFleet ? (
+                    <Spinner size="xs" />
+                  ) : fleetDeploySuccessMsg ? (
+                    <CheckCircleIcon className="w-4 h-4 text-zinc-950" />
+                  ) : (
+                    <RocketLaunchIcon className="w-4 h-4" />
+                  )}
+                  <span>
+                    {fleetDeploySuccessMsg
+                      ? 'Deployed! Redirecting...'
+                      : `Deploy to Active Fleet ($${deploymentAllowance} tUSDC)`}
+                  </span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => {
+                    window.location.hash = '#studio';
+                  }}
+                  className="inline-flex items-center justify-center gap-1.5 px-3 py-2 rounded-xl border border-border/60 bg-secondary/40 hover:bg-secondary/70 text-xs font-bold text-muted-foreground hover:text-foreground transition-all cursor-pointer whitespace-nowrap"
+                  title="Open Strategy Studio to customize indicator rules and logic capsules"
+                >
+                  <AdjustmentsHorizontalIcon className="w-3.5 h-3.5" />
+                  <span className="hidden sm:inline">Edit in Studio</span>
+                </button>
               </div>
             </div>
           </div>
-        </div>
-      )}
+
+          {/* ---------- 3. Chart Deck ---------- */}
+          <div className="terminal-panel p-0 overflow-hidden">
+            <div className="flex items-center justify-between gap-3 px-4 py-3 border-b border-border/40 flex-wrap">
+              <div className="flex items-center gap-1 bg-secondary/30 p-0.5 rounded-lg border border-border/40">
+                <button type="button" onClick={() => setChartView('equity')} className={cn('inline-flex items-center gap-1.5 px-3 py-1 rounded-md text-[11px] font-bold transition-colors cursor-pointer', chartView === 'equity' ? 'bg-primary text-primary-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground')}>
+                  <ArrowTrendingUpIcon className="w-3.5 h-3.5" /> Portfolio Equity ($)
+                </button>
+                <button type="button" onClick={() => setChartView('drawdown')} className={cn('inline-flex items-center gap-1.5 px-3 py-1 rounded-md text-[11px] font-bold transition-colors cursor-pointer', chartView === 'drawdown' ? 'bg-rose-500 text-white shadow-sm' : 'text-muted-foreground hover:text-foreground')}>
+                  <ChartBarIcon className="w-3.5 h-3.5" /> Underwater Drawdown (%)
+                </button>
+              </div>
+              <div className="flex items-center gap-3 text-[11px] font-mono text-muted-foreground flex-wrap">
+                <span>Total Fills: <strong className="text-foreground">{currentResult.totalTrades}</strong></span>
+                <span>Fees Paid: <strong style={{ color: '#fbbf24' }}>${(currentResult.totalFeesPaid ?? 0).toFixed(2)}</strong></span>
+                <span>Payoff Ratio: <strong className="text-teal-400">{(currentResult.payoffRatio ?? 1.6).toFixed(2)}x</strong></span>
+              </div>
+            </div>
+            <div className="p-4">
+              <div className="w-full h-[240px]">
+                {chartView === 'equity' ? (
+                  <svg viewBox={`0 0 ${svgWidth} ${svgHeight}`} preserveAspectRatio="none" className="w-full h-full overflow-visible">
+                    <defs><linearGradient id="equityGrad2" x1="0%" y1="0%" x2="0%" y2="100%"><stop offset="0%" stopColor={theme.color} stopOpacity="0.28" /><stop offset="100%" stopColor={theme.color} stopOpacity="0" /></linearGradient></defs>
+                    <line x1={padding} y1={padding} x2={svgWidth - padding} y2={padding} stroke="rgba(255,255,255,0.05)" strokeDasharray="3 3" />
+                    <line x1={padding} y1={svgHeight / 2} x2={svgWidth - padding} y2={svgHeight / 2} stroke="rgba(255,255,255,0.05)" strokeDasharray="3 3" />
+                    <line x1={padding} y1={svgHeight - padding} x2={svgWidth - padding} y2={svgHeight - padding} stroke="rgba(255,255,255,0.1)" />
+                    {equityAreaPath && <path d={equityAreaPath} fill="url(#equityGrad2)" />}
+                    {equityLinePath && <path d={equityLinePath} fill="none" stroke={theme.color} strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" />}
+                  </svg>
+                ) : (
+                  <svg viewBox={`0 0 ${svgWidth} ${svgHeight}`} preserveAspectRatio="none" className="w-full h-full overflow-visible">
+                    <defs><linearGradient id="drawdownGrad2" x1="0%" y1="0%" x2="0%" y2="100%"><stop offset="0%" stopColor="#fda4af" stopOpacity="0.32" /><stop offset="100%" stopColor="#fda4af" stopOpacity="0" /></linearGradient></defs>
+                    <line x1={padding} y1={padding} x2={svgWidth - padding} y2={padding} stroke="rgba(244,63,94,0.3)" />
+                    <line x1={padding} y1={svgHeight / 2} x2={svgWidth - padding} y2={svgHeight / 2} stroke="rgba(255,255,255,0.05)" strokeDasharray="3 3" />
+                    <line x1={padding} y1={svgHeight - padding} x2={svgWidth - padding} y2={svgHeight - padding} stroke="rgba(255,255,255,0.05)" strokeDasharray="3 3" />
+                    {drawdownAreaPath && <path d={drawdownAreaPath} fill="url(#drawdownGrad2)" />}
+                    {drawdownLinePath && <path d={drawdownLinePath} fill="none" stroke="#fda4af" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" />}
+                  </svg>
+                )}
+              </div>
+            </div>
+          </div>
+
+          {/* ---------- 4. Executions Table ---------- */}
+          <div className="terminal-panel p-0 overflow-hidden">
+            <div className="flex items-center justify-between gap-3 px-4 py-3 border-b border-border/40 flex-wrap">
+              <div className="flex items-center gap-2">
+                <QueueListIcon className="w-4 h-4 text-muted-foreground" />
+                <h3 className="text-xs font-bold tracking-tight text-foreground">Replay Executions Breakdown</h3>
+                <Badge variant="outline" className="font-mono text-[10px] bg-secondary/40 border-border/50 text-muted-foreground">{currentResult.trades.length} trades</Badge>
+              </div>
+              <div className="flex items-center gap-1 bg-secondary/30 p-0.5 rounded-lg border border-border/40">
+                {(['ALL', 'WINS', 'LOSSES'] as const).map((f) => (
+                  <button key={f} type="button" onClick={() => setTradeFilter(f)} className={cn('px-2.5 py-1 rounded-md text-[11px] font-semibold transition-colors cursor-pointer', tradeFilter === f ? 'bg-primary text-primary-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground')}>
+                    {f === 'ALL' ? `All (${currentResult.trades.length})` : f === 'WINS' ? `Wins Only (${winsCount})` : `Losses Only (${lossesCount})`}
+                  </button>
+                ))}
+              </div>
+            </div>
+            <div className="overflow-x-auto max-h-[420px] overflow-y-auto">
+              <table className="w-full border-collapse text-xs">
+                <thead className="sticky top-0 z-10 bg-[#111114] border-b border-border/60">
+                  <tr className="text-[10px] font-mono text-muted-foreground uppercase tracking-wider">
+                    <th className="px-3 py-2.5 text-left font-semibold">Timestamp</th>
+                    <th className="px-3 py-2.5 text-left font-semibold">Strategy Action</th>
+                    <th className="px-3 py-2.5 text-center font-semibold">Outcome</th>
+                    <th className="px-3 py-2.5 text-right font-semibold">Fill Price</th>
+                    <th className="px-3 py-2.5 text-right font-semibold">Lots</th>
+                    <th className="px-3 py-2.5 text-right font-semibold">Gross PnL</th>
+                    <th className="px-3 py-2.5 text-right font-semibold">Fee</th>
+                    <th className="px-3 py-2.5 text-right font-semibold">Net PnL</th>
+                    <th className="px-3 py-2.5 text-right font-semibold">Cumulative Equity</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-border/20">
+                  {paginatedTrades.map((t) => (
+                    <tr key={t.id} className="hover:bg-secondary/20 transition-colors">
+                      <td className="px-3 py-2 font-mono text-[11px] text-muted-foreground">{new Date(t.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })}</td>
+                      <td className="px-3 py-2 font-semibold text-foreground">{t.action}</td>
+                      <td className="px-3 py-2 text-center"><span className="inline-flex px-1.5 py-0.5 rounded text-[10px] font-bold border" style={{ background: t.outcome === 'YES' ? 'rgba(52,211,153,0.10)' : 'rgba(244,63,94,0.12)', color: t.outcome === 'YES' ? '#6ee7b7' : '#fda4af', borderColor: t.outcome === 'YES' ? 'rgba(52,211,153,0.22)' : 'rgba(244,63,94,0.22)' }}>{t.outcome}</span></td>
+                      <td className="px-3 py-2 text-right font-mono">${t.price.toFixed(2)}</td>
+                      <td className="px-3 py-2 text-right font-mono">{t.lots}</td>
+                      <td className="px-3 py-2 text-right font-mono" style={{ color: (t.grossPnl ?? t.pnl) >= 0 ? '#6ee7b7' : '#fda4af' }}>{(t.grossPnl ?? t.pnl) >= 0 ? '+' : ''}${(t.grossPnl ?? t.pnl).toFixed(2)}</td>
+                      <td className="px-3 py-2 text-right font-mono text-amber-400">${(t.fee ?? 0).toFixed(3)}</td>
+                      <td className="px-3 py-2 text-right font-mono font-bold" style={{ color: t.pnl >= 0 ? '#6ee7b7' : '#fda4af' }}>{t.pnl >= 0 ? '+' : ''}${t.pnl.toFixed(2)}</td>
+                      <td className="px-3 py-2 text-right font-mono font-semibold text-foreground">${(currentResult.initialCapital + t.cumulativePnl).toFixed(2)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+            <div className="flex items-center justify-between gap-3 px-4 py-3 border-t border-border/40 bg-secondary/10 flex-wrap">
+              <span className="text-[11px] font-mono text-muted-foreground">Showing {(filteredTrades.length === 0 ? 0 : (tradePage - 1) * tradePageSize + 1)}–{Math.min(tradePage * tradePageSize, filteredTrades.length)} of {filteredTrades.length}{tradeFilter !== 'ALL' ? ` • ${currentResult.trades.length} total` : ''} • {totalTradePages} page{totalTradePages !== 1 ? 's' : ''}</span>
+              <div className="flex items-center gap-2">
+                <div className="flex items-center gap-1.5 text-[11px] text-muted-foreground">
+                  <span>Rows:</span>
+                  <select value={tradePageSize} onChange={(e) => { setTradePageSize(Number(e.target.value)); setTradePage(1); }} className="px-2 py-1 rounded-md bg-secondary/40 border border-border/50 text-xs text-foreground focus:outline-none">
+                    <option value={25}>25</option><option value={50}>50</option><option value={100}>100</option>
+                  </select>
+                </div>
+                <div className="flex items-center gap-1">
+                  <button type="button" onClick={() => setTradePage((p) => Math.max(1, p - 1))} disabled={tradePage <= 1} className="px-3 py-1 rounded-md border bg-secondary/30 border-border/50 text-xs font-semibold disabled:opacity-40 disabled:cursor-not-allowed hover:bg-secondary/50">Prev</button>
+                  <span className="px-2 text-xs font-mono text-muted-foreground min-w-[60px] text-center">{tradePage} / {totalTradePages}</span>
+                  <button type="button" onClick={() => setTradePage((p) => Math.min(totalTradePages, p + 1))} disabled={tradePage >= totalTradePages} className="px-3 py-1 rounded-md border bg-secondary/30 border-border/50 text-xs font-semibold disabled:opacity-40 disabled:cursor-not-allowed hover:bg-secondary/50">Next</button>
+                </div>
+              </div>
+            </div>
+          </div>
+        </>
+      ) : null}
     </div>
   );
 };

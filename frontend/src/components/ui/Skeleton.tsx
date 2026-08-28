@@ -478,39 +478,155 @@ export const AgentThoughtFeedSkeleton: React.FC = () => {
   );
 };
 
+import { Spinner } from './Spinner.js';
+
+export interface StrategyStudioSkeletonProps {
+  agentName?: string;
+  symbol?: string;
+  timeframe?: string;
+  period?: string;
+  color?: string;
+}
+
 /**
  * Strategy Studio Simulation Scorecards & Chart Skeleton
  */
-export const StrategyStudioSkeleton: React.FC = () => {
+export const StrategyStudioSkeleton: React.FC<StrategyStudioSkeletonProps> = ({
+  agentName = 'Quantitative Strategy',
+  symbol = 'BTC/USD',
+  timeframe = '5m',
+  period = '7d',
+  color = '#2dd4bf',
+}) => {
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
-      {/* Scorecards Grid */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '14px' }}>
-        {[1, 2, 3, 4, 5, 6, 7, 8].map((i) => (
-          <div key={i} className="stat-card" style={{ display: 'flex', flexDirection: 'column', gap: '8px', padding: '14px' }}>
-            <div className="stat-card-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-              <Skeleton variant="text" width={85} height={11} />
+    <div className="flex flex-col gap-3.5">
+      {/* Simulation Calculating Status Banner HUD */}
+      <div
+        className="terminal-panel p-3.5 border rounded-xl flex items-center justify-between gap-3 overflow-hidden relative"
+        style={{
+          borderColor: `${color}40`,
+          background: `linear-gradient(90deg, ${color}10 0%, rgba(255,255,255,0.02) 50%, ${color}08 100%)`,
+        }}
+      >
+        <div className="flex items-center gap-3 min-w-0">
+          <div
+            className="w-8 h-8 rounded-lg grid place-items-center flex-shrink-0 border"
+            style={{
+              background: `${color}18`,
+              borderColor: `${color}40`,
+              color,
+            }}
+          >
+            <Spinner size="sm" style={{ color }} />
+          </div>
+          <div className="min-w-0">
+            <div className="flex items-center gap-2 flex-wrap">
+              <span className="text-xs font-bold text-foreground truncate">
+                Simulating {agentName}
+              </span>
+              <span
+                className="text-[9px] font-mono font-bold px-1.5 py-0.5 rounded border"
+                style={{
+                  background: `${color}15`,
+                  borderColor: `${color}35`,
+                  color,
+                }}
+              >
+                {symbol} · {timeframe} · {period.toUpperCase()}
+              </span>
+            </div>
+            <p className="text-[11px] text-muted-foreground mt-0.5">
+              Replaying bar-by-bar historical market candles on Somnia CLOB with microstructure friction & slippage...
+            </p>
+          </div>
+        </div>
+
+        <div className="hidden sm:flex items-center gap-2 text-[10px] font-mono text-muted-foreground flex-shrink-0">
+          <span className="inline-block w-2 h-2 rounded-full animate-ping" style={{ backgroundColor: color }} />
+          <span>Computing Alpha Metrics</span>
+        </div>
+      </div>
+
+      {/* 8 Stat Cards Grid Skeleton */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+        {[
+          'Net Strategy PnL',
+          'Win Rate',
+          'Sharpe Ratio',
+          'Sortino Ratio',
+          'Max Drawdown',
+          'Profit Factor',
+          'Trade Expectancy',
+          'Fleet Automation',
+        ].map((label, idx) => (
+          <div key={idx} className="terminal-panel p-3.5 flex flex-col justify-between min-h-[96px]">
+            <div className="flex items-center justify-between">
+              <span className="text-[10px] font-mono font-semibold tracking-wider text-muted-foreground uppercase">
+                {label}
+              </span>
               <Skeleton variant="circular" width={14} height={14} />
             </div>
-            <Skeleton variant="text" width={90} height={22} />
-            <Skeleton variant="text" width={110} height={10} />
+            <div className="my-1.5">
+              <Skeleton variant="text" width={idx % 2 === 0 ? '70%' : '55%'} height={24} borderRadius={4} />
+            </div>
+            <Skeleton variant="text" width="45%" height={10} />
           </div>
         ))}
       </div>
 
       {/* Chart Canvas Skeleton */}
-      <div className="terminal-panel" style={{ padding: '20px', height: '300px', display: 'flex', flexDirection: 'column', gap: '16px' }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-          <div style={{ display: 'flex', gap: '6px' }}>
-            <Skeleton variant="rectangular" width={120} height={26} borderRadius={4} />
-            <Skeleton variant="rectangular" width={140} height={26} borderRadius={4} />
+      <div className="terminal-panel p-0 overflow-hidden">
+        <div className="flex items-center justify-between gap-3 px-4 py-3 border-b border-border/40 flex-wrap">
+          <div className="flex items-center gap-2">
+            <Skeleton variant="rectangular" width={130} height={28} borderRadius={6} />
+            <Skeleton variant="rectangular" width={145} height={28} borderRadius={6} />
           </div>
-          <div style={{ display: 'flex', gap: '14px' }}>
-            <Skeleton variant="text" width={80} height={12} />
-            <Skeleton variant="text" width={80} height={12} />
+          <div className="flex items-center gap-3">
+            <Skeleton variant="text" width={90} height={14} />
+            <Skeleton variant="text" width={90} height={14} />
+            <Skeleton variant="text" width={90} height={14} />
           </div>
         </div>
-        <Skeleton variant="rectangular" width="100%" height="100%" borderRadius={8} />
+        <div className="p-4 flex flex-col gap-3">
+          <div className="w-full h-[240px] rounded-lg border border-border/30 bg-secondary/10 relative overflow-hidden flex items-center justify-center">
+            {/* Ambient scanline placeholder */}
+            <svg className="w-full h-full opacity-20 absolute inset-0" preserveAspectRatio="none">
+              <line x1="24" y1="24" x2="96%" y2="24" stroke="currentColor" strokeDasharray="3 3" />
+              <line x1="24" y1="120" x2="96%" y2="120" stroke="currentColor" strokeDasharray="3 3" />
+              <line x1="24" y1="216" x2="96%" y2="216" stroke="currentColor" />
+            </svg>
+            <div className="flex flex-col items-center gap-2 z-10">
+              <Spinner size="md" style={{ color }} />
+              <span className="text-xs font-mono text-muted-foreground">Synthesizing Equity Curve & Drawdown Vectors...</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* Executions Table Skeleton */}
+      <div className="terminal-panel p-0 overflow-hidden">
+        <div className="flex items-center justify-between gap-3 px-4 py-3 border-b border-border/40">
+          <div className="flex items-center gap-2">
+            <QueueListIcon className="w-4 h-4 text-muted-foreground" />
+            <span className="text-xs font-bold tracking-tight text-foreground">Replay Executions Breakdown</span>
+          </div>
+          <Skeleton variant="badge" width={80} height={20} />
+        </div>
+        <div className="p-3 flex flex-col gap-2">
+          {[1, 2, 3, 4, 5].map((row) => (
+            <div key={row} className="flex items-center justify-between py-2 px-2 border-b border-border/20 gap-3">
+              <Skeleton variant="text" width={60} height={12} />
+              <Skeleton variant="text" width={90} height={12} />
+              <Skeleton variant="badge" width={40} height={16} />
+              <Skeleton variant="text" width={65} height={12} />
+              <Skeleton variant="text" width={40} height={12} />
+              <Skeleton variant="text" width={70} height={12} />
+              <Skeleton variant="text" width={50} height={12} />
+              <Skeleton variant="text" width={70} height={12} />
+              <Skeleton variant="text" width={85} height={12} />
+            </div>
+          ))}
+        </div>
       </div>
     </div>
   );
