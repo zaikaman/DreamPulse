@@ -262,7 +262,7 @@ export const StatCardsGrid: React.FC<StatCardsGridProps> = ({
                       <span>Active Grant</span>
                     </span>
                     <span className="font-mono text-[11px] text-muted-foreground whitespace-nowrap truncate">
-                      Cap: <span className="text-foreground font-medium">{activeSession.maxTradeSize} tUSDC</span>
+                      Max/Trade: <span className="text-foreground font-medium">{activeSession.maxTradeSize} tUSDC</span>
                     </span>
                   </>
                 ) : (
