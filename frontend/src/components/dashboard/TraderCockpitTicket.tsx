@@ -227,7 +227,7 @@ export const TraderCockpitTicket: React.FC<TraderCockpitTicketProps> = ({
     }
 
     if (isTradingLocked) {
-      setExecutionError('Trading is locked during the final 30 seconds before contract resolution.');
+      setExecutionError('Market round has expired and is currently in oracle settlement.');
       return;
     }
 
@@ -325,7 +325,7 @@ export const TraderCockpitTicket: React.FC<TraderCockpitTicketProps> = ({
             isTradingLocked ? "text-amber-400 animate-pulse" : "text-brand-cyan"
           )}>
             {isTradingLocked ? <LockClosedIcon className="w-3.5 h-3.5 text-amber-400" /> : <ClockIcon className="w-3.5 h-3.5" />}
-            <span>{isTradingLocked ? `${formattedCountdown} (LOCKED)` : formattedCountdown}</span>
+            <span>{isTradingLocked ? `${formattedCountdown} (RESOLVING)` : formattedCountdown}</span>
           </div>
         </div>
 
@@ -653,7 +653,7 @@ export const TraderCockpitTicket: React.FC<TraderCockpitTicketProps> = ({
             className="w-full py-3 rounded-xl font-bold text-xs uppercase tracking-wider bg-amber-500/10 text-amber-400 border border-amber-500/30 flex items-center justify-center gap-2 cursor-not-allowed opacity-90"
           >
             <LockClosedIcon className="w-4 h-4 text-amber-400 animate-pulse" />
-            <span>Trading Locked • Resolving in {formattedCountdown}</span>
+            <span>Round Expired • Oracle Resolving</span>
           </button>
         ) : (
           <button
