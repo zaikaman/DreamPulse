@@ -52,6 +52,38 @@ export const EventContractChart: React.FC<EventContractChartProps> = ({
 
   const impliedProbYes = liveTick?.impliedProb ?? market.impliedProbYes ?? smoothFallbackProb;
   const fairValueYes = liveTick?.fairValue ?? market.fairValueYes ?? smoothFallbackProb;
+  const isSyntheticOrSeed = Boolean(market.isSynthetic || market.isSeedDepth);
+  const rawEdge = liveTick?.edge ?? (fairValueYes - impliedProbYes);
+  const edge = isSyntheticOrSeed ? 0 : rawEdge;
+  const isYesEdge = edge > 0.004;
+  const hasEdge = Math.abs(edge) >= 0.005;
+
+  const aiBadge = useMemo(() => {
+    if (isSyntheticOrSeed) {
+      return {
+        text: `AI Fair ${(fairValueYes * 100).toFixed(1)}% (SEED)`,
+        bg: '#1e1035',
+        stroke: '#52525b',
+        color: '#a1a1aa',
+        w: 150,
+      };
+    }
+    if (hasEdge) {
+      const edgePct = (Math.abs(edge) * 100).toFixed(1);
+      const dir = isYesEdge ? 'YES' : 'NO';
+      const fairStr = (fairValueYes * 100).toFixed(1);
+      const mktStr = (impliedProbYes * 100).toFixed(1);
+      const text = `AI Fair ${fairStr}% vs ${mktStr}% → ${dir} +${edgePct}%`;
+      const w = Math.min(220, Math.max(170, text.length * 6.8 + 16));
+      const bg = isYesEdge ? 'rgba(0,230,118,0.14)' : 'rgba(255,51,102,0.14)';
+      const stroke = isYesEdge ? '#00e676' : '#ff3366';
+      const color = isYesEdge ? '#00e676' : '#ff3366';
+      return { text, bg, stroke, color, w };
+    }
+    const pct = fairValueYes >= 0.5 ? (fairValueYes * 100).toFixed(1) : ((1 - fairValueYes) * 100).toFixed(1);
+    const d = fairValueYes >= 0.5 ? 'UP' : 'DOWN';
+    return { text: `AI Fair ${pct}% ${d}`, bg: '#1e1035', stroke: '#7928ca', color: '#d8b4fe', w: 145 };
+  }, [fairValueYes, impliedProbYes, edge, isSyntheticOrSeed, hasEdge, isYesEdge]);
 
   // Local price history trail
   const [priceHistory, setPriceHistory] = useState<PricePoint[]>(() => {
@@ -398,28 +430,28 @@ export const EventContractChart: React.FC<EventContractChartProps> = ({
               />
               <circle cx={zoneRight} cy={aiTargetY} r="3.5" fill="#7928ca" filter="url(#glow)" />
               
-              {/* Distinctive AI Badge Pill */}
-              <g transform={`translate(${zoneRight - 150}, ${aiLabelY - 14})`}>
+              {/* Edge-aware AI Badge — shows Fair vs Market so YES edge does not contradict DOWN fair */}
+              <g transform={`translate(${zoneRight - aiBadge.w - 6}, ${aiLabelY - 14})`}>
                 <rect
                   x="0"
                   y="0"
-                  width="145"
+                  width={aiBadge.w}
                   height="20"
                   rx="4"
-                  fill="#1e1035"
+                  fill={aiBadge.bg}
                   fillOpacity="0.9"
-                  stroke="#7928ca"
+                  stroke={aiBadge.stroke}
                   strokeWidth="1"
                 />
                 <text
                   x="8"
                   y="14"
-                  fill="#d8b4fe"
+                  fill={aiBadge.color}
                   fontSize="10"
                   fontFamily="JetBrains Mono, monospace"
                   fontWeight="bold"
                 >
-                  AI Model: {(fairValueYes >= 0.5 ? fairValueYes * 100 : (1 - fairValueYes) * 100).toFixed(1)}% {fairValueYes >= 0.5 ? 'UP' : 'DOWN'}
+                  {aiBadge.text}
                 </text>
               </g>
             </g>
