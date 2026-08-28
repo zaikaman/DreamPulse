@@ -12,6 +12,8 @@ export interface UsePersonalSwarmReturn {
   isCopyTradeEnabled: boolean;
   isCopyMode: boolean;
   isPersonalMode: boolean;
+  isProtocolCopyActive: boolean;
+  isPersonalSwarmActive: boolean;
   refresh: () => Promise<void>;
   setMode: (mode: 'COPY' | 'PERSONAL') => Promise<boolean>;
   toggleCopyTrade: (enabled: boolean) => Promise<boolean>;
@@ -223,8 +225,10 @@ export const usePersonalSwarm = (userAddress?: string): UsePersonalSwarmReturn =
     isSaving,
     error,
     isCopyTradeEnabled: copyEnabled,
-    isCopyMode: (config?.mode ?? 'COPY') === 'COPY' && copyEnabled,
-    isPersonalMode: config?.mode === 'PERSONAL' && copyEnabled,
+    isCopyMode: (config?.mode ?? 'COPY') === 'COPY',
+    isPersonalMode: config?.mode === 'PERSONAL',
+    isProtocolCopyActive: (config?.mode ?? 'COPY') === 'COPY' && copyEnabled,
+    isPersonalSwarmActive: config?.mode === 'PERSONAL' && copyEnabled,
     refresh: fetchAll,
     setMode,
     toggleCopyTrade,

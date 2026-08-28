@@ -614,7 +614,9 @@ apiRouter.post('/swarm/toggle-copytrade', async (req: Request, res: Response) =>
     return res.json({
       success: true,
       config: updated,
-      message: enabled ? 'Autonomous Swarm Copy-Trading ENABLED' : 'Autonomous Swarm Copy-Trading DISABLED (Terminal Copilot Only)',
+      message: enabled
+        ? 'Autonomous Protocol Swarm Mirroring ENABLED'
+        : 'Autonomous Protocol Swarm Mirroring DISABLED (Custom Agents & Terminal Copilot remain active)',
     });
   } catch (err: any) {
     return res.status(400).json({ success: false, error: err.message });

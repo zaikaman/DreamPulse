@@ -13,6 +13,8 @@ import {
   ChevronRightIcon,
   CurrencyDollarIcon,
   ExclamationTriangleIcon,
+  SparklesIcon,
+  CpuChipIcon,
 } from '@heroicons/react/24/outline';
 import type { SessionGrant } from '../types/index.js';
 import type { WalletState } from '../hooks/useSessionKey.js';
@@ -31,6 +33,7 @@ interface SessionStatusBarProps {
   onSwitchNetwork: () => Promise<void>;
   isCopyTradeEnabled?: boolean;
   onToggleCopyTrade?: (enabled: boolean) => Promise<boolean>;
+  deployedCustomCount?: number;
 }
 
 export const SessionStatusBar: React.FC<SessionStatusBarProps> = ({
@@ -43,6 +46,7 @@ export const SessionStatusBar: React.FC<SessionStatusBarProps> = ({
   onSwitchNetwork,
   isCopyTradeEnabled,
   onToggleCopyTrade,
+  deployedCustomCount = 0,
 }) => {
   const isConnected = wallet.isConnected;
   const isCorrectNetwork = wallet.isCorrectNetwork;
@@ -223,51 +227,88 @@ export const SessionStatusBar: React.FC<SessionStatusBarProps> = ({
             <div className="session-metric-divider"></div>
 
             <div className="session-metric-item">
-              <span className="metric-label">SWARM COPY-TRADE</span>
-              <button
-                type="button"
-                disabled={isTogglingCopy}
-                onClick={async () => {
-                  const next = !activeCopyTrade;
-                  setIsTogglingCopy(true);
-                  try {
-                    if (onToggleCopyTrade) {
-                      await onToggleCopyTrade(next);
-                    } else if (wallet.address) {
-                      await apiClient.toggleCopyTrade(wallet.address, next);
-                    }
-                    if (activeSession) {
-                      activeSession.copyTradeEnabled = next;
-                    }
-                    try {
-                      const saved = typeof window !== 'undefined' ? localStorage.getItem('dreampulse_active_session') : null;
-                      if (saved) {
-                        const parsed = JSON.parse(saved);
-                        parsed.copyTradeEnabled = next;
-                        localStorage.setItem('dreampulse_active_session', JSON.stringify(parsed));
+              <span className="metric-label">EXECUTION MODE</span>
+              {(() => {
+                const hasCustom = deployedCustomCount > 0;
+                const hasProtocol = activeCopyTrade;
+
+                let modeLabel = 'COPILOT ONLY';
+                let modeBg = 'rgba(245, 158, 11, 0.12)';
+                let modeColor = '#fbbf24';
+                let modeBorder = 'rgba(245, 158, 11, 0.25)';
+                let modeIcon = <BoltIcon className="w-3 h-3" />;
+                let tooltipText = 'Terminal Copilot Only — Click to toggle Swarm Mirroring or deploy custom agents in Strategy Studio.';
+
+                if (hasCustom && hasProtocol) {
+                  modeLabel = `HYBRID (${deployedCustomCount}C + SWARM)`;
+                  modeBg = 'rgba(16, 185, 129, 0.14)';
+                  modeColor = '#34d399';
+                  modeBorder = 'rgba(16, 185, 129, 0.28)';
+                  modeIcon = <SparklesIcon className="w-3 h-3 text-emerald-400" />;
+                  tooltipText = `Hybrid Fleet: ${deployedCustomCount} custom agent(s) & Protocol Swarm Mirror active. Click to disable Protocol Mirror.`;
+                } else if (hasCustom && !hasProtocol) {
+                  modeLabel = `CUSTOM FLEET (${deployedCustomCount})`;
+                  modeBg = 'rgba(168, 85, 247, 0.14)';
+                  modeColor = '#c084fc';
+                  modeBorder = 'rgba(168, 85, 247, 0.3)';
+                  modeIcon = <CpuChipIcon className="w-3 h-3 text-purple-400" />;
+                  tooltipText = `Custom Fleet: ${deployedCustomCount} custom agent(s) trading autonomously. Protocol Swarm Mirror is OFF. Click to enable Swarm Mirror.`;
+                } else if (!hasCustom && hasProtocol) {
+                  modeLabel = 'SWARM MIRROR';
+                  modeBg = 'rgba(56, 189, 248, 0.14)';
+                  modeColor = '#38bdf8';
+                  modeBorder = 'rgba(56, 189, 248, 0.28)';
+                  modeIcon = <BoltIcon className="w-3 h-3 text-sky-400" />;
+                  tooltipText = 'Protocol Swarm Mirror is active — Click to disable (Terminal Copilot Only).';
+                }
+
+                return (
+                  <button
+                    type="button"
+                    disabled={isTogglingCopy}
+                    onClick={async () => {
+                      const next = !activeCopyTrade;
+                      setIsTogglingCopy(true);
+                      try {
+                        if (onToggleCopyTrade) {
+                          await onToggleCopyTrade(next);
+                        } else if (wallet.address) {
+                          await apiClient.toggleCopyTrade(wallet.address, next);
+                        }
+                        if (activeSession) {
+                          activeSession.copyTradeEnabled = next;
+                        }
+                        try {
+                          const saved = typeof window !== 'undefined' ? localStorage.getItem('dreampulse_active_session') : null;
+                          if (saved) {
+                            const parsed = JSON.parse(saved);
+                            parsed.copyTradeEnabled = next;
+                            localStorage.setItem('dreampulse_active_session', JSON.stringify(parsed));
+                          }
+                        } catch {}
+                        if (typeof window !== 'undefined') {
+                          window.dispatchEvent(new CustomEvent('dreampulse:session-update', { detail: { copyTradeEnabled: next } }));
+                        }
+                        setLocalCopyEnabled(next);
+                      } catch (e) {
+                        console.error('Failed to toggle copy-trade:', e);
+                      } finally {
+                        setIsTogglingCopy(false);
                       }
-                    } catch {}
-                    if (typeof window !== 'undefined') {
-                      window.dispatchEvent(new CustomEvent('dreampulse:session-update', { detail: { copyTradeEnabled: next } }));
-                    }
-                    setLocalCopyEnabled(next);
-                  } catch (e) {
-                    console.error('Failed to toggle copy-trade:', e);
-                  } finally {
-                    setIsTogglingCopy(false);
-                  }
-                }}
-                className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-mono font-bold border transition-all cursor-pointer hover:opacity-90 disabled:opacity-50"
-                style={{
-                  background: activeCopyTrade ? 'rgba(56, 189, 248, 0.14)' : 'rgba(245, 158, 11, 0.12)',
-                  color: activeCopyTrade ? '#38bdf8' : '#fbbf24',
-                  borderColor: activeCopyTrade ? 'rgba(56, 189, 248, 0.28)' : 'rgba(245, 158, 11, 0.25)',
-                }}
-                title={activeCopyTrade ? 'Swarm Copy-Trading is ACTIVE — Click to disable (Terminal Copilot Only)' : 'Terminal Copilot Only — Click to enable Swarm Copy-Trading'}
-              >
-                {isTogglingCopy ? <Spinner size="xs" /> : <BoltIcon className="w-3 h-3" />}
-                <span>{activeCopyTrade ? 'SWARM: ACTIVE' : 'COPILOT ONLY'}</span>
-              </button>
+                    }}
+                    className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[10px] font-mono font-bold border transition-all cursor-pointer hover:opacity-90 disabled:opacity-50"
+                    style={{
+                      background: modeBg,
+                      color: modeColor,
+                      borderColor: modeBorder,
+                    }}
+                    title={tooltipText}
+                  >
+                    {isTogglingCopy ? <Spinner size="xs" /> : modeIcon}
+                    <span>{modeLabel}</span>
+                  </button>
+                );
+              })()}
             </div>
 
             <div className="session-metric-divider"></div>

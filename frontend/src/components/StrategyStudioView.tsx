@@ -21,6 +21,8 @@ import {
   XMarkIcon,
   BanknotesIcon,
   SignalIcon,
+  CpuChipIcon,
+  KeyIcon,
 } from '@heroicons/react/24/outline';
 import type {
   CustomAgentDefinition,
@@ -78,8 +80,8 @@ export const StrategyStudioView: React.FC<StrategyStudioViewProps> = ({
     balanceSTT: '0',
     balanceCollateral: '0',
   },
-  activeSession: _activeSession = null,
-  onOpenSessionModal: _onOpenSessionModal,
+  activeSession = null,
+  onOpenSessionModal,
   onConnectWallet: _onConnectWallet,
   onNavigateToBacktester,
 }) => {
@@ -285,9 +287,12 @@ export const StrategyStudioView: React.FC<StrategyStudioViewProps> = ({
       }
       setSaveSuccessMsg(
         deployNow
-          ? `Strategy deployed with $${draftAllowance.toFixed(2)} tUSDC allowance!`
+          ? `Strategy deployed with $${draftAllowance.toFixed(2)} tUSDC allowance! Running autonomously in isolated mode.`
           : 'Strategy saved to your library!'
       );
+      if (deployNow && (!activeSession || !activeSession.isActive)) {
+        onOpenSessionModal?.();
+      }
       setTimeout(() => setSaveSuccessMsg(null), 4000);
       if (deployNow) {
         setActiveTab('LIBRARY');
@@ -322,6 +327,10 @@ export const StrategyStudioView: React.FC<StrategyStudioViewProps> = ({
 
   // 1-Click Deploy / Pause handler for library cards
   const handleToggleDeploy = async (agent: CustomAgentDefinition) => {
+    if (!agent.isDeployed && (!activeSession || !activeSession.isActive)) {
+      onOpenSessionModal?.();
+      return;
+    }
     setActionLoadingId(agent.id);
     try {
       if (agent.isDeployed) {
@@ -489,6 +498,44 @@ export const StrategyStudioView: React.FC<StrategyStudioViewProps> = ({
             <CubeIcon className="w-3.5 h-3.5" />
             <span>Strategy Library ({agents.length})</span>
           </button>
+        </div>
+      </div>
+
+      {/* Autonomous Execution Context Banner */}
+      <div className="terminal-panel p-3.5 bg-gradient-to-r from-purple-500/10 via-secondary/20 to-background border-purple-500/30 flex items-center justify-between gap-4 flex-wrap">
+        <div className="flex items-center gap-3">
+          <div className="w-8 h-8 rounded-lg grid place-items-center bg-purple-500/20 text-purple-300 border border-purple-500/30 flex-shrink-0">
+            <CpuChipIcon className="w-4 h-4" />
+          </div>
+          <div>
+            <div className="flex items-center gap-2">
+              <span className="text-xs font-bold text-foreground">Isolated Autonomous Execution</span>
+              <Badge variant="outline" className="text-[9px] font-mono border-purple-500/40 text-purple-300 bg-purple-500/10 font-semibold">
+                Independent of Swarm Copy-Trade
+              </Badge>
+            </div>
+            <p className="text-[11px] text-muted-foreground mt-0.5">
+              Custom agents trade autonomously within their dedicated bankroll allowance using your session key. Protocol Swarm Mirroring is NOT required.
+            </p>
+          </div>
+        </div>
+
+        <div className="flex items-center gap-2">
+          {activeSession && activeSession.isActive ? (
+            <div className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 text-[11px] font-mono font-bold">
+              <ShieldCheckIcon className="w-3.5 h-3.5" />
+              <span>Session Key Active</span>
+            </div>
+          ) : (
+            <button
+              type="button"
+              onClick={onOpenSessionModal}
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-primary hover:bg-primary/90 text-primary-foreground text-xs font-bold transition-all cursor-pointer shadow-sm"
+            >
+              <KeyIcon className="w-3.5 h-3.5" />
+              <span>Authorize Session Key to Deploy</span>
+            </button>
+          )}
         </div>
       </div>
 

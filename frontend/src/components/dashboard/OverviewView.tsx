@@ -12,6 +12,7 @@ import type { WalletState } from '../../hooks/useSessionKey.js';
 import { useAgentSwarm } from '../../hooks/useAgentSwarm.js';
 import { useUserPortfolio } from '../../hooks/useUserPortfolio.js';
 import { usePersonalSwarm } from '../../hooks/usePersonalSwarm.js';
+import { useCustomAgents } from '../../hooks/useCustomAgents.js';
 import { useOnboarding } from '../../hooks/useOnboarding.js';
 import { StatCardsGrid } from './StatCardsGrid.js';
 import { SessionStatusBar } from '../SessionStatusBar.js';
@@ -110,6 +111,8 @@ const OverviewViewComponent: React.FC<OverviewViewProps> = ({
   const { detailed: swarmDetailed, summary: swarmSummary, orders } = useAgentSwarm();
   const { portfolio } = useUserPortfolio(wallet);
   const { isCopyTradeEnabled, toggleCopyTrade } = usePersonalSwarm(wallet?.address || undefined);
+  const { agents: customAgents } = useCustomAgents(wallet?.address || undefined);
+  const deployedCustomCount = useMemo(() => customAgents.filter((a) => a.isDeployed).length, [customAgents]);
 
   const {
     quests,
@@ -153,6 +156,7 @@ const OverviewViewComponent: React.FC<OverviewViewProps> = ({
           onSwitchNetwork={onSwitchNetwork}
           isCopyTradeEnabled={isCopyTradeEnabled}
           onToggleCopyTrade={toggleCopyTrade}
+          deployedCustomCount={deployedCustomCount}
         />
       )}
 

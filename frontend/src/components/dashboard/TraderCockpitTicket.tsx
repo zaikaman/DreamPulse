@@ -603,7 +603,7 @@ export const TraderCockpitTicket: React.FC<TraderCockpitTicketProps> = ({
           <span>Execution Path</span>
           <span className={cn("font-bold", activeSession?.isActive ? "text-emerald-400" : "text-muted-foreground")}>
             {activeSession?.isActive
-              ? (activeSession.copyTradeEnabled ? "1-Click Gasless (Swarm ON)" : "1-Click Gasless (Copilot Only)")
+              ? "1-Click Gasless (Session Active)"
               : "Direct Wallet Signing"}
           </span>
         </div>

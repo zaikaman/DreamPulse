@@ -19,6 +19,7 @@ import {
   DocumentCheckIcon,
   ArrowLeftEndOnRectangleIcon,
   XCircleIcon,
+  SparklesIcon,
 } from '@heroicons/react/24/outline';
 import type { SessionGrant } from '../types/index.js';
 import type { WalletState } from '../hooks/useSessionKey.js';
@@ -309,9 +310,16 @@ export const SessionDelegationModal: React.FC<SessionDelegationModalProps> = ({
                 )}
 
                 <div className="stat-pill" style={{ border: `1px solid ${activeSession.copyTradeEnabled ? 'rgba(56, 189, 248, 0.25)' : 'hsl(var(--border) / 0.5)'}` }}>
-                  <span className="stat-pill-label">Execution Mode:</span>
+                  <span className="stat-pill-label">Protocol Mirror:</span>
                   <span className="stat-pill-value" style={{ color: activeSession.copyTradeEnabled ? '#38bdf8' : 'hsl(var(--muted-foreground))' }}>
-                    {activeSession.copyTradeEnabled ? 'Swarm Copy-Trading ON' : 'Terminal Copilot Only'}
+                    {activeSession.copyTradeEnabled ? 'ON (Mirroring Active)' : 'OFF (Discretionary Only)'}
+                  </span>
+                </div>
+
+                <div className="stat-pill" style={{ border: '1px solid rgba(168, 85, 247, 0.25)' }}>
+                  <span className="stat-pill-label">Custom Agents:</span>
+                  <span className="stat-pill-value" style={{ color: '#c084fc' }}>
+                    Autonomous Ready
                   </span>
                 </div>
 
@@ -661,7 +669,29 @@ export const SessionDelegationModal: React.FC<SessionDelegationModalProps> = ({
               </div>
             </div>
 
-            {/* Autonomous Swarm Copy-Trading Mode Switch */}
+            {/* Session Delegation Capability Clarification Card */}
+            <div className="rounded-lg p-3 border border-border/60 bg-secondary/20 flex flex-col gap-2">
+              <div className="text-[11px] font-bold text-foreground flex items-center gap-1.5 font-mono uppercase text-muted-foreground">
+                <ShieldCheckIcon className="w-3.5 h-3.5 text-emerald-400" />
+                <span>Session Key Capabilities</span>
+              </div>
+              <div className="grid grid-cols-2 gap-2 text-[11px]">
+                <div className="p-2 rounded bg-background/50 border border-border/40 flex flex-col gap-0.5">
+                  <span className="font-bold text-foreground flex items-center gap-1">
+                    <BoltIcon className="w-3 h-3 text-amber-400" /> 1-Click Terminal
+                  </span>
+                  <span className="text-[10px] text-muted-foreground">Instant gasless trades with AI Alpha Copilot</span>
+                </div>
+                <div className="p-2 rounded bg-background/50 border border-border/40 flex flex-col gap-0.5">
+                  <span className="font-bold text-foreground flex items-center gap-1">
+                    <SparklesIcon className="w-3 h-3 text-purple-400" /> Custom Agents
+                  </span>
+                  <span className="text-[10px] text-muted-foreground">Powers your Strategy Studio automated bots</span>
+                </div>
+              </div>
+            </div>
+
+            {/* Autonomous Protocol Swarm Mirror Switch */}
             <div className="config-group" style={{ background: 'hsl(var(--secondary) / 0.35)', padding: '12px 14px', borderRadius: '8px', border: `1px solid ${enableCopyTrading ? 'rgba(56, 189, 248, 0.4)' : 'hsl(var(--border) / 0.7)'}` }}>
               <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: '12px' }}>
                 <div style={{ display: 'flex', gap: '10px' }}>
@@ -670,15 +700,15 @@ export const SessionDelegationModal: React.FC<SessionDelegationModalProps> = ({
                   </div>
                   <div>
                     <div style={{ fontSize: '12px', fontWeight: 700, color: 'hsl(var(--foreground))', display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
-                      <span>Enable Autonomous Swarm Copy-Trading</span>
+                      <span>Mirror Protocol Swarm (Volt, Oracle, Titan)</span>
                       <span style={{ fontSize: '9px', padding: '1px 6px', borderRadius: '4px', background: enableCopyTrading ? 'rgba(56, 189, 248, 0.15)' : 'hsl(var(--secondary))', color: enableCopyTrading ? '#38bdf8' : 'hsl(var(--muted-foreground))', border: `1px solid ${enableCopyTrading ? 'rgba(56, 189, 248, 0.3)' : 'hsl(var(--border))'}`, fontWeight: 700, fontFamily: 'var(--font-mono)' }}>
-                        {enableCopyTrading ? 'SWARM MIRROR ON' : 'TERMINAL COPILOT ONLY'}
+                        {enableCopyTrading ? 'PROTOCOL MIRROR ON' : 'PROTOCOL MIRROR OFF'}
                       </span>
                     </div>
                     <p style={{ margin: '4px 0 0', fontSize: '11px', color: 'hsl(var(--muted-foreground))', lineHeight: 1.4 }}>
                       {enableCopyTrading
-                        ? 'Volt, Oracle, and Titan will automatically mirror high-conviction trades from your wallet within your single & daily caps.'
-                        : 'Leave OFF to use session delegation exclusively for fast 1-click execution when YOU trade with the AI Copilot in the Trade Terminal.'}
+                        ? 'Institutional Volt, Oracle, and Titan trades will be mirrored directly to your wallet within authorized caps.'
+                        : 'Keep OFF if you only want to trade manually or let your own Custom Strategy Studio bots trade without copying platform bots.'}
                     </p>
                   </div>
                 </div>
@@ -696,7 +726,7 @@ export const SessionDelegationModal: React.FC<SessionDelegationModalProps> = ({
                     transition: 'background 0.2s ease',
                     padding: '2px',
                   }}
-                  aria-label="Toggle autonomous swarm copy trading"
+                  aria-label="Toggle autonomous protocol swarm mirroring"
                 >
                   <span
                     style={{

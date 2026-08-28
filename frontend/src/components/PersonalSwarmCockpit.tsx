@@ -178,19 +178,32 @@ export const PersonalSwarmCockpit: React.FC<PersonalSwarmCockpitProps> = ({
     }
   };
 
-  // Master Pause / Resume All Fleet
+  // Dedicated Protocol Mirror Toggle (does not touch Custom Agents)
+  const handleToggleProtocolCopy = async () => {
+    setIsSwitching(true);
+    try {
+      await toggleCopyTrade(!isCopyTradeEnabled);
+    } finally {
+      setIsSwitching(false);
+    }
+  };
+
+  // Master Emergency Killswitch (pauses all running bots)
   const handleMasterToggleFleet = async () => {
     setIsSwitching(true);
     try {
-      const nextState = !isCopyTradeEnabled;
-      await toggleCopyTrade(nextState);
-      // If pausing all fleet, also pause active custom agents
-      if (!nextState) {
+      const hasAnyActive = totalActiveFleetCount > 0;
+      if (hasAnyActive) {
+        if (isCopyTradeEnabled) {
+          await toggleCopyTrade(false);
+        }
         for (const agent of customAgents) {
           if (agent.isDeployed) {
             await pauseAgent(agent.id);
           }
         }
+      } else {
+        await toggleCopyTrade(true);
       }
     } finally {
       setIsSwitching(false);
@@ -208,7 +221,8 @@ export const PersonalSwarmCockpit: React.FC<PersonalSwarmCockpitProps> = ({
   const activeCoreCount = (config?.voltEnabled ? 1 : 0) + (config?.oracleEnabled ? 1 : 0) + (config?.titanEnabled ? 1 : 0);
   const deployedCustomAgents = useMemo(() => customAgents.filter((a) => a.isDeployed), [customAgents]);
   const activeCustomCount = deployedCustomAgents.length;
-  const totalActiveFleetCount = isCopyTradeEnabled ? activeCoreCount + activeCustomCount : 0;
+  // Decoupled: core count only counts if isCopyTradeEnabled, custom agents count whenever deployed
+  const totalActiveFleetCount = (isCopyTradeEnabled ? activeCoreCount : 0) + activeCustomCount;
 
   const totalCustomAllocated = useMemo(
     () => deployedCustomAgents.reduce((sum, a) => sum + (a.allocatedAllowance || 100), 0),
@@ -228,7 +242,7 @@ export const PersonalSwarmCockpit: React.FC<PersonalSwarmCockpitProps> = ({
   const totalCoreAllocated = isCopyTradeEnabled ? (activeCoreCount > 0 ? activeCoreCount * 100 : 0) : 0;
   const totalFleetAllocated = totalCoreAllocated + totalCustomAllocated;
 
-  const isEditable = isPersonalMode && hasActiveSession && isCopyTradeEnabled;
+  const isEditable = isPersonalMode && hasActiveSession;
   const needsDelegation = isPersonalMode && !hasActiveSession;
 
   if (!userAddress) {
@@ -295,7 +309,11 @@ export const PersonalSwarmCockpit: React.FC<PersonalSwarmCockpitProps> = ({
                   variant="outline"
                   className={cn(
                     'font-mono text-[10px] px-2 py-0.5 border gap-1 font-bold',
-                    !isCopyTradeEnabled
+                    activeCustomCount > 0 && !isCopyTradeEnabled
+                      ? 'bg-purple-500/10 text-purple-300 border-purple-500/30'
+                      : activeCustomCount > 0 && isCopyTradeEnabled
+                      ? 'bg-emerald-500/10 text-emerald-300 border-emerald-500/30'
+                      : !isCopyTradeEnabled
                       ? 'bg-amber-500/10 text-amber-400 border-amber-500/30'
                       : isPersonalMode
                       ? 'bg-purple-500/10 text-purple-300 border-purple-500/30'
@@ -305,10 +323,22 @@ export const PersonalSwarmCockpit: React.FC<PersonalSwarmCockpitProps> = ({
                   <span
                     className={cn(
                       'w-1.5 h-1.5 rounded-full',
-                      !isCopyTradeEnabled ? 'bg-amber-400' : isPersonalMode ? 'bg-purple-400' : 'bg-emerald-400 animate-pulse'
+                      activeCustomCount > 0 && !isCopyTradeEnabled
+                        ? 'bg-purple-400 animate-pulse'
+                        : activeCustomCount > 0 && isCopyTradeEnabled
+                        ? 'bg-emerald-400 animate-pulse'
+                        : !isCopyTradeEnabled
+                        ? 'bg-amber-400'
+                        : isPersonalMode
+                        ? 'bg-purple-400'
+                        : 'bg-emerald-400 animate-pulse'
                     )}
                   />
-                  {!isCopyTradeEnabled
+                  {activeCustomCount > 0 && !isCopyTradeEnabled
+                    ? `CUSTOM FLEET ACTIVE (${activeCustomCount} BOTS)`
+                    : activeCustomCount > 0 && isCopyTradeEnabled
+                    ? `HYBRID FLEET ACTIVE (${totalActiveFleetCount} BOTS)`
+                    : !isCopyTradeEnabled
                     ? 'FLEET: PAUSED (COPILOT ONLY)'
                     : isPersonalMode
                     ? 'PERSONAL ISOLATED FLEET'
@@ -317,7 +347,11 @@ export const PersonalSwarmCockpit: React.FC<PersonalSwarmCockpitProps> = ({
               </div>
               <div className="text-[11px] text-muted-foreground mt-1 flex items-center gap-2 flex-wrap">
                 <span>
-                  {!isCopyTradeEnabled
+                  {activeCustomCount > 0 && !isCopyTradeEnabled
+                    ? `Running ${activeCustomCount} custom Strategy Studio agent(s) in isolated execution. Protocol swarm mirroring is OFF.`
+                    : activeCustomCount > 0 && isCopyTradeEnabled
+                    ? `Running ${activeCustomCount} custom agent(s) alongside ${isPersonalMode ? 'personalized' : 'protocol mirror'} core bots.`
+                    : !isCopyTradeEnabled
                     ? 'Autonomous fleet trading is currently paused. Manual 1-click Copilot execution remains active.'
                     : isPersonalMode
                     ? 'Running isolated per-wallet execution on Somnia Shannon CLOB.'
@@ -347,28 +381,53 @@ export const PersonalSwarmCockpit: React.FC<PersonalSwarmCockpitProps> = ({
               <span>Deploy New Agent</span>
             </button>
 
-            {/* Master Emergency Killswitch */}
+            {/* Protocol Swarm Mirror Toggle */}
             <button
               type="button"
-              onClick={handleMasterToggleFleet}
+              onClick={handleToggleProtocolCopy}
               disabled={isSwitching || isSaving}
               className={cn(
                 'inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border text-xs font-bold transition-all disabled:opacity-60 cursor-pointer shadow-sm',
                 isCopyTradeEnabled
-                  ? 'bg-rose-500/15 hover:bg-rose-500/25 text-rose-400 border-rose-500/40'
-                  : 'bg-emerald-500 hover:bg-emerald-400 text-zinc-950 border-emerald-500'
+                  ? 'bg-sky-500/15 hover:bg-sky-500/25 text-sky-300 border-sky-500/40'
+                  : 'bg-secondary/40 hover:bg-secondary/60 text-muted-foreground border-border/60'
               )}
-              title={isCopyTradeEnabled ? 'Pause all running bots in your active fleet immediately' : 'Resume autonomous fleet execution'}
+              title={isCopyTradeEnabled ? 'Protocol Swarm Mirror is ACTIVE — Click to disable' : 'Click to enable Protocol Swarm Mirroring (Volt, Oracle, Titan)'}
             >
               {isSwitching ? (
                 <Spinner size="xs" />
               ) : isCopyTradeEnabled ? (
-                <PauseIcon className="w-3.5 h-3.5" />
+                <BoltIcon className="w-3.5 h-3.5 text-sky-400" />
               ) : (
-                <PowerIcon className="w-3.5 h-3.5" />
+                <BoltIcon className="w-3.5 h-3.5 text-muted-foreground" />
               )}
-              <span>{isCopyTradeEnabled ? 'Emergency Pause Fleet' : 'Resume All Fleet'}</span>
+              <span>{isCopyTradeEnabled ? 'Protocol Swarm: ON' : 'Protocol Swarm: OFF'}</span>
             </button>
+
+            {/* Master Emergency Killswitch */}
+            {totalActiveFleetCount > 0 ? (
+              <button
+                type="button"
+                onClick={handleMasterToggleFleet}
+                disabled={isSwitching || isSaving}
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border text-xs font-bold transition-all disabled:opacity-60 cursor-pointer shadow-sm bg-rose-500/15 hover:bg-rose-500/25 text-rose-400 border-rose-500/40"
+                title="Pause all running core bots and custom agents immediately"
+              >
+                {isSwitching ? <Spinner size="xs" /> : <PauseIcon className="w-3.5 h-3.5" />}
+                <span>Emergency Pause All</span>
+              </button>
+            ) : !isCopyTradeEnabled ? (
+              <button
+                type="button"
+                onClick={handleMasterToggleFleet}
+                disabled={isSwitching || isSaving}
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border text-xs font-bold transition-all disabled:opacity-60 cursor-pointer shadow-sm bg-emerald-500 hover:bg-emerald-400 text-zinc-950 border-emerald-500"
+                title="Resume autonomous fleet execution"
+              >
+                {isSwitching ? <Spinner size="xs" /> : <PowerIcon className="w-3.5 h-3.5" />}
+                <span>Resume All Fleet</span>
+              </button>
+            ) : null}
 
             {isCopyTradeEnabled && (
               <>
