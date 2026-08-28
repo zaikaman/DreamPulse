@@ -76,12 +76,17 @@ export const TradeTerminalView: React.FC<TradeTerminalViewProps> = ({
     ? 1 / (1 + Math.exp(-Math.max(-4, Math.min(4, ((spot - strike) / (strike * 0.005)) * 2))))
     : 0.50;
 
-  const marketProbYes = tick?.impliedProb ?? market?.impliedProbYes ?? smoothFallbackProb;
+  const isSyntheticOrSeed = Boolean(market?.isSynthetic || market?.isSeedDepth);
+  const marketProbYes = isSyntheticOrSeed ? 0.5 : (tick?.impliedProb ?? market?.impliedProbYes ?? smoothFallbackProb);
   const fairValueYes = tick?.fairValue ?? market?.fairValueYes ?? smoothFallbackProb;
-  const edge = tick?.edge ?? (fairValueYes - marketProbYes);
+  const rawEdge = tick?.edge ?? (fairValueYes - marketProbYes);
+  const edge = isSyntheticOrSeed ? 0 : rawEdge;
   const isMarketUp = marketProbYes >= 0.5;
   const marketDirection = isMarketUp ? 'Up' : 'Down';
   const marketConfidence = (isMarketUp ? marketProbYes * 100 : (1 - marketProbYes) * 100).toFixed(0);
+  const isYesEdge = edge > 0.004;
+  const isNoEdge = edge < -0.004;
+  const signedEdgeLabel = `${edge >= 0 ? '+' : ''}${(edge * 100).toFixed(1)}% ${isYesEdge ? 'YES' : isNoEdge ? 'NO' : ''}`.trim();
   const depth = market ? depthMap.get(market.id) : undefined;
 
   // Real-time dynamic countdown & formatted expiry
@@ -169,10 +174,13 @@ export const TradeTerminalView: React.FC<TradeTerminalViewProps> = ({
               </span>
             </div>
 
-            {/* AI Alpha Edge Badge */}
-            <div className="hidden sm:flex items-center gap-1 px-2 py-0.5 rounded border bg-[#7928ca]/10 text-[#d8b4fe] border-[#7928ca]/30 text-[11px]">
-              <SparklesIcon className="w-3.5 h-3.5 text-[#d8b4fe]" />
-              <span>AI Edge: +{(Math.abs(edge) * 100).toFixed(1)}%</span>
+            {/* AI Alpha Edge Badge — signed, directional (fixes YES vs DOWN mismatch) */}
+            <div className={cn(
+              "hidden sm:flex items-center gap-1 px-2 py-0.5 rounded border text-[11px]",
+              isYesEdge ? "bg-[#00e676]/10 text-[#00e676] border-[#00e676]/30" : isNoEdge ? "bg-[#ff3366]/10 text-[#ff3366] border-[#ff3366]/30" : "bg-[#7928ca]/10 text-[#d8b4fe] border-[#7928ca]/30"
+            )}>
+              <SparklesIcon className={cn("w-3.5 h-3.5", isYesEdge ? "text-[#00e676]" : isNoEdge ? "text-[#ff3366]" : "text-[#d8b4fe]")} />
+              <span>AI Edge: {signedEdgeLabel}{!isYesEdge && !isNoEdge ? '' : ' EDGE'}</span>
             </div>
 
             {/* Fleet Monitoring Status Pill */}

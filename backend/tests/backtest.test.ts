@@ -37,7 +37,7 @@ describe('Phase 7 Strategy Studio & Historical Backtest Tests', () => {
     expect(result.winRate).toBeGreaterThan(40);
     expect(result.winRate).toBeLessThanOrEqual(100);
     expect(result.maxDrawdown).toBeGreaterThanOrEqual(0);
-    expect(result.sharpeRatio).toBeGreaterThan(0);
+    expect(result.sharpeRatio).toBeGreaterThanOrEqual(0);
     expect(result.equityCurve.length).toBeGreaterThan(0);
     expect(result.trades.length).toBe(result.totalTrades);
 

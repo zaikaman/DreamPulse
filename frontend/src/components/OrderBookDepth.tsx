@@ -90,12 +90,14 @@ export const OrderBookDepth: React.FC<OrderBookDepthProps> = ({
     return <OrderBookDepthSkeleton />;
   }
 
-  // Spot price & market computations
+  // Spot price & market computations — synthetic/seed markets are forced to 0 edge (no alpha)
+  const isSyntheticOrSeedDepth = Boolean(selectedMarket.isSynthetic || selectedMarket.isSeedDepth);
   const spot = liveTick?.spotPrice ?? selectedMarket.strikePrice;
   const isITM = spot >= selectedMarket.strikePrice;
   const strikeDelta = spot - selectedMarket.strikePrice;
   const fairValue = liveTick?.fairValue ?? selectedMarket.fairValueYes;
-  const edge = liveTick?.edge ?? selectedMarket.edgePercentage;
+  const rawEdge = liveTick?.edge ?? selectedMarket.edgePercentage;
+  const edge = isSyntheticOrSeedDepth ? 0 : rawEdge;
 
   // Use live WebSocket depth if available, otherwise fall back to REST depth
   const bids = liveDepth?.bids.length

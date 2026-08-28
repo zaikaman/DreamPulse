@@ -93,9 +93,13 @@ export const TraderCockpitTicket: React.FC<TraderCockpitTicketProps> = ({
     return Number(sigmoid.toFixed(4));
   }, [spotPrice, strike]);
 
-  const marketProbYes = liveTick?.impliedProb ?? market.impliedProbYes ?? (currentBestAsk > 0 ? currentBestAsk : smoothFallbackProb);
+  const isSyntheticOrSeed = Boolean(market.isSynthetic || market.isSeedDepth);
+  const marketProbYes = isSyntheticOrSeed
+    ? 0.5
+    : (liveTick?.impliedProb ?? market.impliedProbYes ?? (currentBestAsk > 0 ? currentBestAsk : smoothFallbackProb));
   const fairValueYes = liveTick?.fairValue ?? market.fairValueYes ?? smoothFallbackProb;
-  const bsmEdge = liveTick?.edge ?? (fairValueYes - marketProbYes);
+  const rawBsmEdge = liveTick?.edge ?? (fairValueYes - marketProbYes);
+  const bsmEdge = isSyntheticOrSeed ? 0 : rawBsmEdge;
 
   // Implied odds
   const upOddsPct = Math.round(marketProbYes * 100);
@@ -157,24 +161,45 @@ export const TraderCockpitTicket: React.FC<TraderCockpitTicketProps> = ({
     };
   }, [price, collateralAmount]);
 
-  // Swarm AI Copilot intelligence with directional hysteresis & smooth confidence
+  // Swarm AI Copilot intelligence — edge-driven recommendation (fixes YES vs DOWN mismatch)
   const aiRecommendation = useMemo(() => {
-    const recommendedOutcome: 'YES' | 'NO' = fairValueYes >= 0.50 ? 'YES' : 'NO';
-    const recommendedDirection: 'UP' | 'DOWN' = fairValueYes >= 0.50 ? 'UP' : 'DOWN';
-    const edgeVal = (Math.abs(bsmEdge) * 100).toFixed(1);
+    const effectiveEdge = bsmEdge;
+    const EDGE_EPSILON = 0.004;
+    const isYesEdge = effectiveEdge > EDGE_EPSILON;
+    const isNoEdge = effectiveEdge < -EDGE_EPSILON;
+    const fairDirection: 'UP' | 'DOWN' = fairValueYes >= 0.50 ? 'UP' : 'DOWN';
+    const edgeDirection: 'UP' | 'DOWN' = isYesEdge ? 'UP' : isNoEdge ? 'DOWN' : fairDirection;
+    const recommendedOutcome: 'YES' | 'NO' = isYesEdge ? 'YES' : isNoEdge ? 'NO' : (fairValueYes >= 0.50 ? 'YES' : 'NO');
+    const recommendedDirection: 'UP' | 'DOWN' = edgeDirection;
+    const edgeVal = (Math.abs(effectiveEdge) * 100).toFixed(1);
+    const signedEdgeVal = `${effectiveEdge >= 0 ? '+' : ''}${(effectiveEdge * 100).toFixed(1)}%`;
     const spotDiff = spotPrice - strike;
     const pctDiff = strike > 0 ? (spotDiff / strike) * 100 : 0;
     const diffText = spotDiff >= 0 
       ? `+$${spotDiff < 1 ? spotDiff.toFixed(4) : spotDiff.toFixed(2)} (+${pctDiff.toFixed(2)}%) above strike` 
       : `-$${Math.abs(spotDiff) < 1 ? Math.abs(spotDiff).toFixed(4) : Math.abs(spotDiff).toFixed(2)} (${pctDiff.toFixed(2)}%) below strike`;
 
-    const confScore = Math.round((fairValueYes >= 0.5 ? fairValueYes : (1 - fairValueYes)) * 100);
-    let rationale = `Spot is ${diffText}. Titan BSM & Confluence engine rates ${recommendedDirection} with ${confScore}% conviction (+${edgeVal}% Alpha dislocation vs CLOB).`;
+    // Confidence: when a meaningful edge exists, use edge-strength confidence (mirrors Oracle Arb 80%+ netEdge*2.8)
+    // so a 26% YES edge shows ~92% confidence UP rather than 28% UP (which would look weak despite strong alpha)
+    let confScore: number;
+    if (Math.abs(effectiveEdge) >= 0.015) {
+      confScore = Math.min(97, Math.max(58, Math.round(62 + Math.abs(effectiveEdge) * 130)));
+    } else {
+      confScore = recommendedDirection === 'UP' ? Math.round(fairValueYes * 100) : Math.round((1 - fairValueYes) * 100);
+    }
+    // When there's a meaningful edge, surface both market and model probabilities so YES-edge vs DOWN-model is not confusing
+    let rationale: string;
+    if (Math.abs(effectiveEdge) >= 0.005) {
+      rationale = `Spot is ${diffText}. Market ${(marketProbYes * 100).toFixed(1)}% UP vs Titan BSM fair ${(fairValueYes * 100).toFixed(1)}% UP → ${isYesEdge ? 'YES' : 'NO'} edge ${signedEdgeVal} (${edgeVal}% Alpha dislocation vs CLOB, ${confScore}% edge conviction ${recommendedDirection}).`;
+    } else {
+      rationale = `Spot is ${diffText}. Titan BSM & Confluence engine rates ${recommendedDirection} with ${confScore}% conviction (${signedEdgeVal} Alpha vs CLOB — fairly priced).`;
+    }
 
     const recentThought = agentThoughts.find(
       (t) => t.marketId === market.id || t.marketId?.toLowerCase() === market.id.toLowerCase()
     );
-    if (recentThought?.reasoningText) {
+    // Only override with agent thought when it is not contradicting a strong edge signal
+    if (recentThought?.reasoningText && Math.abs(effectiveEdge) < 0.03) {
       rationale = recentThought.reasoningText;
     }
 
@@ -183,9 +208,12 @@ export const TraderCockpitTicket: React.FC<TraderCockpitTicketProps> = ({
       recommendedDirection,
       confidence: confScore,
       edgeVal,
+      signedEdgeVal,
+      isYesEdge,
+      isNoEdge,
       rationale,
     };
-  }, [spotPrice, strike, fairValueYes, bsmEdge, agentThoughts, market.id]);
+  }, [spotPrice, strike, fairValueYes, bsmEdge, marketProbYes, agentThoughts, market.id]);
 
   // 1-Click Auto Align with AI recommendation
   const handleAutoAlignAI = () => {
@@ -523,8 +551,8 @@ export const TraderCockpitTicket: React.FC<TraderCockpitTicketProps> = ({
               Titan BSM
             </Badge>
           </div>
-          <span className="text-[9px] text-[#d8b4fe]/80 font-mono">
-            {aiRecommendation.edgeVal}% Edge
+          <span className={cn("text-[9px] font-mono", (aiRecommendation as any).isYesEdge ? "text-[#00e676]" : (aiRecommendation as any).isNoEdge ? "text-[#ff3366]" : "text-[#d8b4fe]/80")}>
+            {(aiRecommendation as any).signedEdgeVal ?? `+${aiRecommendation.edgeVal}%`} {(aiRecommendation as any).isYesEdge ? 'YES' : (aiRecommendation as any).isNoEdge ? 'NO' : ''} Edge
           </span>
         </div>
 

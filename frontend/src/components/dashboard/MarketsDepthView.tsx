@@ -42,19 +42,23 @@ const MarketsDepthViewComponent: React.FC<MarketsDepthViewProps> = ({
   onOpenSessionModal,
   onConnectWallet,
 }) => {
-  // Compute top edge anomaly contract across open markets
+  // Compute top edge anomaly contract — preserve signed edge and ignore synthetic/seed (edge forced 0)
   const topEdgeMarket = useMemo<{ market: Market | null; edge: number }>(() => {
     let topM: Market | null = null;
-    let maxEdge = 0;
+    let bestSignedEdge = 0;
+    let bestAbsEdge = 0;
     markets.forEach((m) => {
+      if (m.isSynthetic || m.isSeedDepth) return;
       const tick = liveTicks.get(m.id);
-      const edge = Math.abs(tick?.edge ?? m.edgePercentage);
-      if (edge > maxEdge) {
-        maxEdge = edge;
+      const signedEdge = tick?.edge ?? m.edgePercentage;
+      const absEdge = Math.abs(signedEdge);
+      if (absEdge > bestAbsEdge) {
+        bestAbsEdge = absEdge;
+        bestSignedEdge = signedEdge;
         topM = m;
       }
     });
-    return { market: topM, edge: maxEdge };
+    return { market: topM, edge: bestSignedEdge };
   }, [markets, liveTicks]);
 
   // Compute average spread
@@ -82,15 +86,15 @@ const MarketsDepthViewComponent: React.FC<MarketsDepthViewProps> = ({
           <ChartBarIcon className="w-4 h-4 text-muted-foreground/60 mt-1.5" />
         </div>
 
-        {/* KPI 2: Top Alpha Mispricing */}
+        {/* KPI 2: Top Alpha Mispricing — signed, color-coded by YES/NO edge */}
         <div className="terminal-panel p-3 flex items-center justify-between">
           <div className="flex flex-col">
             <span className="text-[10px] font-mono font-semibold text-muted-foreground uppercase tracking-wider">
               TOP ALPHA MISPRICING
             </span>
             <div className="flex items-center gap-1.5 mt-0.5">
-              <span className="text-base font-mono font-bold text-[#00e676]">
-                +{((topEdgeMarket.edge || 0) * 100).toFixed(1)}%
+              <span className={`text-base font-mono font-bold ${topEdgeMarket.edge > 0.004 ? 'text-[#00e676]' : topEdgeMarket.edge < -0.004 ? 'text-[#ff3366]' : 'text-muted-foreground'}`}>
+                {topEdgeMarket.edge > 0 ? '+' : ''}{((topEdgeMarket.edge || 0) * 100).toFixed(1)}%{Math.abs(topEdgeMarket.edge) >= 0.005 ? (topEdgeMarket.edge > 0 ? ' YES' : ' NO') : ''}
               </span>
               {topEdgeMarket.market && (
                 <span className="text-[11px] font-mono text-muted-foreground truncate max-w-[90px]">
@@ -99,7 +103,7 @@ const MarketsDepthViewComponent: React.FC<MarketsDepthViewProps> = ({
               )}
             </div>
           </div>
-          <BoltIcon className="w-5 h-5 text-[#00e676]/60" />
+          <BoltIcon className={`w-5 h-5 ${topEdgeMarket.edge > 0.004 ? 'text-[#00e676]/60' : topEdgeMarket.edge < -0.004 ? 'text-[#ff3366]/60' : 'text-muted-foreground/40'}`} />
         </div>
 
         {/* KPI 3: CLOB Avg Spread */}
