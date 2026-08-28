@@ -298,7 +298,18 @@ export class CustomAgentEvaluator {
         case 'PRICE_DRIFT': {
           // Check spot velocity drift: prefer 5m drift if period >= 5, else 1m drift
           const driftPeriod = cond.period || 1;
-          const actualDrift = driftPeriod >= 5 ? spotTicker.change5m : spotTicker.change1m;
+          let actualDrift = driftPeriod >= 5 ? spotTicker.change5m : spotTicker.change1m;
+
+          // Robust fallback: if ticker change is zero or missing, calculate directly from recent candle closes
+          if (actualDrift === 0 && candles.length >= 2) {
+            const barsBack = driftPeriod >= 15 ? 3 : driftPeriod >= 5 ? 1 : 1;
+            const refIdx = Math.max(0, candles.length - 1 - barsBack);
+            const refPrice = candles[refIdx]?.close || currentSpot;
+            if (refPrice > 0) {
+              actualDrift = Number(((currentSpot - refPrice) / refPrice).toFixed(5));
+            }
+          }
+
           const threshold = cond.value ?? 0.0015;
 
           if (cond.operator === 'GREATER_THAN') {
