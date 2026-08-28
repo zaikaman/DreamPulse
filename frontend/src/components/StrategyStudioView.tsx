@@ -878,7 +878,7 @@ export const StrategyStudioView: React.FC<StrategyStudioViewProps> = ({
                         className="w-16 px-2 py-1 rounded bg-background border border-border/60 text-xs font-bold text-foreground font-mono"
                       />
                     </div>
-                    <span className="text-muted-foreground">STT</span>
+                    <span className="text-muted-foreground">tUSDC</span>
                   </div>
                 </div>
               </div>
@@ -1248,7 +1248,7 @@ export const StrategyStudioView: React.FC<StrategyStudioViewProps> = ({
                         {agent.rules?.action?.direction || 'CALL'} · {agent.rules?.action?.durationSec || 60}s
                       </span>
                       <span className="text-[9px] font-mono px-1.5 py-0.5 rounded bg-secondary/40 border border-border/50 text-foreground font-semibold">
-                        {agent.rules?.action?.stakeAmount || 10} STT / trade
+                        {agent.rules?.action?.stakeAmount || 10} tUSDC / trade
                       </span>
                     </div>
 
