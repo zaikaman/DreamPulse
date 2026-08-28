@@ -501,41 +501,120 @@ export const StrategyStudioView: React.FC<StrategyStudioViewProps> = ({
         </div>
       </div>
 
-      {/* Autonomous Execution Context Banner */}
-      <div className="terminal-panel p-3.5 bg-gradient-to-r from-purple-500/10 via-secondary/20 to-background border-purple-500/30 flex items-center justify-between gap-4 flex-wrap">
-        <div className="flex items-center gap-3">
-          <div className="w-8 h-8 rounded-lg grid place-items-center bg-purple-500/20 text-purple-300 border border-purple-500/30 flex-shrink-0">
-            <CpuChipIcon className="w-4 h-4" />
-          </div>
-          <div>
-            <div className="flex items-center gap-2">
-              <span className="text-xs font-bold text-foreground">Isolated Autonomous Execution</span>
-              <Badge variant="outline" className="text-[9px] font-mono border-purple-500/40 text-purple-300 bg-purple-500/10 font-semibold">
-                Independent of Swarm Copy-Trade
+      {/* Symmetrical Autonomous Execution Architecture Banner */}
+      <div className="terminal-panel p-0 overflow-hidden border-border/60 bg-card/60 backdrop-blur-md shadow-sm">
+        <div className="grid grid-cols-1 md:grid-cols-3 divide-y md:divide-y-0 md:divide-x divide-border/40">
+          {/* Pillar 1: Execution Model */}
+          <div className="p-3.5 flex flex-col justify-between gap-2.5 bg-gradient-to-b from-purple-500/5 to-transparent">
+            <div className="flex items-center justify-between gap-2">
+              <div className="flex items-center gap-2">
+                <div className="w-7 h-7 rounded-lg grid place-items-center bg-purple-500/15 text-purple-300 border border-purple-500/30 flex-shrink-0">
+                  <CpuChipIcon className="w-3.5 h-3.5" />
+                </div>
+                <span className="text-xs font-bold text-foreground">Isolated Execution</span>
+              </div>
+              <Badge variant="outline" className="text-[9px] font-mono border-purple-500/40 text-purple-300 bg-purple-500/10">
+                Self-Governed
               </Badge>
             </div>
-            <p className="text-[11px] text-muted-foreground mt-0.5">
-              Custom agents trade autonomously within their dedicated bankroll allowance using your session key. Protocol Swarm Mirroring is NOT required.
+            <p className="text-[11px] text-muted-foreground leading-snug">
+              Custom agents execute your custom trigger rules directly on Somnia CLOB without swarm mirroring.
             </p>
-          </div>
-        </div>
-
-        <div className="flex items-center gap-2">
-          {activeSession && activeSession.isActive ? (
-            <div className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 text-[11px] font-mono font-bold">
-              <ShieldCheckIcon className="w-3.5 h-3.5" />
-              <span>Session Key Active</span>
+            <div className="flex items-center gap-1.5 text-[10px] font-mono text-purple-300/80">
+              <span className="w-1.5 h-1.5 rounded-full bg-purple-400" />
+              <span>Independent of Swarm Copy-Trade</span>
             </div>
-          ) : (
-            <button
-              type="button"
-              onClick={onOpenSessionModal}
-              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-primary hover:bg-primary/90 text-primary-foreground text-xs font-bold transition-all cursor-pointer shadow-sm"
-            >
-              <KeyIcon className="w-3.5 h-3.5" />
-              <span>Authorize Session Key to Deploy</span>
-            </button>
-          )}
+          </div>
+
+          {/* Pillar 2: Risk & Bankroll Isolation */}
+          <div className="p-3.5 flex flex-col justify-between gap-2.5 bg-gradient-to-b from-sky-500/5 to-transparent">
+            <div className="flex items-center justify-between gap-2">
+              <div className="flex items-center gap-2">
+                <div className="w-7 h-7 rounded-lg grid place-items-center bg-sky-500/15 text-sky-300 border border-sky-500/30 flex-shrink-0">
+                  <BanknotesIcon className="w-3.5 h-3.5" />
+                </div>
+                <span className="text-xs font-bold text-foreground">Dedicated Bankroll</span>
+              </div>
+              <Badge variant="outline" className="text-[9px] font-mono border-sky-500/40 text-sky-300 bg-sky-500/10">
+                Non-Custodial
+              </Badge>
+            </div>
+            <p className="text-[11px] text-muted-foreground leading-snug">
+              Allocated tUSDC allowance locks max risk per agent. Funds remain non-custodial in your wallet.
+            </p>
+            <div className="flex items-center gap-1.5 text-[10px] font-mono text-sky-300/80">
+              <span className="w-1.5 h-1.5 rounded-full bg-sky-400" />
+              <span>Hard-Capped Capital Shield</span>
+            </div>
+          </div>
+
+          {/* Pillar 3: Session Authority & Status */}
+          <div className={cn(
+            "p-3.5 flex flex-col justify-between gap-2.5",
+            activeSession && activeSession.isActive
+              ? "bg-gradient-to-b from-emerald-500/5 to-transparent"
+              : "bg-gradient-to-b from-amber-500/5 to-transparent"
+          )}>
+            <div className="flex items-center justify-between gap-2">
+              <div className="flex items-center gap-2">
+                <div className={cn(
+                  "w-7 h-7 rounded-lg grid place-items-center flex-shrink-0 border",
+                  activeSession && activeSession.isActive
+                    ? "bg-emerald-500/15 text-emerald-300 border-emerald-500/30"
+                    : "bg-amber-500/15 text-amber-300 border-amber-500/30"
+                )}>
+                  <ShieldCheckIcon className="w-3.5 h-3.5" />
+                </div>
+                <span className="text-xs font-bold text-foreground">Session Authority</span>
+              </div>
+              <Badge
+                variant="outline"
+                className={cn(
+                  "text-[9px] font-mono font-semibold",
+                  activeSession && activeSession.isActive
+                    ? "border-emerald-500/40 text-emerald-300 bg-emerald-500/10"
+                    : "border-amber-500/40 text-amber-300 bg-amber-500/10"
+                )}
+              >
+                {activeSession && activeSession.isActive ? 'Active' : 'Auth Required'}
+              </Badge>
+            </div>
+
+            <p className="text-[11px] text-muted-foreground leading-snug">
+              {activeSession && activeSession.isActive
+                ? 'Sub-second gasless signatures authorized for autonomous background order dispatch.'
+                : 'Session delegation is required before deploying custom autonomous trading bots.'}
+            </p>
+
+            <div className="flex items-center justify-between gap-2 pt-0.5">
+              {activeSession && activeSession.isActive ? (
+                <>
+                  <div className="inline-flex items-center gap-1.5 text-[11px] font-mono text-emerald-400 font-semibold">
+                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+                    <span>Session Key Active</span>
+                  </div>
+                  {onOpenSessionModal && (
+                    <button
+                      type="button"
+                      onClick={onOpenSessionModal}
+                      className="text-[10px] font-mono text-muted-foreground hover:text-foreground transition-colors underline cursor-pointer"
+                    >
+                      Manage
+                    </button>
+                  )}
+                </>
+              ) : (
+                <button
+                  type="button"
+                  onClick={onOpenSessionModal}
+                  className="w-full inline-flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-lg bg-primary hover:bg-primary/90 text-primary-foreground text-xs font-bold transition-all cursor-pointer shadow-sm"
+                >
+                  <KeyIcon className="w-3.5 h-3.5" />
+                  <span>Authorize Session Key</span>
+                </button>
+              )}
+            </div>
+          </div>
         </div>
       </div>
 
