@@ -10,7 +10,7 @@ export interface MarketCountdownResult {
 
 export function useMarketCountdown(
   closeTimestamp?: string,
-  windowDuration: '5m' | '15m' | '1h' = '15m'
+  windowDuration: '1m' | '5m' | '15m' | '1h' | string = '15m'
 ): MarketCountdownResult {
   const [now, setNow] = useState<number>(Date.now());
 
@@ -23,7 +23,7 @@ export function useMarketCountdown(
   let diff = Math.floor((closeTime - now) / 1000);
 
   // If invalid or in the past, provide a deterministic rolling cycle based on current time
-  const cycleSeconds = windowDuration === '1h' ? 3600 : windowDuration === '5m' ? 300 : 900;
+  const cycleSeconds = windowDuration === '1m' ? 60 : windowDuration === '1h' ? 3600 : windowDuration === '5m' ? 300 : 900;
   if (isNaN(diff) || diff <= 0 || diff > 3600 * 24) {
     diff = cycleSeconds - (Math.floor(now / 1000) % cycleSeconds);
   }

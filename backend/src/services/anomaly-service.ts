@@ -8,7 +8,7 @@ export type AnomalySeverity = 'LOW' | 'MEDIUM' | 'HIGH';
 export interface AnomalyReport {
   marketId: string;
   symbol: string;
-  windowDuration: '5m' | '15m' | '1h' | '4h' | string;
+  windowDuration: '1m' | '5m' | '15m' | '1h' | '4h' | string;
   strikePrice: number;
   spotPrice: number;
   timeLeftSeconds: number;

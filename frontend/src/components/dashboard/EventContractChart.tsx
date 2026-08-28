@@ -508,7 +508,7 @@ export const EventContractChart: React.FC<EventContractChartProps> = ({
 
           {/* Time Labels on Bottom Axis */}
           <text x={padding.left + 5} y={height - 12} fill="#71717a" fontSize="10" fontFamily="JetBrains Mono, monospace">
-            15m ago
+            {market.windowDuration || '15m'} ago
           </text>
           <text x={splitX - 35} y={height - 12} fill="#00ffcc" fontSize="10" fontFamily="JetBrains Mono, monospace" fontWeight="bold">
             now {new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false })}

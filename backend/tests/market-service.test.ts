@@ -32,11 +32,13 @@ describe('Market Service & Anomaly Detector Unit & Integration Tests', () => {
       expect(btcMarkets.length).toBeGreaterThan(0);
       expect(ethMarkets.length).toBeGreaterThan(0);
 
-      // Verify presence of 5m, 15m, 1h windows
+      // Verify presence of 1m, 5m, 15m, 1h windows
+      const m1 = marketService.getActiveMarkets({ window: '1m' });
       const m5 = marketService.getActiveMarkets({ window: '5m' });
       const m15 = marketService.getActiveMarkets({ window: '15m' });
       const m1h = marketService.getActiveMarkets({ window: '1h' });
 
+      expect(m1.length).toBeGreaterThan(0);
       expect(m5.length).toBeGreaterThan(0);
       expect(m15.length).toBeGreaterThan(0);
       expect(m1h.length).toBeGreaterThan(0);

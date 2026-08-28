@@ -97,7 +97,7 @@ export const RecentlySettledRounds: React.FC<RecentlySettledRoundsProps> = ({
       {/* Title & Info Bar */}
       <div className="flex items-center justify-between px-1 text-[11px] font-mono text-muted-foreground">
         <div className="flex items-center gap-2">
-          <span className="font-bold text-foreground">Recently settled - 15m</span>
+          <span className="font-bold text-foreground">Recently settled</span>
           <span className="text-[10px] text-muted-foreground/80">Historical round resolutions & payouts</span>
         </div>
 

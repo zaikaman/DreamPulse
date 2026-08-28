@@ -243,13 +243,14 @@ export class MarketService extends EventEmitter {
         }
 
         const intervalSec = Number(m.intervalSec || 300);
-        let windowDuration: '5m' | '15m' | '1h' | '4h' | '24h' | '7d' | string = '5m';
+        let windowDuration: '1m' | '5m' | '15m' | '1h' | '4h' | '24h' | '7d' | string = '5m';
         if (intervalSec >= 604800) windowDuration = '7d';
         else if (intervalSec >= 86400) windowDuration = '24h';
         else if (intervalSec >= 14400) windowDuration = '4h';
         else if (intervalSec >= 3600) windowDuration = '1h';
         else if (intervalSec >= 900) windowDuration = '15m';
-        else windowDuration = '5m';
+        else if (intervalSec >= 300) windowDuration = '5m';
+        else windowDuration = '1m';
 
         const expirySec = Number(m.expiry || 0);
         const closeTimeMs = existingMarket
@@ -550,7 +551,7 @@ export class MarketService extends EventEmitter {
   public ensureRollingMarkets(): void {
     const now = Date.now();
     const symbols = ['BTC/USD', 'ETH/USD', 'SOL/USD', 'BNB/USD', 'DOGE/USD'];
-    const windows: Array<'5m' | '15m' | '1h' | '4h' | '24h' | '7d'> = ['5m', '15m', '1h', '4h', '24h', '7d'];
+    const windows: Array<'1m' | '5m' | '15m' | '1h' | '4h' | '24h' | '7d'> = ['1m', '5m', '15m', '1h', '4h', '24h', '7d'];
 
     for (const symbol of symbols) {
       const spot = this.getSpotPrice(symbol);

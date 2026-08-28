@@ -40,7 +40,7 @@ interface TraderCockpitTicketProps {
   onConnectWallet?: () => void;
   bestBidYes?: number;
   bestAskYes?: number;
-  onSelectDuration?: (duration: '5m' | '15m' | '1h') => void;
+  onSelectDuration?: (duration: '1m' | '5m' | '15m' | '1h') => void;
 }
 
 export const TraderCockpitTicket: React.FC<TraderCockpitTicketProps> = ({
@@ -330,15 +330,15 @@ export const TraderCockpitTicket: React.FC<TraderCockpitTicketProps> = ({
         </div>
 
         <div className="flex items-center justify-between text-[11px] text-muted-foreground">
-          <span>{market.windowDuration === '1h' ? '1-hour' : market.windowDuration === '5m' ? '5-minute' : '15-minute'} market</span>
+          <span>{market.windowDuration === '1h' ? '1-hour' : market.windowDuration === '15m' ? '15-minute' : market.windowDuration === '5m' ? '5-minute' : market.windowDuration === '1m' ? '1-minute' : '15-minute'} market</span>
           <span className="text-[10px]">
             strike ${strike.toLocaleString('en-US', { minimumFractionDigits: 2 })} · expires {formattedExpiry}
           </span>
         </div>
 
-        {/* Timeframe Switcher (15m / 1h) */}
+        {/* Timeframe Switcher (1m / 5m / 15m / 1h) */}
         <div className="flex items-center gap-1.5 mt-2.5">
-          {(['5m', '15m', '1h'] as const).map((duration) => {
+          {(['1m', '5m', '15m', '1h'] as const).map((duration) => {
             const isCur = (market.windowDuration || '15m') === duration;
             return (
               <button

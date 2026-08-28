@@ -29,7 +29,7 @@ const EdgeRadarHeatmapComponent: React.FC<EdgeRadarHeatmapProps> = ({
 
   const discoveredSymbols = Array.from(new Set(markets.map((m) => m.symbol)));
   const symbols = discoveredSymbols.length > 0 ? discoveredSymbols : ['BTC/USD', 'ETH/USD', 'SOL/USD', 'BNB/USD', 'DOGE/USD'];
-  const windows: Array<'5m' | '15m' | '1h'> = ['5m', '15m', '1h'];
+  const windows: Array<'1m' | '5m' | '15m' | '1h'> = ['1m', '5m', '15m', '1h'];
 
   // Find most severe anomaly
   const highestAnomaly = markets.reduce((max, m) => {
@@ -84,9 +84,9 @@ const EdgeRadarHeatmapComponent: React.FC<EdgeRadarHeatmapProps> = ({
 
       {/* Heatmap Matrix Table */}
       <div className="overflow-x-auto">
-        <div className="min-w-[620px] flex flex-col gap-2">
+        <div className="min-w-[700px] flex flex-col gap-2">
           {/* Header Row */}
-          <div className="grid grid-cols-[100px_repeat(3,1fr)] gap-2.5 px-1 text-[11px] font-mono text-muted-foreground font-medium uppercase tracking-wider">
+          <div className="grid grid-cols-[100px_repeat(4,1fr)] gap-2.5 px-1 text-[11px] font-mono text-muted-foreground font-medium uppercase tracking-wider">
             <div>Asset</div>
             {windows.map((win) => (
               <div key={win} className="text-center">
@@ -97,7 +97,7 @@ const EdgeRadarHeatmapComponent: React.FC<EdgeRadarHeatmapProps> = ({
 
           {/* Asset Rows */}
           {symbols.map((sym) => (
-            <div key={sym} className="grid grid-cols-[100px_repeat(3,1fr)] gap-2.5 items-stretch">
+            <div key={sym} className="grid grid-cols-[100px_repeat(4,1fr)] gap-2.5 items-stretch">
               {/* Asset Symbol Tag */}
               <div className="flex items-center justify-between px-3 py-2 rounded-lg bg-secondary/30 border border-border/40">
                 <span className="font-mono text-xs font-bold text-foreground">

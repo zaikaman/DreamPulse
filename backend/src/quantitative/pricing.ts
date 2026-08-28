@@ -24,6 +24,9 @@ export function secondsToYears(seconds: number): number {
  */
 export function parseWindowToSeconds(window: string): number {
   switch (window.toLowerCase()) {
+    case '1m':
+    case '60s':
+      return 60;
     case '5m':
       return 300;
     case '15m':

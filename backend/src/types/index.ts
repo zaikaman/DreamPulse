@@ -17,7 +17,7 @@ export interface Market {
   id: string; // Contract Address or Market Key
   symbol: string; // "BTC/USD" | "ETH/USD"
   strikePrice: number;
-  windowDuration: '5m' | '15m' | '1h' | '4h' | string;
+  windowDuration: '1m' | '5m' | '15m' | '1h' | '4h' | string;
   openTimestamp: string;
   closeTimestamp: string;
   resolutionTimestamp: string;
