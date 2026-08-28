@@ -39,7 +39,7 @@ export const App: React.FC = () => {
   const [isCommandPaletteOpen, setIsCommandPaletteOpen] = useState<boolean>(false);
 
   // Live data hooks
-  const { markets, selectedMarket, selectedMarketId, setSelectedMarketId, loading: isMarketsLoading } = useMarkets();
+  const { markets, selectedMarket, selectedMarketId, setSelectedMarketId, loading: isMarketsLoading, refreshMarkets } = useMarkets();
   const {
     isConnected,
     latencyMs,
@@ -298,6 +298,7 @@ export const App: React.FC = () => {
             selectedMarket={selectedMarket}
             selectedMarketId={selectedMarketId}
             onSelectMarket={setSelectedMarketId}
+            onRefreshMarkets={refreshMarkets}
             liveTicks={liveTicks}
             depthMap={depthMap}
             currentSpotPrices={currentSpotPrices}

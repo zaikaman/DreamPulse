@@ -569,8 +569,18 @@ export class MarketService extends EventEmitter {
 
         const windowSec = parseWindowToSeconds(windowDur);
         const windowMs = windowSec * 1000;
-        const closeTimeMs = now + windowMs;
-        const openTimeMs = now;
+        
+        // Align rolling rounds to natural interval boundaries (e.g. 15m rounds align to :00, :15, :30, :45)
+        const currentIntervalStart = Math.floor(now / windowMs) * windowMs;
+        let closeTimeMs = currentIntervalStart + windowMs;
+        let openTimeMs = currentIntervalStart;
+
+        // If less than 15 seconds remain in the current interval block, create for the next full block
+        if (closeTimeMs - now < 15000) {
+          closeTimeMs += windowMs;
+          openTimeMs = now;
+        }
+
         const strike = symbol === 'DOGE/USD' ? Number(spot.toFixed(3)) : Math.round(spot);
 
         const marketId = `${SOMNIA_ADDRESSES.binaryModule}-${symbol.replace('/', '')}-${windowDur}-${strike}-${closeTimeMs}`;

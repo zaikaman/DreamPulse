@@ -97,7 +97,7 @@ export function useMarkets(options?: UseMarketsOptions) {
     isMountedRef.current = true;
     fetchMarkets();
 
-    const interval = setInterval(fetchMarkets, options?.pollIntervalMs || 25000);
+    const interval = setInterval(fetchMarkets, options?.pollIntervalMs || 5000);
 
     return () => {
       isMountedRef.current = false;
@@ -138,6 +138,23 @@ export function useMarkets(options?: UseMarketsOptions) {
   }, []);
 
   const selectedMarket = markets.find((m) => m.id === selectedMarketId) || (markets.length > 0 ? markets[0] : null);
+
+  // Auto-fetch fresh markets immediately when the active selected market passes its closeTimestamp
+  useEffect(() => {
+    if (!selectedMarket?.closeTimestamp) return;
+    const closeMs = new Date(selectedMarket.closeTimestamp).getTime();
+    if (isNaN(closeMs) || closeMs <= 0) return;
+
+    const remainingMs = closeMs - Date.now();
+    if (remainingMs > 0) {
+      const timeout = setTimeout(() => {
+        if (isMountedRef.current) {
+          fetchMarkets();
+        }
+      }, remainingMs + 500);
+      return () => clearTimeout(timeout);
+    }
+  }, [selectedMarket?.id, selectedMarket?.closeTimestamp, fetchMarkets]);
 
   // Real-time market tick listener via multiplexed telemetry bus
   useEffect(() => {

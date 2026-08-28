@@ -23,6 +23,7 @@ interface TradeTerminalViewProps {
   selectedMarket: Market | null;
   selectedMarketId: string | null;
   onSelectMarket: (marketId: string) => void;
+  onRefreshMarkets?: () => void;
   liveTicks: Map<string, MarketTickData>;
   depthMap: Map<string, DepthUpdateData>;
   currentSpotPrices: Record<string, number>;
@@ -39,6 +40,7 @@ export const TradeTerminalView: React.FC<TradeTerminalViewProps> = ({
   selectedMarket,
   selectedMarketId: _selectedMarketId,
   onSelectMarket,
+  onRefreshMarkets,
   liveTicks,
   depthMap,
   currentSpotPrices,
@@ -230,6 +232,7 @@ export const TradeTerminalView: React.FC<TradeTerminalViewProps> = ({
                 liveTick={tick}
                 currentSpotPrice={spot}
                 agentThoughts={agentThoughts}
+                onExpire={onRefreshMarkets}
               />
             ) : null}
           </div>

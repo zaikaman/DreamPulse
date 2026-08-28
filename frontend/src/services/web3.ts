@@ -6,7 +6,6 @@ import {
   defineChain,
   parseUnits,
   formatUnits,
-  encodeFunctionData,
   type Address,
   type Hex,
   type PublicClient,
@@ -618,82 +617,32 @@ export class Web3Service {
   }): Promise<{ operatorHash?: Hex; allowanceHashes: Hex[] }> {
     const operator = params.operator || SOMNIA_ADDRESSES.operatorAccount;
     const token = params.token || SOMNIA_ADDRESSES.testUsdc;
-    const selectors = [OPERATOR_SELECTORS.placeOrderFor, OPERATOR_SELECTORS.placeBinaryOrderFor, OPERATOR_SELECTORS.cancelOrderFor];
 
-    const needsOperator = !(await this.isOperatorAuthorized({ owner: params.userAddress, operator, selector: OPERATOR_SELECTORS.placeOrderFor }));
-    let hasOperatorAllowance = false;
-    try {
-      const opAllow = await publicClient.readContract({ address: token, abi: ERC20_ABI, functionName: 'allowance', args: [params.userAddress, operator] });
-      hasOperatorAllowance = (opAllow as bigint) >= parseUnits('1000', 6);
-    } catch {}
+    const [isGloballyAuthed, currentAllowance] = await Promise.all([
+      this.isOperatorAuthorized({ owner: params.userAddress, operator, selector: OPERATOR_SELECTORS.placeOrderFor }),
+      publicClient.readContract({
+        address: token,
+        abi: ERC20_ABI,
+        functionName: 'allowance',
+        args: [params.userAddress, operator],
+      }).catch(() => 0n),
+    ]);
+
+    const minAllowance = parseUnits('1000', 6);
+    const needsOperator = !isGloballyAuthed;
+    const hasOperatorAllowance = (currentAllowance as bigint) >= minAllowance;
 
     if (!needsOperator && hasOperatorAllowance) return { allowanceHashes: [] };
-
-    const calls: Array<{ to: Address; data: Hex }> = [];
-    if (needsOperator) {
-      calls.push({
-        to: SOMNIA_ADDRESSES.operatorPermissionsRegistry,
-        data: encodeFunctionData({ abi: OPERATOR_REGISTRY_ABI, functionName: 'setOperatorApprovalGlobal', args: [operator, selectors, true] }),
-      });
-    }
-    if (!hasOperatorAllowance) {
-      calls.push({
-        to: token,
-        data: encodeFunctionData({ abi: ERC20_ABI, functionName: 'approve', args: [operator, parseUnits('1000000', 6)] }),
-      });
-    }
-
-    // Try EIP-5792 batch
-    const canBatch = typeof window !== 'undefined' && window.ethereum && typeof window.ethereum.request === 'function';
-    if (canBatch && calls.length > 1) {
-      try {
-        const wallet = this.getWalletClient(params.userAddress) as any;
-        if (typeof wallet.sendCalls === 'function') {
-          const id: string = await wallet.sendCalls({ account: params.userAddress, calls, chain: somniaShannonTestnet });
-          const start = Date.now();
-          while (Date.now() - start < 90_000) {
-            try {
-              const status: any = await window.ethereum.request({ method: 'wallet_getCallsStatus', params: [id] });
-              if (status?.status === 'CONFIRMED' || status?.status === 200 || status?.receipts) {
-                const receipts: Hex[] = (status.receipts || []).map((r: any) => r.transactionHash || r.hash).filter(Boolean);
-                return { operatorHash: receipts[0], allowanceHashes: receipts.slice(needsOperator ? 1 : 0) };
-              }
-              if (status?.status === 'FAILED') throw new Error('Batch failed');
-            } catch {}
-            await new Promise((r) => setTimeout(r, 1500));
-          }
-          return { allowanceHashes: [id as Hex] };
-        }
-        const batchId: string = await window.ethereum.request({
-          method: 'wallet_sendCalls',
-          params: [{ version: '1.0', chainId: `0x${somniaShannonTestnet.id.toString(16)}`, from: params.userAddress, calls }],
-        });
-        const start = Date.now();
-        while (Date.now() - start < 90_000) {
-          try {
-            const status: any = await window.ethereum.request({ method: 'wallet_getCallsStatus', params: [batchId] });
-            if (status?.status === 'CONFIRMED' || status?.status === 200 || status?.receipts) {
-              const receipts: Hex[] = (status.receipts || []).map((r: any) => r.transactionHash || r.hash).filter(Boolean);
-              return { operatorHash: receipts[0], allowanceHashes: receipts.slice(needsOperator ? 1 : 0) };
-            }
-            if (status?.status === 'FAILED') throw new Error('Batch failed');
-          } catch {}
-          await new Promise((r) => setTimeout(r, 1500));
-        }
-        return { allowanceHashes: [batchId as Hex] };
-      } catch (batchErr: any) {
-        const msg = String(batchErr?.message || '');
-        if (msg.includes('User rejected') || msg.includes('rejected')) throw batchErr;
-        console.warn('[Web3Service] batchAuthorizeAndApprovePools fallback:', msg);
-      }
-    }
 
     let operatorHash: Hex | undefined;
     if (needsOperator) {
       const res = await this.grantOperatorGlobal({ userAddress: params.userAddress, operator });
       operatorHash = res.hash;
     }
-    const appHash = await this.approveOperatorForTestUsdc({ userAddress: params.userAddress, operator });
+    let appHash: Hex | undefined;
+    if (!hasOperatorAllowance) {
+      appHash = await this.approveOperatorForTestUsdc({ userAddress: params.userAddress, operator });
+    }
     return { operatorHash, allowanceHashes: appHash ? [appHash] : [] };
   }
 
@@ -727,99 +676,39 @@ export class Web3Service {
   }
 
   /**
-   * 2-click forever: single batch for approve(operator,MAX) + setOperatorApprovalGlobal + per-pool setOperatorApprovalForPool for 7d horizon.
-   * Uses EIP-5792 wallet_sendCalls or EIP-7702 delegation to Batch helper — one popup for N pools.
+   * Fast, non-blocking single operator approval & TestUSDC allowance check.
+   * Leverages Somnia OperatorPermissionsRegistry global approval + operator TestUSDC allowance.
+   * Dispatches directly to user wallet without sequential multi-pool RPC blocking.
    */
   public async batchSingleApproveAndGlobal(params: { userAddress: Address; operator?: Address; pools?: Address[] }): Promise<Hex | undefined> {
     const operator = params.operator || SOMNIA_ADDRESSES.operatorAccount;
     const token = SOMNIA_ADDRESSES.testUsdc;
-    const selectors = [OPERATOR_SELECTORS.placeOrderFor, OPERATOR_SELECTORS.placeBinaryOrderFor, OPERATOR_SELECTORS.cancelOrderFor];
-    const needsOp = !(await this.isOperatorAuthorized({ owner: params.userAddress, operator }));
-    let needsApprove = true;
-    try {
-      const allowance = await publicClient.readContract({ address: token, abi: ERC20_ABI, functionName: 'allowance', args: [params.userAddress, operator] });
-      needsApprove = allowance < parseUnits('1000000', 6);
-    } catch {}
-    // Also need per-pool isApprovedForPool for future pools — fetch via batch check
-    const pools = params.pools || [];
-    const poolsToAuthorize: Address[] = [];
-    if (pools.length > 0) {
-      for (const pool of [...new Set(pools.map((p) => p.toLowerCase()))] as Address[]) {
-        if (!pool || pool === SOMNIA_ADDRESSES.binaryModule) continue;
-        try {
-          const perPool = await publicClient.readContract({
-            address: SOMNIA_ADDRESSES.operatorPermissionsRegistry,
-            abi: OPERATOR_REGISTRY_ABI,
-            functionName: 'isApprovedForPool',
-            args: [pool as Address, params.userAddress, operator, OPERATOR_SELECTORS.placeBinaryOrderFor as `0x${string}`],
-          });
-          if (!perPool) poolsToAuthorize.push(pool as Address);
-        } catch {
-          poolsToAuthorize.push(pool as Address);
-        }
-      }
-    }
-    if (!needsOp && !needsApprove && poolsToAuthorize.length === 0) return undefined;
-    const calls: Array<{ to: Address; data: Hex }> = [];
-    if (needsApprove) calls.push({ to: token, data: encodeFunctionData({ abi: ERC20_ABI, functionName: 'approve', args: [operator, parseUnits('1000000', 6)] }) });
-    if (needsOp) calls.push({ to: SOMNIA_ADDRESSES.operatorPermissionsRegistry, data: encodeFunctionData({ abi: OPERATOR_REGISTRY_ABI, functionName: 'setOperatorApprovalGlobal', args: [operator, selectors, true] }) });
-    for (const pool of poolsToAuthorize) {
-      calls.push({
-        to: SOMNIA_ADDRESSES.operatorPermissionsRegistry,
-        data: encodeFunctionData({ abi: OPERATOR_REGISTRY_ABI, functionName: 'setOperatorApprovalForPool', args: [pool as Address, operator, selectors, true] }),
-      });
-    }
-    // Try EIP-5792 first
-    const canBatch = typeof window !== 'undefined' && (window.ethereum as any)?.request;
-    if (canBatch && calls.length > 1) {
-      try {
-        const walletAny = this.getWalletClient(params.userAddress) as any;
-        if (typeof walletAny.sendCalls === 'function') {
-          const id = await walletAny.sendCalls({ account: params.userAddress, calls, chain: somniaShannonTestnet });
-          const start = Date.now();
-          while (Date.now() - start < 60000) {
-            try {
-              const st: any = await (window.ethereum as any).request({ method: 'wallet_getCallsStatus', params: [id] });
-              if (st?.status === 'CONFIRMED' || st?.receipts) return st.receipts?.[0]?.transactionHash || id as Hex;
-            } catch {}
-            await new Promise((r) => setTimeout(r, 1000));
-          }
-          return id as Hex;
-        }
-        const batchId: string = await (window.ethereum as any).request({ method: 'wallet_sendCalls', params: [{ version: '1.0', chainId: `0x${somniaShannonTestnet.id.toString(16)}`, from: params.userAddress, calls }] });
-        const start = Date.now();
-        while (Date.now() - start < 60000) {
-          try {
-            const st: any = await (window.ethereum as any).request({ method: 'wallet_getCallsStatus', params: [batchId] });
-            if (st?.status === 'CONFIRMED' || st?.receipts) return st.receipts?.[0]?.transactionHash || batchId as Hex;
-          } catch {}
-          await new Promise((r) => setTimeout(r, 1000));
-        }
-        return batchId as Hex;
-      } catch (e: any) {
-        if (String(e?.message || '').includes('User rejected')) throw e;
-      }
-    }
-    // Try EIP-7702 with per-pool batch (also delegates EOA)
-    try {
-      const hash = await this.batchVia7702({ userAddress: params.userAddress, pools: poolsToAuthorize, operator, token });
-      if (hash) return hash;
-    } catch {}
-    // Fallback sequential — include per-pool approvals (BinaryPool requires per-pool even if global true)
+
+    const [isGloballyAuthed, currentAllowance] = await Promise.all([
+      this.isOperatorAuthorized({ owner: params.userAddress, operator }),
+      publicClient.readContract({
+        address: token,
+        abi: ERC20_ABI,
+        functionName: 'allowance',
+        args: [params.userAddress, operator],
+      }).catch(() => 0n),
+    ]);
+
+    const minAllowance = parseUnits('1000', 6);
+    const needsApprove = (currentAllowance as bigint) < minAllowance;
+    const needsOp = !isGloballyAuthed;
+
+    if (!needsOp && !needsApprove) return undefined;
+
     let lastHash: Hex | undefined;
-    if (needsApprove) lastHash = await this.approveOperatorForTestUsdc({ userAddress: params.userAddress, operator });
     if (needsOp) {
       const res = await this.grantOperatorGlobal({ userAddress: params.userAddress, operator });
-      lastHash = res.hash;
+      if (res.hash) lastHash = res.hash;
     }
-    if (poolsToAuthorize.length > 0) {
-      try {
-        const hashes = await this.ensureAllowancesForPools({ userAddress: params.userAddress, pools: poolsToAuthorize });
-        if (hashes.length > 0) lastHash = hashes[hashes.length - 1];
-      } catch {}
+    if (needsApprove) {
+      const appHash = await this.approveOperatorForTestUsdc({ userAddress: params.userAddress, operator });
+      if (appHash) lastHash = appHash;
     }
-    // Also ensure EOA delegation for future pools even if no per-pool needed now
-    try { await this.delegateToBatch(params.userAddress); } catch {}
     return lastHash;
   }
 
@@ -869,49 +758,6 @@ export class Web3Service {
   }
 
   /**
-   * EIP-7702 single-tx batch: delegate user's EOA to BatchApprove helper and execute batchBoth in one transaction.
-   * When pools.length===0 this still ensures delegation (no batchBoth needed) so future pools can be auto-set.
-   */
-  private async batchVia7702(params: { userAddress: Address; pools: Address[]; operator: Address; token: Address }): Promise<Hex | undefined> {
-    const { userAddress, pools, operator, token } = params;
-    const selectors = [OPERATOR_SELECTORS.placeOrderFor, OPERATOR_SELECTORS.placeBinaryOrderFor, OPERATOR_SELECTORS.cancelOrderFor];
-    const batchAddress = SOMNIA_ADDRESSES.batchHelper;
-    const wallet = this.getWalletClient(userAddress) as any;
-    if (typeof wallet.signAuthorization !== 'function' || typeof wallet.sendTransaction !== 'function') return undefined;
-    try {
-      // If no pools, just delegate EOA to Batch so backend can auto-set future per-pool without clicks
-      if (pools.length === 0) {
-        return await this.delegateToBatch(userAddress);
-      }
-      const authorization = await wallet.signAuthorization({
-        account: userAddress,
-        contractAddress: batchAddress,
-        chainId: somniaShannonTestnet.id,
-        executor: 'self',
-      } as any);
-      const data = encodeFunctionData({
-        abi: [
-          { type: 'function', name: 'batchBoth', inputs: [{ name: 'token', type: 'address' }, { name: 'registry', type: 'address' }, { name: 'pools', type: 'address[]' }, { name: 'operator', type: 'address' }, { name: 'selectors', type: 'bytes4[]' }, { name: 'amount', type: 'uint256' }], outputs: [], stateMutability: 'nonpayable' },
-        ] as any,
-        functionName: 'batchBoth',
-        args: [token, SOMNIA_ADDRESSES.operatorPermissionsRegistry, pools, operator, selectors, parseUnits('1000000', 6)],
-      });
-      const hash = await wallet.sendTransaction({
-        account: userAddress,
-        to: userAddress,
-        data,
-        authorizationList: [authorization],
-        chain: somniaShannonTestnet,
-      });
-      await publicClient.waitForTransactionReceipt({ hash });
-      return hash;
-    } catch (e: any) {
-      if (String(e?.message || '').includes('not support') || String(e?.message || '').includes('authorization')) return undefined;
-      throw e;
-    }
-  }
-
-  /**
    * Ensures TestUSDC allowance and operator authorization.
    * Single approve(operator, MAX) covers all current and future binary prediction pools.
    */
@@ -922,106 +768,22 @@ export class Web3Service {
   }): Promise<Hex[]> {
     const token = params.token || SOMNIA_ADDRESSES.testUsdc;
     const operator = SOMNIA_ADDRESSES.operatorAccount;
-    const selectors = [OPERATOR_SELECTORS.placeOrderFor, OPERATOR_SELECTORS.placeBinaryOrderFor, OPERATOR_SELECTORS.cancelOrderFor];
 
-    const needsOperator = !(await this.isOperatorAuthorized({ owner: params.userAddress, operator, selector: OPERATOR_SELECTORS.placeOrderFor }));
-    let hasOperatorAllowance = false;
-    try {
-      const opAllow = await publicClient.readContract({ address: token, abi: ERC20_ABI, functionName: 'allowance', args: [params.userAddress, operator] });
-      hasOperatorAllowance = (opAllow as bigint) >= parseUnits('1000', 6);
-    } catch {}
+    const [isGloballyAuthed, currentAllowance] = await Promise.all([
+      this.isOperatorAuthorized({ owner: params.userAddress, operator, selector: OPERATOR_SELECTORS.placeOrderFor }),
+      publicClient.readContract({
+        address: token,
+        abi: ERC20_ABI,
+        functionName: 'allowance',
+        args: [params.userAddress, operator],
+      }).catch(() => 0n),
+    ]);
+
+    const minAllowance = parseUnits('1000', 6);
+    const needsOperator = !isGloballyAuthed;
+    const hasOperatorAllowance = (currentAllowance as bigint) >= minAllowance;
 
     if (!needsOperator && hasOperatorAllowance) return [];
-
-    const calls: Array<{ to: Address; data: Hex }> = [];
-    if (needsOperator) {
-      calls.push({
-        to: SOMNIA_ADDRESSES.operatorPermissionsRegistry,
-        data: encodeFunctionData({ abi: OPERATOR_REGISTRY_ABI, functionName: 'setOperatorApprovalGlobal', args: [operator, selectors, true] }),
-      });
-    }
-    if (!hasOperatorAllowance) {
-      calls.push({
-        to: token,
-        data: encodeFunctionData({ abi: ERC20_ABI, functionName: 'approve', args: [operator, parseUnits('1000000', 6)] }),
-      });
-    }
-
-    // Feature-detect wallet_sendCalls support
-    const canBatch = typeof window !== 'undefined' && window.ethereum && typeof window.ethereum.request === 'function';
-
-    if (canBatch) {
-      try {
-        // viem's walletClient may expose sendCalls directly
-        const wallet = this.getWalletClient(params.userAddress) as any;
-        if (typeof wallet.sendCalls === 'function') {
-          const sendCallsId: string = await wallet.sendCalls({
-            account: params.userAddress,
-            calls: calls.map((c) => ({ to: c.to, data: c.data })),
-            chain: somniaShannonTestnet,
-          });
-          // Poll wallet_getCallsStatus until confirmed (EIP-5792)
-          const start = Date.now();
-          while (Date.now() - start < 90_000) {
-            try {
-              const status: any = await window.ethereum.request({
-                method: 'wallet_getCallsStatus',
-                params: [sendCallsId],
-              });
-              if (status?.status === 'CONFIRMED' || status?.status === 200 || status?.receipts) {
-                const receipts: Hex[] = (status.receipts || []).map((r: any) => r.transactionHash || r.hash).filter(Boolean);
-                if (receipts.length > 0) return receipts as Hex[];
-                return [sendCallsId as Hex];
-              }
-              if (status?.status === 'FAILED') throw new Error('Batch approve failed');
-            } catch {}
-            await new Promise((r) => setTimeout(r, 1500));
-          }
-          return [sendCallsId as Hex];
-        }
-
-        // Raw wallet_sendCalls
-        const batchId: string = await window.ethereum.request({
-          method: 'wallet_sendCalls',
-          params: [
-            {
-              version: '1.0',
-              chainId: `0x${somniaShannonTestnet.id.toString(16)}`,
-              from: params.userAddress,
-              calls,
-            },
-          ],
-        });
-        // Poll for batch status
-        const start = Date.now();
-        while (Date.now() - start < 90_000) {
-          try {
-            const status: any = await window.ethereum.request({
-              method: 'wallet_getCallsStatus',
-              params: [batchId],
-            });
-            if (status?.status === 'CONFIRMED' || status?.status === 200 || status?.receipts) {
-              const receipts: Hex[] = (status.receipts || []).map((r: any) => r.transactionHash || r.hash).filter(Boolean);
-              if (receipts.length > 0) return receipts as Hex[];
-              return [batchId as Hex];
-            }
-            if (status?.status === 'FAILED') throw new Error('Batch approve failed');
-          } catch {}
-          await new Promise((r) => setTimeout(r, 1500));
-        }
-        return [batchId as Hex];
-      } catch (batchErr: any) {
-        // EIP-5792 not supported or user rejected — fall through to sequential
-        const msg = String(batchErr?.message || '');
-        if (msg.includes('not support') || msg.includes('not found') || msg.includes('Method')) {
-          console.info('[Web3Service] wallet_sendCalls not supported, falling back to sequential approves');
-        } else if (msg.includes('User rejected') || msg.includes('rejected')) {
-          throw batchErr;
-        } else {
-          console.warn('[Web3Service] Batch approve notice, falling back:', msg);
-        }
-      }
-    }
 
     const hashes: Hex[] = [];
     if (needsOperator) {

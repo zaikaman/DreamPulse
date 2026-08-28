@@ -16,6 +16,7 @@ interface EventContractChartProps {
   liveTick?: MarketTickData;
   currentSpotPrice?: number;
   agentThoughts?: AgentThoughtLog[];
+  onExpire?: () => void;
 }
 
 interface PricePoint {
@@ -28,6 +29,7 @@ export const EventContractChart: React.FC<EventContractChartProps> = ({
   liveTick,
   currentSpotPrice,
   agentThoughts: _agentThoughts = [],
+  onExpire,
 }) => {
   const containerRef = useRef<HTMLDivElement>(null);
   const [dimensions, setDimensions] = useState<{ width: number; height: number }>({ width: 800, height: 420 });
@@ -127,7 +129,11 @@ export const EventContractChart: React.FC<EventContractChartProps> = ({
   }, []);
 
   // Real-time dynamic countdown & formatted expiry
-  const { formattedCountdown, formattedExpiry, isLocked } = useMarketCountdown(market.closeTimestamp, market.windowDuration);
+  const { formattedCountdown, formattedExpiry, isLocked } = useMarketCountdown(
+    market.closeTimestamp,
+    market.windowDuration,
+    onExpire
+  );
 
   // Scaler functions for SVG chart
   const { width, height } = dimensions;

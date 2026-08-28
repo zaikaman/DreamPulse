@@ -367,47 +367,17 @@ export function useSessionKey(): UseSessionKeyReturn {
       let onChainTxHash: `0x${string}` | undefined;
 
       try {
-        // Step 1: 1 batch for approve(operator,MAX)+global+per-pool(7d) via EIP-5792/7702
+        // Step 1: On-Chain Operator & TestUSDC Authorization
         setStepState('authorizing_onchain');
-        let futurePools: Address[] = [];
         try {
-          const futureRes = await apiClient.getFuturePools({ horizonHours: 168 }).catch(() => null);
-          if (futureRes?.pools?.length) futurePools = futureRes.pools.slice(0, 80) as Address[];
-        } catch {}
-        try {
-          const batchHash = await web3Service.batchSingleApproveAndGlobal({ userAddress: wallet.address, pools: futurePools });
+          const batchHash = await web3Service.batchSingleApproveAndGlobal({ userAddress: wallet.address });
           if (batchHash) onChainTxHash = batchHash;
         } catch (e: any) {
-          if (String(e?.message || '').includes('User rejected')) throw e;
+          if (String(e?.message || '').includes('User rejected') || String(e?.message || '').includes('rejected')) {
+            throw e;
+          }
           console.warn('[useSessionKey] batchSingleApproveAndGlobal notice:', e.message);
-          try {
-            const opHash = await web3Service.approveOperatorForTestUsdc({ userAddress: wallet.address });
-            if (opHash) onChainTxHash = opHash;
-          } catch (ee: any) {
-            if (String(ee?.message || '').includes('User rejected')) throw ee;
-          }
-          try {
-            const isAuth = await web3Service.isOperatorAuthorized({ owner: wallet.address, operator: SOMNIA_ADDRESSES.operatorAccount });
-            if (!isAuth) {
-              const res = await web3Service.grantOperatorGlobal({ userAddress: wallet.address, operator: SOMNIA_ADDRESSES.operatorAccount, approved: true });
-              onChainTxHash = res.hash;
-            }
-          } catch (ee: any) {
-            if (String(ee?.message || '').includes('User rejected')) throw ee;
-          }
-          if (futurePools.length > 0) {
-            try {
-              await web3Service.batchAuthorizeAndApprovePools({ userAddress: wallet.address, pools: futurePools });
-            } catch {}
-          }
         }
-        // Delegate EOA to Batch helper for future per-pool isApprovedForPool without further clicks (EIP-7702, executor:self)
-        try {
-          const code = await (web3Service as any).isDelegatedToBatch?.(wallet.address);
-          if (!code) {
-            await (web3Service as any).delegateToBatch?.(wallet.address).catch(() => {});
-          }
-        } catch {}
 
         // Optional: Collateral vault deposit — only for SpotPools, BinaryPools use allowance only
         if (params.depositAmount && params.depositAmount > 0 && params.targetPool) {
