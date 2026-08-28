@@ -288,9 +288,12 @@ function computeEquityAndDaily(orders: OrderExecution[], cutoffMs: number): { eq
 }
 
 function breakdownByAgent(orders: OrderExecution[]): AgentBreakdown[] {
-  const agentList: AgentType[] = ['Volt', 'Oracle', 'Titan', 'Sweeper'];
+  const agentList: (AgentType | 'CUSTOM')[] = ['Volt', 'Oracle', 'Titan', 'Sweeper'];
   if (orders.some((o) => o.agentType === 'Manual' || o.source === 'TERMINAL')) {
     agentList.push('Manual');
+  }
+  if (orders.some((o) => o.agentType === 'CUSTOM')) {
+    agentList.push('CUSTOM' as any);
   }
   return agentList.map((agent) => {
     const filtered = orders.filter((o) => o.agentType === agent || (agent === 'Manual' && o.source === 'TERMINAL'));
