@@ -272,14 +272,16 @@ apiRouter.get('/sessions/:userAddress', async (req: Request, res: Response) => {
 
     const activeSession = await sessionService.getUserActiveSession(userAddress);
     if (activeSession) {
-      const userOrders = orderService.getOrders({ userAddress });
-      const realSpend = userOrders
-        .filter((o) => o.status === 'FILLED' || o.status === 'PENDING')
-        .reduce((sum, o) => sum + (o.totalCost || 0), 0);
+      const userOrders = orderService.getOrders({ userAddress }).filter((o) => o.sessionId === activeSession.id);
+      if (userOrders.length > 0) {
+        const realSpend = userOrders
+          .filter((o) => o.status === 'FILLED' || o.status === 'PENDING')
+          .reduce((sum, o) => sum + (o.totalCost || 0), 0);
 
-      if (activeSession.spentToday > realSpend) {
-        activeSession.spentToday = Number(realSpend.toFixed(4));
-        sessionService.updateSessionSpend(activeSession.id, activeSession.spentToday);
+        if (activeSession.spentToday > realSpend) {
+          activeSession.spentToday = Number(realSpend.toFixed(4));
+          sessionService.updateSessionSpend(activeSession.id, activeSession.spentToday);
+        }
       }
     }
 
@@ -813,13 +815,16 @@ apiRouter.get('/portfolio/summary', async (req: Request, res: Response) => {
     const userOrders = orderService.getOrders({ userAddress: targetAddress });
     const session = targetAddress ? await sessionService.getUserActiveSession(targetAddress).catch(() => null) : null;
     if (session) {
-      const realSpend = userOrders
-        .filter((o) => o.status === 'FILLED' || o.status === 'PENDING')
-        .reduce((sum, o) => sum + (o.totalCost || 0), 0);
+      const sessionOrders = userOrders.filter((o) => o.sessionId === session.id);
+      if (sessionOrders.length > 0) {
+        const realSpend = sessionOrders
+          .filter((o) => o.status === 'FILLED' || o.status === 'PENDING')
+          .reduce((sum, o) => sum + (o.totalCost || 0), 0);
 
-      if (session.spentToday > realSpend) {
-        session.spentToday = Number(realSpend.toFixed(4));
-        sessionService.updateSessionSpend(session.id, session.spentToday);
+        if (session.spentToday > realSpend) {
+          session.spentToday = Number(realSpend.toFixed(4));
+          sessionService.updateSessionSpend(session.id, session.spentToday);
+        }
       }
     }
 

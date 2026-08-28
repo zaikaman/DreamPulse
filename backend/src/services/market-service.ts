@@ -767,8 +767,9 @@ export class MarketService extends EventEmitter {
   public async ensureMarketPersisted(marketId: string, symbol: string = 'BTC/USD'): Promise<void> {
     if (!marketId) return;
     try {
+      const db = getServiceSupabase();
       const existing = this.markets.get(marketId);
-      await supabase.from('markets').upsert({
+      const res = await db.from('markets').upsert({
         id: marketId,
         symbol: existing?.symbol || symbol,
         strike_price: existing?.strikePrice || 0,
@@ -786,8 +787,11 @@ export class MarketService extends EventEmitter {
         edge_percentage: existing?.edgePercentage ?? 0,
         updated_at: new Date().toISOString(),
       }, { onConflict: 'id' });
-    } catch (_err) {
-      // Non-fatal
+      if (res.error) {
+        console.warn(`[MarketService] ensureMarketPersisted notice for ${marketId}:`, res.error.message);
+      }
+    } catch (err: any) {
+      console.warn(`[MarketService] ensureMarketPersisted exception for ${marketId}:`, err?.message || err);
     }
   }
 
