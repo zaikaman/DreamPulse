@@ -359,9 +359,9 @@ export class LeaderboardService {
     };
     const cutoffMs = timeCutoffs[tf] ? now - timeCutoffs[tf] : 0;
 
-    // 2. Fetch all real orders from orderService and custom agents from customAgentService
+    // 2. Fetch all real orders from orderService and ALL custom agents (global arena) from customAgentService
     const allOrders = orderService.getOrders({});
-    const allCustomAgents = await customAgentService.getCustomAgents();
+    const allCustomAgents = await customAgentService.getAllCustomAgents();
 
     // 3. Compute real metrics for Protocol Archetypes
     const archetypeEntries: Array<Omit<ArenaAgentEntry, 'rank' | 'tierBadge'>> = PROTOCOL_SWARM_ARCHETYPES.map((arch) => {

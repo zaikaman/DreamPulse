@@ -117,16 +117,38 @@ describe('Swarm Arena & Strategy Leaderboard Tests', () => {
     });
 
     it('excludes agents with zero trades from arena leaderboard', async () => {
+      // Create a fresh zero-trade custom agent that must NOT appear on the arena
+      const zeroTradeAgent = await customAgentService.createCustomAgent({
+        userAddress: '0x1111111111111111111111111111111111111111',
+        name: `Zero Trade Sentinel ${Date.now()}`,
+        description: 'Agent with no fills should be hidden from arena',
+        symbol: 'BTC/USD',
+        timeframe: '5m',
+        strategyType: 'CUSTOM',
+        rules: {
+          operator: 'AND',
+          conditions: [{ id: 'c-1', indicator: 'RSI', period: 14, operator: 'LESS_THAN', value: 30 }],
+          action: { direction: 'CALL', durationSec: 300, stakeType: 'FIXED', stakeAmount: 10 },
+          risk: { maxConsecutiveLosses: 2, cooldownMinutes: 3, minPoolPayoutPct: 75 },
+        },
+        color: '#ffffff',
+        icon: 'BoltIcon',
+        isActive: true,
+        isDeployed: true,
+        allocatedAllowance: 100,
+        spentAllowance: 0,
+      });
+
       const all = await leaderboardService.getAgentLeaderboard({ timeframe: 'ALL' });
       // Every returned agent must have at least one trade
       for (const a of all.data) {
         expect(a.tradesCount).toBeGreaterThan(0);
       }
-      // Starter templates with zero trades should not appear at all
-      const starterIds = ['00000000-0000-0000-0000-000000000001', '00000000-0000-0000-0000-000000000002', '00000000-0000-0000-0000-000000000003'];
-      for (const id of starterIds) {
-        expect(all.data.some((a) => a.id === id)).toBe(false);
-      }
+      // The freshly created zero-trade agent must be excluded
+      expect(all.data.some((a) => a.id === zeroTradeAgent.id)).toBe(false);
+
+      // Cleanup
+      await customAgentService.deleteCustomAgent(zeroTradeAgent.id, zeroTradeAgent.userAddress);
     });
 
     it('ranks human traders and computes win streaks and Copilot synergy', async () => {

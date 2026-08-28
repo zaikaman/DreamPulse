@@ -298,6 +298,53 @@ export class CustomAgentService {
   }
 
   /**
+   * Retrieves ALL custom agents across all users (for global arena leaderboard).
+   * Includes every user-created agent plus pristine starter templates (zero-trade templates will be filtered upstream).
+   */
+  public async getAllCustomAgents(): Promise<CustomAgentDefinition[]> {
+    const result: CustomAgentDefinition[] = [];
+    const seenIds = new Set<string>();
+
+    // 1. Fetch every user-owned agent from DB (exclude pure template owner)
+    try {
+      const { data, error } = await supabase
+        .from('custom_agents')
+        .select('*')
+        .neq('user_address', '0x0000000000000000000000000000000000000000')
+        .order('created_at', { ascending: false });
+
+      if (!error && Array.isArray(data)) {
+        for (const row of data) {
+          const mapped = this.mapDbRowToAgent(row);
+          result.push(mapped);
+          seenIds.add(mapped.id);
+          this.inMemoryAgents.set(mapped.id, mapped);
+        }
+      }
+    } catch (err: any) {
+      console.warn('[CustomAgentService] Error loading all custom agents:', err.message);
+    }
+
+    // 2. Merge any in-memory user agents not yet persisted / not returned from DB
+    for (const [id, agent] of this.inMemoryAgents.entries()) {
+      if (agent.userAddress.toLowerCase() !== '0x0000000000000000000000000000000000000000' && !seenIds.has(id)) {
+        result.push(agent);
+        seenIds.add(id);
+      }
+    }
+
+    // 3. Always append pristine starter templates (they have tradesCount 0 and will be filtered upstream, but keep for completeness)
+    for (const t of STARTER_TEMPLATES) {
+      if (!seenIds.has(t.id)) {
+        result.push(JSON.parse(JSON.stringify(t)));
+        seenIds.add(t.id);
+      }
+    }
+
+    return result;
+  }
+
+  /**
    * Retrieves all currently active and deployed custom agents across all users.
    */
   public async getActiveDeployedAgents(): Promise<CustomAgentDefinition[]> {
