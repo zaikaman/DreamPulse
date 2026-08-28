@@ -14,7 +14,7 @@
 <p align="center">
   <a href="https://shannon-explorer.somnia.network"><img src="https://img.shields.io/badge/Blockchain-Somnia%20Shannon%20(50312)-00ffcc?style=for-the-badge&logo=ethereum&logoColor=black" alt="Somnia Shannon Testnet" /></a>
   <a href="https://docs.dreamdex.io/developers/event-contracts"><img src="https://img.shields.io/badge/Protocol-DreamDEX%20Event%20Contracts-7928CA?style=for-the-badge&logo=chainlink&logoColor=white" alt="DreamDEX Protocol" /></a>
-  <a href="https://github.com/zaikaman/DreamPulse"><img src="https://img.shields.io/badge/Tests-103%2F103%20Passed%20(100%25)-00e676?style=for-the-badge&logo=vitest&logoColor=white" alt="Tests 103/103 Passing" /></a>
+  <a href="https://github.com/zaikaman/DreamPulse"><img src="https://img.shields.io/badge/Tests-127%2F127%20Passed%20(100%25)-00e676?style=for-the-badge&logo=vitest&logoColor=white" alt="Tests 127/127 Passing" /></a>
   <a href="https://groq.com"><img src="https://img.shields.io/badge/LLM-Groq%20(Swarm)%20%2B%20Gemini%20(Studio)-f55036?style=for-the-badge&logo=openai&logoColor=white" alt="Groq + Gemini LLM" /></a>
 </p>
 
@@ -30,17 +30,18 @@
 6. [Non-Custodial Session Delegation & BatchApprove.sol](#non-custodial-session-delegation--batchapprovesol)
 7. [Strategy Studio (No-Code Agent & Swarm Builder) & Quantitative Backtester](#strategy-studio-no-code-agent--swarm-builder--quantitative-backtester)
 8. [Personal Swarm: Copy-Trading vs Isolated Per-Wallet Swarms](#personal-swarm-copy-trading-vs-isolated-per-wallet-swarms)
-9. [Institutional Design System & Minimalist Terminal UI](#institutional-design-system--minimalist-terminal-ui)
-10. [Minimalist Onboarding & First-Run Activation Flow](#minimalist-onboarding--first-run-activation-flow)
-11. [Smart Contracts & On-Chain Deployments](#smart-contracts--on-chain-deployments)
-12. [Hackathon Judging Criteria Alignment](#hackathon-judging-criteria-alignment)
-13. [Developer Feedback Report (Somnia & DreamDEX SDK)](#developer-feedback-report-somnia--dreamdex-sdk)
-14. [System Architecture Diagrams](#system-architecture-diagrams)
-15. [API & WebSocket Telemetry Protocol](#api--websocket-telemetry-protocol)
-16. [Local Installation & Development Guide](#local-installation--development-guide)
-17. [Verification & Test Suite (100/100 Passing)](#verification--test-suite-100100-passing)
-18. [2–3 Minute Demo Video Walkthrough](#23-minute-demo-video-walkthrough)
-19. [License & Acknowledgements](#license--acknowledgements)
+9. [Swarm Arena, Strategy Leaderboard & Proof-of-Alpha Card Studio](#swarm-arena-strategy-leaderboard--proof-of-alpha-card-studio)
+10. [Institutional Design System & Minimalist Terminal UI](#institutional-design-system--minimalist-terminal-ui)
+11. [Minimalist Onboarding & First-Run Activation Flow](#minimalist-onboarding--first-run-activation-flow)
+12. [Smart Contracts & On-Chain Deployments](#smart-contracts--on-chain-deployments)
+13. [Hackathon Judging Criteria Alignment](#hackathon-judging-criteria-alignment)
+14. [Developer Feedback Report (Somnia & DreamDEX SDK)](#developer-feedback-report-somnia--dreamdex-sdk)
+15. [System Architecture Diagrams](#system-architecture-diagrams)
+16. [API & WebSocket Telemetry Protocol](#api--websocket-telemetry-protocol)
+17. [Local Installation & Development Guide](#local-installation--development-guide)
+18. [Verification & Test Suite (127/127 Passing)](#verification--test-suite-127127-passing)
+19. [2–3 Minute Demo Video Walkthrough](#23-minute-demo-video-walkthrough)
+20. [License & Acknowledgements](#license--acknowledgements)
 
 ---
 
@@ -353,6 +354,62 @@ This design preserves the original operator-as-source-of-truth while giving ever
 
 ---
 
+## Swarm Arena, Strategy Leaderboard & Proof-of-Alpha Card Studio
+
+Fulfilling the hackathon's core vision for **Social Prediction Products**, **1-Click Strategy Cloning**, and **Viral Ecosystem Adoption**, DreamPulse introduces the **Swarm Arena** (`#arena`), **Dedicated Full-Page Trader Profiles** (`#profile/:address`), and the **Proof-of-Alpha Card Studio**:
+
+```mermaid
+flowchart TD
+    subgraph SwarmArena ["Swarm Arena & Strategy Leaderboard (#arena)"]
+        direction TB
+        TRACK1["🤖 AI Agent Fleet Track\n(Protocol Archetypes & User Custom Deployed Agents)"]
+        TRACK2["👤 Human Forecasters Track\n(100% Real CLOB Order Flow & On-Chain PnL)"]
+    end
+
+    subgraph Actions ["Social Actions & Composability"]
+        CLONE["⚡ 1-Click Strategy Clone\n(Imports Rule AST -> Personal Swarm / Studio)"]
+        MIRROR["👥 Autonomous Social Mirror\n(Auto-Replicate High-Ranked Forecasters)"]
+        CARD["🎨 Proof-of-Alpha Card Studio\n(2x/4x Retina Canvas Badges for Twitter & Telegram)"]
+        PROFILE["📊 Dedicated Trader Profile Page\n(Realized Alpha Curves, Distributions, Fills Table)"]
+    end
+
+    TRACK1 --> CLONE
+    TRACK1 --> CARD
+    TRACK2 --> MIRROR
+    TRACK2 --> PROFILE
+    PROFILE --> CARD
+```
+
+### 1. Dual-Track Arena & Quantitative Leaderboards
+* **AI Agent Fleet Track**: Ranks autonomous algorithmic agents (such as *Volt Latency Sniper*, *Oracle Volatility Harvester*, *Titan MM*, and community-deployed custom agents) by real Net PnL, Win Rate %, Total Fills, Sharpe/Sortino Ratios, and Quantitative Rule Summaries.
+* **Human Forecasters Track**: Aggregates 100% genuine manual and terminal order executions on Somnia DreamDEX CLOB event pools. Ranks forecasters with Copilot Synergy Scores, Win Streaks, Volume, and Tier Badges (`APEX`, `GRANDMASTER`, `MASTER`, `PRO`, `EMERGING`).
+* **Multi-Timeframe Filtering**: Filter rankings across `24H` (active daily activity slice) and `7D` / `30D` / `ALL` (true inception performance metrics).
+
+### 2. 1-Click Strategy Cloning & Social Mirroring
+* **1-Click Strategy Cloning**: Clicking **Clone Strategy** on any agent copies its quantitative rule conditions, drift thresholds, and parameter AST directly into the user's Strategy Studio or Personal Swarm Cockpit.
+* **Autonomous Social Mirror Trading**: Clicking **Mirror Forecaster** enables automated copy-trading for that trader's signals within the user's non-custodial session risk bounds (`maxTradeSize`, `dailyVolumeCap`).
+
+### 3. Dedicated Full-Page Trader Profile (`#profile/:address`)
+* **Interactive Cumulative Alpha Performance Curve**: Visualizes cumulative realized PnL trajectory across trading rounds with interactive date/delta inspection.
+* **Recent On-Chain Executions Ledger**: Complete transaction history with market window badges, execution side (`BUY CALL` / `SELL NO`), stake amount, settled PnL, and direct Somnia Shannon Explorer verification links.
+* **Asset Allocation & Horizon Breakdown**: Horizontal percentage allocation bars across asset pairs (`BTC/USD`, `ETH/USD`, `SOL/USD`) and preferred binary expiry horizons (`1m`, `5m`, `15m`).
+* **Deep-Linkable URL Architecture**: Supports canonical `#profile/0x...`, `#trader/0x...`, and `#arena` deep linking.
+
+### 4. Proof-of-Alpha Card Studio (`ProofOfAlphaModal.tsx`)
+A high-resolution viral graphics generator rendering 2x & 4x retina Canvas cards for social bragging on X (Twitter), Telegram, and Discord:
+* **Curated Visual Themes**:
+  * **Cyber Emerald**: Obsidian matrix with neon emerald laser accents and cybernetic glows.
+  * **Shannon Quantum**: Electric Somnia cyan/blue gradient mesh with quantum edge lighting.
+  * **Apex Gold**: Luxurious dark titanium with gold foil highlights and champagne borders.
+  * **Crimson Titan**: Deep nebula violet & crimson with glowing laser highlights.
+  * **Dark Monochrome**: Stealth high-contrast obsidian with silver metallic sheen.
+* **Aspect Ratio & DPI Selection**: `16:9 Landscape` (Twitter cards) and `1:1 Square` (Discord/Telegram feeds) at `2x HD` or `4x Ultra-HD`.
+* **Customizable Slogans & Taglines**: Live editable text input with 1-click preset badges.
+* **High-Tech Cyber HUD Elements**: Toggleable isometric matrix grid, HUD corner brackets (`┌ ┐ └ ┘`), glowing area sparkline with final apex node ring, and Somnia Shannon verification stamp.
+* **1-Click Export**: Binary clipboard copy (`navigator.clipboard.write`), PNG download, and direct `Share on X` intent.
+
+---
+
 ## Institutional Design System & Minimalist Terminal UI
 
 The DreamPulse frontend is crafted with a high-aesthetic, minimalist institutional quant design system built with React 18, TypeScript, Tailwind CSS, and custom glassmorphic shaders:
@@ -567,6 +624,12 @@ The DreamPulse backend daemon exposes a comprehensive REST and WebSocket gateway
 | `POST` | `/api/v1/agents/custom/:id/deploy` | Deploys an individual custom agent for autonomous execution with dedicated tUSDC allowance. |
 | `POST` | `/api/v1/agents/custom/:id/pause` | Pauses an active custom agent's autonomous trading loop. |
 | `POST` | `/api/v1/agents/custom/:id/allowance` | Sets or updates the maximum allocated tUSDC bankroll allowance for an agent. |
+| `GET` | `/api/v1/arena/leaderboard/agents` | Returns ranked AI agent fleet with PnL, Win Rate, Sharpe, and Rule AST summaries. |
+| `GET` | `/api/v1/arena/leaderboard/traders` | Returns ranked Human Forecasters aggregating 100% genuine CLOB orders. |
+| `GET` | `/api/v1/arena/trader/:address/profile` | Retrieves detailed forecaster profile with equity curve, asset allocation, and fill history. |
+| `POST` | `/api/v1/arena/agent/:id/clone` | Clones an agent strategy directly into the user's custom strategy library. |
+| `POST` | `/api/v1/arena/copytrade/toggle` | Toggles autonomous social mirror trading for a target forecaster. |
+| `GET` | `/api/v1/arena/stats` | Global arena statistics including aggregate volume, community alpha, and active swarms. |
 | `GET` | `/api/health` | Service health status, uptime, and database connectivity. |
 
 ### Real-Time WebSocket Telemetry (`/ws/telemetry`)
@@ -651,7 +714,7 @@ Run both backend daemon and frontend Vite server concurrently:
 ```bash
 npm run dev
 ```
-* **Frontend Web App**: `http://localhost:5173`
+* **Frontend Web App**: `http://localhost:5174`
 * **Backend REST Gateway**: `http://localhost:5000/api/v1`
 * **WebSocket Stream**: `ws://localhost:5000/ws/telemetry`
 
@@ -660,9 +723,9 @@ For step-by-step instructions on deploying the **Frontend to Vercel** and the **
 
 ---
 
-## Verification & Test Suite (103/103 Passing)
+## Verification & Test Suite (127/127 Passing)
 
-DreamPulse enforces strict production-grade quality invariants with an automated **Vitest** test suite covering quantitative mathematics, smart contract session boundaries, multi-agent evaluation logic, backtesting algorithms, and API endpoints.
+DreamPulse enforces strict production-grade quality invariants with an automated **Vitest** test suite covering quantitative mathematics, smart contract session boundaries, multi-agent evaluation logic, backtesting algorithms, social leaderboard calculations, and API endpoints.
 
 ```bash
 # Run complete test suite across the workspace
@@ -681,29 +744,35 @@ npm run verify
 | [`tests/market-service.test.ts`](file:///d:/DreamPulse/backend/tests/market-service.test.ts) | **15** | Somnia on-chain CLOB order book polling, GraphQL indexer query parsing, anomaly detection (spread/staleness/mispricing), Binance spot ticker ingestion, and fallback market generation. |
 | [`tests/session.test.ts`](file:///d:/DreamPulse/backend/tests/session.test.ts) | **14** | Non-custodial session registration, EIP-712 typed signature verification, single trade size caps ($20 limit), cumulative daily volume caps ($200 limit), session revocation, multi-wallet isolation, and copy-trade target filtering. |
 | [`tests/api.test.ts`](file:///d:/DreamPulse/backend/tests/api.test.ts) | **13** | Express REST API health, market lists, order book depth ladders, anomaly feeds, telemetry stream endpoints, session management routes, order execution logs, copy-trade toggle, and sweeper trigger. |
+| [`tests/user-swarm.test.ts`](file:///d:/DreamPulse/backend/tests/user-swarm.test.ts) | **10** | Personal swarm isolated parameters, mode switching (`COPY` vs `PERSONAL`), per-wallet ephemeral swarm spawning, independent inventory tracking, and rate limits. |
 | [`tests/settlement.test.ts`](file:///d:/DreamPulse/backend/tests/settlement.test.ts) | **9** | Matured market resolution detection, automated winning share redemptions via Sweeper daemon, 100% collateral compounding into active trading balances, and multi-market batch claim aggregation. |
+| [`tests/leaderboard.test.ts`](file:///d:/DreamPulse/backend/tests/leaderboard.test.ts) | **9** | Dual-track Swarm Arena rankings, Sharpe/Sortino ratios, APEX tier badges, 100% real human forecaster order aggregation, Copilot synergy, detailed trader profile generation, 1-click strategy cloning, and global arena stats. |
 | [`tests/backtest.test.ts`](file:///d:/DreamPulse/backend/tests/backtest.test.ts) | **6** | Historical backtesting engine against Binance tick data, Sortino ratio, Profit Factor, Max Drawdown underwater curve computations, fee and slippage simulations. |
+| [`tests/custom-agent.test.ts`](file:///d:/DreamPulse/backend/tests/custom-agent.test.ts) | **5** | Custom deployed agents evaluation engine, starter templates, trade fills, settlements, and dedicated tUSDC allowance depletion tracking. |
 | [`tests/llm.test.ts`](file:///d:/DreamPulse/backend/tests/llm.test.ts) | **4** | Groq Qwen 2.5 multi-key round-robin rotation, persistent key index, structured reasoning thoughts, and exclusive Google Gemini Strategy Studio isolation. |
-| [`tests/setup.test.ts`](file:///d:/DreamPulse/backend/tests/setup.test.ts) | **2** | Environment configuration sanity check, Somnia Shannon network (Chain ID `50312`), and contract constants validation. |
-| **Total** | **103** | **100% Passing across 9 test suites with zero failures and zero `any` types** |
+| [`tests/setup.test.ts`](file:///d:/DreamPulse/backend/tests/setup.test.ts) | **3** | Environment configuration sanity check, Somnia Shannon network (Chain ID `50312`), and contract constants validation. |
+| **Total** | **127** | **100% Passing across 12 test suites with zero failures and zero `any` types** |
 
 ### Test Suite Execution Output
 ```
  RUN  v3.2.7 D:/DreamPulse/backend
 
- ✓ tests/setup.test.ts (2 tests)
+ ✓ tests/setup.test.ts (3 tests)
  ✓ tests/quantitative.test.ts (20 tests)
  ✓ tests/settlement.test.ts (9 tests)
  ✓ tests/llm.test.ts (4 tests)
  ✓ tests/backtest.test.ts (6 tests)
  ✓ tests/agents.test.ts (19 tests)
+ ✓ tests/user-swarm.test.ts (10 tests)
+ ✓ tests/leaderboard.test.ts (9 tests)
+ ✓ tests/custom-agent.test.ts (5 tests)
  ✓ tests/api.test.ts (13 tests)
  ✓ tests/market-service.test.ts (15 tests)
  ✓ tests/session.test.ts (14 tests)
 
- Test Files  9 passed (9)
-      Tests  103 passed (103)
-   Duration  15.26s
+ Test Files  12 passed (12)
+      Tests  127 passed (127)
+   Duration  15.42s
 ```
 
 ---

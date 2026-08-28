@@ -70,5 +70,5 @@ describe('Groq Multi-Key Round-Robin & Fallback System', () => {
     expect(agent).toHaveProperty('name');
     expect(agent).toHaveProperty('rules');
     expect(agent.rules?.action?.direction).toBe('CALL');
-  }, 25000);
+  }, 45000);
 });

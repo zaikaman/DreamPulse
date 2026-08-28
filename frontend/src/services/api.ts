@@ -12,6 +12,12 @@ import type {
   CustomAgentDefinition,
   CustomSwarmDefinition,
   CustomAgentRules,
+  ArenaAgentEntry,
+  ArenaTraderEntry,
+  TraderProfileDetail,
+  ArenaGlobalStats,
+  ArenaTimeframe,
+  ArenaSortBy,
 } from '../types/index.js';
 
 const rawApiUrl = ((import.meta as any).env?.VITE_BACKEND_HTTP_URL || '').trim();
@@ -410,6 +416,65 @@ export const apiClient = {
     return fetchJson(`/swarms/custom/${encodeURIComponent(id)}?userAddress=${encodeURIComponent(userAddress)}`, {
       method: 'DELETE',
     });
+  },
+
+  // Swarm Arena & Strategy Leaderboard
+  async getArenaAgents(params?: {
+    timeframe?: ArenaTimeframe;
+    symbol?: string;
+    strategyType?: string;
+    sortBy?: ArenaSortBy;
+    search?: string;
+  }): Promise<{ success: boolean; count: number; data: ArenaAgentEntry[] }> {
+    const q = new URLSearchParams();
+    if (params?.timeframe) q.append('timeframe', params.timeframe);
+    if (params?.symbol && params.symbol !== 'ALL') q.append('symbol', params.symbol);
+    if (params?.strategyType && params.strategyType !== 'ALL') q.append('strategyType', params.strategyType);
+    if (params?.sortBy) q.append('sortBy', params.sortBy);
+    if (params?.search) q.append('search', params.search);
+    const queryString = q.toString();
+    return fetchJson(`/arena/leaderboard/agents${queryString ? `?${queryString}` : ''}`);
+  },
+
+  async getArenaTraders(params?: {
+    range?: ArenaTimeframe;
+    sortBy?: ArenaSortBy;
+    search?: string;
+  }): Promise<{ success: boolean; count: number; data: ArenaTraderEntry[] }> {
+    const q = new URLSearchParams();
+    if (params?.range) q.append('range', params.range);
+    if (params?.sortBy) q.append('sortBy', params.sortBy);
+    if (params?.search) q.append('search', params.search);
+    const queryString = q.toString();
+    return fetchJson(`/arena/leaderboard/traders${queryString ? `?${queryString}` : ''}`);
+  },
+
+  async getTraderProfile(address: string): Promise<{ success: boolean; data: TraderProfileDetail }> {
+    return fetchJson(`/arena/trader/${encodeURIComponent(address)}/profile`);
+  },
+
+  async cloneArenaAgent(agentId: string, userAddress: string): Promise<{ success: boolean; message: string; data: CustomAgentDefinition }> {
+    return fetchJson(`/arena/agent/${encodeURIComponent(agentId)}/clone`, {
+      method: 'POST',
+      body: JSON.stringify({ userAddress }),
+    });
+  },
+
+  async toggleSocialCopyTrade(payload: {
+    userAddress: string;
+    targetAddress?: string;
+    enabled: boolean;
+    maxTradeSize?: number;
+    dailyVolumeCap?: number;
+  }): Promise<{ success: boolean; config: any; message: string }> {
+    return fetchJson('/arena/copytrade/toggle', {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    });
+  },
+
+  async getArenaStats(): Promise<{ success: boolean; data: ArenaGlobalStats }> {
+    return fetchJson('/arena/stats');
   },
 };
 

@@ -16,6 +16,7 @@ import {
   ArrowLeftEndOnRectangleIcon,
   BoltIcon,
   ChartPieIcon,
+  TrophyIcon,
 } from '@heroicons/react/24/outline';
 import type { SessionGrant } from '../../types/index.js';
 import type { WalletState } from '../../hooks/useSessionKey.js';
@@ -102,6 +103,12 @@ const AppSidebarComponent: React.FC<AppSidebarProps> = ({
       label: 'Backtester',
       Icon: ChartBarIcon,
       badge: 'Lab',
+    },
+    {
+      id: 'Swarm Arena',
+      label: 'Swarm Arena',
+      Icon: TrophyIcon,
+      badge: 'Arena',
     },
     {
       id: 'AI Swarm Feed',

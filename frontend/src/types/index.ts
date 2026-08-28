@@ -306,3 +306,107 @@ export interface CustomSwarmDefinition {
   createdAt: string;
   updatedAt?: string;
 }
+
+// ------------------------------------------------------------------------------
+// Swarm Arena & Social Prediction Types
+// ------------------------------------------------------------------------------
+export type ArenaTimeframe = '24h' | '7d' | '30d' | 'ALL';
+export type ArenaSortBy = 'pnl' | 'winRate' | 'trades' | 'sharpe' | 'volume' | 'streak';
+export type ArenaTierBadge = 'APEX' | 'GRANDMASTER' | 'MASTER' | 'PRO' | 'EMERGING';
+
+export interface ArenaAgentEntry {
+  id: string;
+  name: string;
+  description: string;
+  creatorAddress: string;
+  creatorName: string;
+  isProtocolArchetype: boolean;
+  symbol: string;
+  timeframe: string;
+  strategyType: string;
+  color: string;
+  icon: string;
+  pnl: number;
+  pnlPct: number;
+  winRate: number;
+  tradesCount: number;
+  winsCount: number;
+  lossesCount: number;
+  sharpeRatio: number;
+  sortinoRatio: number;
+  maxDrawdownPct: number;
+  allocatedAllowance: number;
+  spentAllowance: number;
+  clonesCount: number;
+  copiersCount: number;
+  rank: number;
+  tierBadge: ArenaTierBadge;
+  tags: string[];
+  rulesSummary: string[];
+  sparkline: number[];
+  isActive: boolean;
+  isDeployed: boolean;
+  createdAt: string;
+}
+
+export interface ArenaTraderEntry {
+  rank: number;
+  userAddress: string;
+  traderTitle: string;
+  realizedPnl: number;
+  pnlPct: number;
+  winRate: number;
+  tradesCount: number;
+  winsCount: number;
+  lossesCount: number;
+  volume: number;
+  currentStreak: number;
+  bestStreak: number;
+  copilotSynergyScore: number;
+  favoriteSymbol: string;
+  favoriteWindow: string;
+  tierBadge: ArenaTierBadge;
+  sparkline: number[];
+  lastActiveAt: string;
+}
+
+export interface TraderProfileDetail {
+  summary: ArenaTraderEntry;
+  assetDistribution: Array<{ symbol: string; percentage: number; volume: number; trades: number }>;
+  timeframeDistribution: Array<{ timeframe: string; percentage: number; trades: number }>;
+  equityCurve: Array<{ timestamp: number; date: string; pnl: number; cumulativePnl: number }>;
+  recentTrades: OrderExecution[];
+}
+
+export interface ArenaGlobalStats {
+  totalArenaVolume: number;
+  totalCommunityPnl: number;
+  totalActiveAgents: number;
+  totalRegisteredTraders: number;
+  apexWinStreak: number;
+  totalClonesCount: number;
+  generatedAt: string;
+}
+
+export type ProofOfAlphaCardType = 'AGENT' | 'TRADER' | 'SETTLEMENT';
+
+export interface ProofOfAlphaCardConfig {
+  cardType: ProofOfAlphaCardType;
+  title: string;
+  subtitle: string;
+  badge: string;
+  primaryMetricLabel: string;
+  primaryMetricValue: string;
+  primaryMetricPositive?: boolean;
+  secondaryMetricLabel: string;
+  secondaryMetricValue: string;
+  tertiaryMetricLabel?: string;
+  tertiaryMetricValue?: string;
+  accentColor: string;
+  walletOrAgentId: string;
+  verifiedNetwork: string;
+  txHash?: string;
+  sparkline?: number[];
+  rulesSummary?: string[];
+}
+

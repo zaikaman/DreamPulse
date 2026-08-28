@@ -115,7 +115,7 @@ class TelemetryClient {
     const loc = window.location;
     const protocol = loc.protocol === 'https:' ? 'wss:' : 'ws:';
     const host = loc.hostname;
-    const port = loc.port === '5173' ? '5000' : loc.port || '5000';
+    const port = (loc.port === '5173' || loc.port === '5174') ? '5000' : loc.port || '5000';
     return `${protocol}//${host}:${port}/ws/telemetry`;
   }
 

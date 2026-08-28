@@ -22,12 +22,14 @@ import { apiClient } from './services/api.js';
 import { telemetryClient, type OrderFillData, type SweepCompleteData } from './services/telemetry-client.js';
 import { Spinner } from './components/ui/Spinner.js';
 import { useOnboarding } from './hooks/useOnboarding.js';
-import { getViewForHash, navigateToView } from './lib/navigation.js';
+import { getViewForHash, navigateToView, getProfileAddressFromHash } from './lib/navigation.js';
 
 // Lazy load heavy modules to minimize initial bundle size and accelerate TTI
 const SwarmCockpitView = React.lazy(() => import('./components/dashboard/SwarmCockpitView.js').then((m) => ({ default: m.SwarmCockpitView })));
 const StrategyStudioView = React.lazy(() => import('./components/StrategyStudioView.js').then((m) => ({ default: m.StrategyStudioView })));
 const Backtester = React.lazy(() => import('./components/StrategyStudio.js').then((m) => ({ default: m.Backtester })));
+const SwarmArenaView = React.lazy(() => import('./components/arena/SwarmArenaView.js').then((m) => ({ default: m.SwarmArenaView })));
+const TraderProfileView = React.lazy(() => import('./components/arena/TraderProfileView.js').then((m) => ({ default: m.TraderProfileView })));
 const SweeperControls = React.lazy(() => import('./components/SweeperControls.js').then((m) => ({ default: m.SweeperControls })));
 const AnalyticsView = React.lazy(() => import('./components/dashboard/AnalyticsView.js').then((m) => ({ default: m.AnalyticsView })));
 const SessionDelegationModal = React.lazy(() => import('./components/SessionDelegationModal.js').then((m) => ({ default: m.SessionDelegationModal })));
@@ -35,6 +37,7 @@ const OnboardingWizardModal = React.lazy(() => import('./components/onboarding/O
 
 export const App: React.FC = () => {
   const [activeNav, setActiveNav] = useState<DashboardViewType>('Landing');
+  const [selectedProfileAddress, setSelectedProfileAddress] = useState<string | null>(null);
   const [sidebarCollapsed, setSidebarCollapsed] = useState<boolean>(false);
   const [isCommandPaletteOpen, setIsCommandPaletteOpen] = useState<boolean>(false);
 
@@ -138,6 +141,10 @@ export const App: React.FC = () => {
   useEffect(() => {
     const handleHash = () => {
       const targetView = getViewForHash(window.location.hash);
+      const profileAddr = getProfileAddressFromHash(window.location.hash);
+      if (profileAddr) {
+        setSelectedProfileAddress(profileAddr);
+      }
       setActiveNav(targetView);
     };
     handleHash();
@@ -357,6 +364,54 @@ export const App: React.FC = () => {
               activeSession={activeSession}
               onOpenSessionModal={handleOpenSessionModal}
               onConnectWallet={connectWallet}
+            />
+          </React.Suspense>
+        ) : activeNav === 'Swarm Arena' ? (
+          <React.Suspense fallback={<div className="glass-card" style={{ minHeight: '340px', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: '12px' }}><Spinner size="lg" /><span style={{ fontSize: '13px', color: 'var(--muted-foreground)' }}>Loading Swarm Arena & Leaderboard...</span></div>}>
+            <SwarmArenaView
+              wallet={wallet}
+              onOpenSessionModal={handleOpenSessionModal}
+              onConnectWallet={connectWallet}
+              onNavigateToStudio={(customDraft) => {
+                setForkedStrategyConfig({
+                  agentType: 'CUSTOM',
+                  customAgentId: customDraft?.id,
+                  customDraft: customDraft,
+                  customRules: customDraft?.rules,
+                  symbol: customDraft?.symbol,
+                  timeframe: customDraft?.timeframe as any,
+                });
+                handleNavigateView('Strategy Studio');
+              }}
+              onNavigateToBacktester={(agentId, customDraft) => {
+                setForkedStrategyConfig({
+                  agentType: 'CUSTOM',
+                  customAgentId: agentId,
+                  customDraft: customDraft,
+                  customRules: customDraft?.rules,
+                  symbol: customDraft?.symbol,
+                  timeframe: customDraft?.timeframe as any,
+                });
+                handleNavigateView('Backtester');
+              }}
+              onNavigateToTraderProfile={(traderAddr) => {
+                setSelectedProfileAddress(traderAddr);
+                setActiveNav('Trader Profile');
+                window.location.hash = `#profile/${traderAddr}`;
+              }}
+            />
+          </React.Suspense>
+        ) : activeNav === 'Trader Profile' ? (
+          <React.Suspense fallback={<div className="glass-card" style={{ minHeight: '340px', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: '12px' }}><Spinner size="lg" /><span style={{ fontSize: '13px', color: 'var(--muted-foreground)' }}>Loading Forecaster Profile...</span></div>}>
+            <TraderProfileView
+              wallet={wallet}
+              targetAddress={selectedProfileAddress}
+              onBack={() => {
+                setActiveNav('Swarm Arena');
+                window.location.hash = '#arena';
+              }}
+              onConnectWallet={connectWallet}
+              onOpenSessionModal={handleOpenSessionModal}
             />
           </React.Suspense>
         ) : activeNav === 'Analytics' ? (

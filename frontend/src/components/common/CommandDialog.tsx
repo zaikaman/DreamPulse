@@ -19,6 +19,7 @@ import {
   SparklesIcon,
   ArrowRightIcon,
   XMarkIcon,
+  TrophyIcon,
 } from "@heroicons/react/24/outline";
 import { Dialog, DialogContent } from "../ui/dialog";
 import type { DashboardViewType } from "../landing/CinematicHero";
@@ -163,6 +164,13 @@ export const CommandDialog: React.FC<CommandDialogProps> = ({
         desc: "Quant Replay & Historical Simulation Lab",
         icon: ChartBarIcon,
         keywords: "backtest backtester simulation replay historical quant formulas sharpe winrate drawdown",
+      },
+      {
+        id: "Swarm Arena",
+        label: "Swarm Arena & Leaderboard",
+        desc: "Social Prediction Rankings, 1-Click Clone & Copy-Trade",
+        icon: TrophyIcon,
+        keywords: "swarm arena leaderboard social prediction ranking forecasters clone copytrade sharpe winrate alpha",
       },
       {
         id: "Settlement",

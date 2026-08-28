@@ -13,6 +13,7 @@ import type { MarketStatus, AgentType, OrderStatus } from '../types/index.js';
 import { type Address, type Hex, isAddress, getAddress, parseAbi } from 'viem';
 import { analyticsService, type AnalyticsRange } from '../services/analytics-service.js';
 import { userSwarmService } from '../services/user-swarm-service.js';
+import { leaderboardService, type ArenaTimeframe, type ArenaSortBy } from '../services/leaderboard-service.js';
 
 export const apiRouter = Router();
 
@@ -1240,5 +1241,107 @@ apiRouter.delete('/swarms/custom/:id', async (req: Request, res: Response) => {
     res.status(500).json({ success: false, error: err.message || 'Failed to delete swarm' });
   }
 });
+
+// ------------------------------------------------------------------------------
+// 10. Swarm Arena & Strategy Leaderboard (Social Prediction & Rankings)
+// ------------------------------------------------------------------------------
+apiRouter.get('/arena/leaderboard/agents', async (req: Request, res: Response) => {
+  try {
+    const { timeframe, symbol, strategyType, sortBy, search } = req.query;
+    const result = await leaderboardService.getAgentLeaderboard({
+      timeframe: timeframe as ArenaTimeframe,
+      symbol: symbol as string,
+      strategyType: strategyType as string,
+      sortBy: sortBy as ArenaSortBy,
+      searchQuery: search as string,
+    });
+    res.json({ success: true, count: result.count, data: result.data });
+  } catch (err: any) {
+    res.status(500).json({ success: false, error: err.message || 'Failed to fetch agent leaderboard' });
+  }
+});
+
+apiRouter.get('/arena/leaderboard/traders', async (req: Request, res: Response) => {
+  try {
+    const { range, sortBy, search } = req.query;
+    const result = await leaderboardService.getTraderLeaderboard({
+      range: range as ArenaTimeframe,
+      sortBy: sortBy as ArenaSortBy,
+      searchQuery: search as string,
+    });
+    res.json({ success: true, count: result.count, data: result.data });
+  } catch (err: any) {
+    res.status(500).json({ success: false, error: err.message || 'Failed to fetch trader leaderboard' });
+  }
+});
+
+apiRouter.get('/arena/trader/:address/profile', async (req: Request, res: Response) => {
+  try {
+    const { address } = req.params;
+    if (!address || !isAddress(address)) {
+      return res.status(400).json({ success: false, error: 'Valid user address is required' });
+    }
+    const profile = await leaderboardService.getTraderProfile(address);
+    if (!profile) {
+      return res.status(404).json({ success: false, error: 'Trader profile not found' });
+    }
+    return res.json({ success: true, data: profile });
+  } catch (err: any) {
+    return res.status(500).json({ success: false, error: err.message || 'Failed to fetch trader profile' });
+  }
+});
+
+apiRouter.post('/arena/agent/:id/clone', async (req: Request, res: Response) => {
+  try {
+    const { id } = req.params;
+    const { userAddress } = req.body;
+    if (!userAddress || !isAddress(userAddress)) {
+      return res.status(400).json({ success: false, error: 'Valid userAddress is required to clone agent' });
+    }
+    const cloned = await leaderboardService.cloneAgentStrategy(id, userAddress);
+    if (!cloned) {
+      return res.status(404).json({ success: false, error: 'Agent to clone not found' });
+    }
+    return res.status(201).json({
+      success: true,
+      message: `Strategy ${cloned.name} successfully cloned to your studio library`,
+      data: cloned,
+    });
+  } catch (err: any) {
+    return res.status(500).json({ success: false, error: err.message || 'Failed to clone agent strategy' });
+  }
+});
+
+apiRouter.post('/arena/copytrade/toggle', async (req: Request, res: Response) => {
+  try {
+    const { userAddress, targetAddress, enabled, maxTradeSize, dailyVolumeCap } = req.body;
+    if (!userAddress || !isAddress(userAddress)) {
+      return res.status(400).json({ success: false, error: 'Valid userAddress is required' });
+    }
+    if (typeof enabled !== 'boolean') {
+      return res.status(400).json({ success: false, error: 'Missing enabled boolean' });
+    }
+    const updated = await userSwarmService.setCopyTradeEnabled(userAddress, enabled);
+    return res.json({
+      success: true,
+      config: updated,
+      message: enabled
+        ? `Social Copy-Trading enabled${targetAddress ? ` mirroring ${targetAddress.slice(0, 6)}...${targetAddress.slice(-4)}` : ''}`
+        : 'Social Copy-Trading disabled',
+    });
+  } catch (err: any) {
+    return res.status(500).json({ success: false, error: err.message || 'Failed to toggle copy-trade' });
+  }
+});
+
+apiRouter.get('/arena/stats', async (_req: Request, res: Response) => {
+  try {
+    const stats = await leaderboardService.getArenaStats();
+    res.json({ success: true, data: stats });
+  } catch (err: any) {
+    res.status(500).json({ success: false, error: err.message || 'Failed to fetch arena statistics' });
+  }
+});
+
 
 

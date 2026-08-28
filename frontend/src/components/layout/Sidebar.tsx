@@ -13,6 +13,7 @@ import {
   ShieldCheckIcon,
   BoltIcon,
   XMarkIcon,
+  TrophyIcon,
 } from "@heroicons/react/24/outline";
 import { BrandLogo, BrandIcon } from "../common/BrandLogo";
 import { Button } from "../ui/button";
@@ -118,6 +119,13 @@ export const Sidebar: React.FC<SidebarProps> = ({
       description: "Quantitative Replay & Simulation Lab",
       badge: "Lab",
       icon: ChartBarIcon,
+    },
+    {
+      id: "Swarm Arena" as DashboardViewType,
+      label: "Swarm Arena",
+      description: "Social Prediction & Strategy Leaderboard",
+      badge: "Arena",
+      icon: TrophyIcon,
     },
     {
       id: "AI Swarm Feed" as DashboardViewType,

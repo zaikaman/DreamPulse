@@ -32,8 +32,10 @@ export type DashboardViewType =
   | "Swarm Cockpit"
   | "Strategy Studio"
   | "Backtester"
+  | "Swarm Arena"
   | "Analytics"
-  | "Settlement";
+  | "Settlement"
+  | "Trader Profile";
 
 interface CinematicHeroProps {
   onEnterConsole: (view?: DashboardViewType) => void;

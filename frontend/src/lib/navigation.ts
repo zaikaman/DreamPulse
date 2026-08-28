@@ -14,8 +14,10 @@ export const VIEW_TO_HASH_MAP: Record<DashboardViewType, string> = {
   'Swarm Cockpit': 'cockpit',
   'Strategy Studio': 'studio',
   Backtester: 'backtest',
+  'Swarm Arena': 'arena',
   Analytics: 'analytics',
   Settlement: 'settlement',
+  'Trader Profile': 'profile',
 };
 
 /**
@@ -106,6 +108,14 @@ export function getViewForHash(rawHash: string): DashboardViewType {
     case 'replay':
       return 'Backtester';
 
+    case 'arena':
+    case 'swarm-arena':
+    case 'leaderboard':
+    case 'social':
+    case 'rankings':
+    case 'forecasters':
+      return 'Swarm Arena';
+
     case 'settlement':
     case 'sweeper':
     case 'settle':
@@ -113,6 +123,13 @@ export function getViewForHash(rawHash: string): DashboardViewType {
     case 'claim':
     case 'payouts':
       return 'Settlement';
+
+    case 'profile':
+    case 'trader':
+    case 'trader-profile':
+    case 'forecaster':
+    case 'user':
+      return 'Trader Profile';
 
     case 'analytics':
     case 'portfolio':
@@ -131,6 +148,18 @@ export function getViewForHash(rawHash: string): DashboardViewType {
     default:
       return 'Landing';
   }
+}
+
+/**
+ * Extract target trader address from URL hash if present (e.g. #profile/0x123... or #trader?address=0x123...)
+ */
+export function getProfileAddressFromHash(rawHash: string): string | null {
+  if (!rawHash) return null;
+  const match = rawHash.match(/#(?:profile|trader|forecaster)\/([0-9a-zA-Z_]+)/i);
+  if (match && match[1]) return match[1];
+  const queryMatch = rawHash.match(/[?&]address=([0-9a-zA-Z_]+)/i);
+  if (queryMatch && queryMatch[1]) return queryMatch[1];
+  return null;
 }
 
 /**
