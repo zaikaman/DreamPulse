@@ -399,14 +399,49 @@ export class LeaderboardService {
     });
 
     // 4. Compute real metrics for Custom Agents & Templates
+    // Fix: strictly attribute CUSTOM orders per-agent by symbol to avoid cross-agent contamination (identical PnL bug)
     const customEntries: Array<Omit<ArenaAgentEntry, 'rank' | 'tierBadge'>> = allCustomAgents.map((agent) => {
       const isTemplate = STARTER_TEMPLATES.some((t) => t.id === agent.id);
-      const agentOrders = allOrders.filter(
-        (o) =>
-          (o.sessionId && o.sessionId === agent.id) ||
-          (o.agentType === 'CUSTOM' && o.userAddress?.toLowerCase() === agent.userAddress.toLowerCase())
-      );
-      const metrics = this.computePerformanceMetrics(agentOrders, cutoffMs, agent.allocatedAllowance || 100);
+      const agentSym = (agent.symbol || 'BTC/USD').toUpperCase();
+      const agentAddr = agent.userAddress?.toLowerCase();
+      const agentOrders = allOrders.filter((o) => {
+        if (o.sessionId && o.sessionId === agent.id) return true;
+        if (o.agentType === 'CUSTOM' && o.userAddress?.toLowerCase() === agentAddr) {
+          const orderSym = o.marketSnapshot?.symbol?.toUpperCase();
+          // Require symbol match when snapshot is available; otherwise fall back to not counting
+          // (prevents all CUSTOM orders from one user being credited to every agent of that user)
+          if (orderSym) return orderSym === agentSym;
+          // No snapshot (synthetic/legacy order) — try to infer via marketId parsing or skip to avoid misattribution.
+          // We skip here and rely on stored per-agent accounting for those edge cases below.
+          return false;
+        }
+        return false;
+      });
+      const computed = this.computePerformanceMetrics(agentOrders, cutoffMs, agent.allocatedAllowance || 100);
+      // Authoritative per-agent accounting (recordTradeFill/Settlement) is stored on the agent itself.
+      // For timeframe=ALL (cutoffMs===0) we can safely reconcile missing-snapshot orders via stored values;
+      // for windowed views (24h/7d/30d) keep strictly time-windowed computed to avoid leaking all-time PnL into a 24h slice.
+      let metrics = computed;
+      const storedTrades = agent.tradesCount ?? 0;
+      const storedPnl = agent.pnl ?? 0;
+      const shouldReconcileStored = cutoffMs === 0 && (storedTrades > computed.tradesCount || (computed.tradesCount === 0 && storedTrades > 0));
+      if (shouldReconcileStored) {
+        // Re-derive win counts from stored winRate
+        const winsFromStored = Math.round(((agent.winRate ?? 0) / 100) * storedTrades);
+        const lossesFromStored = Math.max(0, storedTrades - winsFromStored);
+        const pnlPctFromStored = agent.allocatedAllowance ? Number(((storedPnl / agent.allocatedAllowance) * 100).toFixed(2)) : computed.pnlPct;
+        metrics = {
+          ...computed,
+          pnl: Number(storedPnl.toFixed(2)),
+          pnlPct: pnlPctFromStored,
+          winRate: agent.winRate ?? computed.winRate,
+          tradesCount: storedTrades,
+          winsCount: winsFromStored,
+          lossesCount: lossesFromStored,
+          spentAllowance: agent.spentAllowance ?? computed.spentAllowance,
+          // Keep computed sharpe/sortino/maxDrawdown/sparkline from order history where available; fallback to 0
+        };
+      }
 
       // Rules summary chips
       const ruleChips: string[] = [];
