@@ -20,12 +20,21 @@ import {
   ArrowLeftEndOnRectangleIcon,
   XCircleIcon,
   SparklesIcon,
+  ArrowsPointingOutIcon,
 } from '@heroicons/react/24/outline';
 import type { SessionGrant } from '../types/index.js';
 import type { WalletState } from '../hooks/useSessionKey.js';
 import { SOMNIA_ADDRESSES } from '../services/web3.js';
 import { Spinner } from './ui/Spinner.js';
 import { parseWeb3Error } from '../lib/errorUtils.js';
+import {
+  UNLIMITED_AMOUNT,
+  UNLIMITED_HOURS,
+  isUnlimitedAmount,
+  isUnlimitedExpiry,
+  formatCapAmount,
+  formatSessionTimeRemaining,
+} from '../lib/sessionUtils.js';
 
 interface SessionDelegationModalProps {
   isOpen: boolean;
@@ -81,21 +90,78 @@ export const SessionDelegationModal: React.FC<SessionDelegationModalProps> = ({
   onRefreshAllowance,
   onClearError,
 }) => {
+  // Max Trade Size state
   const [maxTradeSize, setMaxTradeSize] = useState<number>(10);
+  const [isUnlimitedMaxTrade, setIsUnlimitedMaxTrade] = useState<boolean>(false);
+  const [customMaxTradeStr, setCustomMaxTradeStr] = useState<string>('10');
+
+  // Daily Volume Cap state
   const [dailyVolumeCap, setDailyVolumeCap] = useState<number>(100);
-  const [durationHours, setDurationHours] = useState<number>(24);
+  const [isUnlimitedDailyCap, setIsUnlimitedDailyCap] = useState<boolean>(false);
+  const [customDailyCapStr, setCustomDailyCapStr] = useState<string>('100');
+
+  // Working Capital Vault Deposit state
   const [depositAmount, setDepositAmount] = useState<number>(10);
+  const [customDepositStr, setCustomDepositStr] = useState<string>('10');
+
+  // Duration state
+  const [durationHours, setDurationHours] = useState<number>(24);
+  const [isCustomDuration, setIsCustomDuration] = useState<boolean>(false);
+  const [customDurationValue, setCustomDurationValue] = useState<string>('30');
+  const [customDurationUnit, setCustomDurationUnit] = useState<'hours' | 'days' | 'months'>('days');
+
+  // Miscellaneous modal state
   const [enableCopyTrading, setEnableCopyTrading] = useState<boolean>(false);
   const [copiedOperator, setCopiedOperator] = useState<boolean>(false);
   const [confirmRevoke, setConfirmRevoke] = useState<boolean>(initialRevokeMode);
   const [revokeOnChainOption, setRevokeOnChainOption] = useState<boolean>(true);
 
+  // Pre-populate values when modal opens or activeSession updates
   useEffect(() => {
     if (isOpen) {
       setConfirmRevoke(Boolean(initialRevokeMode));
       setRevokeOnChainOption(true);
+
       if (activeSession) {
         setEnableCopyTrading(Boolean(activeSession.copyTradeEnabled));
+
+        // Max Trade Size pre-population
+        if (isUnlimitedAmount(activeSession.maxTradeSize)) {
+          setIsUnlimitedMaxTrade(true);
+          setMaxTradeSize(UNLIMITED_AMOUNT);
+          setCustomMaxTradeStr('100');
+        } else {
+          setIsUnlimitedMaxTrade(false);
+          setMaxTradeSize(activeSession.maxTradeSize);
+          setCustomMaxTradeStr(String(activeSession.maxTradeSize));
+        }
+
+        // Daily Volume Cap pre-population
+        if (isUnlimitedAmount(activeSession.dailyVolumeCap)) {
+          setIsUnlimitedDailyCap(true);
+          setDailyVolumeCap(UNLIMITED_AMOUNT);
+          setCustomDailyCapStr('500');
+        } else {
+          setIsUnlimitedDailyCap(false);
+          setDailyVolumeCap(activeSession.dailyVolumeCap);
+          setCustomDailyCapStr(String(activeSession.dailyVolumeCap));
+        }
+
+        // Working Capital Vault Deposit
+        const activeDeposit = activeSession.vaultDepositAmount ?? 0;
+        setDepositAmount(activeDeposit);
+        setCustomDepositStr(String(activeDeposit));
+
+        // Duration pre-population
+        if (isUnlimitedExpiry(activeSession.expiresAt)) {
+          setDurationHours(UNLIMITED_HOURS);
+          setIsCustomDuration(false);
+        } else {
+          const expiryTime = new Date(activeSession.expiresAt).getTime();
+          const remainingHours = Math.max(1, Math.round((expiryTime - Date.now()) / (3600 * 1000)));
+          setDurationHours(remainingHours);
+          setIsCustomDuration(false);
+        }
       }
     }
   }, [isOpen, initialRevokeMode, activeSession]);
@@ -108,13 +174,29 @@ export const SessionDelegationModal: React.FC<SessionDelegationModalProps> = ({
     setTimeout(() => setCopiedOperator(false), 2000);
   };
 
+  const getEffectiveDurationHours = (): number => {
+    if (isCustomDuration) {
+      const num = parseFloat(customDurationValue) || 1;
+      if (customDurationUnit === 'days') return Math.round(num * 24);
+      if (customDurationUnit === 'months') return Math.round(num * 24 * 30);
+      return Math.round(num);
+    }
+    return durationHours;
+  };
+
   const handleCreate = async () => {
     onClearError();
+    const effectiveMaxTrade = isUnlimitedMaxTrade ? UNLIMITED_AMOUNT : Math.max(1, maxTradeSize);
+    const effectiveDailyCap = isUnlimitedDailyCap
+      ? UNLIMITED_AMOUNT
+      : Math.max(isUnlimitedMaxTrade ? 1 : effectiveMaxTrade, dailyVolumeCap);
+    const effectiveDuration = getEffectiveDurationHours();
+
     try {
       await onCreateSession({
-        maxTradeSize,
-        dailyVolumeCap,
-        durationHours,
+        maxTradeSize: effectiveMaxTrade,
+        dailyVolumeCap: effectiveDailyCap,
+        durationHours: effectiveDuration,
         depositAmount: depositAmount > 0 ? depositAmount : undefined,
         copyTradeEnabled: enableCopyTrading,
       });
@@ -140,6 +222,10 @@ export const SessionDelegationModal: React.FC<SessionDelegationModalProps> = ({
     { label: '6 Hours', hours: 6 },
     { label: '24 Hours', hours: 24 },
     { label: '7 Days', hours: 168 },
+    { label: '30 Days', hours: 720 },
+    { label: '90 Days', hours: 2160 },
+    { label: '1 Year', hours: 8760 },
+    { label: 'Unlimited (100 Yrs)', hours: UNLIMITED_HOURS },
   ];
 
   const parsedError = error ? parseWeb3Error(error) : null;
@@ -158,6 +244,43 @@ export const SessionDelegationModal: React.FC<SessionDelegationModalProps> = ({
         return 'Sign EIP-712 & Submit On-Chain Delegation...';
     }
   };
+
+  // Deposit input handler
+  const handleDepositChange = (valStr: string) => {
+    setCustomDepositStr(valStr);
+    const parsed = parseFloat(valStr);
+    if (!isNaN(parsed) && parsed >= 0) {
+      setDepositAmount(parsed);
+    } else if (valStr === '') {
+      setDepositAmount(0);
+    }
+  };
+
+  // Max Trade Size input handler
+  const handleMaxTradeChange = (valStr: string) => {
+    setCustomMaxTradeStr(valStr);
+    const parsed = parseFloat(valStr);
+    if (!isNaN(parsed) && parsed > 0) {
+      setMaxTradeSize(parsed);
+      setIsUnlimitedMaxTrade(false);
+      if (!isUnlimitedDailyCap && dailyVolumeCap < parsed) {
+        setDailyVolumeCap(parsed * 2);
+        setCustomDailyCapStr(String(parsed * 2));
+      }
+    }
+  };
+
+  // Daily Volume Cap input handler
+  const handleDailyCapChange = (valStr: string) => {
+    setCustomDailyCapStr(valStr);
+    const parsed = parseFloat(valStr);
+    if (!isNaN(parsed) && parsed > 0) {
+      setDailyVolumeCap(parsed);
+      setIsUnlimitedDailyCap(false);
+    }
+  };
+
+  const collateralBalance = parseFloat(wallet.balanceCollateral || '0');
 
   return (
     <div className="modal-backdrop" onClick={onClose}>
@@ -185,7 +308,7 @@ export const SessionDelegationModal: React.FC<SessionDelegationModalProps> = ({
               <span className="modal-subheading">
                 {confirmRevoke
                   ? 'Confirm revocation of autonomous agent execution and operator permissions'
-                  : 'EIP-712 cryptographic authorization for autonomous swarm execution'}
+                  : 'EIP-712 cryptographic authorization for autonomous swarm & custom bot execution'}
               </span>
             </div>
           </div>
@@ -217,15 +340,15 @@ export const SessionDelegationModal: React.FC<SessionDelegationModalProps> = ({
                   display: 'flex',
                   alignItems: 'center',
                   justifyContent: 'space-between',
-                  background: parseFloat(wallet.balanceCollateral || '0') === 0 ? 'hsl(var(--secondary) / 0.5)' : 'hsl(var(--secondary) / 0.35)',
-                  border: `1px solid ${parseFloat(wallet.balanceCollateral || '0') === 0 ? 'rgba(255, 183, 0, 0.28)' : 'hsl(var(--border) / 0.5)'}`,
+                  background: collateralBalance === 0 ? 'hsl(var(--secondary) / 0.5)' : 'hsl(var(--secondary) / 0.35)',
+                  border: `1px solid ${collateralBalance === 0 ? 'rgba(255, 183, 0, 0.28)' : 'hsl(var(--border) / 0.5)'}`,
                   borderRadius: '6px',
                   padding: '8px 12px',
                   margin: '10px 0',
                 }}
               >
                 <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                  {parseFloat(wallet.balanceCollateral || '0') === 0 ? (
+                  {collateralBalance === 0 ? (
                     <ExclamationTriangleIcon className="w-4 h-4" style={{ color: '#ffb700' }} />
                   ) : (
                     <CheckCircleIcon className="w-4 h-4" style={{ color: 'var(--trade-yes)' }} />
@@ -235,7 +358,7 @@ export const SessionDelegationModal: React.FC<SessionDelegationModalProps> = ({
                       Trading Collateral: <span className="tabular-num">{wallet.balanceCollateral || '0.00'} tUSDC</span>
                     </div>
                     <div style={{ fontSize: '10px', color: 'hsl(var(--muted-foreground))' }}>
-                      {parseFloat(wallet.balanceCollateral || '0') === 0
+                      {collateralBalance === 0
                         ? 'Zero collateral will cause autonomous transactions to revert. Claim faucet below.'
                         : 'Collateral is ready for automated multi-agent order book execution.'}
                     </div>
@@ -302,26 +425,46 @@ export const SessionDelegationModal: React.FC<SessionDelegationModalProps> = ({
                 )}
               </div>
 
+              {/* Active Session Stat Pills */}
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px', margin: '8px 0' }}>
+                <div className="stat-pill">
+                  <span className="stat-pill-label">Single Cap:</span>
+                  <span className="stat-pill-value font-mono">{formatCapAmount(activeSession.maxTradeSize)}</span>
+                </div>
+
+                <div className="stat-pill">
+                  <span className="stat-pill-label">24h Budget:</span>
+                  <span className="stat-pill-value font-mono">
+                    {activeSession.spentToday || 0} / {formatCapAmount(activeSession.dailyVolumeCap)}
+                  </span>
+                </div>
+
+                <div className="stat-pill">
+                  <span className="stat-pill-label">Duration / Expiry:</span>
+                  <span className="stat-pill-value font-mono">{formatSessionTimeRemaining(activeSession.expiresAt)}</span>
+                </div>
+
                 {activeSession.vaultDepositAmount !== undefined && activeSession.vaultDepositAmount > 0 && (
                   <div className="stat-pill">
                     <span className="stat-pill-label">Vault Capital:</span>
-                    <span className="stat-pill-value">{activeSession.vaultDepositAmount} tUSDC</span>
+                    <span className="stat-pill-value font-mono">{activeSession.vaultDepositAmount} tUSDC</span>
                   </div>
                 )}
 
                 <div className="stat-pill" style={{ border: `1px solid ${activeSession.copyTradeEnabled ? 'rgba(56, 189, 248, 0.25)' : 'hsl(var(--border) / 0.5)'}` }}>
                   <span className="stat-pill-label">Protocol Mirror:</span>
-                  <span className="stat-pill-value" style={{ color: activeSession.copyTradeEnabled ? ' #00ffcc' : 'hsl(var(--muted-foreground))' }}>
+                  <span className="stat-pill-value font-mono" style={{ color: activeSession.copyTradeEnabled ? '#00ffcc' : 'hsl(var(--muted-foreground))' }}>
                     {activeSession.copyTradeEnabled ? 'ON (Mirroring Active)' : 'OFF (Discretionary Only)'}
                   </span>
                 </div>
 
                 <div className="stat-pill" style={{ border: '1px solid rgba(168, 85, 247, 0.25)' }}>
                   <span className="stat-pill-label">Custom Agents:</span>
-                  <span className="stat-pill-value" style={{ color: '#d8b4fe' }}>
+                  <span className="stat-pill-value font-mono" style={{ color: '#d8b4fe' }}>
                     Autonomous Ready
                   </span>
                 </div>
+              </div>
 
               {confirmRevoke ? (
                 <div className="revoke-confirm-card">
@@ -337,7 +480,6 @@ export const SessionDelegationModal: React.FC<SessionDelegationModalProps> = ({
                     </div>
                   </div>
 
-                  {/* Custom Styled Interactive Checkbox Option Tile */}
                   <div
                     className={`revoke-option-tile ${revokeOnChainOption ? 'active' : ''}`}
                     onClick={() => setRevokeOnChainOption(!revokeOnChainOption)}
@@ -533,7 +675,7 @@ export const SessionDelegationModal: React.FC<SessionDelegationModalProps> = ({
                   <span style={{ fontSize: '9px', fontFamily: 'var(--font-mono)', padding: '1px 5px', borderRadius: '3px', background: 'rgba(0, 230, 118, 0.15)', color: 'var(--trade-yes)' }}>GASLESS</span>
                 </div>
                 <p style={{ margin: 0, color: 'hsl(var(--muted-foreground))', lineHeight: 1.35 }}>
-                  Cryptographically enforces maximum trade size & 24h spend ceilings without custodial access.
+                  Cryptographically enforces maximum trade size & spend ceilings without custodial access.
                 </p>
               </div>
             </div>
@@ -563,110 +705,320 @@ export const SessionDelegationModal: React.FC<SessionDelegationModalProps> = ({
 
           {/* Risk Limits Configuration Form */}
           <div className="risk-config-section">
-            <h3 className="section-title">Configure Risk Ceilings & Working Capital</h3>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '12px' }}>
+              <h3 className="section-title" style={{ margin: 0 }}>Configure Risk Ceilings & Working Capital</h3>
+              <span style={{ fontSize: '10px', color: 'hsl(var(--muted-foreground))', fontFamily: 'var(--font-mono)' }}>
+                Zero Upper Cap Constraints
+              </span>
+            </div>
 
-            {/* Working Capital Vault Deposit */}
+            {/* 1. Working Capital Vault Deposit */}
             <div className="config-group">
               <div className="config-header-row">
-                <label htmlFor="deposit-amount-slider" className="config-label" style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
+                <label htmlFor="deposit-amount-input" className="config-label" style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
                   <CurrencyDollarIcon className="w-3.5 h-3.5" style={{ color: 'hsl(var(--muted-foreground))' }} />
                   <span>Working Capital Vault Deposit</span>
                 </label>
-                <span className="config-value-badge">{depositAmount} tUSDC</span>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                  <input
+                    id="deposit-amount-input"
+                    type="number"
+                    min={0}
+                    step="any"
+                    value={customDepositStr}
+                    onChange={(e) => handleDepositChange(e.target.value)}
+                    className="custom-numeric-input"
+                    placeholder="0"
+                    aria-label="Working Capital Vault Deposit in tUSDC"
+                  />
+                  <span className="config-unit-label">tUSDC</span>
+                </div>
               </div>
               <input
                 id="deposit-amount-slider"
                 type="range"
                 min={0}
-                max={100}
+                max={Math.max(500, depositAmount)}
                 step={5}
                 value={depositAmount}
-                onChange={(e) => setDepositAmount(Number(e.target.value))}
+                onChange={(e) => {
+                  const val = Number(e.target.value);
+                  setDepositAmount(val);
+                  setCustomDepositStr(String(val));
+                }}
                 className="custom-range-slider"
               />
               <div className="preset-pill-row">
-                {[0, 10, 25, 50, 100].map((val) => (
+                {[0, 50, 100, 500, 1000, 5000].map((val) => (
                   <button
                     key={val}
                     type="button"
                     className={`preset-pill ${depositAmount === val ? 'active' : ''}`}
-                    onClick={() => setDepositAmount(val)}
+                    onClick={() => {
+                      setDepositAmount(val);
+                      setCustomDepositStr(String(val));
+                    }}
                   >
-                    {val === 0 ? '0 (Skip)' : `${val} tUSDC`}
+                    {val === 0 ? '0 (Skip)' : `${val.toLocaleString()} tUSDC`}
                   </button>
                 ))}
+                {collateralBalance > 0 && (
+                  <button
+                    type="button"
+                    className={`preset-pill ${depositAmount === collateralBalance ? 'active' : ''}`}
+                    onClick={() => {
+                      setDepositAmount(collateralBalance);
+                      setCustomDepositStr(String(collateralBalance));
+                    }}
+                    style={{ borderColor: 'rgba(0, 255, 204, 0.4)', color: 'var(--brand-cyan)' }}
+                  >
+                    MAX ({collateralBalance.toLocaleString()} tUSDC)
+                  </button>
+                )}
               </div>
             </div>
 
-            {/* Max Trade Size Slider */}
+            {/* 2. Max Trade Size Limit */}
             <div className="config-group">
               <div className="config-header-row">
-                <label htmlFor="max-trade-slider" className="config-label">
-                  Max Trade Size Limit
+                <label htmlFor="max-trade-input" className="config-label" style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
+                  <AdjustmentsHorizontalIcon className="w-3.5 h-3.5" style={{ color: 'hsl(var(--muted-foreground))' }} />
+                  <span>Max Trade Size Limit</span>
                 </label>
-                <span className="config-value-badge">{maxTradeSize} tUSDC</span>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                  {isUnlimitedMaxTrade ? (
+                    <span className="unlimited-active-badge">
+                      <SparklesIcon className="w-3 h-3 text-[#00ffcc]" />
+                      <span>Unlimited (No Cap)</span>
+                    </span>
+                  ) : (
+                    <>
+                      <input
+                        id="max-trade-input"
+                        type="number"
+                        min={1}
+                        step="any"
+                        value={customMaxTradeStr}
+                        onChange={(e) => handleMaxTradeChange(e.target.value)}
+                        className="custom-numeric-input"
+                        placeholder="10"
+                        aria-label="Max Trade Size in tUSDC"
+                      />
+                      <span className="config-unit-label">tUSDC</span>
+                    </>
+                  )}
+                </div>
               </div>
               <input
                 id="max-trade-slider"
                 type="range"
                 min={1}
-                max={50}
-                step={1}
-                value={maxTradeSize}
+                max={Math.max(5000, isUnlimitedMaxTrade ? 5000 : maxTradeSize)}
+                step={5}
+                disabled={isUnlimitedMaxTrade}
+                value={isUnlimitedMaxTrade ? 5000 : maxTradeSize}
                 onChange={(e) => {
                   const val = Number(e.target.value);
                   setMaxTradeSize(val);
-                  if (dailyVolumeCap < val) setDailyVolumeCap(val * 2);
+                  setIsUnlimitedMaxTrade(false);
+                  setCustomMaxTradeStr(String(val));
+                  if (!isUnlimitedDailyCap && dailyVolumeCap < val) {
+                    setDailyVolumeCap(val * 2);
+                    setCustomDailyCapStr(String(val * 2));
+                  }
                 }}
                 className="custom-range-slider"
+                style={{ opacity: isUnlimitedMaxTrade ? 0.35 : 1 }}
               />
               <div className="preset-pill-row">
-                {[5, 10, 25, 50].map((val) => (
+                {[10, 50, 100, 500, 1000, 5000].map((val) => (
                   <button
                     key={val}
                     type="button"
-                    className={`preset-pill ${maxTradeSize === val ? 'active' : ''}`}
+                    className={`preset-pill ${!isUnlimitedMaxTrade && maxTradeSize === val ? 'active' : ''}`}
                     onClick={() => {
+                      setIsUnlimitedMaxTrade(false);
                       setMaxTradeSize(val);
-                      if (dailyVolumeCap < val) setDailyVolumeCap(val * 2);
+                      setCustomMaxTradeStr(String(val));
+                      if (!isUnlimitedDailyCap && dailyVolumeCap < val) {
+                        setDailyVolumeCap(val * 2);
+                        setCustomDailyCapStr(String(val * 2));
+                      }
                     }}
                   >
-                    {val} tUSDC
+                    {val.toLocaleString()} tUSDC
                   </button>
                 ))}
+                <button
+                  type="button"
+                  className={`preset-pill preset-pill-unlimited ${isUnlimitedMaxTrade ? 'active' : ''}`}
+                  onClick={() => {
+                    setIsUnlimitedMaxTrade(true);
+                    setMaxTradeSize(UNLIMITED_AMOUNT);
+                  }}
+                >
+                  <SparklesIcon className="w-3 h-3 text-[#00ffcc]" />
+                  <span>Unlimited</span>
+                </button>
               </div>
             </div>
 
-            {/* Daily Volume Cap Slider */}
+            {/* 3. 24-Hour Daily Volume Cap */}
             <div className="config-group">
               <div className="config-header-row">
-                <label htmlFor="daily-cap-slider" className="config-label">
-                  24-Hour Daily Volume Cap
+                <label htmlFor="daily-cap-input" className="config-label" style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
+                  <BoltIcon className="w-3.5 h-3.5" style={{ color: 'hsl(var(--muted-foreground))' }} />
+                  <span>24-Hour Daily Volume Cap</span>
                 </label>
-                <span className="config-value-badge">{dailyVolumeCap} tUSDC</span>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                  {isUnlimitedDailyCap ? (
+                    <span className="unlimited-active-badge">
+                      <SparklesIcon className="w-3 h-3 text-[#00ffcc]" />
+                      <span>Unlimited (No Cap)</span>
+                    </span>
+                  ) : (
+                    <>
+                      <input
+                        id="daily-cap-input"
+                        type="number"
+                        min={1}
+                        step="any"
+                        value={customDailyCapStr}
+                        onChange={(e) => handleDailyCapChange(e.target.value)}
+                        className="custom-numeric-input"
+                        placeholder="100"
+                        aria-label="24-Hour Daily Volume Cap in tUSDC"
+                      />
+                      <span className="config-unit-label">tUSDC</span>
+                    </>
+                  )}
+                </div>
               </div>
               <input
                 id="daily-cap-slider"
                 type="range"
-                min={maxTradeSize}
-                max={500}
-                step={5}
-                value={dailyVolumeCap}
-                onChange={(e) => setDailyVolumeCap(Number(e.target.value))}
+                min={isUnlimitedMaxTrade ? 10 : maxTradeSize}
+                max={Math.max(25000, isUnlimitedDailyCap ? 25000 : dailyVolumeCap)}
+                step={25}
+                disabled={isUnlimitedDailyCap}
+                value={isUnlimitedDailyCap ? 25000 : dailyVolumeCap}
+                onChange={(e) => {
+                  const val = Number(e.target.value);
+                  setDailyVolumeCap(val);
+                  setIsUnlimitedDailyCap(false);
+                  setCustomDailyCapStr(String(val));
+                }}
                 className="custom-range-slider"
+                style={{ opacity: isUnlimitedDailyCap ? 0.35 : 1 }}
               />
               <div className="preset-pill-row">
-                {[25, 50, 100, 250, 500].map((val) => (
+                {[100, 500, 1000, 5000, 25000, 100000].map((val) => (
                   <button
                     key={val}
                     type="button"
-                    className={`preset-pill ${dailyVolumeCap === val ? 'active' : ''}`}
-                    onClick={() => setDailyVolumeCap(Math.max(val, maxTradeSize))}
+                    className={`preset-pill ${!isUnlimitedDailyCap && dailyVolumeCap === val ? 'active' : ''}`}
+                    onClick={() => {
+                      setIsUnlimitedDailyCap(false);
+                      const effectiveVal = Math.max(val, isUnlimitedMaxTrade ? 1 : maxTradeSize);
+                      setDailyVolumeCap(effectiveVal);
+                      setCustomDailyCapStr(String(effectiveVal));
+                    }}
                   >
-                    {val} tUSDC
+                    {val.toLocaleString()} tUSDC
                   </button>
                 ))}
+                <button
+                  type="button"
+                  className={`preset-pill preset-pill-unlimited ${isUnlimitedDailyCap ? 'active' : ''}`}
+                  onClick={() => {
+                    setIsUnlimitedDailyCap(true);
+                    setDailyVolumeCap(UNLIMITED_AMOUNT);
+                  }}
+                >
+                  <SparklesIcon className="w-3 h-3 text-[#00ffcc]" />
+                  <span>Unlimited</span>
+                </button>
               </div>
+            </div>
+
+            {/* 4. Session Duration Selector */}
+            <div className="config-group">
+              <div className="config-header-row">
+                <label className="config-label" style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
+                  <ClockIcon className="w-3.5 h-3.5" style={{ color: 'hsl(var(--muted-foreground))' }} />
+                  <span>Session Duration & Expiration</span>
+                </label>
+                <span className="config-value-badge font-mono">
+                  {isCustomDuration
+                    ? `${customDurationValue} ${customDurationUnit}`
+                    : durationHours >= UNLIMITED_HOURS
+                    ? 'Unlimited (100 Years)'
+                    : durationHours >= 8760
+                    ? `${Math.round(durationHours / 8760)} Year(s)`
+                    : durationHours >= 24
+                    ? `${Math.round(durationHours / 24)} Day(s)`
+                    : `${durationHours} Hour(s)`}
+                </span>
+              </div>
+              <div className="duration-grid-expanded">
+                {durationOptions.map((opt) => (
+                  <button
+                    key={opt.hours}
+                    type="button"
+                    className={`duration-card ${!isCustomDuration && durationHours === opt.hours ? 'active' : ''}`}
+                    onClick={() => {
+                      setIsCustomDuration(false);
+                      setDurationHours(opt.hours);
+                    }}
+                  >
+                    {opt.hours >= UNLIMITED_HOURS ? (
+                      <SparklesIcon className="w-3.5 h-3.5 text-[#00ffcc]" />
+                    ) : (
+                      <ClockIcon className="w-3.5 h-3.5" />
+                    )}
+                    <span>{opt.label}</span>
+                  </button>
+                ))}
+                <button
+                  type="button"
+                  className={`duration-card ${isCustomDuration ? 'active' : ''}`}
+                  onClick={() => setIsCustomDuration(true)}
+                >
+                  <ArrowsPointingOutIcon className="w-3.5 h-3.5" />
+                  <span>Custom...</span>
+                </button>
+              </div>
+
+              {/* Custom Duration Input Box */}
+              {isCustomDuration && (
+                <div className="custom-duration-box animate-fadeIn">
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    <span style={{ fontSize: '11px', color: 'hsl(var(--muted-foreground))' }}>Delegate for:</span>
+                    <input
+                      type="number"
+                      min={1}
+                      value={customDurationValue}
+                      onChange={(e) => setCustomDurationValue(e.target.value)}
+                      className="custom-numeric-input"
+                      style={{ width: '70px' }}
+                      aria-label="Custom duration quantity"
+                    />
+                    <select
+                      value={customDurationUnit}
+                      onChange={(e) => setCustomDurationUnit(e.target.value as any)}
+                      className="custom-select-box"
+                      aria-label="Custom duration unit"
+                    >
+                      <option value="hours">Hours</option>
+                      <option value="days">Days</option>
+                      <option value="months">Months (30d)</option>
+                    </select>
+                    <span style={{ fontSize: '10.5px', color: 'var(--brand-cyan)', fontFamily: 'var(--font-mono)' }}>
+                      (= {getEffectiveDurationHours().toLocaleString()} Total Hours)
+                    </span>
+                  </div>
+                </div>
+              )}
             </div>
 
             {/* Session Delegation Capability Clarification Card */}
@@ -695,13 +1047,13 @@ export const SessionDelegationModal: React.FC<SessionDelegationModalProps> = ({
             <div className="config-group" style={{ background: 'hsl(var(--secondary) / 0.35)', padding: '12px 14px', borderRadius: '8px', border: `1px solid ${enableCopyTrading ? 'rgba(56, 189, 248, 0.4)' : 'hsl(var(--border) / 0.7)'}` }}>
               <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: '12px' }}>
                 <div style={{ display: 'flex', gap: '10px' }}>
-                  <div style={{ width: '32px', height: '32px', borderRadius: '8px', background: enableCopyTrading ? 'rgba(56, 189, 248, 0.15)' : 'hsl(var(--secondary))', border: `1px solid ${enableCopyTrading ? 'rgba(56, 189, 248, 0.3)' : 'hsl(var(--border) / 0.6)'}`, display: 'grid', placeItems: 'center', color: enableCopyTrading ? ' #00ffcc' : 'hsl(var(--muted-foreground))', flexShrink: 0, marginTop: '2px' }}>
+                  <div style={{ width: '32px', height: '32px', borderRadius: '8px', background: enableCopyTrading ? 'rgba(56, 189, 248, 0.15)' : 'hsl(var(--secondary))', border: `1px solid ${enableCopyTrading ? 'rgba(56, 189, 248, 0.3)' : 'hsl(var(--border) / 0.6)'}`, display: 'grid', placeItems: 'center', color: enableCopyTrading ? '#00ffcc' : 'hsl(var(--muted-foreground))', flexShrink: 0, marginTop: '2px' }}>
                     <BoltIcon className="w-4 h-4" />
                   </div>
                   <div>
                     <div style={{ fontSize: '12px', fontWeight: 700, color: 'hsl(var(--foreground))', display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
                       <span>Mirror Protocol Swarm (Volt, Oracle, Titan)</span>
-                      <span style={{ fontSize: '9px', padding: '1px 6px', borderRadius: '4px', background: enableCopyTrading ? 'rgba(56, 189, 248, 0.15)' : 'hsl(var(--secondary))', color: enableCopyTrading ? ' #00ffcc' : 'hsl(var(--muted-foreground))', border: `1px solid ${enableCopyTrading ? 'rgba(56, 189, 248, 0.3)' : 'hsl(var(--border))'}`, fontWeight: 700, fontFamily: 'var(--font-mono)' }}>
+                      <span style={{ fontSize: '9px', padding: '1px 6px', borderRadius: '4px', background: enableCopyTrading ? 'rgba(56, 189, 248, 0.15)' : 'hsl(var(--secondary))', color: enableCopyTrading ? '#00ffcc' : 'hsl(var(--muted-foreground))', border: `1px solid ${enableCopyTrading ? 'rgba(56, 189, 248, 0.3)' : 'hsl(var(--border))'}`, fontWeight: 700, fontFamily: 'var(--font-mono)' }}>
                         {enableCopyTrading ? 'PROTOCOL MIRROR ON' : 'PROTOCOL MIRROR OFF'}
                       </span>
                     </div>
@@ -720,7 +1072,7 @@ export const SessionDelegationModal: React.FC<SessionDelegationModalProps> = ({
                     width: '42px',
                     height: '24px',
                     borderRadius: '12px',
-                    background: enableCopyTrading ? ' #00ffcc' : 'hsl(var(--muted))',
+                    background: enableCopyTrading ? '#00ffcc' : 'hsl(var(--muted))',
                     border: 'none',
                     position: 'relative',
                     transition: 'background 0.2s ease',
@@ -740,27 +1092,6 @@ export const SessionDelegationModal: React.FC<SessionDelegationModalProps> = ({
                     }}
                   />
                 </button>
-              </div>
-            </div>
-
-            {/* Duration Selector */}
-            <div className="config-group">
-              <div className="config-header-row">
-                <label className="config-label">Session Duration</label>
-                <span className="config-value-badge">{durationHours} Hours</span>
-              </div>
-              <div className="duration-grid">
-                {durationOptions.map((opt) => (
-                  <button
-                    key={opt.hours}
-                    type="button"
-                    className={`duration-card ${durationHours === opt.hours ? 'active' : ''}`}
-                    onClick={() => setDurationHours(opt.hours)}
-                  >
-                    <ClockIcon className="w-3.5 h-3.5" />
-                    <span>{opt.label}</span>
-                  </button>
-                ))}
               </div>
             </div>
           </div>
@@ -789,8 +1120,8 @@ export const SessionDelegationModal: React.FC<SessionDelegationModalProps> = ({
               <div className="safety-item">
                 <ClockIcon className="w-3.5 h-3.5 safety-mini-icon" />
                 <div>
-                  <strong>Hard Time Expiry</strong>
-                  <p>Session automatically dissolves when duration expires.</p>
+                  <strong>Cryptographic Expiry</strong>
+                  <p>Session automatically dissolves when configured duration expires.</p>
                 </div>
               </div>
               <div className="safety-item">
@@ -907,4 +1238,3 @@ export const SessionDelegationModal: React.FC<SessionDelegationModalProps> = ({
     </div>
   );
 };
-

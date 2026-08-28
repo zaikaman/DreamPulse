@@ -23,6 +23,8 @@ function isSessionPersistenceEnabled(): boolean {
   return url.length > 0 && !url.includes('mock-project');
 }
 
+export const UNLIMITED_AMOUNT = 1_000_000_000;
+
 export interface SessionRecord {
   id: string;
   userAddress: Address;
@@ -204,7 +206,7 @@ export class SessionService {
     if (isNaN(maxTradeSize) || maxTradeSize <= 0) {
       throw new Error(`Invalid maxTradeSize: must be positive number`);
     }
-    if (isNaN(dailyVolumeCap) || dailyVolumeCap < maxTradeSize) {
+    if (isNaN(dailyVolumeCap) || (dailyVolumeCap < maxTradeSize && dailyVolumeCap < UNLIMITED_AMOUNT)) {
       throw new Error(`Invalid dailyVolumeCap: must be >= maxTradeSize (${maxTradeSize})`);
     }
 
@@ -625,8 +627,8 @@ export class SessionService {
       return { allowed: false, reason: 'Session is inactive or revoked' };
     }
 
-    // Single trade risk guardrail
-    if (tradeCost > session.maxTradeSize) {
+    // Single trade risk guardrail (bypassed if maxTradeSize is unlimited)
+    if (session.maxTradeSize < UNLIMITED_AMOUNT && tradeCost > session.maxTradeSize) {
       return {
         allowed: false,
         reason: `Trade cost (${tradeCost.toFixed(2)} tUSDC) exceeds maximum trade size limit of ${session.maxTradeSize.toFixed(2)} tUSDC`,
@@ -647,8 +649,8 @@ export class SessionService {
       }
     }
 
-    // Daily volume cap guardrail
-    if (session.spentToday + tradeCost > session.dailyVolumeCap) {
+    // Daily volume cap guardrail (bypassed if dailyVolumeCap is unlimited)
+    if (session.dailyVolumeCap < UNLIMITED_AMOUNT && session.spentToday + tradeCost > session.dailyVolumeCap) {
       const remaining = Math.max(0, session.dailyVolumeCap - session.spentToday);
       return {
         allowed: false,

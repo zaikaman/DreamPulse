@@ -14,6 +14,7 @@ import {
 import type { WalletState } from '../../hooks/useSessionKey.js';
 import type { SessionGrant } from '../../types/index.js';
 import { Spinner } from '../ui/Spinner.js';
+import { formatCapAmount } from '../../lib/sessionUtils.js';
 
 interface WalletAccountDropdownProps {
   wallet: WalletState;
@@ -342,8 +343,8 @@ export const WalletAccountDropdown: React.FC<WalletAccountDropdownProps> = ({
 
             {isSessionActive && activeSession && (
               <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '10px', color: 'var(--muted-foreground)' }}>
-                <span>Cap: {activeSession.maxTradeSize} tUSDC/trade</span>
-                <span>24h: {activeSession.spentToday || 0} / {activeSession.dailyVolumeCap} tUSDC</span>
+                <span>Cap: {formatCapAmount(activeSession.maxTradeSize)}/trade</span>
+                <span>24h: {activeSession.spentToday || 0} / {formatCapAmount(activeSession.dailyVolumeCap)}</span>
               </div>
             )}
 

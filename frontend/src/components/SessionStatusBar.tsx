@@ -22,6 +22,11 @@ import { SOMNIA_ADDRESSES } from '../services/web3.js';
 import { apiClient } from '../services/api.js';
 import { Spinner } from './ui/Spinner.js';
 import { Button } from './ui/button.js';
+import {
+  formatCapAmount,
+  formatSessionTimeRemaining,
+  isUnlimitedAmount,
+} from '../lib/sessionUtils.js';
 
 interface SessionStatusBarProps {
   wallet: WalletState;
@@ -77,25 +82,7 @@ export const SessionStatusBar: React.FC<SessionStatusBarProps> = ({
     }
 
     const updateTimer = () => {
-      const expiry = new Date(activeSession.expiresAt).getTime();
-      const now = Date.now();
-      const diffMs = expiry - now;
-
-      if (diffMs <= 0) {
-        setTimeRemaining('Expired');
-        return;
-      }
-
-      const totalSec = Math.floor(diffMs / 1000);
-      const hours = Math.floor(totalSec / 3600);
-      const mins = Math.floor((totalSec % 3600) / 60);
-      const secs = totalSec % 60;
-
-      if (hours > 0) {
-        setTimeRemaining(`${hours}h ${mins}m`);
-      } else {
-        setTimeRemaining(`${mins}m ${secs}s`);
-      }
+      setTimeRemaining(formatSessionTimeRemaining(activeSession.expiresAt));
     };
 
     updateTimer();
@@ -118,9 +105,9 @@ export const SessionStatusBar: React.FC<SessionStatusBarProps> = ({
             <ShieldExclamationIcon className="w-3.5 h-3.5" />
           </div>
           <div className="session-banner-text">
-            <span className="session-banner-title">Non-Custodial Session Inactive</span>
-            <span className="session-banner-desc">
-              Connect Web3 wallet to authorize autonomous trading bots with deterministic risk caps.
+            <span className="session-banner-title">Direct Wallet Execution (Manual)</span>
+            <span className="session-banner-subtitle">
+              Connect Web3 wallet to authorize non-custodial session key for 1-click execution & autonomous agent swarm.
             </span>
           </div>
         </div>
@@ -139,14 +126,14 @@ export const SessionStatusBar: React.FC<SessionStatusBarProps> = ({
   // Wrong Network State
   if (!isCorrectNetwork) {
     return (
-      <div className="session-status-banner warning">
+      <div className="session-status-banner wrong-network">
         <div className="session-banner-left">
           <div className="status-badge-dot warning">
             <BoltIcon className="w-3.5 h-3.5" />
           </div>
           <div className="session-banner-text">
             <span className="session-banner-title">Wrong Network Detected</span>
-            <span className="session-banner-desc">
+            <span className="session-banner-subtitle">
               Somnia Shannon Testnet (Chain ID 50312) required for high-throughput CLOB operations.
             </span>
           </div>
@@ -166,8 +153,9 @@ export const SessionStatusBar: React.FC<SessionStatusBarProps> = ({
   // Active Session Display
   if (isSessionActive && activeSession) {
     const spent = Number(activeSession.spentToday || 0);
-    const cap = Number(activeSession.dailyVolumeCap || 1);
-    const spentPercent = Math.min(100, Math.max(0, (spent / cap) * 100));
+    const isUnlimitedDaily = isUnlimitedAmount(activeSession.dailyVolumeCap);
+    const cap = isUnlimitedDaily ? Infinity : Number(activeSession.dailyVolumeCap || 1);
+    const spentPercent = isUnlimitedDaily ? 0 : Math.min(100, Math.max(0, (spent / cap) * 100));
 
     return (
       <div className="session-status-banner active">
@@ -196,7 +184,7 @@ export const SessionStatusBar: React.FC<SessionStatusBarProps> = ({
 
             <div className="session-metric-item">
               <span className="metric-label">SINGLE CAP</span>
-              <span className="metric-value tabular-num">{activeSession.maxTradeSize} tUSDC</span>
+              <span className="metric-value tabular-num font-mono">{formatCapAmount(activeSession.maxTradeSize)}</span>
             </div>
 
             <div className="session-metric-divider"></div>
@@ -204,21 +192,24 @@ export const SessionStatusBar: React.FC<SessionStatusBarProps> = ({
             <div className="session-metric-item budget-meter-item">
               <div className="budget-label-row">
                 <span className="metric-label">24H VOLUME BUDGET</span>
-                <span className="budget-numbers tabular-num">
-                  {spent.toFixed(1)} / {cap} tUSDC ({spentPercent.toFixed(0)}%)
+                <span className="budget-numbers tabular-num font-mono">
+                  {isUnlimitedDaily
+                    ? `${spent.toFixed(1)} / Unlimited`
+                    : `${spent.toFixed(1)} / ${cap.toLocaleString()} tUSDC (${spentPercent.toFixed(0)}%)`}
                 </span>
               </div>
               <div className="budget-progress-track">
                 <div
                   className="budget-progress-fill"
                   style={{
-                    width: `${spentPercent}%`,
-                    backgroundColor:
-                      spentPercent > 85
-                        ? 'hsl(var(--destructive))'
-                        : spentPercent > 60
-                        ? '#f59e0b'
-                        : 'hsl(var(--primary))',
+                    width: isUnlimitedDaily ? '100%' : `${spentPercent}%`,
+                    backgroundColor: isUnlimitedDaily
+                      ? 'rgba(0, 255, 204, 0.6)'
+                      : spentPercent > 85
+                      ? 'hsl(var(--destructive))'
+                      : spentPercent > 60
+                      ? '#f59e0b'
+                      : 'hsl(var(--primary))',
                   }}
                 ></div>
               </div>

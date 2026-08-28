@@ -383,5 +383,42 @@ describe('Task T038 & T040: Session Management Service & Risk Guardrails', () =>
     const copyTargets = sessionService.getDelegatedCopyTradeSessions(liveOperator.address);
     expect(copyTargets.some((s) => s.userAddress.toLowerCase() === copilotOnlyUser.address.toLowerCase())).toBe(false);
   });
+
+  it('supports unlimited and high-cap session delegation (unlimited time, maxTradeSize, dailyVolumeCap)', async () => {
+    const user = privateKeyToAccount(generatePrivateKey());
+    const UNLIMITED_VAL = 1_000_000_000;
+    const perpetualExpiry = new Date(Date.now() + 100 * 365 * 24 * 3600 * 1000).toISOString();
+
+    const session = await sessionService.registerSession({
+      userAddress: user.address,
+      operatorAddress: liveOperator.address,
+      maxTradeSize: UNLIMITED_VAL,
+      dailyVolumeCap: UNLIMITED_VAL,
+      expiresAt: perpetualExpiry,
+      onChainAuthorized: true,
+      copyTradeEnabled: true,
+    });
+
+    expect(session.isActive).toBe(true);
+    expect(session.maxTradeSize).toBe(UNLIMITED_VAL);
+    expect(session.dailyVolumeCap).toBe(UNLIMITED_VAL);
+    expect(session.expiresAt).toBe(perpetualExpiry);
+
+    // Any large trade is permitted under unlimited bounds
+    const check1 = sessionService.validateTradeAllowance(session.id, 50_000);
+    expect(check1.allowed).toBe(true);
+
+    const check2 = sessionService.validateTradeAllowance(session.id, 500_000);
+    expect(check2.allowed).toBe(true);
+
+    // Record huge spend
+    await sessionService.recordTradeSpend(session.id, 500_000);
+    expect(session.spentToday).toBe(500_000);
+
+    // Subsequent huge trade is still allowed under unlimited daily volume
+    const check3 = sessionService.validateTradeAllowance(session.id, 250_000);
+    expect(check3.allowed).toBe(true);
+  });
 });
+
 

@@ -18,6 +18,7 @@ import { SOMNIA_ADDRESSES } from '../../services/web3.js';
 import { StatCardsGridSkeleton } from '../ui/Skeleton.js';
 import { Badge } from '../ui/badge.js';
 import { cn } from '../../lib/utils.js';
+import { formatCapAmount } from '../../lib/sessionUtils.js';
 
 interface StatCardsGridProps {
   markets: Market[];
@@ -242,7 +243,7 @@ export const StatCardsGrid: React.FC<StatCardsGridProps> = ({
                 {activeSession?.isActive
                   ? (
                     <>
-                      {activeSession.spentToday || 0} / {activeSession.dailyVolumeCap} <span className="text-xs font-normal text-muted-foreground">tUSDC</span>
+                      {activeSession.spentToday || 0} / {formatCapAmount(activeSession.dailyVolumeCap)}
                     </>
                   )
                   : 'DIRECT MODE'}
@@ -255,7 +256,7 @@ export const StatCardsGrid: React.FC<StatCardsGridProps> = ({
                       <span>Active Grant</span>
                     </span>
                     <span className="font-mono text-[11px] text-muted-foreground whitespace-nowrap truncate">
-                      Max/Trade: <span className="text-foreground font-medium">{activeSession.maxTradeSize} tUSDC</span>
+                      Max/Trade: <span className="text-foreground font-medium">{formatCapAmount(activeSession.maxTradeSize)}</span>
                     </span>
                   </>
                 ) : (
