@@ -10,6 +10,15 @@ export const DEFAULT_ANNUAL_VOLATILITY: Record<string, number> = {
   DEFAULT: 0.60,
 };
 
+export const MIN_ANNUAL_VOLATILITY: Record<string, number> = {
+  'BTC/USD': 0.35,
+  'ETH/USD': 0.45,
+  'SOL/USD': 0.55,
+  'BNB/USD': 0.45,
+  'DOGE/USD': 0.60,
+  DEFAULT: 0.30,
+};
+
 const SECONDS_PER_YEAR = 365.25 * 24 * 3600;
 
 /**
@@ -60,7 +69,7 @@ export function calculateSpotDrift(currentSpot: number, referenceSpot: number): 
  * @param priceHistory Historical timestamp and price observations
  * @param symbol Fallback asset symbol for baseline prior
  * @param windowSeconds Window length in seconds (defaults to 300s / 5m)
- * @returns Annualized volatility bounded between [0.15, 2.50] (15% to 250%)
+ * @returns Annualized volatility bounded between asset min floor and 250%
  */
 export function calculateRealizedVolatility(
   priceHistory?: Array<{ timestamp: number; price: number }>,
@@ -68,6 +77,7 @@ export function calculateRealizedVolatility(
   windowSeconds: number = 300,
 ): number {
   const fallback = DEFAULT_ANNUAL_VOLATILITY[symbol] ?? DEFAULT_ANNUAL_VOLATILITY.DEFAULT;
+  const minFloor = MIN_ANNUAL_VOLATILITY[symbol] ?? MIN_ANNUAL_VOLATILITY.DEFAULT;
   if (!priceHistory || priceHistory.length < 5) {
     return fallback;
   }
@@ -113,11 +123,12 @@ export function calculateRealizedVolatility(
   const rawVol = Math.sqrt(Math.max(0, annualizedVariance));
 
   // Blend with baseline prior based on sample size confidence (Bayesian shrinkage)
-  const confidenceWeight = Math.min(1.0, logReturns.length / 30);
+  // Requires ~60 ticks in window to reach 100% confidence, preventing rapid collapse on quiet 5m ticks
+  const confidenceWeight = Math.min(1.0, logReturns.length / 60);
   const blendedVol = confidenceWeight * rawVol + (1 - confidenceWeight) * fallback;
 
-  // Clamp to realistic asset boundaries [15%, 250%]
-  return Number(Math.min(2.50, Math.max(0.15, blendedVol)).toFixed(4));
+  // Clamp to realistic asset boundaries [minFloor, 250%]
+  return Number(Math.min(2.50, Math.max(minFloor, blendedVol)).toFixed(4));
 }
 
 /**
@@ -131,6 +142,7 @@ export function calculateEWMARealizedVolatility(
   windowSeconds: number = 300,
 ): number {
   const fallback = DEFAULT_ANNUAL_VOLATILITY[symbol] ?? DEFAULT_ANNUAL_VOLATILITY.DEFAULT;
+  const minFloor = MIN_ANNUAL_VOLATILITY[symbol] ?? MIN_ANNUAL_VOLATILITY.DEFAULT;
   if (!priceHistory || priceHistory.length < 5) {
     return fallback;
   }
@@ -178,11 +190,11 @@ export function calculateEWMARealizedVolatility(
   const annualizedVariance = (ewmaVariance / avgDtSeconds) * SECONDS_PER_YEAR;
   const rawVol = Math.sqrt(Math.max(0, annualizedVariance));
 
-  // Bayesian prior blending with asset baseline
-  const sampleConfidence = Math.min(1.0, logReturns.length / 25);
+  // Bayesian prior blending with asset baseline (60-sample horizon for stable confidence)
+  const sampleConfidence = Math.min(1.0, logReturns.length / 60);
   const blendedVol = sampleConfidence * rawVol + (1.0 - sampleConfidence) * fallback;
 
-  return Number(Math.min(2.50, Math.max(0.15, blendedVol)).toFixed(4));
+  return Number(Math.min(2.50, Math.max(minFloor, blendedVol)).toFixed(4));
 }
 
 export interface DepthVWAPResult {

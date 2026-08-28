@@ -46,6 +46,12 @@ export class AnomalyService extends EventEmitter {
       return null;
     }
 
+    // Suppress actionable anomaly alerts on synthetic rolling markets or unseeded dummy books (0.49/0.51 fallback)
+    if (market.isSynthetic || market.isSeedDepth) {
+      this.activeAnomalies.delete(market.id);
+      return null;
+    }
+
     // Guard against stale price feeds during REST fallback delays or disconnects
     if (process.env.NODE_ENV !== 'test' && priceFeedService.isPriceStale(market.symbol, 6000)) {
       return null;

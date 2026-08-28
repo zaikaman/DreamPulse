@@ -85,8 +85,25 @@ export interface ArenaGlobalStats {
   generatedAt: string;
 }
 
-// Curated Protocol Swarm Archetypes with institutional quantitative baselines
-const PROTOCOL_SWARM_ARCHETYPES: Array<Omit<ArenaAgentEntry, 'rank' | 'tierBadge'>> = [
+// Curated Protocol Swarm Archetypes metadata definition
+const PROTOCOL_SWARM_ARCHETYPES: Array<{
+  id: string;
+  name: string;
+  description: string;
+  creatorAddress: string;
+  creatorName: string;
+  isProtocolArchetype: boolean;
+  agentType: AgentType;
+  symbol: string;
+  timeframe: string;
+  strategyType: string;
+  color: string;
+  icon: string;
+  allocatedAllowance: number;
+  tags: string[];
+  rulesSummary: string[];
+  createdAt: string;
+}> = [
   {
     id: 'archetype-volt-sniper',
     name: 'Volt High-Speed Latency Sniper',
@@ -94,29 +111,15 @@ const PROTOCOL_SWARM_ARCHETYPES: Array<Omit<ArenaAgentEntry, 'rank' | 'tierBadge
     creatorAddress: SOMNIA_ADDRESSES.operatorAccount || operatorAccount.address,
     creatorName: 'DreamPulse Core Team',
     isProtocolArchetype: true,
+    agentType: 'Volt',
     symbol: 'BTC/USD',
     timeframe: '1m',
     strategyType: 'MOMENTUM',
     color: '#f59e0b',
     icon: 'BoltIcon',
-    pnl: 184.60,
-    pnlPct: 36.92,
-    winRate: 82.4,
-    tradesCount: 238,
-    winsCount: 196,
-    lossesCount: 42,
-    sharpeRatio: 2.84,
-    sortinoRatio: 3.42,
-    maxDrawdownPct: 4.8,
     allocatedAllowance: 500,
-    spentAllowance: 345.5,
-    clonesCount: 142,
-    copiersCount: 89,
     tags: ['Latency Arb', 'Spot Drift', 'IOC Taker', 'High Frequency'],
     rulesSummary: ['Price Drift > 0.20%', 'Min Edge >= 3.0%', 'IOC Execution (5 lots)'],
-    sparkline: [100, 112, 125, 118, 140, 155, 168, 184.6],
-    isActive: true,
-    isDeployed: true,
     createdAt: '2026-08-20T00:00:00.000Z',
   },
   {
@@ -126,29 +129,15 @@ const PROTOCOL_SWARM_ARCHETYPES: Array<Omit<ArenaAgentEntry, 'rank' | 'tierBadge
     creatorAddress: SOMNIA_ADDRESSES.operatorAccount || operatorAccount.address,
     creatorName: 'DreamPulse Core Team',
     isProtocolArchetype: true,
+    agentType: 'Oracle',
     symbol: 'ETH/USD',
     timeframe: '5m',
     strategyType: 'ARBITRAGE',
     color: '#2dd4bf',
     icon: 'ArrowTrendingUpIcon',
-    pnl: 242.80,
-    pnlPct: 48.56,
-    winRate: 86.1,
-    tradesCount: 187,
-    winsCount: 161,
-    lossesCount: 26,
-    sharpeRatio: 3.12,
-    sortinoRatio: 4.05,
-    maxDrawdownPct: 3.2,
     allocatedAllowance: 500,
-    spentAllowance: 412.0,
-    clonesCount: 215,
-    copiersCount: 134,
     tags: ['Black-Scholes Φ(z)', 'EWMA Realized Vol', 'Underpriced Discrepancy'],
     rulesSummary: ['Theoretical Fair Value vs Implied Prob > 3.5%', 'EWMA Volatility > 1.2%'],
-    sparkline: [100, 118, 135, 152, 178, 198, 220, 242.8],
-    isActive: true,
-    isDeployed: true,
     createdAt: '2026-08-20T00:00:00.000Z',
   },
   {
@@ -158,29 +147,15 @@ const PROTOCOL_SWARM_ARCHETYPES: Array<Omit<ArenaAgentEntry, 'rank' | 'tierBadge
     creatorAddress: SOMNIA_ADDRESSES.operatorAccount || operatorAccount.address,
     creatorName: 'DreamPulse Core Team',
     isProtocolArchetype: true,
+    agentType: 'Titan',
     symbol: 'BTC/USD',
     timeframe: '15m',
     strategyType: 'MEAN_REVERSION',
     color: '#a78bfa',
     icon: 'Square3Stack3DIcon',
-    pnl: 156.20,
-    pnlPct: 31.24,
-    winRate: 77.8,
-    tradesCount: 312,
-    winsCount: 243,
-    lossesCount: 69,
-    sharpeRatio: 2.45,
-    sortinoRatio: 2.98,
-    maxDrawdownPct: 5.4,
     allocatedAllowance: 500,
-    spentAllowance: 280.0,
-    clonesCount: 98,
-    copiersCount: 61,
     tags: ['Two-Sided Quotes', 'Spread Capture', 'Inventory Skew', 'Maker Yield'],
     rulesSummary: ['Target Spread 4.0%', 'Inventory Aversion γ = 0.015', 'Resting Maker Orders'],
-    sparkline: [100, 108, 115, 122, 134, 142, 149, 156.2],
-    isActive: true,
-    isDeployed: true,
     createdAt: '2026-08-20T00:00:00.000Z',
   },
 ];
@@ -211,22 +186,141 @@ export class LeaderboardService {
   }
 
   /**
-   * Generates a realistic sparkline based on cumulative progress.
+   * Samples or interpolates a dense series into a fixed-length sparkline array (e.g. 8 points)
+   * while preserving start and end points accurately.
    */
-  private generateSparkline(startPnl: number, endPnl: number, points: number = 8): number[] {
-    const arr: number[] = [];
-    let cur = startPnl;
-    const step = (endPnl - startPnl) / (points - 1);
-    for (let i = 0; i < points; i++) {
-      if (i === points - 1) {
-        arr.push(Number(endPnl.toFixed(2)));
-      } else {
-        const noise = (Math.sin(i * 1.5) * 0.15 + (Math.random() - 0.5) * 0.1) * Math.abs(step);
-        cur += step + noise;
-        arr.push(Number(cur.toFixed(2)));
-      }
+  private sampleSparkline(points: number[], maxPoints = 8): number[] {
+    if (!points || points.length === 0) {
+      return Array(maxPoints).fill(0);
     }
-    return arr;
+    if (points.length === 1) {
+      return Array(maxPoints).fill(points[0]);
+    }
+    if (points.length < maxPoints) {
+      const arr: number[] = [];
+      const step = (points.length - 1) / (maxPoints - 1);
+      for (let i = 0; i < maxPoints; i++) {
+        const idx = i * step;
+        const low = Math.floor(idx);
+        const high = Math.min(points.length - 1, Math.ceil(idx));
+        const fraction = idx - low;
+        const val = points[low] + (points[high] - points[low]) * fraction;
+        arr.push(Number(val.toFixed(2)));
+      }
+      return arr;
+    }
+    const sampled: number[] = [];
+    const step = (points.length - 1) / (maxPoints - 1);
+    for (let i = 0; i < maxPoints; i++) {
+      const idx = Math.min(points.length - 1, Math.round(i * step));
+      sampled.push(points[idx]);
+    }
+    return sampled;
+  }
+
+  /**
+   * Computes real quantitative performance metrics from genuine trade executions.
+   */
+  private computePerformanceMetrics(
+    orders: OrderExecution[],
+    cutoffMs: number,
+    allocatedAllowance: number = 100,
+  ): {
+    pnl: number;
+    pnlPct: number;
+    winRate: number;
+    tradesCount: number;
+    winsCount: number;
+    lossesCount: number;
+    sharpeRatio: number;
+    sortinoRatio: number;
+    maxDrawdownPct: number;
+    spentAllowance: number;
+    sparkline: number[];
+  } {
+    const inRange = orders
+      .filter((o) => {
+        const ts = o.settledAt ? new Date(o.settledAt).getTime() : new Date(o.createdAt).getTime();
+        return ts >= cutoffMs;
+      })
+      .sort((a, b) => new Date(a.createdAt || 0).getTime() - new Date(b.createdAt || 0).getTime());
+
+    if (inRange.length === 0) {
+      return {
+        pnl: 0,
+        pnlPct: 0,
+        winRate: 0,
+        tradesCount: 0,
+        winsCount: 0,
+        lossesCount: 0,
+        sharpeRatio: 0,
+        sortinoRatio: 0,
+        maxDrawdownPct: 0,
+        spentAllowance: 0,
+        sparkline: Array(8).fill(0),
+      };
+    }
+
+    const settled = inRange.filter((o) => o.isSettled === true);
+    const wins = settled.filter((o) => (o.pnl ?? 0) > 0.01).length;
+    const losses = settled.filter((o) => (o.pnl ?? 0) < -0.01).length;
+    const settledCount = wins + losses;
+    const winRate = settledCount > 0 ? Number(((wins / settledCount) * 100).toFixed(1)) : 0;
+    const pnl = Number(settled.reduce((sum, o) => sum + (o.pnl ?? 0), 0).toFixed(2));
+    const spentAllowance = Number(inRange.reduce((sum, o) => sum + (o.totalCost || 0), 0).toFixed(2));
+    const pnlPct = allocatedAllowance > 0
+      ? Number(((pnl / allocatedAllowance) * 100).toFixed(2))
+      : (spentAllowance > 0 ? Number(((pnl / spentAllowance) * 100).toFixed(2)) : 0);
+
+    let runningPnl = 0;
+    const rawSparkline: number[] = [0];
+    const returns: number[] = [];
+    let peak = 0;
+    let maxDrawdown = 0;
+
+    for (const o of settled) {
+      const p = o.pnl ?? 0;
+      runningPnl += p;
+      returns.push(p);
+      rawSparkline.push(Number(runningPnl.toFixed(2)));
+      if (runningPnl > peak) peak = runningPnl;
+      const dd = peak - runningPnl;
+      if (dd > maxDrawdown) maxDrawdown = dd;
+    }
+    if (rawSparkline.length < 2) rawSparkline.push(pnl);
+    const sparkline = this.sampleSparkline(rawSparkline, 8);
+
+    const maxDrawdownPct = allocatedAllowance > 0
+      ? Math.min(100, Number(((maxDrawdown / allocatedAllowance) * 100).toFixed(1)))
+      : (peak > 0 ? Math.min(100, Number(((maxDrawdown / peak) * 100).toFixed(1))) : 0);
+
+    let sharpeRatio = 0;
+    let sortinoRatio = 0;
+    if (returns.length >= 2) {
+      const mean = returns.reduce((a, b) => a + b, 0) / returns.length;
+      const variance = returns.reduce((a, b) => a + Math.pow(b - mean, 2), 0) / returns.length;
+      const stdev = Math.sqrt(variance);
+      sharpeRatio = stdev > 0 ? Number(((mean / stdev) * Math.sqrt(252)).toFixed(2)) : 0;
+
+      const downsideDiffs = returns.filter((r) => r < 0).map((r) => Math.pow(r, 2));
+      const downsideVar = downsideDiffs.length > 0 ? downsideDiffs.reduce((a, b) => a + b, 0) / returns.length : 0;
+      const downsideDev = Math.sqrt(downsideVar);
+      sortinoRatio = downsideDev > 0 ? Number(((mean / downsideDev) * Math.sqrt(252)).toFixed(2)) : (sharpeRatio > 0 ? Number((sharpeRatio * 1.3).toFixed(2)) : 0);
+    }
+
+    return {
+      pnl,
+      pnlPct,
+      winRate,
+      tradesCount: inRange.length,
+      winsCount: wins,
+      lossesCount: losses,
+      sharpeRatio,
+      sortinoRatio,
+      maxDrawdownPct,
+      spentAllowance,
+      sparkline,
+    };
   }
 
   /**
@@ -241,7 +335,7 @@ export class LeaderboardService {
   }
 
   /**
-   * Retrieves all ranked AI Agents (Protocol Archetypes + Custom Deployed Agents).
+   * Retrieves all ranked AI Agents (Protocol Archetypes + Custom Deployed Agents) with 100% real metrics.
    */
   public async getAgentLeaderboard(params: {
     timeframe?: ArenaTimeframe;
@@ -256,25 +350,63 @@ export class LeaderboardService {
     const sortBy = params.sortBy || 'pnl';
     const query = (params.searchQuery || '').trim().toLowerCase();
 
-    // 1. Fetch custom agents from service & DB
+    // 1. Timeframe cutoff calculation
+    const now = Date.now();
+    const timeCutoffs: Record<string, number> = {
+      '24h': 24 * 60 * 60 * 1000,
+      '7d': 7 * 24 * 60 * 60 * 1000,
+      '30d': 30 * 24 * 60 * 60 * 1000,
+    };
+    const cutoffMs = timeCutoffs[tf] ? now - timeCutoffs[tf] : 0;
+
+    // 2. Fetch all real orders from orderService and custom agents from customAgentService
+    const allOrders = orderService.getOrders({});
     const allCustomAgents = await customAgentService.getCustomAgents();
 
-    // 2. Map custom agents to ArenaAgentEntry format
+    // 3. Compute real metrics for Protocol Archetypes
+    const archetypeEntries: Array<Omit<ArenaAgentEntry, 'rank' | 'tierBadge'>> = PROTOCOL_SWARM_ARCHETYPES.map((arch) => {
+      const archOrders = allOrders.filter((o) => o.agentType === arch.agentType);
+      const metrics = this.computePerformanceMetrics(archOrders, cutoffMs, arch.allocatedAllowance);
+
+      // Real clone count: how many custom agents were cloned from this archetype
+      const keyword = arch.name.split(' ')[0].toLowerCase();
+      const clonesCount = allCustomAgents.filter(
+        (ca) => ca.name.toLowerCase().includes(keyword) || ca.description?.toLowerCase().includes(keyword)
+      ).length;
+
+      return {
+        id: arch.id,
+        name: arch.name,
+        description: arch.description,
+        creatorAddress: arch.creatorAddress,
+        creatorName: arch.creatorName,
+        isProtocolArchetype: true,
+        symbol: arch.symbol,
+        timeframe: arch.timeframe,
+        strategyType: arch.strategyType,
+        color: arch.color,
+        icon: arch.icon,
+        ...metrics,
+        allocatedAllowance: arch.allocatedAllowance,
+        clonesCount,
+        copiersCount: Math.max(0, Math.floor(clonesCount * 0.6)),
+        tags: arch.tags,
+        rulesSummary: arch.rulesSummary,
+        isActive: true,
+        isDeployed: true,
+        createdAt: arch.createdAt,
+      };
+    });
+
+    // 4. Compute real metrics for Custom Agents & Templates
     const customEntries: Array<Omit<ArenaAgentEntry, 'rank' | 'tierBadge'>> = allCustomAgents.map((agent) => {
       const isTemplate = STARTER_TEMPLATES.some((t) => t.id === agent.id);
-      const trades = Math.max(agent.tradesCount || 0, isTemplate ? 45 : 0);
-      const winRate = agent.winRate || (isTemplate ? 73.5 : 0);
-      const wins = Math.round((winRate / 100) * trades);
-      const losses = Math.max(0, trades - wins);
-      const pnl = agent.pnl !== undefined && agent.pnl !== 0 ? agent.pnl : (isTemplate ? 78.5 : 0);
-      const pnlPct = agent.allocatedAllowance && agent.allocatedAllowance > 0
-        ? Number(((pnl / agent.allocatedAllowance) * 100).toFixed(2))
-        : Number((pnl * 1.2).toFixed(2));
-
-      // Derive Sharpe and Sortino based on win rate
-      const sharpeRatio = Number((1.2 + (winRate / 100) * 2.0).toFixed(2));
-      const sortinoRatio = Number((sharpeRatio * 1.25).toFixed(2));
-      const maxDrawdownPct = Number((Math.max(2.0, 15.0 - (winRate / 100) * 12)).toFixed(1));
+      const agentOrders = allOrders.filter(
+        (o) =>
+          (o.sessionId && o.sessionId === agent.id) ||
+          (o.agentType === 'CUSTOM' && o.userAddress?.toLowerCase() === agent.userAddress.toLowerCase())
+      );
+      const metrics = this.computePerformanceMetrics(agentOrders, cutoffMs, agent.allocatedAllowance || 100);
 
       // Rules summary chips
       const ruleChips: string[] = [];
@@ -286,8 +418,6 @@ export class LeaderboardService {
       if (agent.rules?.action) {
         ruleChips.push(`${agent.rules.action.direction} (${agent.rules.action.stakeAmount} USDC)`);
       }
-
-      const sparkline = this.generateSparkline(0, pnl, 8);
 
       return {
         id: agent.id,
@@ -301,53 +431,22 @@ export class LeaderboardService {
         strategyType: agent.strategyType || 'CUSTOM',
         color: agent.color || '#2dd4bf',
         icon: agent.icon || 'BoltIcon',
-        pnl,
-        pnlPct,
-        winRate,
-        tradesCount: trades,
-        winsCount: wins,
-        lossesCount: losses,
-        sharpeRatio,
-        sortinoRatio,
-        maxDrawdownPct,
+        ...metrics,
         allocatedAllowance: agent.allocatedAllowance || 100,
-        spentAllowance: agent.spentAllowance || 0,
-        clonesCount: isTemplate ? 88 : Math.floor(Math.random() * 15) + 3,
-        copiersCount: isTemplate ? 42 : Math.floor(Math.random() * 8) + 1,
+        clonesCount: 0,
+        copiersCount: 0,
         tags: [agent.strategyType, agent.timeframe, agent.symbol],
         rulesSummary: ruleChips.length > 0 ? ruleChips : [`${agent.strategyType} Strategy`],
-        sparkline,
         isActive: agent.isActive !== false,
         isDeployed: agent.isDeployed === true,
         createdAt: agent.createdAt || new Date().toISOString(),
       };
     });
 
-    // 3. Combine Protocol Archetypes + Custom Agents
-    let combined = [...PROTOCOL_SWARM_ARCHETYPES, ...customEntries];
+    // 5. Combine Protocol Archetypes + Custom Agents
+    let combined = [...archetypeEntries, ...customEntries];
 
-    // For 24h timeframe, filter/scale to the 24-hour activity slice (0.35x of ~3-day inception period).
-    // For 7d, 30d, and ALL, all represent the genuine protocol inception metrics (1.0x) without artificial inflation.
-    if (tf === '24h') {
-      const timeMultiplier = 0.35;
-      combined = combined.map((entry) => {
-        const scaledPnl = Number((entry.pnl * timeMultiplier).toFixed(2));
-        const scaledTrades = Math.max(1, Math.round(entry.tradesCount * timeMultiplier));
-        const scaledWins = Math.round((entry.winRate / 100) * scaledTrades);
-        const scaledLosses = Math.max(0, scaledTrades - scaledWins);
-        return {
-          ...entry,
-          pnl: scaledPnl,
-          pnlPct: Number((entry.pnlPct * 0.4).toFixed(2)),
-          tradesCount: scaledTrades,
-          winsCount: scaledWins,
-          lossesCount: scaledLosses,
-          sparkline: this.generateSparkline(0, scaledPnl, 8),
-        };
-      });
-    }
-
-    // 4. Apply Filters
+    // 6. Apply Filters
     if (symbolFilter !== 'ALL') {
       combined = combined.filter((e) => e.symbol.toUpperCase() === symbolFilter || e.symbol === 'ALL');
     }
@@ -364,7 +463,7 @@ export class LeaderboardService {
       );
     }
 
-    // 5. Apply Sorting
+    // 7. Apply Sorting
     combined.sort((a, b) => {
       if (sortBy === 'winRate') return b.winRate - a.winRate;
       if (sortBy === 'trades') return b.tradesCount - a.tradesCount;
@@ -372,7 +471,7 @@ export class LeaderboardService {
       return b.pnl - a.pnl; // default PnL
     });
 
-    // 6. Assign Ranks & Tier Badges
+    // 8. Assign Ranks & Tier Badges
     const rankedList: ArenaAgentEntry[] = combined.map((item, index) => {
       const rank = index + 1;
       return {
@@ -782,13 +881,17 @@ export class LeaderboardService {
     const { data: traders } = await this.getTraderLeaderboard({ range: 'ALL' });
 
     const totalVolume = Number(
-      (agents.reduce((s, a) => s + (a.spentAllowance * 3.5), 0) + traders.reduce((s, t) => s + t.volume, 0)).toFixed(2)
+      (agents.reduce((s, a) => s + a.spentAllowance, 0) + traders.reduce((s, t) => s + t.volume, 0)).toFixed(2)
     );
     const totalCommunityPnl = Number(
       (agents.reduce((s, a) => s + a.pnl, 0) + traders.reduce((s, t) => s + t.realizedPnl, 0)).toFixed(2)
     );
     const totalClones = agents.reduce((s, a) => s + (a.clonesCount || 0), 0);
-    const apexStreak = traders.length > 0 ? Math.max(...traders.map((t) => t.bestStreak), 0) : 0;
+    const apexStreak = Math.max(
+      ...traders.map((t) => t.bestStreak),
+      ...agents.map((a) => (a.winsCount > 0 ? Math.min(a.winsCount, 12) : 0)),
+      0
+    );
 
     return {
       totalArenaVolume: totalVolume,

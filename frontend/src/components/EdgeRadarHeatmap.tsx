@@ -31,8 +31,9 @@ const EdgeRadarHeatmapComponent: React.FC<EdgeRadarHeatmapProps> = ({
   const symbols = discoveredSymbols.length > 0 ? discoveredSymbols : ['BTC/USD', 'ETH/USD', 'SOL/USD', 'BNB/USD', 'DOGE/USD'];
   const windows: Array<'1m' | '5m' | '15m' | '1h'> = ['1m', '5m', '15m', '1h'];
 
-  // Find most severe anomaly
+  // Find most severe anomaly across real executable on-chain markets
   const highestAnomaly = markets.reduce((max, m) => {
+    if (m.isSynthetic || m.isSeedDepth) return max;
     const tick = liveTicks.get(m.id);
     const edge = Math.abs(tick?.edge ?? m.edgePercentage);
     return edge > max ? edge : max;
@@ -44,9 +45,10 @@ const EdgeRadarHeatmapComponent: React.FC<EdgeRadarHeatmapProps> = ({
     (selectedMarketId ? markets.find((m) => m.id === selectedMarketId) : markets[0]);
 
   const inspectionTick = activeInspectionMarket ? liveTicks.get(activeInspectionMarket.id) : undefined;
+  const isInspectionSynthetic = Boolean(activeInspectionMarket?.isSynthetic || activeInspectionMarket?.isSeedDepth);
   const inspectionImplied = inspectionTick?.impliedProb ?? activeInspectionMarket?.impliedProbYes ?? 0.5;
   const inspectionFair = inspectionTick?.fairValue ?? activeInspectionMarket?.fairValueYes ?? 0.5;
-  const inspectionEdge = inspectionTick?.edge ?? activeInspectionMarket?.edgePercentage ?? 0;
+  const inspectionEdge = isInspectionSynthetic ? 0 : (inspectionTick?.edge ?? activeInspectionMarket?.edgePercentage ?? 0);
 
   return (
     <div className="terminal-panel p-4">
@@ -131,11 +133,12 @@ const EdgeRadarHeatmapComponent: React.FC<EdgeRadarHeatmapProps> = ({
                 }, matchingMarkets[0]);
 
                 const tick = liveTicks.get(bestMarket.id);
-                const edge = tick?.edge ?? bestMarket.edgePercentage;
+                const isSyntheticOrSeed = Boolean(bestMarket.isSynthetic || bestMarket.isSeedDepth);
+                const edge = isSyntheticOrSeed ? 0 : (tick?.edge ?? bestMarket.edgePercentage);
                 const fairValue = tick?.fairValue ?? bestMarket.fairValueYes;
                 const impliedProb = tick?.impliedProb ?? bestMarket.impliedProbYes;
                 const isSelected = bestMarket.id === selectedMarketId;
-                const isAnomaly = Math.abs(edge) >= 0.03;
+                const isAnomaly = !isSyntheticOrSeed && Math.abs(edge) >= 0.03;
 
                 return (
                   <div
@@ -158,14 +161,14 @@ const EdgeRadarHeatmapComponent: React.FC<EdgeRadarHeatmapProps> = ({
                       <span
                         className={cn(
                           "font-mono text-[11px] font-bold px-1.5 py-0.5 rounded border leading-none",
-                          Math.abs(edge) < 0.01
+                          isSyntheticOrSeed || Math.abs(edge) < 0.01
                             ? "bg-secondary/40 text-muted-foreground border-border/40"
                             : edge > 0
                             ? "bg-emerald-500/10 text-emerald-400 border-emerald-500/20"
                             : "bg-rose-500/10 text-rose-400 border-rose-500/20"
                         )}
                       >
-                        {edge >= 0 ? '+' : ''}{(edge * 100).toFixed(1)}%
+                        {isSyntheticOrSeed ? '0.0%' : `${edge >= 0 ? '+' : ''}${(edge * 100).toFixed(1)}%`}
                       </span>
                     </div>
 

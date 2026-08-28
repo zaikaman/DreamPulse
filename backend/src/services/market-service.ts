@@ -101,7 +101,7 @@ export class MarketService extends EventEmitter {
 
         market.fairValueYes = smoothedFair;
         market.impliedProbYes = edge.impliedProbYes;
-        market.edgePercentage = edge.edgePercentage;
+        market.edgePercentage = market.isSeedDepth || market.isSynthetic ? 0 : edge.edgePercentage;
       }
     }
     this.emit('spot_updated', ticker);
@@ -312,6 +312,12 @@ export class MarketService extends EventEmitter {
         let bestAskYes = 0.51;
         const obResult = orderBooks[i];
         const depthLevels = obResult && obResult.status === 'fulfilled' ? obResult.value : null;
+        const hasRealClobDepth = Boolean(
+          depthLevels && (
+            (depthLevels.yesBids && depthLevels.yesBids.length > 0 && depthLevels.yesBids[0].price > 0n) ||
+            (depthLevels.yesAsks && depthLevels.yesAsks.length > 0 && depthLevels.yesAsks[0].price > 0n)
+          )
+        );
 
         if (depthLevels && depthLevels.yesBids && depthLevels.yesBids.length > 0 && depthLevels.yesBids[0].price > 0n) {
           bestBidYes = Number((Number(depthLevels.yesBids[0].price) / 1_000_000).toFixed(3));
@@ -351,7 +357,7 @@ export class MarketService extends EventEmitter {
           bestAskNo: Number((1.0 - bestBidYes).toFixed(2)),
           impliedProbYes: edge.impliedProbYes,
           fairValueYes: fair.fairValueYes,
-          edgePercentage: edge.edgePercentage,
+          edgePercentage: hasRealClobDepth ? edge.edgePercentage : 0,
           poolAddress: m.poolAddress as Address,
           marketIdHex: m.marketId as Hex,
           venueId: m.venueId || undefined,
@@ -360,6 +366,8 @@ export class MarketService extends EventEmitter {
           noTokenId: m.noTokenId,
           intervalSec,
           onchainStatus: m.status === 'Trading' ? MARKET_STATUS.Trading : undefined,
+          isSynthetic: false,
+          isSeedDepth: !hasRealClobDepth,
         };
 
         if (status === 'Open') {
@@ -606,7 +614,9 @@ export class MarketService extends EventEmitter {
             bestAskNo: 0.51,
             impliedProbYes: edge.impliedProbYes,
             fairValueYes: fair.fairValueYes,
-            edgePercentage: edge.edgePercentage,
+            edgePercentage: 0,
+            isSynthetic: true,
+            isSeedDepth: true,
           };
 
           this.markets.set(marketId, newMarket);
@@ -689,7 +699,7 @@ export class MarketService extends EventEmitter {
 
         market.fairValueYes = smoothedFair;
         market.impliedProbYes = edge.impliedProbYes;
-        market.edgePercentage = edge.edgePercentage;
+        market.edgePercentage = market.isSeedDepth || market.isSynthetic ? 0 : edge.edgePercentage;
       }
     }
 
@@ -876,6 +886,8 @@ export class MarketService extends EventEmitter {
     const fair = calculateFairValue(spot, market.strikePrice, timeLeft, market.symbol, undefined, ticker?.priceHistory);
     const edge = calculateEdge(fair.fairValueYes, market.bestBidYes, market.bestAskYes);
 
+    market.isSeedDepth = false;
+    market.isSynthetic = false;
     market.fairValueYes = fair.fairValueYes;
     market.impliedProbYes = edge.impliedProbYes;
     market.edgePercentage = edge.edgePercentage;

@@ -40,6 +40,8 @@ export interface Market {
   noTokenId?: string;
   intervalSec?: number;
   onchainStatus?: number;
+  isSynthetic?: boolean;
+  isSeedDepth?: boolean;
 }
 
 export interface SessionGrant {

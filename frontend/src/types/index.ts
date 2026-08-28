@@ -31,6 +31,8 @@ export interface Market {
   edgePercentage: number;
   poolAddress?: string;
   marketIdHex?: string;
+  isSynthetic?: boolean;
+  isSeedDepth?: boolean;
 }
 
 export interface OrderBookLevel {
