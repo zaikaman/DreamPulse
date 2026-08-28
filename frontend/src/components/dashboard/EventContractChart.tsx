@@ -556,7 +556,7 @@ export const EventContractChart: React.FC<EventContractChartProps> = ({
         >
           <div className={cn("flex items-center gap-1.5 text-xs font-mono font-bold", isLocked ? "text-amber-400" : "text-brand-cyan")}>
             {isLocked ? <LockClosedIcon className="w-3.5 h-3.5 animate-pulse text-amber-400" /> : <ClockIcon className="w-3.5 h-3.5 animate-pulse text-brand-cyan" />}
-            <span>{isLocked ? `${formattedCountdown} (RESOLVING)` : formattedCountdown}</span>
+            <span>{isLocked ? `${formattedCountdown} (LOCKED)` : formattedCountdown}</span>
           </div>
           <div className="text-[8px] font-mono text-muted-foreground tracking-wider uppercase">
             {isLocked ? 'Resolving Phase' : 'Time to Settlement'}

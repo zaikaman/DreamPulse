@@ -372,6 +372,7 @@ export class OrderService {
   private pnlSyncInFlight: Promise<void> | null = null;
   private cachedPnlByKey = new Map<string, { sum: number; timestamp: number }>();
   private stateChangeListeners: Array<() => void> = [];
+  private lastExecutionFailureReason: string | null = null;
 
   /**
    * Registers an active resting limit maker quote placed by an agent (e.g. Titan).
@@ -740,6 +741,7 @@ export class OrderService {
     session: SessionGrant,
     source: OrderSource = 'SWARM',
   ): Promise<OrderExecution | null> {
+    this.lastExecutionFailureReason = null;
     if (decision.action === 'HOLD' || decision.action === 'CANCEL_QUOTE') {
       return null;
     }
@@ -760,6 +762,7 @@ export class OrderService {
     } = quantizeOrder(rawPrice, rawLotSize, outcome);
 
     if (rawQuantity <= 0n) {
+      this.lastExecutionFailureReason = `Requested order size ${rawLotSize} rounds to 0 lots`;
       console.warn(`[OrderService] Trade skipped: requested size ${rawLotSize} rounds to 0 lots`);
       return null;
     }
@@ -769,23 +772,28 @@ export class OrderService {
     if (registeredSession) {
       const riskAllowance = sessionService.validateTradeAllowance(session.id, totalCost);
       if (!riskAllowance.allowed) {
+        this.lastExecutionFailureReason = `Session risk limit reached: ${riskAllowance.reason}`;
         console.warn(`[OrderService] Trade rejected: ${riskAllowance.reason}`);
         return null;
       }
     } else {
       if (!session.isActive) {
+        this.lastExecutionFailureReason = 'Session is inactive. Please re-authorize your session.';
         console.warn('[OrderService] Trade rejected: Session is inactive');
         return null;
       }
       if (new Date(session.expiresAt).getTime() <= Date.now()) {
+        this.lastExecutionFailureReason = 'Session has expired. Please re-authorize your session.';
         console.warn('[OrderService] Trade rejected: Session has expired');
         return null;
       }
       if (totalCost > session.maxTradeSize) {
+        this.lastExecutionFailureReason = `Trade cost ($${totalCost}) exceeds maxTradeSize ($${session.maxTradeSize})`;
         console.warn(`[OrderService] Trade rejected: Trade cost (${totalCost}) exceeds maxTradeSize (${session.maxTradeSize})`);
         return null;
       }
       if (session.spentToday + totalCost > session.dailyVolumeCap) {
+        this.lastExecutionFailureReason = 'Trade cost exceeds dailyVolumeCap';
         console.warn(`[OrderService] Trade rejected: Trade cost exceeds dailyVolumeCap`);
         return null;
       }
@@ -821,6 +829,7 @@ export class OrderService {
     try {
       await assertFunded(onchain, outcome, direction, rawPriceOwn, rawQuantity, targetTrader);
     } catch (err: any) {
+      this.lastExecutionFailureReason = err.message || 'Pre-flight funding check failed';
       if (!err.message?.includes('Insufficient native STT gas balance')) {
         console.warn(`[OrderService] Pre-flight funding check skipped trade for ${targetTrader}:`, err.message);
       }
@@ -1003,22 +1012,27 @@ export class OrderService {
                     args: [targetTrader, proceeds],
                   });
                 } catch (trErr: any) {
-                  console.warn(`[OrderService] Transfer proceeds failed to copy-trader ${targetTrader}:`, trErr.message);
+                  console.warn(`[OrderService] Transfer proceeds failed to copy-trader ${targetTrader}:`, trErr?.message || trErr);
                 }
               }
             }
           }
+        } else {
+          this.lastExecutionFailureReason = 'Trading is closed: Market is within final 30s settlement window.';
         }
       } catch (err: any) {
         const msg: string = err?.message || String(err);
+        this.lastExecutionFailureReason = `On-chain order placement failed: ${msg}`;
         const isAllowanceError = msg.includes('Insufficient TestUSDC allowance') || msg.includes('allowance') || msg.includes('ERC20InsufficientAllowance');
         const isCollateralError = msg.includes('Insufficient collateral') || msg.includes('ERC20InsufficientBalance') || msg.includes('insufficient balance');
         const isTimeoutError = msg.includes('Timed out while waiting') || msg.includes('timeout') || msg.includes('waitForTransactionReceipt');
         const isGasFundsError = msg.includes('insufficient funds for gas') || msg.includes('insufficient native balance') || msg.includes('exceeds balance') || msg.includes('Insufficient native STT gas balance');
         const isOutOfGasError = msg.includes('out of gas') || msg.includes('OUT_OF_GAS') || msg.includes('gas limit reached');
 
-        // Allowance/collateral/timeout are user-fixable or infra-timeout — do NOT burn circuit breaker or per-pool 10m cooldown
         if (isAllowanceError || isCollateralError) {
+          this.lastExecutionFailureReason = isAllowanceError
+            ? 'TestUSDC allowance to operator is required. Please re-authorize your session in the Session Modal.'
+            : 'Insufficient TestUSDC balance in wallet to cover order cost.';
           console.warn(`[OrderService] Copy-trade skipped for ${targetTrader} on ${onchain?.pool}: ${msg.slice(0, 900)} — user must ensure TestUSDC balance and operator allowance via frontend.`);
           return null;
         }
@@ -1054,6 +1068,14 @@ export class OrderService {
     }
 
     if (!txHash) {
+      if (!this.lastExecutionFailureReason) {
+        if (onchain && onchain.status !== 1) {
+          const statusLabels = ['Listed', 'Trading', 'Locked', 'Settling', 'Resolved', 'Voided'];
+          this.lastExecutionFailureReason = `Market is in ${statusLabels[onchain.status] || 'non-trading'} status and not accepting orders.`;
+        } else {
+          this.lastExecutionFailureReason = 'Order placement could not be completed on-chain. Please verify market status and try again.';
+        }
+      }
       return null;
     }
 
@@ -1323,11 +1345,14 @@ export class OrderService {
       throw new Error(`Market '${params.marketId}' not found.`);
     }
 
-    // Enforce market active status (DreamDEX P2P CLOB allows trading right up to expiry)
+    // Enforce market active status and 30s settlement lockout
     const closeTimeMs = new Date(market.closeTimestamp).getTime();
     const timeLeftSec = Math.floor((closeTimeMs - Date.now()) / 1000);
     if (market.status !== 'Open' || (!isNaN(timeLeftSec) && timeLeftSec <= 0)) {
       throw new Error(`Market ${market.symbol} is closed and resolving. Orders are no longer accepted for this round.`);
+    }
+    if (!isNaN(timeLeftSec) && timeLeftSec <= 30) {
+      throw new Error('Trading is closed: Market is within final 30s settlement window.');
     }
 
     // Check risk limits directly
@@ -1490,7 +1515,8 @@ export class OrderService {
 
     const executed = await this.executeAgentDecision(decision, session as unknown as SessionGrant, 'TERMINAL');
     if (!executed) {
-      throw new Error(`Order placement could not be completed on-chain. Please verify collateral allowance and try again.`);
+      const reason = this.lastExecutionFailureReason || 'Order placement could not be completed on-chain. Please verify market status and try again.';
+      throw new Error(reason);
     }
 
     return executed;

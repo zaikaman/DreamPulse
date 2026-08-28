@@ -47,7 +47,7 @@ export function useMarketCountdown(
     } else {
       diff = rawDiff;
       isExpired = false;
-      isLocked = false;
+      isLocked = rawDiff <= 30; // 30-second lockout before contract resolution
     }
     expiryDate = new Date(closeTime);
   } else {
@@ -55,7 +55,7 @@ export function useMarketCountdown(
     const cycleSeconds = windowDuration === '1m' ? 60 : windowDuration === '1h' ? 3600 : windowDuration === '5m' ? 300 : 900;
     diff = cycleSeconds - (Math.floor(now / 1000) % cycleSeconds);
     isExpired = false;
-    isLocked = false;
+    isLocked = diff <= 30;
     expiryDate = new Date(now + diff * 1000);
   }
 
