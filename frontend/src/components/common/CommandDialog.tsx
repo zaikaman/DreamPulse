@@ -489,7 +489,7 @@ export const CommandDialog: React.FC<CommandDialogProps> = ({
       >
         {/* Search Input Bar */}
         <div className="flex items-center border-b border-border/60 px-3.5 py-3 bg-muted/20">
-          <MagnifyingGlassIcon className="w-4 h-4 text-cyan-400 mr-2.5 shrink-0" />
+          <MagnifyingGlassIcon className="w-4 h-4 text-[#00ffcc] mr-2.5 shrink-0" />
           <input
             autoFocus
             type="text"
@@ -645,7 +645,7 @@ export const CommandDialog: React.FC<CommandDialogProps> = ({
                             <div
                               className={`p-1.5 rounded-lg shrink-0 ${
                                 isSelected
-                                  ? "bg-cyan-500/15 text-cyan-400"
+                                  ? "bg-[#00ffcc]/15 text-[#00ffcc]"
                                   : "bg-muted/60 text-muted-foreground"
                               }`}
                             >
@@ -702,7 +702,7 @@ export const CommandDialog: React.FC<CommandDialogProps> = ({
                             <div
                               className={`p-1.5 rounded-lg shrink-0 ${
                                 isSelected
-                                  ? "bg-emerald-500/15 text-emerald-400"
+                                  ? "bg-[#00e676]/15 text-[#00e676]"
                                   : "bg-muted/60 text-muted-foreground"
                               }`}
                             >
@@ -719,7 +719,7 @@ export const CommandDialog: React.FC<CommandDialogProps> = ({
                           </div>
                           <div className="flex items-center gap-2 shrink-0">
                             {market.extra && (
-                              <span className="text-[11px] font-mono font-medium text-cyan-400 bg-cyan-500/10 px-2 py-0.5 rounded-md border border-cyan-500/20">
+                              <span className="text-[11px] font-mono font-medium text-[#00ffcc] bg-[#00ffcc]/10 px-2 py-0.5 rounded-md border border-[#00ffcc]/20">
                                 {market.extra}
                               </span>
                             )}

@@ -1,14 +1,10 @@
 import React, { useState, useEffect } from 'react';
 import {
-  Square3Stack3DIcon,
   CheckCircleIcon,
   BoltIcon,
   ArrowTrendingUpIcon,
-  Squares2X2Icon,
-  CpuChipIcon,
-  WalletIcon,
   ShieldCheckIcon,
-  ChartBarIcon,
+  CpuChipIcon,
   UserIcon,
   LockClosedIcon,
   CurrencyDollarIcon,
@@ -195,7 +191,6 @@ export const StatCardsGrid: React.FC<StatCardsGridProps> = ({
                       <span>+1k Faucet</span>
                     </button>
                   )}
-                  <WalletIcon className="w-3.5 h-3.5 stat-card-icon text-muted-foreground/70" />
                 </div>
               </div>
               <div className="stat-card-value font-mono text-cyan-400 truncate">
@@ -216,7 +211,6 @@ export const StatCardsGrid: React.FC<StatCardsGridProps> = ({
             <div className="stat-card">
               <div className="stat-card-header">
                 <span className="stat-card-title truncate">Total Net PnL</span>
-                <ArrowTrendingUpIcon className="w-3.5 h-3.5 stat-card-icon text-muted-foreground/70" />
               </div>
               <div className={cn(
                 "stat-card-value font-mono truncate",
@@ -243,7 +237,6 @@ export const StatCardsGrid: React.FC<StatCardsGridProps> = ({
             >
               <div className="stat-card-header">
                 <span className="stat-card-title truncate">Session Budget</span>
-                <ShieldCheckIcon className="w-3.5 h-3.5 stat-card-icon text-muted-foreground/70" />
               </div>
               <div className="stat-card-value font-mono truncate">
                 {activeSession?.isActive
@@ -283,7 +276,6 @@ export const StatCardsGrid: React.FC<StatCardsGridProps> = ({
             <div className="stat-card">
               <div className="stat-card-header">
                 <span className="stat-card-title truncate">Swarm Eval Speed</span>
-                <Squares2X2Icon className="w-3.5 h-3.5 stat-card-icon text-muted-foreground/70" />
               </div>
               <div className="stat-card-value font-mono text-foreground truncate">
                 {latencyMs}ms <span className="text-xs font-normal text-muted-foreground">TICK</span>
@@ -305,7 +297,6 @@ export const StatCardsGrid: React.FC<StatCardsGridProps> = ({
             <div className="stat-card">
               <div className="stat-card-header">
                 <span className="stat-card-title truncate">24h Swarm Volume</span>
-                <ChartBarIcon className="w-3.5 h-3.5 stat-card-icon text-muted-foreground/70" />
               </div>
               <div className="stat-card-value font-mono text-cyan-400 truncate">
                 ${total24hVolume.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
@@ -325,7 +316,6 @@ export const StatCardsGrid: React.FC<StatCardsGridProps> = ({
             <div className="stat-card">
               <div className="stat-card-header">
                 <span className="stat-card-title truncate">Event Contracts</span>
-                <Square3Stack3DIcon className="w-3.5 h-3.5 stat-card-icon text-muted-foreground/70" />
               </div>
               <div className="stat-card-value font-mono truncate">
                 {activeMarketsCount} <span className="text-xs font-normal text-muted-foreground">ACTIVE</span>
@@ -352,7 +342,6 @@ export const StatCardsGrid: React.FC<StatCardsGridProps> = ({
             >
               <div className="stat-card-header">
                 <span className="stat-card-title truncate">Active Fleet PnL</span>
-                <ArrowTrendingUpIcon className="w-3.5 h-3.5 stat-card-icon text-muted-foreground/70" />
               </div>
               <div className={cn(
                 "stat-card-value font-mono truncate",
@@ -375,7 +364,6 @@ export const StatCardsGrid: React.FC<StatCardsGridProps> = ({
             <div className="stat-card">
               <div className="stat-card-header">
                 <span className="stat-card-title truncate">Pricing Engine Latency</span>
-                <Squares2X2Icon className="w-3.5 h-3.5 stat-card-icon text-muted-foreground/70" />
               </div>
               <div className="stat-card-value font-mono text-foreground truncate">
                 {latencyMs}ms <span className="text-xs font-normal text-muted-foreground">TICK</span>

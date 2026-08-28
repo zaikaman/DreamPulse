@@ -63,14 +63,14 @@ export const OnboardingQuestBar: React.FC<OnboardingQuestBarProps> = ({
                 variant="outline"
                 className={`font-mono text-[9px] px-1.5 py-0 h-4 ${
                   allCompleted
-                    ? 'border-emerald-500/30 text-emerald-400 bg-emerald-950/20'
+                    ? 'border-[#00e676]/30 text-[#00e676] bg-[#00e676]/10'
                     : 'border-border/50 text-muted-foreground'
                 }`}
               >
                 {completedCount} / {totalCount} Completed ({progressPercent}%)
               </Badge>
               {allCompleted && (
-                <span className="text-[10px] font-mono text-emerald-400 font-medium">
+                <span className="text-[10px] font-mono text-[#00e676] font-medium">
                   • Shannon Pioneer Active
                 </span>
               )}
@@ -104,7 +104,7 @@ export const OnboardingQuestBar: React.FC<OnboardingQuestBarProps> = ({
       <div className="w-full bg-secondary/40 h-1 rounded-full overflow-hidden mt-2 mb-2.5">
         <div
           className={`h-full transition-all duration-500 ${
-            allCompleted ? 'bg-emerald-400' : 'bg-foreground'
+            allCompleted ? 'bg-[#00e676]' : 'bg-foreground'
           }`}
           style={{ width: `${progressPercent}%` }}
         />
@@ -122,7 +122,7 @@ export const OnboardingQuestBar: React.FC<OnboardingQuestBarProps> = ({
         >
           <div className="flex items-center gap-2 min-w-0">
             {quests[0]?.isCompleted ? (
-              <CheckCircleIcon className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
+              <CheckCircleIcon className="w-3.5 h-3.5 text-[#00e676] shrink-0" />
             ) : (
               <div className="w-3.5 h-3.5 rounded-full border border-border/80 shrink-0" />
             )}
@@ -142,7 +142,7 @@ export const OnboardingQuestBar: React.FC<OnboardingQuestBarProps> = ({
         >
           <div className="flex items-center gap-2 min-w-0">
             {quests[1]?.isCompleted ? (
-              <CheckCircleIcon className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
+              <CheckCircleIcon className="w-3.5 h-3.5 text-[#00e676] shrink-0" />
             ) : (
               <div className="w-3.5 h-3.5 rounded-full border border-border/80 shrink-0" />
             )}
@@ -173,7 +173,7 @@ export const OnboardingQuestBar: React.FC<OnboardingQuestBarProps> = ({
         >
           <div className="flex items-center gap-2 min-w-0">
             {quests[2]?.isCompleted ? (
-              <CheckCircleIcon className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
+              <CheckCircleIcon className="w-3.5 h-3.5 text-[#00e676] shrink-0" />
             ) : (
               <div className="w-3.5 h-3.5 rounded-full border border-border/80 shrink-0" />
             )}
@@ -203,7 +203,7 @@ export const OnboardingQuestBar: React.FC<OnboardingQuestBarProps> = ({
         >
           <div className="flex items-center gap-2 min-w-0">
             {quests[3]?.isCompleted ? (
-              <CheckCircleIcon className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
+              <CheckCircleIcon className="w-3.5 h-3.5 text-[#00e676] shrink-0" />
             ) : (
               <div className="w-3.5 h-3.5 rounded-full border border-border/80 shrink-0" />
             )}
@@ -233,7 +233,7 @@ export const OnboardingQuestBar: React.FC<OnboardingQuestBarProps> = ({
         >
           <div className="flex items-center gap-2 min-w-0">
             {quests[4]?.isCompleted ? (
-              <CheckCircleIcon className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
+              <CheckCircleIcon className="w-3.5 h-3.5 text-[#00e676] shrink-0" />
             ) : (
               <div className="w-3.5 h-3.5 rounded-full border border-border/80 shrink-0" />
             )}

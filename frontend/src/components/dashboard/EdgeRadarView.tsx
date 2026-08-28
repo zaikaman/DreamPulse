@@ -142,7 +142,7 @@ const EdgeRadarViewComponent: React.FC<EdgeRadarViewProps> = ({
                     isSyntheticOrSeed
                       ? "text-muted-foreground bg-secondary/40 border-border/40"
                       : Math.abs(edge) >= 0.03
-                      ? "bg-amber-500/10 text-amber-300 border-amber-500/30"
+                      ? "bg-[#ffb700]/10 text-[#ffb700] border-[#ffb700]/30"
                       : "text-muted-foreground"
                   )}
                 >
@@ -155,8 +155,8 @@ const EdgeRadarViewComponent: React.FC<EdgeRadarViewProps> = ({
                   isSyntheticOrSeed || Math.abs(edge) < 0.01
                     ? "text-foreground"
                     : isYesEdge
-                    ? "text-emerald-400"
-                    : "text-rose-400"
+                    ? "text-[#00e676]"
+                    : "text-[#ff3366]"
                 )}
               >
                 {isSyntheticOrSeed ? '0.0%' : `${isYesEdge ? '+' : ''}${(edge * 100).toFixed(1)}%`}
@@ -186,8 +186,8 @@ const EdgeRadarViewComponent: React.FC<EdgeRadarViewProps> = ({
                     "inline-flex items-center gap-1 px-2 py-0.5 rounded font-mono text-xs font-bold border",
                     !isSyntheticOrSeed && Math.abs(edge) >= 0.03
                       ? isYesEdge
-                        ? "bg-emerald-500/10 text-emerald-400 border-emerald-500/30"
-                        : "bg-rose-500/10 text-rose-400 border-rose-500/30"
+                        ? "bg-[#00e676]/10 text-[#00e676] border-[#00e676]/30"
+                        : "bg-[#ff3366]/10 text-[#ff3366] border-[#ff3366]/30"
                       : "bg-secondary/40 text-muted-foreground border-border/50"
                   )}
                 >

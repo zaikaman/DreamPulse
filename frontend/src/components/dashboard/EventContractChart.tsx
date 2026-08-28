@@ -243,7 +243,7 @@ export const EventContractChart: React.FC<EventContractChartProps> = ({
             <span
               className={cn(
                 "px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider flex items-center gap-1",
-                isITM ? "bg-emerald-500/20 text-emerald-400 border border-emerald-500/30" : "bg-rose-500/20 text-rose-400 border border-rose-500/30"
+                isITM ? "bg-[#00e676]/20 text-[#00e676] border border-[#00e676]/30" : "bg-[#ff3366]/20 text-[#ff3366] border border-[#ff3366]/30"
               )}
               title={isITM ? `Spot is $${Math.abs(spot - strike).toFixed(2)} above strike ($${strike.toLocaleString()})` : `Spot is $${Math.abs(spot - strike).toFixed(2)} below strike ($${strike.toLocaleString()})`}
             >
@@ -262,12 +262,12 @@ export const EventContractChart: React.FC<EventContractChartProps> = ({
             className={cn(
               "flex items-center gap-1 px-2 py-1 rounded text-[11px] transition-all cursor-pointer border",
               showAIForecast
-                ? "bg-purple-500/20 text-purple-300 border-purple-500/40 shadow-xs shadow-purple-500/10"
+                ? "bg-[#7928ca]/20 text-[#d8b4fe] border-[#7928ca]/40 shadow-xs shadow-[0_0_10px_rgba(121,40,202,0.12)]"
                 : "bg-secondary/40 text-muted-foreground border-border/40 hover:text-foreground"
             )}
             title="Toggle AI Forecast Projection Cone"
           >
-            <SparklesIcon className="w-3.5 h-3.5 text-purple-400" />
+            <SparklesIcon className="w-3.5 h-3.5 text-[#d8b4fe]" />
             <span className="hidden sm:inline">AI Forecast</span>
           </button>
 
@@ -302,8 +302,8 @@ export const EventContractChart: React.FC<EventContractChartProps> = ({
           <defs>
             {/* Gradients */}
             <linearGradient id="priceLineGrad" x1="0%" y1="0%" x2="100%" y2="0%">
-              <stop offset="0%" stopColor="#818cf8" stopOpacity="0.4" />
-              <stop offset="60%" stopColor="#38bdf8" stopOpacity="0.8" />
+              <stop offset="0%" stopColor="#00ffcc" stopOpacity="0.4" />
+              <stop offset="60%" stopColor="#00ffcc" stopOpacity="0.8" />
               <stop offset="100%" stopColor="#00ffcc" stopOpacity="1" />
             </linearGradient>
 
@@ -313,18 +313,18 @@ export const EventContractChart: React.FC<EventContractChartProps> = ({
             </linearGradient>
 
             <linearGradient id="upZoneGrad" x1="0%" y1="0%" x2="0%" y2="100%">
-              <stop offset="0%" stopColor="#10b981" stopOpacity="0.22" />
-              <stop offset="100%" stopColor="#10b981" stopOpacity="0.06" />
+              <stop offset="0%" stopColor="#00e676" stopOpacity="0.22" />
+              <stop offset="100%" stopColor="#00e676" stopOpacity="0.06" />
             </linearGradient>
 
             <linearGradient id="downZoneGrad" x1="0%" y1="0%" x2="0%" y2="100%">
-              <stop offset="0%" stopColor="#f43f5e" stopOpacity="0.06" />
-              <stop offset="100%" stopColor="#f43f5e" stopOpacity="0.22" />
+              <stop offset="0%" stopColor="#ff3366" stopOpacity="0.06" />
+              <stop offset="100%" stopColor="#ff3366" stopOpacity="0.22" />
             </linearGradient>
 
             <linearGradient id="aiConeGrad" x1="0%" y1="0%" x2="100%" y2="0%">
-              <stop offset="0%" stopColor="#a855f7" stopOpacity="0.3" />
-              <stop offset="100%" stopColor="#c084fc" stopOpacity="0.08" />
+              <stop offset="0%" stopColor="#7928ca" stopOpacity="0.3" />
+              <stop offset="100%" stopColor="#7928ca" stopOpacity="0.08" />
             </linearGradient>
 
             <filter id="glow" x="-20%" y="-20%" width="140%" height="140%">
@@ -392,11 +392,11 @@ export const EventContractChart: React.FC<EventContractChartProps> = ({
                 y1={currentY}
                 x2={zoneRight}
                 y2={aiTargetY}
-                stroke="#c084fc"
+                stroke="#7928ca"
                 strokeWidth="1.5"
                 strokeDasharray="3 2"
               />
-              <circle cx={zoneRight} cy={aiTargetY} r="3.5" fill="#c084fc" filter="url(#glow)" />
+              <circle cx={zoneRight} cy={aiTargetY} r="3.5" fill="#7928ca" filter="url(#glow)" />
               
               {/* Distinctive AI Badge Pill */}
               <g transform={`translate(${zoneRight - 150}, ${aiLabelY - 14})`}>
@@ -408,13 +408,13 @@ export const EventContractChart: React.FC<EventContractChartProps> = ({
                   rx="4"
                   fill="#1e1035"
                   fillOpacity="0.9"
-                  stroke="#a855f7"
+                  stroke="#7928ca"
                   strokeWidth="1"
                 />
                 <text
                   x="8"
                   y="14"
-                  fill="#e9d5ff"
+                  fill="#d8b4fe"
                   fontSize="10"
                   fontFamily="JetBrains Mono, monospace"
                   fontWeight="bold"
@@ -536,7 +536,7 @@ export const EventContractChart: React.FC<EventContractChartProps> = ({
             <div className="font-bold text-foreground">${hoverPoint.price.toLocaleString('en-US', { minimumFractionDigits: 2 })}</div>
             <div className="text-[10px] text-muted-foreground flex items-center justify-between gap-3">
               <span>{hoverPoint.time}</span>
-              <span className={hoverPoint.delta >= 0 ? 'text-emerald-400' : 'text-rose-400'}>
+              <span className={hoverPoint.delta >= 0 ? 'text-[#00e676]' : 'text-[#ff3366]'}>
                 {hoverPoint.delta >= 0 ? '+' : ''}${hoverPoint.delta.toFixed(2)}
               </span>
             </div>
@@ -547,15 +547,15 @@ export const EventContractChart: React.FC<EventContractChartProps> = ({
         <div
           className={cn(
             "absolute z-20 flex flex-col items-center gap-0.5 px-2.5 py-1 rounded-lg border shadow-lg backdrop-blur-md transition-all",
-            isLocked ? "bg-amber-950/40 border-amber-500/50 text-amber-400" : "bg-background/90 border-border/70 text-brand-cyan"
+            isLocked ? "bg-[#ffb700]/10 border-[#ffb700]/50 text-[#ffb700]" : "bg-background/90 border-border/70 text-brand-cyan"
           )}
           style={{
             left: `${splitX + 14}px`,
             top: '8px',
           }}
         >
-          <div className={cn("flex items-center gap-1.5 text-xs font-mono font-bold", isLocked ? "text-amber-400" : "text-brand-cyan")}>
-            {isLocked ? <LockClosedIcon className="w-3.5 h-3.5 animate-pulse text-amber-400" /> : <ClockIcon className="w-3.5 h-3.5 animate-pulse text-brand-cyan" />}
+          <div className={cn("flex items-center gap-1.5 text-xs font-mono font-bold", isLocked ? "text-[#ffb700]" : "text-brand-cyan")}>
+            {isLocked ? <LockClosedIcon className="w-3.5 h-3.5 animate-pulse text-[#ffb700]" /> : <ClockIcon className="w-3.5 h-3.5 animate-pulse text-brand-cyan" />}
             <span>{isLocked ? `${formattedCountdown} (LOCKED)` : formattedCountdown}</span>
           </div>
           <div className="text-[8px] font-mono text-muted-foreground tracking-wider uppercase">
@@ -565,7 +565,7 @@ export const EventContractChart: React.FC<EventContractChartProps> = ({
 
         {/* Dynamic Zone Labels */}
         <div
-          className="absolute pointer-events-none text-emerald-400/80 font-mono font-bold text-xs tracking-wider flex items-center gap-1"
+          className="absolute pointer-events-none text-[#00e676]/80 font-mono font-bold text-xs tracking-wider flex items-center gap-1"
           style={{ right: `${padding.right + 12}px`, top: '10px' }}
         >
           <ArrowTrendingUpIcon className="w-3.5 h-3.5" />
@@ -573,7 +573,7 @@ export const EventContractChart: React.FC<EventContractChartProps> = ({
         </div>
 
         <div
-          className="absolute pointer-events-none text-rose-400/80 font-mono font-bold text-xs tracking-wider flex items-center gap-1"
+          className="absolute pointer-events-none text-[#ff3366]/80 font-mono font-bold text-xs tracking-wider flex items-center gap-1"
           style={{ right: `${padding.right + 12}px`, bottom: `${padding.bottom + 12}px` }}
         >
           <ArrowTrendingDownIcon className="w-3.5 h-3.5" />

@@ -129,7 +129,7 @@ export const SwarmArenaView: React.FC<SwarmArenaViewProps> = ({
       primaryMetricPositive: agent.pnl >= 0,
       secondaryMetricLabel: 'Sharpe / Win Rate',
       secondaryMetricValue: `${agent.sharpeRatio.toFixed(2)} (${agent.winRate}%)`,
-      accentColor: '#2dd4bf',
+      accentColor: '#00ffcc',
       walletOrAgentId: agent.id,
       verifiedNetwork: 'Somnia Shannon Testnet',
       rulesSummary: agent.rulesSummary,
@@ -147,7 +147,7 @@ export const SwarmArenaView: React.FC<SwarmArenaViewProps> = ({
       primaryMetricPositive: trader.realizedPnl >= 0,
       secondaryMetricLabel: 'Win Rate & Streak',
       secondaryMetricValue: `${trader.winRate}% (${trader.currentStreak} Streak)`,
-      accentColor: '#2dd4bf',
+      accentColor: '#00ffcc',
       walletOrAgentId: trader.userAddress,
       verifiedNetwork: 'Somnia Shannon Testnet',
       sparkline: trader.sparkline,
@@ -179,7 +179,7 @@ export const SwarmArenaView: React.FC<SwarmArenaViewProps> = ({
       <div className="terminal-panel p-4 flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
           <div className="flex items-center gap-2 mb-1">
-            <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
+            <span className="w-2 h-2 rounded-full bg-[#00e676] animate-pulse" />
             <span className="text-[11px] font-mono text-muted-foreground uppercase tracking-wider font-semibold">
               SWARM ARENA & LEADERBOARD
             </span>
@@ -202,7 +202,7 @@ export const SwarmArenaView: React.FC<SwarmArenaViewProps> = ({
 
           <div className="px-3.5 py-2 rounded-lg bg-card/60 border border-border/50">
             <div className="text-[10px] text-muted-foreground uppercase font-mono">Community Alpha</div>
-            <div className="text-xs font-semibold text-emerald-400 font-mono mt-0.5">
+            <div className="text-xs font-semibold text-[#00e676] font-mono mt-0.5">
               +${stats ? stats.totalCommunityPnl.toFixed(2) : '9,929.21'}
             </div>
           </div>
@@ -225,9 +225,9 @@ export const SwarmArenaView: React.FC<SwarmArenaViewProps> = ({
 
       {/* 2. Notification / Action Flash Banners */}
       {cloneSuccessMsg && (
-        <div className="p-2.5 px-3.5 rounded-lg bg-emerald-500/10 border border-emerald-500/30 flex items-center justify-between text-xs text-emerald-300 animate-fade-in">
+        <div className="p-2.5 px-3.5 rounded-lg bg-[#00e676]/10 border border-[#00e676]/30 flex items-center justify-between text-xs text-[#00e676] animate-fade-in">
           <div className="flex items-center gap-2">
-            <CheckCircleIcon className="w-4 h-4 text-emerald-400 flex-shrink-0" />
+            <CheckCircleIcon className="w-4 h-4 text-[#00e676] flex-shrink-0" />
             <span>{cloneSuccessMsg}</span>
           </div>
           <div className="flex items-center gap-3">
@@ -244,7 +244,7 @@ export const SwarmArenaView: React.FC<SwarmArenaViewProps> = ({
             <button
               type="button"
               onClick={clearMessages}
-              className="text-emerald-400 hover:text-white cursor-pointer"
+              className="text-[#00e676] hover:text-white cursor-pointer"
             >
               <XMarkIcon className="w-4 h-4" />
             </button>
@@ -255,7 +255,7 @@ export const SwarmArenaView: React.FC<SwarmArenaViewProps> = ({
       {copyTradeStatusMsg && (
         <div className="p-2.5 px-3.5 rounded-lg bg-secondary/50 border border-border/50 flex items-center justify-between text-xs text-foreground animate-fade-in">
           <div className="flex items-center gap-2">
-            <SparklesIcon className="w-4 h-4 text-cyan-400 flex-shrink-0" />
+            <SparklesIcon className="w-4 h-4 text-[#00ffcc] flex-shrink-0" />
             <span>{copyTradeStatusMsg}</span>
           </div>
           <button
@@ -269,12 +269,12 @@ export const SwarmArenaView: React.FC<SwarmArenaViewProps> = ({
       )}
 
       {error && (
-        <div className="p-2.5 px-3.5 rounded-lg bg-rose-500/10 border border-rose-500/30 flex items-center justify-between text-xs text-rose-300 animate-fade-in">
+        <div className="p-2.5 px-3.5 rounded-lg bg-[#ff3366]/10 border border-[#ff3366]/30 flex items-center justify-between text-xs text-[#ff3366] animate-fade-in">
           <span>{error}</span>
           <button
             type="button"
             onClick={clearMessages}
-            className="text-rose-400 hover:text-white cursor-pointer"
+            className="text-[#ff3366] hover:text-white cursor-pointer"
           >
             <XMarkIcon className="w-4 h-4" />
           </button>
@@ -424,7 +424,7 @@ export const SwarmArenaView: React.FC<SwarmArenaViewProps> = ({
                 <h4 className="text-xs font-semibold text-foreground line-clamp-1">{agents[1]?.name}</h4>
                 <p className="text-[11px] text-muted-foreground">By {agents[1]?.creatorName}</p>
                 <div className="flex items-baseline gap-2 mt-2 font-mono">
-                  <span className="text-sm font-semibold text-emerald-400">+{agents[1]?.pnl.toFixed(2)} USDC</span>
+                  <span className="text-sm font-semibold text-[#00e676]">+{agents[1]?.pnl.toFixed(2)} USDC</span>
                   <span className="text-xs text-muted-foreground">({agents[1]?.winRate}%)</span>
                 </div>
               </div>
@@ -461,7 +461,7 @@ export const SwarmArenaView: React.FC<SwarmArenaViewProps> = ({
                 <h4 className="text-xs font-semibold text-foreground line-clamp-1">{traders[1]?.traderTitle}</h4>
                 <p className="text-[11px] text-muted-foreground font-mono">{traders[1]?.userAddress.slice(0, 8)}...{traders[1]?.userAddress.slice(-6)}</p>
                 <div className="flex items-baseline gap-2 mt-2 font-mono">
-                  <span className="text-sm font-semibold text-emerald-400">+{traders[1]?.realizedPnl.toFixed(2)} USDC</span>
+                  <span className="text-sm font-semibold text-[#00e676]">+{traders[1]?.realizedPnl.toFixed(2)} USDC</span>
                   <span className="text-xs text-muted-foreground">({traders[1]?.winRate}%)</span>
                 </div>
               </div>
@@ -493,7 +493,7 @@ export const SwarmArenaView: React.FC<SwarmArenaViewProps> = ({
               <div>
                 <div className="flex items-center justify-between mb-2">
                   <Badge variant="outline" className="font-mono text-[10px] text-foreground bg-secondary/60 border-border/70 font-semibold flex items-center gap-1">
-                    <TrophyIcon className="w-3 h-3 text-amber-400" />
+                    <TrophyIcon className="w-3 h-3 text-[#ffb700]" />
                     <span>#1 Apex Leader</span>
                   </Badge>
                   <Badge variant="secondary" className="font-mono text-[10px] text-muted-foreground">
@@ -503,7 +503,7 @@ export const SwarmArenaView: React.FC<SwarmArenaViewProps> = ({
                 <h4 className="text-xs font-semibold text-foreground line-clamp-1">{agents[0]?.name}</h4>
                 <p className="text-[11px] text-muted-foreground">By {agents[0]?.creatorName}</p>
                 <div className="flex items-baseline gap-2 mt-2 font-mono">
-                  <span className="text-base font-bold text-emerald-400">+{agents[0]?.pnl.toFixed(2)} USDC</span>
+                  <span className="text-base font-bold text-[#00e676]">+{agents[0]?.pnl.toFixed(2)} USDC</span>
                   <span className="text-xs text-muted-foreground">({agents[0]?.winRate}%)</span>
                 </div>
                 <div className="flex items-center gap-2 mt-1.5 text-[10px] text-muted-foreground font-mono">
@@ -538,7 +538,7 @@ export const SwarmArenaView: React.FC<SwarmArenaViewProps> = ({
               <div>
                 <div className="flex items-center justify-between mb-2">
                   <Badge variant="outline" className="font-mono text-[10px] text-foreground bg-secondary/60 border-border/70 font-semibold flex items-center gap-1">
-                    <TrophyIcon className="w-3 h-3 text-amber-400" />
+                    <TrophyIcon className="w-3 h-3 text-[#ffb700]" />
                     <span>#1 Apex Leader</span>
                   </Badge>
                   <span className="text-[11px] text-muted-foreground font-mono">{traders[0]?.favoriteSymbol}</span>
@@ -546,7 +546,7 @@ export const SwarmArenaView: React.FC<SwarmArenaViewProps> = ({
                 <h4 className="text-xs font-semibold text-foreground line-clamp-1">{traders[0]?.traderTitle}</h4>
                 <p className="text-[11px] text-muted-foreground font-mono">{traders[0]?.userAddress.slice(0, 8)}...{traders[0]?.userAddress.slice(-6)}</p>
                 <div className="flex items-baseline gap-2 mt-2 font-mono">
-                  <span className="text-base font-bold text-emerald-400">+{traders[0]?.realizedPnl.toFixed(2)} USDC</span>
+                  <span className="text-base font-bold text-[#00e676]">+{traders[0]?.realizedPnl.toFixed(2)} USDC</span>
                   <span className="text-xs text-muted-foreground">({traders[0]?.winRate}%)</span>
                 </div>
                 <div className="flex items-center gap-2 mt-1.5 text-[10px] text-muted-foreground font-mono">
@@ -590,7 +590,7 @@ export const SwarmArenaView: React.FC<SwarmArenaViewProps> = ({
                 <h4 className="text-xs font-semibold text-foreground line-clamp-1">{agents[2]?.name}</h4>
                 <p className="text-[11px] text-muted-foreground">By {agents[2]?.creatorName}</p>
                 <div className="flex items-baseline gap-2 mt-2 font-mono">
-                  <span className="text-sm font-semibold text-emerald-400">+{agents[2]?.pnl.toFixed(2)} USDC</span>
+                  <span className="text-sm font-semibold text-[#00e676]">+{agents[2]?.pnl.toFixed(2)} USDC</span>
                   <span className="text-xs text-muted-foreground">({agents[2]?.winRate}%)</span>
                 </div>
               </div>
@@ -626,7 +626,7 @@ export const SwarmArenaView: React.FC<SwarmArenaViewProps> = ({
                 <h4 className="text-xs font-semibold text-foreground line-clamp-1">{traders[2]?.traderTitle}</h4>
                 <p className="text-[11px] text-muted-foreground font-mono">{traders[2]?.userAddress.slice(0, 8)}...{traders[2]?.userAddress.slice(-6)}</p>
                 <div className="flex items-baseline gap-2 mt-2 font-mono">
-                  <span className="text-sm font-semibold text-emerald-400">+{traders[2]?.realizedPnl.toFixed(2)} USDC</span>
+                  <span className="text-sm font-semibold text-[#00e676]">+{traders[2]?.realizedPnl.toFixed(2)} USDC</span>
                   <span className="text-xs text-muted-foreground">({traders[2]?.winRate}%)</span>
                 </div>
               </div>
@@ -750,7 +750,7 @@ export const SwarmArenaView: React.FC<SwarmArenaViewProps> = ({
 
                       {/* Net PnL */}
                       <td style={{ padding: '10px 16px', textAlign: 'right' }} className="font-mono">
-                        <div className="font-semibold text-emerald-400">
+                        <div className="font-semibold text-[#00e676]">
                           +{agent.pnl.toFixed(2)} USDC
                         </div>
                         <div className="text-[10px] text-muted-foreground">
@@ -874,7 +874,7 @@ export const SwarmArenaView: React.FC<SwarmArenaViewProps> = ({
 
                       {/* Realized PnL */}
                       <td style={{ padding: '10px 16px', textAlign: 'right' }} className="font-mono">
-                        <div className="font-semibold text-emerald-400">
+                        <div className="font-semibold text-[#00e676]">
                           +{trader.realizedPnl.toFixed(2)} USDC
                         </div>
                         <div className="text-[10px] text-muted-foreground">

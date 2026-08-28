@@ -17,9 +17,9 @@ const SIZE_MAP = {
 
 const COLOR_MAP = {
   cyan: 'var(--brand-cyan, #00ffcc)',
-  amber: 'var(--trade-anomaly, #f59e0b)',
-  green: 'var(--trade-yes, #10b981)',
-  rose: 'var(--trade-no, #f43f5e)',
+  amber: 'var(--trade-anomaly, #ffb700)',
+  green: 'var(--trade-yes, #00e676)',
+  rose: 'var(--trade-no, #ff3366)',
   white: '#ffffff',
   muted: 'var(--muted-foreground, #a1a1aa)',
 };

@@ -9,7 +9,10 @@ export interface BadgeProps extends React.HTMLAttributes<HTMLSpanElement> {
     | "outline"
     | "ghost"
     | "link"
-    | "success";
+    | "success"
+    | "protocol"
+    | "anomaly"
+    | "warning";
   size?: "default" | "sm";
 }
 
@@ -24,19 +27,25 @@ export function Badge({
 
   const variantStyles = {
     default:
-      "bg-primary text-primary-foreground",
+      "bg-[#00ffcc]/10 text-[#00ffcc] border-[#00ffcc]/30 font-medium",
     secondary:
-      "bg-secondary text-secondary-foreground",
+      "bg-secondary text-secondary-foreground border-border",
     destructive:
-      "bg-destructive/15 text-destructive border-destructive/30 font-medium",
+      "bg-[#ff3366]/10 text-[#ff3366] border-[#ff3366]/30 font-medium",
     success:
-      "bg-emerald-500/15 text-emerald-400 border-emerald-500/30 font-medium",
+      "bg-[#00e676]/10 text-[#00e676] border-[#00e676]/30 font-medium",
+    protocol:
+      "bg-[#7928ca]/10 text-[#d8b4fe] border-[#7928ca]/30 font-medium",
+    anomaly:
+      "bg-[#ffb700]/10 text-[#ffb700] border-[#ffb700]/30 font-medium",
+    warning:
+      "bg-[#ffb700]/10 text-[#ffb700] border-[#ffb700]/30 font-medium",
     outline:
       "border-border text-foreground bg-transparent",
     ghost:
-      "hover:bg-muted text-muted-foreground",
+      "hover:bg-muted text-muted-foreground border-transparent",
     link:
-      "text-primary underline-offset-4 hover:underline",
+      "text-[#00ffcc] underline-offset-4 hover:underline border-transparent",
   };
 
   const sizeStyles = {

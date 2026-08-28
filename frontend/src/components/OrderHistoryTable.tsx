@@ -365,7 +365,7 @@ export const OrderHistoryTable: React.FC<OrderHistoryTableProps> = ({
     switch (agentType) {
       case 'Volt':
         return (
-          <span style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', padding: '2px 6px', borderRadius: '4px', background: 'rgba(255, 170, 0, 0.12)', border: '1px solid rgba(255, 170, 0, 0.3)', color: '#ffaa00', fontSize: '11px', fontWeight: 700 }}>
+          <span style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', padding: '2px 6px', borderRadius: '4px', background: 'rgba(255, 170, 0, 0.12)', border: '1px solid rgba(255, 170, 0, 0.3)', color: '#ffb700', fontSize: '11px', fontWeight: 700 }}>
             <BoltIcon className="w-3 h-3" />
             <span>Volt</span>
           </span>
@@ -379,7 +379,7 @@ export const OrderHistoryTable: React.FC<OrderHistoryTableProps> = ({
         );
       case 'Titan':
         return (
-          <span style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', padding: '2px 6px', borderRadius: '4px', background: 'rgba(168, 85, 247, 0.12)', border: '1px solid rgba(168, 85, 247, 0.3)', color: '#a855f7', fontSize: '11px', fontWeight: 700 }}>
+          <span style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', padding: '2px 6px', borderRadius: '4px', background: 'rgba(168, 85, 247, 0.12)', border: '1px solid rgba(168, 85, 247, 0.3)', color: ' #7928ca', fontSize: '11px', fontWeight: 700 }}>
             <Square3Stack3DIcon className="w-3 h-3" />
             <span>Titan</span>
           </span>

@@ -3,7 +3,7 @@
    ============================================================================== */
 
 :root {
-  /* Dark Theme Tokens */
+  /* Dark Theme Tokens — aligned to DESIGN.md + index.css */
   --background: 224 25% 5%;
   --foreground: 210 25% 98%;
   
@@ -13,8 +13,8 @@
   --popover: 224 25% 7.5%;
   --popover-foreground: 210 25% 98%;
   
-  --primary: 210 25% 98%;
-  --primary-foreground: 224 28% 8%;
+  --primary: 167 100% 50%;
+  --primary-foreground: 224 25% 5%;
   
   --secondary: 224 20% 12%;
   --secondary-foreground: 210 25% 98%;
@@ -25,24 +25,26 @@
   --accent: 224 22% 14%;
   --accent-foreground: 210 25% 98%;
   
-  --destructive: 0 84.2% 60.2%;
+  --destructive: 346 100% 60%;
   --destructive-foreground: 0 0% 98%;
   
   --border: 224 16% 15%;
   --border-subtle: rgba(255, 255, 255, 0.08);
   --border-strong: rgba(255, 255, 255, 0.18);
   --input: 224 16% 15%;
-  --ring: 217.2 91.2% 59.8%;
+  --ring: 167 100% 50%;
   
-  /* Trading & Protocol Specific Accents */
+  /* Trading & Protocol Specific Accents — exact DESIGN.md */
   --brand-cyan: #00ffcc;
   --brand-cyan-glow: rgba(0, 255, 204, 0.18);
-  --trade-yes: #10b981;
-  --trade-yes-glow: rgba(16, 185, 129, 0.2);
-  --trade-no: #f43f5e;
-  --trade-no-glow: rgba(244, 63, 94, 0.2);
-  --trade-anomaly: #f59e0b;
-  --trade-anomaly-glow: rgba(245, 158, 11, 0.2);
+  --brand-violet: #7928ca;
+  --brand-violet-glow: rgba(121, 40, 202, 0.18);
+  --trade-yes: #00e676;
+  --trade-yes-glow: rgba(0, 230, 118, 0.2);
+  --trade-no: #ff3366;
+  --trade-no-glow: rgba(255, 51, 102, 0.2);
+  --trade-anomaly: #ffb700;
+  --trade-anomaly-glow: rgba(255, 183, 0, 0.2);
   
   /* Sidebar Tokens */
   --sidebar-bg: hsl(224 25% 5% / 0.65);
@@ -297,7 +299,7 @@
   width: 28px;
   height: 28px;
   border-radius: 6px;
-  background: linear-gradient(135deg, rgba(0, 255, 204, 0.2), rgba(59, 130, 246, 0.2));
+  background: rgba(0, 255, 204, 0.12);
   border: 1px solid rgba(0, 255, 204, 0.3);
   display: grid;
   place-items: center;
@@ -913,11 +915,11 @@ select.terminal-select option {
 }
 
 .stat-delta.pos {
-  color: var(--trade-yes, #10b981);
+  color: var(--trade-yes, #00e676);
 }
 
 .stat-delta.neg {
-  color: var(--trade-no, #f43f5e);
+  color: var(--trade-no, #ff3366);
 }
 
 .stat-card-icon {
@@ -967,15 +969,15 @@ select.terminal-select option {
 }
 
 .stat-pill-tag.tag-green {
-  background: rgba(16, 185, 129, 0.08);
-  color: #34d399;
-  border: 1px solid rgba(16, 185, 129, 0.2);
+  background: rgba(0, 230, 118, 0.08);
+  color: #00e676;
+  border: 1px solid rgba(0, 230, 118, 0.22);
 }
 
 .stat-pill-tag.tag-amber {
-  background: rgba(245, 158, 11, 0.08);
-  color: #fbbf24;
-  border: 1px solid rgba(245, 158, 11, 0.2);
+  background: rgba(255, 183, 0, 0.08);
+  color: #ffb700;
+  border: 1px solid rgba(255, 183, 0, 0.22);
 }
 
 .stat-pill-tag.tag-cyan {
@@ -1360,8 +1362,8 @@ select.terminal-select option {
 
 /* Active Session Banner */
 .active-session-banner {
-  background: rgba(16, 185, 129, 0.06);
-  border: 1px solid rgba(16, 185, 129, 0.3);
+  background: rgba(0, 230, 118, 0.06);
+  border: 1px solid rgba(0, 230, 118, 0.3);
   border-radius: var(--radius-md);
   padding: 14px;
 }
@@ -1452,21 +1454,21 @@ select.terminal-select option {
 }
 
 .btn-revoke-trigger:hover {
-  background: rgba(244, 63, 94, 0.08);
-  border-color: rgba(244, 63, 94, 0.3);
-  color: #f87171;
+  background: rgba(255, 51, 102, 0.08);
+  border-color: rgba(255, 51, 102, 0.3);
+  color: #ff3366;
 }
 
 .revoke-confirm-card {
   margin-top: 12px;
-  background: rgba(244, 63, 94, 0.05);
-  border: 1px solid rgba(244, 63, 94, 0.28);
+  background: rgba(255, 51, 102, 0.05);
+  border: 1px solid rgba(255, 51, 102, 0.28);
   border-radius: var(--radius-md);
   padding: 14px;
   display: flex;
   flex-direction: column;
   gap: 12px;
-  box-shadow: 0 4px 16px -4px rgba(244, 63, 94, 0.12);
+  box-shadow: 0 4px 16px -4px rgba(255, 51, 102, 0.12);
   transition: all 0.2s ease;
 }
 
@@ -1480,8 +1482,8 @@ select.terminal-select option {
   width: 26px;
   height: 26px;
   border-radius: 6px;
-  background: rgba(244, 63, 94, 0.15);
-  border: 1px solid rgba(244, 63, 94, 0.3);
+  background: rgba(255, 51, 102, 0.15);
+  border: 1px solid rgba(255, 51, 102, 0.3);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -1523,13 +1525,13 @@ select.terminal-select option {
 }
 
 .revoke-option-tile:hover {
-  background: rgba(244, 63, 94, 0.06);
-  border-color: rgba(244, 63, 94, 0.3);
+  background: rgba(255, 51, 102, 0.06);
+  border-color: rgba(255, 51, 102, 0.3);
 }
 
 .revoke-option-tile.active {
-  background: rgba(244, 63, 94, 0.08);
-  border-color: rgba(244, 63, 94, 0.45);
+  background: rgba(255, 51, 102, 0.08);
+  border-color: rgba(255, 51, 102, 0.45);
 }
 
 .custom-checkbox-box {
@@ -1547,9 +1549,9 @@ select.terminal-select option {
 }
 
 .custom-checkbox-box.checked {
-  background: rgba(244, 63, 94, 0.2);
-  border-color: #f43f5e;
-  box-shadow: 0 0 8px rgba(244, 63, 94, 0.3);
+  background: rgba(255, 51, 102, 0.2);
+  border-color: #ff3366;
+  box-shadow: 0 0 8px rgba(255, 51, 102, 0.3);
 }
 
 .revoke-option-text {
@@ -1578,7 +1580,7 @@ select.terminal-select option {
 }
 
 .btn-revoke-execute {
-  background: #e11d48;
+  background: #ff3366;
   color: #ffffff;
   border: 1px solid rgba(255, 255, 255, 0.15);
   font-size: 11.5px;
@@ -1590,12 +1592,13 @@ select.terminal-select option {
   align-items: center;
   gap: 6px;
   transition: all 0.15s ease;
-  box-shadow: 0 2px 8px rgba(225, 29, 72, 0.35);
+  box-shadow: 0 2px 8px rgba(255, 51, 102, 0.35);
 }
 
 .btn-revoke-execute:hover:not(:disabled) {
-  background: #f43f5e;
-  box-shadow: 0 2px 12px rgba(244, 63, 94, 0.5);
+  background: #ff3366;
+  filter: brightness(1.08);
+  box-shadow: 0 2px 12px rgba(255, 51, 102, 0.5);
 }
 
 .btn-revoke-execute:disabled {
@@ -1914,15 +1917,15 @@ select.terminal-select option {
 
 .session-error-critical,
 .error-alert-box {
-  background: rgba(244, 63, 94, 0.08);
-  border: 1px solid rgba(244, 63, 94, 0.35);
-  box-shadow: 0 2px 8px rgba(244, 63, 94, 0.06);
+  background: rgba(255, 51, 102, 0.08);
+  border: 1px solid rgba(255, 51, 102, 0.35);
+  box-shadow: 0 2px 8px rgba(255, 51, 102, 0.06);
 }
 
 .session-error-notice {
-  background: rgba(245, 158, 11, 0.08);
-  border: 1px solid rgba(245, 158, 11, 0.35);
-  box-shadow: 0 2px 8px rgba(245, 158, 11, 0.06);
+  background: rgba(255, 183, 0, 0.08);
+  border: 1px solid rgba(255, 183, 0, 0.35);
+  box-shadow: 0 2px 8px rgba(255, 183, 0, 0.06);
 }
 
 .session-error-header {
@@ -1946,7 +1949,7 @@ select.terminal-select option {
 }
 
 .session-error-notice .session-error-title-wrap {
-  color: #fbbf24;
+  color: #ffb700;
 }
 
 .session-error-title {
@@ -2116,7 +2119,7 @@ select.terminal-select option {
 
 .session-status-banner.warning {
   background-color: hsl(var(--card) / 0.6);
-  border-color: rgba(245, 158, 11, 0.3);
+  border-color: rgba(255, 183, 0, 0.3);
 }
 
 .session-status-banner.unlinked {
@@ -2163,9 +2166,9 @@ select.terminal-select option {
 }
 
 .status-badge-dot.warning {
-  background: rgba(245, 158, 11, 0.1);
-  color: #fbbf24;
-  border: 1px solid rgba(245, 158, 11, 0.3);
+  background: rgba(255, 183, 0, 0.1);
+  color: #ffb700;
+  border: 1px solid rgba(255, 183, 0, 0.3);
 }
 
 .session-banner-text {
@@ -2311,16 +2314,17 @@ select.terminal-select option {
 }
 
 .btn-banner-action.primary {
-  background: #ffffff;
-  color: #09090b;
-  border: none;
-  font-weight: 600;
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2);
+  background: #00ffcc;
+  color: #060709;
+  border: 1px solid rgba(0, 255, 204, 0.3);
+  font-weight: 700;
+  box-shadow: 0 0 14px rgba(0, 255, 204, 0.25);
 }
 
 .btn-banner-action.primary:hover {
-  background: rgba(255, 255, 255, 0.9);
-  color: #000000;
+  background: #00ffcc;
+  filter: brightness(1.08);
+  color: #060709;
 }
 
 .btn-banner-action.warning {
@@ -2367,9 +2371,9 @@ select.terminal-select option {
 }
 
 .btn-revoke-compact:hover {
-  background: rgba(244, 63, 94, 0.08);
-  border-color: rgba(244, 63, 94, 0.3);
-  color: #f87171;
+  background: rgba(255, 51, 102, 0.08);
+  border-color: rgba(255, 51, 102, 0.3);
+  color: #ff3366;
 }
 
 @media (max-width: 768px) {
@@ -2415,8 +2419,8 @@ select.terminal-select option {
 }
 
 .btn-header-network-switch {
-  background: rgba(245, 158, 11, 0.12);
-  border: 1px solid rgba(245, 158, 11, 0.35);
+  background: rgba(255, 183, 0, 0.12);
+  border: 1px solid rgba(255, 183, 0, 0.35);
   color: var(--trade-anomaly);
   font-size: 11px;
   font-weight: 700;
@@ -2430,7 +2434,7 @@ select.terminal-select option {
 }
 
 .btn-header-network-switch:hover {
-  background: rgba(245, 158, 11, 0.2);
+  background: rgba(255, 183, 0, 0.2);
 }
 
 .btn-header-session {

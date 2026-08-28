@@ -60,7 +60,7 @@ const EdgeRadarHeatmapComponent: React.FC<EdgeRadarHeatmapProps> = ({
             REAL-TIME Φ(z) MISPRICING MATRIX
           </span>
           {highestAnomaly >= 0.03 && (
-            <Badge variant="outline" className="font-mono text-[10px] bg-amber-500/10 text-amber-300 border-amber-500/30 gap-1">
+            <Badge variant="outline" className="font-mono text-[10px] bg-[#ffb700]/10 text-[#ffb700] border-[#ffb700]/30 gap-1">
               <BoltIcon className="w-2.5 h-2.5" />
               <span>{(highestAnomaly * 100).toFixed(1)}% MAX ARB</span>
             </Badge>
@@ -70,7 +70,7 @@ const EdgeRadarHeatmapComponent: React.FC<EdgeRadarHeatmapProps> = ({
         {/* Minimalist Legend */}
         <div className="flex items-center gap-3 sm:gap-4 text-[11px] font-mono text-muted-foreground flex-wrap">
           <div className="flex items-center gap-1.5">
-            <span className="w-1.5 h-1.5 rounded-full bg-emerald-400" />
+            <span className="w-1.5 h-1.5 rounded-full bg-[#00e676]" />
             <span>YES Alpha (&gt;0)</span>
           </div>
           <div className="flex items-center gap-1.5">
@@ -164,8 +164,8 @@ const EdgeRadarHeatmapComponent: React.FC<EdgeRadarHeatmapProps> = ({
                           isSyntheticOrSeed || Math.abs(edge) < 0.01
                             ? "bg-secondary/40 text-muted-foreground border-border/40"
                             : edge > 0
-                            ? "bg-emerald-500/10 text-emerald-400 border-emerald-500/20"
-                            : "bg-rose-500/10 text-rose-400 border-rose-500/20"
+                            ? "bg-[#00e676]/10 text-[#00e676] border-[#00e676]/20"
+                            : "bg-[#ff3366]/10 text-[#ff3366] border-[#ff3366]/20"
                         )}
                       >
                         {isSyntheticOrSeed ? '0.0%' : `${edge >= 0 ? '+' : ''}${(edge * 100).toFixed(1)}%`}
@@ -181,7 +181,7 @@ const EdgeRadarHeatmapComponent: React.FC<EdgeRadarHeatmapProps> = ({
                     {/* Subtle Anomaly Indicator */}
                     {isAnomaly && (
                       <div
-                        className="absolute top-1.5 right-1.5 w-1.5 h-1.5 rounded-full bg-amber-400/80"
+                        className="absolute top-1.5 right-1.5 w-1.5 h-1.5 rounded-full bg-[#ffb700]/80"
                         title="Statistical Anomaly (>=3% edge)"
                       />
                     )}
@@ -210,7 +210,7 @@ const EdgeRadarHeatmapComponent: React.FC<EdgeRadarHeatmapProps> = ({
               <span>Φ(z) Fair: <strong className="text-foreground">{(inspectionFair * 100).toFixed(1)}%</strong></span>
               <span>
                 Edge Delta:{' '}
-                <strong className={inspectionEdge >= 0 ? "text-emerald-400" : "text-rose-400"}>
+                <strong className={inspectionEdge >= 0 ? "text-[#00e676]" : "text-[#ff3366]"}>
                   {inspectionEdge >= 0 ? '+' : ''}{(inspectionEdge * 100).toFixed(2)}%
                 </strong>
               </span>

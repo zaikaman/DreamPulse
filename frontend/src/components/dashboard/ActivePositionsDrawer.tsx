@@ -170,12 +170,12 @@ export const ActivePositionsDrawer: React.FC<ActivePositionsDrawerProps> = ({
               <Badge variant="outline" className="text-[9px] px-1.5 py-0 border-brand-cyan/30 text-brand-cyan bg-brand-cyan/5">
                 MANUAL
               </Badge>
-              <div className="hidden md:flex items-center gap-1 px-2 py-0.5 rounded-full border border-emerald-500/30 bg-emerald-500/10 text-emerald-400 text-[10px] font-semibold">
+              <div className="hidden md:flex items-center gap-1 px-2 py-0.5 rounded-full border border-[#00e676]/30 bg-[#00e676]/10 text-[#00e676] text-[10px] font-semibold">
                 <span className="relative flex h-1.5 w-1.5">
-                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
-                  <span className="relative inline-flex rounded-full h-1.5 w-1.5 bg-emerald-500"></span>
+                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-[#00e676] opacity-75"></span>
+                  <span className="relative inline-flex rounded-full h-1.5 w-1.5 bg-[#00e676]"></span>
                 </span>
-                <BoltIcon className="w-3 h-3 text-emerald-400" />
+                <BoltIcon className="w-3 h-3 text-[#00e676]" />
                 <span>Auto-Sweeper Active</span>
               </div>
             </div>
@@ -216,7 +216,7 @@ export const ActivePositionsDrawer: React.FC<ActivePositionsDrawerProps> = ({
             >
               <span>Resting Orders</span>
               {restingOrders.length > 0 && (
-                <span className="px-1 py-0 rounded-full text-[9px] bg-amber-500/20 text-amber-400">
+                <span className="px-1 py-0 rounded-full text-[9px] bg-[#ffb700]/20 text-[#ffb700]">
                   {restingOrders.length}
                 </span>
               )}
@@ -340,8 +340,8 @@ Tx: ${pos.txHash || 'N/A'}`;
                             className={cn(
                               "px-1.5 py-0.5 rounded text-[10px] font-bold border inline-flex items-center gap-1",
                               isYes
-                                ? "bg-emerald-500/10 text-emerald-400 border-emerald-500/30"
-                                : "bg-rose-500/10 text-rose-400 border-rose-500/30"
+                                ? "bg-[#00e676]/10 text-[#00e676] border-[#00e676]/30"
+                                : "bg-[#ff3366]/10 text-[#ff3366] border-[#ff3366]/30"
                             )}
                           >
                             BUY {pos.outcome}
@@ -367,8 +367,8 @@ Tx: ${pos.txHash || 'N/A'}`;
                         </td>
                         <td className="py-2">
                           <div className="flex flex-col">
-                            <span className="text-emerald-400 font-bold">${payout.toFixed(2)} USDC</span>
-                            <span className="text-[9.5px] text-emerald-400/80">+{roiPct.toFixed(0)}% ROI</span>
+                            <span className="text-[#00e676] font-bold">${payout.toFixed(2)} USDC</span>
+                            <span className="text-[9.5px] text-[#00e676]/80">+{roiPct.toFixed(0)}% ROI</span>
                           </div>
                         </td>
                         <td className="py-2 pr-2 text-right">
@@ -437,7 +437,7 @@ Tx: ${pos.txHash || 'N/A'}`;
                         </td>
                         <td className="py-2">
                           <div className="flex flex-col">
-                            <span className={cn("font-bold text-xs", ord.direction === 'BUY' ? "text-emerald-400" : "text-rose-400")}>
+                            <span className={cn("font-bold text-xs", ord.direction === 'BUY' ? "text-[#00e676]" : "text-[#ff3366]")}>
                               {ord.direction} {ord.outcome}
                             </span>
                             <span className="text-[9.5px] text-muted-foreground">{ord.orderType}</span>
@@ -456,7 +456,7 @@ Tx: ${pos.txHash || 'N/A'}`;
                           </div>
                         </td>
                         <td className="py-2 pr-2 text-right">
-                          <Badge variant="outline" className="text-[9px] border-amber-500/40 text-amber-400 bg-amber-500/10">
+                          <Badge variant="outline" className="text-[9px] border-[#ffb700]/40 text-[#ffb700] bg-[#ffb700]/10">
                             RESTING ON CLOB
                           </Badge>
                         </td>
@@ -527,8 +527,8 @@ Tx: ${hist.txHash || 'N/A'}`;
                             className={cn(
                               "px-1.5 py-0.5 rounded text-[10px] font-bold border inline-flex items-center gap-1",
                               hist.outcome === 'YES'
-                                ? "bg-emerald-500/10 text-emerald-400 border-emerald-500/30"
-                                : "bg-rose-500/10 text-rose-400 border-rose-500/30"
+                                ? "bg-[#00e676]/10 text-[#00e676] border-[#00e676]/30"
+                                : "bg-[#ff3366]/10 text-[#ff3366] border-[#ff3366]/30"
                             )}
                           >
                             {hist.outcome}
@@ -541,7 +541,7 @@ Tx: ${hist.txHash || 'N/A'}`;
                             <span
                               className={cn(
                                 "font-bold text-[11px]",
-                                isProfitable ? "text-emerald-400" : "text-rose-400"
+                                isProfitable ? "text-[#00e676]" : "text-[#ff3366]"
                               )}
                             >
                               {isProfitable ? '+' : ''}${pnlVal.toFixed(2)} USDC
@@ -551,8 +551,8 @@ Tx: ${hist.txHash || 'N/A'}`;
                                 {settlementSubText}
                               </span>
                               {isProfitable && (
-                                <span className="inline-flex items-center gap-0.5 px-1 py-0 rounded text-[8.5px] font-semibold bg-emerald-500/15 text-emerald-300 border border-emerald-500/30">
-                                  <CheckCircleIcon className="w-2.5 h-2.5 text-emerald-400" />
+                                <span className="inline-flex items-center gap-0.5 px-1 py-0 rounded text-[8.5px] font-semibold bg-[#00e676]/15 text-[#00e676] border border-[#00e676]/30">
+                                  <CheckCircleIcon className="w-2.5 h-2.5 text-[#00e676]" />
                                   <span>Auto-Swept</span>
                                 </span>
                               )}

@@ -101,7 +101,7 @@ export const TradeTerminalView: React.FC<TradeTerminalViewProps> = ({
                 onClick={() => setIsDropdownOpen(!isDropdownOpen)}
                 className="flex items-center gap-2 px-2.5 py-1.5 rounded-lg bg-secondary/50 hover:bg-secondary/80 border border-border/50 text-xs font-mono font-bold cursor-pointer transition-colors"
               >
-                <span className="w-2 h-2 rounded-full bg-amber-400" />
+                <span className="w-2 h-2 rounded-full bg-[#ffb700]" />
                 <span className="text-foreground">{market.symbol.split('/')[0]}</span>
                 <ChevronDownIcon className="w-3 h-3 text-muted-foreground" />
               </button>
@@ -140,7 +140,7 @@ export const TradeTerminalView: React.FC<TradeTerminalViewProps> = ({
               <span className="text-sm font-bold text-foreground">
                 ${spot.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
               </span>
-              <span className="text-xs font-bold text-emerald-400">
+              <span className="text-xs font-bold text-[#00e676]">
                 +1.51%
               </span>
             </div>
@@ -162,16 +162,16 @@ export const TradeTerminalView: React.FC<TradeTerminalViewProps> = ({
               <span className={cn(
                 "font-bold text-xs px-2 py-0.5 rounded border",
                 isMarketUp
-                  ? "bg-emerald-500/10 text-emerald-400 border-emerald-500/30"
-                  : "bg-rose-500/10 text-rose-400 border-rose-500/30"
+                  ? "bg-[#00e676]/10 text-[#00e676] border-[#00e676]/30"
+                  : "bg-[#ff3366]/10 text-[#ff3366] border-[#ff3366]/30"
               )}>
                 {marketConfidence}% {marketDirection}
               </span>
             </div>
 
             {/* AI Alpha Edge Badge */}
-            <div className="hidden sm:flex items-center gap-1 px-2 py-0.5 rounded border bg-purple-500/10 text-purple-300 border-purple-500/30 text-[11px]">
-              <SparklesIcon className="w-3.5 h-3.5 text-purple-400" />
+            <div className="hidden sm:flex items-center gap-1 px-2 py-0.5 rounded border bg-[#7928ca]/10 text-[#d8b4fe] border-[#7928ca]/30 text-[11px]">
+              <SparklesIcon className="w-3.5 h-3.5 text-[#d8b4fe]" />
               <span>AI Edge: +{(Math.abs(edge) * 100).toFixed(1)}%</span>
             </div>
 
@@ -181,10 +181,10 @@ export const TradeTerminalView: React.FC<TradeTerminalViewProps> = ({
               onClick={() => {
                 window.location.hash = '#cockpit';
               }}
-              className="hidden md:inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full border border-amber-500/30 bg-amber-500/10 hover:bg-amber-500/20 text-amber-400 text-[11px] font-mono transition-colors cursor-pointer"
+              className="hidden md:inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full border border-[#ffb700]/30 bg-[#ffb700]/10 hover:bg-[#ffb700]/20 text-[#ffb700] text-[11px] font-mono transition-colors cursor-pointer"
               title="View autonomous fleet agents executing on this market in Swarm Cockpit"
             >
-              <BoltIcon className="w-3 h-3 text-amber-400" />
+              <BoltIcon className="w-3 h-3 text-[#ffb700]" />
               <span>{fleetMonitoringCount} Fleet Agents Active</span>
             </button>
 

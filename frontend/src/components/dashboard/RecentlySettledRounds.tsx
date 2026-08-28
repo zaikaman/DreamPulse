@@ -123,8 +123,8 @@ export const RecentlySettledRounds: React.FC<RecentlySettledRoundsProps> = ({
             className={cn(
               "flex-shrink-0 flex items-center justify-between gap-3 px-3 py-1.5 rounded-lg border bg-background/70 hover:bg-secondary/40 transition-all cursor-pointer text-xs",
               round.isUp
-                ? "border-emerald-500/20 hover:border-emerald-500/40"
-                : "border-rose-500/20 hover:border-rose-500/40"
+                ? "border-[#00e676]/20 hover:border-[#00e676]/40"
+                : "border-[#ff3366]/20 hover:border-[#ff3366]/40"
             )}
             title={`Settled at $${round.settlementPrice.toLocaleString()} at ${round.settledAt}. Strike was $${round.strikePrice.toLocaleString()}.`}
           >
@@ -149,8 +149,8 @@ export const RecentlySettledRounds: React.FC<RecentlySettledRoundsProps> = ({
               className={cn(
                 "px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider flex items-center gap-0.5",
                 round.isUp
-                  ? "bg-emerald-500/15 text-emerald-400 border border-emerald-500/30"
-                  : "bg-rose-500/15 text-rose-400 border border-rose-500/30"
+                  ? "bg-[#00e676]/15 text-[#00e676] border border-[#00e676]/30"
+                  : "bg-[#ff3366]/15 text-[#ff3366] border border-[#ff3366]/30"
               )}
             >
               {round.isUp ? (

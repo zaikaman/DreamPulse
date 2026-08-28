@@ -165,16 +165,16 @@ export const AgentThoughtFeed: React.FC<AgentThoughtFeedProps> = ({
     switch (cleanAgent) {
       case 'volt':
         return {
-          color: '#fbbf24',
-          bg: 'rgba(245,158,11,0.07)',
-          border: 'rgba(245,158,11,0.16)',
+          color: '#ffb700',
+          bg: 'rgba(255,183,0,0.07)',
+          border: 'rgba(255,183,0,0.16)',
           glow: 'none',
           role: 'Sub-Second Expiry Sniper',
           Icon: BoltIcon,
         };
       case 'oracle':
         return {
-          color: '#2dd4bf',
+          color: '#00ffcc',
           bg: 'rgba(45,212,191,0.07)',
           border: 'rgba(45,212,191,0.16)',
           glow: 'none',
@@ -183,7 +183,7 @@ export const AgentThoughtFeed: React.FC<AgentThoughtFeedProps> = ({
         };
       case 'titan':
         return {
-          color: '#a78bfa',
+          color: '#7928ca',
           bg: 'rgba(167,139,250,0.07)',
           border: 'rgba(167,139,250,0.16)',
           glow: 'none',
@@ -192,9 +192,9 @@ export const AgentThoughtFeed: React.FC<AgentThoughtFeedProps> = ({
         };
       case 'sweeper':
         return {
-          color: '#34d399',
-          bg: 'rgba(52,211,153,0.07)',
-          border: 'rgba(52,211,153,0.16)',
+          color: '#00e676',
+          bg: 'rgba(0,230,118,0.07)',
+          border: 'rgba(0,230,118,0.16)',
           glow: 'none',
           role: 'Settlement Sweeper',
           Icon: SparklesIcon,
@@ -205,9 +205,9 @@ export const AgentThoughtFeed: React.FC<AgentThoughtFeedProps> = ({
         );
         if (match) {
           return {
-            color: match.color || '#38bdf8',
-            bg: `${match.color || '#38bdf8'}12`,
-            border: `${match.color || '#38bdf8'}30`,
+            color: match.color || ' #00ffcc',
+            bg: `${match.color || ' #00ffcc'}12`,
+            border: `${match.color || ' #00ffcc'}30`,
             glow: 'none',
             role: `Custom ${match.strategyType || 'Strategy'}`,
             Icon: SparklesIcon,
@@ -227,10 +227,10 @@ export const AgentThoughtFeed: React.FC<AgentThoughtFeedProps> = ({
 
   const getActionBadgeStyle = (action: string) => {
     if (action.includes('BUY_YES') || action.includes('TAKER_BUY')) {
-      return { background: 'rgba(52,211,153,0.08)', color: '#6ee7b7', border: '1px solid rgba(52,211,153,0.18)' };
+      return { background: 'rgba(0,230,118,0.08)', color: '#00e676', border: '1px solid rgba(0,230,118,0.18)' };
     }
     if (action.includes('BUY_NO') || action.includes('TAKER_SELL')) {
-      return { background: 'rgba(251,113,133,0.08)', color: '#fda4af', border: '1px solid rgba(251,113,133,0.18)' };
+      return { background: 'rgba(251,113,133,0.08)', color: '#ff3366', border: '1px solid rgba(251,113,133,0.18)' };
     }
     if (action.includes('LIMIT_QUOTE') || action.includes('QUOTE')) {
       return { background: 'rgba(96,165,250,0.08)', color: '#93c5fd', border: '1px solid rgba(96,165,250,0.18)' };
@@ -286,7 +286,7 @@ export const AgentThoughtFeed: React.FC<AgentThoughtFeedProps> = ({
               AI SWARM REASONING FEED
             </h3>
             <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full border border-border/50 bg-secondary/40 text-[10px] font-mono font-medium text-muted-foreground">
-              <span className={`w-1.5 h-1.5 rounded-full ${isPaused ? 'bg-amber-400' : isConnected ? 'bg-emerald-400' : 'bg-muted-foreground'}`} />
+              <span className={`w-1.5 h-1.5 rounded-full ${isPaused ? 'bg-[#ffb700]' : isConnected ? 'bg-[#00e676]' : 'bg-muted-foreground'}`} />
               <span>{isPaused ? (isPausedManual ? 'PAUSED' : 'HOVER PAUSED') : isConnected ? 'LIVE' : 'OFFLINE'}</span>
             </span>
           </div>
@@ -495,8 +495,8 @@ export const AgentThoughtFeed: React.FC<AgentThoughtFeedProps> = ({
                     </span>
 
                     {isExec ? (
-                      <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md border text-[10px] font-mono font-medium" style={{ background: 'rgba(52,211,153,0.08)', borderColor: 'rgba(52,211,153,0.18)', color: '#6ee7b7' }}>
-                        <CheckCircleIcon className="w-2.5 h-2.5" style={{ color: '#6ee7b7' }} />
+                      <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md border text-[10px] font-mono font-medium" style={{ background: 'rgba(0,230,118,0.08)', borderColor: 'rgba(0,230,118,0.18)', color: '#00e676' }}>
+                        <CheckCircleIcon className="w-2.5 h-2.5" style={{ color: '#00e676' }} />
                         <span>EXECUTED</span>
                       </span>
                     ) : (
@@ -550,11 +550,11 @@ export const AgentThoughtFeed: React.FC<AgentThoughtFeedProps> = ({
                       className="inline-flex items-center gap-1 text-[10px] font-mono border px-1.5 py-0.5 rounded-md"
                       style={
                         confidencePct >= 80
-                          ? { background: 'rgba(52,211,153,0.07)', borderColor: 'rgba(52,211,153,0.16)', color: '#6ee7b7' }
-                          : { background: 'rgba(251,191,36,0.07)', borderColor: 'rgba(251,191,36,0.16)', color: '#fcd34d' }
+                          ? { background: 'rgba(0,230,118,0.07)', borderColor: 'rgba(0,230,118,0.16)', color: '#00e676' }
+                          : { background: 'rgba(255,183,0,0.07)', borderColor: 'rgba(255,183,0,0.16)', color: '#fcd34d' }
                       }
                     >
-                      <ArrowTrendingUpIcon className="w-3 h-3" style={{ color: confidencePct >= 80 ? '#6ee7b7' : '#fcd34d' }} />
+                      <ArrowTrendingUpIcon className="w-3 h-3" style={{ color: confidencePct >= 80 ? '#00e676' : '#fcd34d' }} />
                       <span>{confidencePct}%</span>
                     </span>
 

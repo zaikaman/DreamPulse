@@ -18,7 +18,7 @@ export const ClaimCelebration: React.FC<ClaimCelebrationProps> = ({
 
   useEffect(() => {
     if (isOpen) {
-      const colors = ['#00ffcc', '#00f0ff', '#00ff66', '#a855f7', '#ffaa00'];
+      const colors = ['#00ffcc', '#00e676', '#ff3366', '#7928ca', '#ffb700'];
       const newParticles = Array.from({ length: 36 }).map((_, i) => ({
         id: i,
         x: (Math.random() - 0.5) * 400,
@@ -76,10 +76,10 @@ export const ClaimCelebration: React.FC<ClaimCelebrationProps> = ({
         style={{
           pointerEvents: 'auto',
           background: 'rgba(14, 14, 18, 0.95)',
-          border: '1px solid var(--trade-buy)',
+          border: '1px solid #00e676',
           borderRadius: '12px',
           padding: '24px 32px',
-          boxShadow: '0 0 40px rgba(0, 255, 102, 0.3), inset 0 0 20px rgba(0, 255, 102, 0.1)',
+          boxShadow: '0 0 40px rgba(0, 230, 118, 0.3), inset 0 0 20px rgba(0, 230, 118, 0.1)',
           backdropFilter: 'blur(16px)',
           textAlign: 'center',
           maxWidth: '440px',
@@ -108,13 +108,13 @@ export const ClaimCelebration: React.FC<ClaimCelebrationProps> = ({
             width: '48px',
             height: '48px',
             borderRadius: '50%',
-            background: 'rgba(0, 255, 102, 0.15)',
-            border: '1px solid rgba(0, 255, 102, 0.4)',
+            background: 'rgba(0, 230, 118, 0.15)',
+            border: '1px solid rgba(0, 230, 118, 0.4)',
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',
             margin: '0 auto 12px auto',
-            color: 'var(--trade-buy)',
+            color: '#00e676',
           }}
         >
           <SparklesIcon className="w-6 h-6" />
@@ -124,7 +124,7 @@ export const ClaimCelebration: React.FC<ClaimCelebrationProps> = ({
           Settlement Redemptions Claimed
         </h3>
 
-        <div style={{ fontSize: '26px', fontWeight: 800, color: 'var(--trade-buy)', fontFamily: 'var(--font-mono)', margin: '8px 0' }}>
+        <div style={{ fontSize: '26px', fontWeight: 800, color: '#00e676', fontFamily: 'var(--font-mono)', margin: '8px 0' }}>
           +{claimedAmount}
         </div>
 

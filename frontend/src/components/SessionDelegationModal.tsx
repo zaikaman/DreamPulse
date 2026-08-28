@@ -218,7 +218,7 @@ export const SessionDelegationModal: React.FC<SessionDelegationModalProps> = ({
                   alignItems: 'center',
                   justifyContent: 'space-between',
                   background: parseFloat(wallet.balanceCollateral || '0') === 0 ? 'hsl(var(--secondary) / 0.5)' : 'hsl(var(--secondary) / 0.35)',
-                  border: `1px solid ${parseFloat(wallet.balanceCollateral || '0') === 0 ? 'rgba(245, 158, 11, 0.28)' : 'hsl(var(--border) / 0.5)'}`,
+                  border: `1px solid ${parseFloat(wallet.balanceCollateral || '0') === 0 ? 'rgba(255, 183, 0, 0.28)' : 'hsl(var(--border) / 0.5)'}`,
                   borderRadius: '6px',
                   padding: '8px 12px',
                   margin: '10px 0',
@@ -226,7 +226,7 @@ export const SessionDelegationModal: React.FC<SessionDelegationModalProps> = ({
               >
                 <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                   {parseFloat(wallet.balanceCollateral || '0') === 0 ? (
-                    <ExclamationTriangleIcon className="w-4 h-4" style={{ color: '#f59e0b' }} />
+                    <ExclamationTriangleIcon className="w-4 h-4" style={{ color: '#ffb700' }} />
                   ) : (
                     <CheckCircleIcon className="w-4 h-4" style={{ color: 'var(--trade-yes)' }} />
                   )}
@@ -311,14 +311,14 @@ export const SessionDelegationModal: React.FC<SessionDelegationModalProps> = ({
 
                 <div className="stat-pill" style={{ border: `1px solid ${activeSession.copyTradeEnabled ? 'rgba(56, 189, 248, 0.25)' : 'hsl(var(--border) / 0.5)'}` }}>
                   <span className="stat-pill-label">Protocol Mirror:</span>
-                  <span className="stat-pill-value" style={{ color: activeSession.copyTradeEnabled ? '#38bdf8' : 'hsl(var(--muted-foreground))' }}>
+                  <span className="stat-pill-value" style={{ color: activeSession.copyTradeEnabled ? ' #00ffcc' : 'hsl(var(--muted-foreground))' }}>
                     {activeSession.copyTradeEnabled ? 'ON (Mirroring Active)' : 'OFF (Discretionary Only)'}
                   </span>
                 </div>
 
                 <div className="stat-pill" style={{ border: '1px solid rgba(168, 85, 247, 0.25)' }}>
                   <span className="stat-pill-label">Custom Agents:</span>
-                  <span className="stat-pill-value" style={{ color: '#c084fc' }}>
+                  <span className="stat-pill-value" style={{ color: '#d8b4fe' }}>
                     Autonomous Ready
                   </span>
                 </div>
@@ -327,7 +327,7 @@ export const SessionDelegationModal: React.FC<SessionDelegationModalProps> = ({
                 <div className="revoke-confirm-card">
                   <div className="revoke-confirm-header">
                     <div className="revoke-confirm-icon-wrap">
-                      <ExclamationTriangleIcon className="w-4 h-4 text-rose-400" />
+                      <ExclamationTriangleIcon className="w-4 h-4 text-[#ff3366]" />
                     </div>
                     <div className="revoke-confirm-headings">
                       <span className="revoke-confirm-title">Confirm Instant Revocation</span>
@@ -352,7 +352,7 @@ export const SessionDelegationModal: React.FC<SessionDelegationModalProps> = ({
                     }}
                   >
                     <div className={`custom-checkbox-box ${revokeOnChainOption ? 'checked' : ''}`}>
-                      {revokeOnChainOption && <CheckIcon className="w-3 h-3 text-rose-400 stroke-[3]" />}
+                      {revokeOnChainOption && <CheckIcon className="w-3 h-3 text-[#ff3366] stroke-[3]" />}
                     </div>
                     <div className="revoke-option-text">
                       <span className="revoke-option-label">
@@ -530,7 +530,7 @@ export const SessionDelegationModal: React.FC<SessionDelegationModalProps> = ({
                     <DocumentCheckIcon className="w-3.5 h-3.5" style={{ color: 'var(--brand-cyan)' }} />
                     <span>Step 2: EIP-712 Policy</span>
                   </strong>
-                  <span style={{ fontSize: '9px', fontFamily: 'var(--font-mono)', padding: '1px 5px', borderRadius: '3px', background: 'rgba(16, 185, 129, 0.15)', color: 'var(--trade-yes)' }}>GASLESS</span>
+                  <span style={{ fontSize: '9px', fontFamily: 'var(--font-mono)', padding: '1px 5px', borderRadius: '3px', background: 'rgba(0, 230, 118, 0.15)', color: 'var(--trade-yes)' }}>GASLESS</span>
                 </div>
                 <p style={{ margin: 0, color: 'hsl(var(--muted-foreground))', lineHeight: 1.35 }}>
                   Cryptographically enforces maximum trade size & 24h spend ceilings without custodial access.
@@ -672,19 +672,19 @@ export const SessionDelegationModal: React.FC<SessionDelegationModalProps> = ({
             {/* Session Delegation Capability Clarification Card */}
             <div className="rounded-lg p-3 border border-border/60 bg-secondary/20 flex flex-col gap-2">
               <div className="text-[11px] font-bold text-foreground flex items-center gap-1.5 font-mono uppercase text-muted-foreground">
-                <ShieldCheckIcon className="w-3.5 h-3.5 text-emerald-400" />
+                <ShieldCheckIcon className="w-3.5 h-3.5 text-[#00e676]" />
                 <span>Session Key Capabilities</span>
               </div>
               <div className="grid grid-cols-2 gap-2 text-[11px]">
                 <div className="p-2 rounded bg-background/50 border border-border/40 flex flex-col gap-0.5">
                   <span className="font-bold text-foreground flex items-center gap-1">
-                    <BoltIcon className="w-3 h-3 text-amber-400" /> 1-Click Terminal
+                    <BoltIcon className="w-3 h-3 text-[#ffb700]" /> 1-Click Terminal
                   </span>
                   <span className="text-[10px] text-muted-foreground">Instant gasless trades with AI Alpha Copilot</span>
                 </div>
                 <div className="p-2 rounded bg-background/50 border border-border/40 flex flex-col gap-0.5">
                   <span className="font-bold text-foreground flex items-center gap-1">
-                    <SparklesIcon className="w-3 h-3 text-purple-400" /> Custom Agents
+                    <SparklesIcon className="w-3 h-3 text-[#d8b4fe]" /> Custom Agents
                   </span>
                   <span className="text-[10px] text-muted-foreground">Powers your Strategy Studio automated bots</span>
                 </div>
@@ -695,13 +695,13 @@ export const SessionDelegationModal: React.FC<SessionDelegationModalProps> = ({
             <div className="config-group" style={{ background: 'hsl(var(--secondary) / 0.35)', padding: '12px 14px', borderRadius: '8px', border: `1px solid ${enableCopyTrading ? 'rgba(56, 189, 248, 0.4)' : 'hsl(var(--border) / 0.7)'}` }}>
               <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: '12px' }}>
                 <div style={{ display: 'flex', gap: '10px' }}>
-                  <div style={{ width: '32px', height: '32px', borderRadius: '8px', background: enableCopyTrading ? 'rgba(56, 189, 248, 0.15)' : 'hsl(var(--secondary))', border: `1px solid ${enableCopyTrading ? 'rgba(56, 189, 248, 0.3)' : 'hsl(var(--border) / 0.6)'}`, display: 'grid', placeItems: 'center', color: enableCopyTrading ? '#38bdf8' : 'hsl(var(--muted-foreground))', flexShrink: 0, marginTop: '2px' }}>
+                  <div style={{ width: '32px', height: '32px', borderRadius: '8px', background: enableCopyTrading ? 'rgba(56, 189, 248, 0.15)' : 'hsl(var(--secondary))', border: `1px solid ${enableCopyTrading ? 'rgba(56, 189, 248, 0.3)' : 'hsl(var(--border) / 0.6)'}`, display: 'grid', placeItems: 'center', color: enableCopyTrading ? ' #00ffcc' : 'hsl(var(--muted-foreground))', flexShrink: 0, marginTop: '2px' }}>
                     <BoltIcon className="w-4 h-4" />
                   </div>
                   <div>
                     <div style={{ fontSize: '12px', fontWeight: 700, color: 'hsl(var(--foreground))', display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
                       <span>Mirror Protocol Swarm (Volt, Oracle, Titan)</span>
-                      <span style={{ fontSize: '9px', padding: '1px 6px', borderRadius: '4px', background: enableCopyTrading ? 'rgba(56, 189, 248, 0.15)' : 'hsl(var(--secondary))', color: enableCopyTrading ? '#38bdf8' : 'hsl(var(--muted-foreground))', border: `1px solid ${enableCopyTrading ? 'rgba(56, 189, 248, 0.3)' : 'hsl(var(--border))'}`, fontWeight: 700, fontFamily: 'var(--font-mono)' }}>
+                      <span style={{ fontSize: '9px', padding: '1px 6px', borderRadius: '4px', background: enableCopyTrading ? 'rgba(56, 189, 248, 0.15)' : 'hsl(var(--secondary))', color: enableCopyTrading ? ' #00ffcc' : 'hsl(var(--muted-foreground))', border: `1px solid ${enableCopyTrading ? 'rgba(56, 189, 248, 0.3)' : 'hsl(var(--border))'}`, fontWeight: 700, fontFamily: 'var(--font-mono)' }}>
                         {enableCopyTrading ? 'PROTOCOL MIRROR ON' : 'PROTOCOL MIRROR OFF'}
                       </span>
                     </div>
@@ -720,7 +720,7 @@ export const SessionDelegationModal: React.FC<SessionDelegationModalProps> = ({
                     width: '42px',
                     height: '24px',
                     borderRadius: '12px',
-                    background: enableCopyTrading ? '#38bdf8' : 'hsl(var(--muted))',
+                    background: enableCopyTrading ? ' #00ffcc' : 'hsl(var(--muted))',
                     border: 'none',
                     position: 'relative',
                     transition: 'background 0.2s ease',
@@ -809,9 +809,9 @@ export const SessionDelegationModal: React.FC<SessionDelegationModalProps> = ({
               <div className="session-error-header">
                 <div className="session-error-title-wrap">
                   {parsedError.isUserRejection ? (
-                    <InformationCircleIcon className="w-4 h-4 text-amber-400 shrink-0" />
+                    <InformationCircleIcon className="w-4 h-4 text-[#ffb700] shrink-0" />
                   ) : (
-                    <ExclamationTriangleIcon className="w-4 h-4 text-rose-400 shrink-0" />
+                    <ExclamationTriangleIcon className="w-4 h-4 text-[#ff3366] shrink-0" />
                   )}
                   <span className="session-error-title">{parsedError.title}</span>
                 </div>

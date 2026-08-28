@@ -89,7 +89,7 @@ const MarketsDepthViewComponent: React.FC<MarketsDepthViewProps> = ({
               TOP ALPHA MISPRICING
             </span>
             <div className="flex items-center gap-1.5 mt-0.5">
-              <span className="text-base font-mono font-bold text-emerald-400">
+              <span className="text-base font-mono font-bold text-[#00e676]">
                 +{((topEdgeMarket.edge || 0) * 100).toFixed(1)}%
               </span>
               {topEdgeMarket.market && (
@@ -99,7 +99,7 @@ const MarketsDepthViewComponent: React.FC<MarketsDepthViewProps> = ({
               )}
             </div>
           </div>
-          <BoltIcon className="w-5 h-5 text-emerald-400/60" />
+          <BoltIcon className="w-5 h-5 text-[#00e676]/60" />
         </div>
 
         {/* KPI 3: CLOB Avg Spread */}

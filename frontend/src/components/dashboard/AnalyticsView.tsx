@@ -10,15 +10,10 @@ import {
   WalletIcon,
   CpuChipIcon,
   EyeIcon,
-  ViewfinderCircleIcon,
-  Square3Stack3DIcon,
   BoltIcon,
   ShieldCheckIcon,
-  ClockIcon,
-  TrophyIcon,
   ExclamationTriangleIcon,
   ArrowPathIcon,
-  PresentationChartLineIcon,
   Squares2X2Icon,
   FireIcon,
   CommandLineIcon,
@@ -87,12 +82,12 @@ const EquityCurveChart: React.FC<{ user: EquityPoint[]; swarm: EquityPoint[]; he
           </g>
         ))}
         <line x1={padding.left} x2={width - padding.right} y1={zeroY} y2={zeroY} stroke="rgba(255,255,255,0.12)" strokeWidth={1} />
-        {swarm.length > 1 && <path d={`${swarmPath} L ${padding.left + innerW} ${zeroY} L ${padding.left} ${zeroY} Z`} fill="rgba(245,158,11,0.08)" stroke="none" />}
+        {swarm.length > 1 && <path d={`${swarmPath} L ${padding.left + innerW} ${zeroY} L ${padding.left} ${zeroY} Z`} fill="rgba(255,183,0,0.08)" stroke="none" />}
         {user.length > 1 && <path d={`${userPath} L ${padding.left + innerW} ${zeroY} L ${padding.left} ${zeroY} Z`} fill="rgba(0,255,204,0.08)" stroke="none" />}
-        {swarm.length > 1 && <path d={swarmPath} fill="none" stroke="#fbbf24" strokeWidth={1.8} strokeLinejoin="round" strokeLinecap="round" strokeDasharray="6 4" opacity={0.9} />}
-        {user.length > 1 && <path d={userPath} fill="none" stroke="#2dd4bf" strokeWidth={2.2} strokeLinejoin="round" strokeLinecap="round" />}
-        {user.length > 0 && (() => { const last = user[user.length - 1]; const x = padding.left + (user.length - 1) * (innerW / Math.max(1, user.length - 1)); const y = padding.top + innerH - ((last.cumulativePnl - min) / range) * innerH; return <circle cx={x} cy={y} r={3.5} fill="#2dd4bf" stroke="#09090b" strokeWidth={2} />; })()}
-        {swarm.length > 0 && user.length > 0 && (() => { const last = swarm[swarm.length - 1]; const x = padding.left + (swarm.length - 1) * (innerW / Math.max(1, swarm.length - 1)); const y = padding.top + innerH - ((last.cumulativePnl - min) / range) * innerH; return <circle cx={x} cy={y} r={3} fill="#fbbf24" stroke="#09090b" strokeWidth={1.5} />; })()}
+        {swarm.length > 1 && <path d={swarmPath} fill="none" stroke="#ffb700" strokeWidth={1.8} strokeLinejoin="round" strokeLinecap="round" strokeDasharray="6 4" opacity={0.9} />}
+        {user.length > 1 && <path d={userPath} fill="none" stroke="#00ffcc" strokeWidth={2.2} strokeLinejoin="round" strokeLinecap="round" />}
+        {user.length > 0 && (() => { const last = user[user.length - 1]; const x = padding.left + (user.length - 1) * (innerW / Math.max(1, user.length - 1)); const y = padding.top + innerH - ((last.cumulativePnl - min) / range) * innerH; return <circle cx={x} cy={y} r={3.5} fill="#00ffcc" stroke="#09090b" strokeWidth={2} />; })()}
+        {swarm.length > 0 && user.length > 0 && (() => { const last = swarm[swarm.length - 1]; const x = padding.left + (swarm.length - 1) * (innerW / Math.max(1, swarm.length - 1)); const y = padding.top + innerH - ((last.cumulativePnl - min) / range) * innerH; return <circle cx={x} cy={y} r={3} fill="#ffb700" stroke="#09090b" strokeWidth={1.5} />; })()}
         {user.map((p, i) => {
           if (user.length > 14 && i % Math.ceil(user.length / 6) !== 0) return null;
           const x = padding.left + i * (innerW / Math.max(1, user.length - 1));
@@ -132,8 +127,8 @@ const DailyPnlBars: React.FC<{ data: DailyBar[]; height?: number }> = ({ data, h
           const safeH = Math.max(1.5, h);
           return (
             <g key={d.date}>
-              <rect x={x} y={y} width={barW} height={safeH} rx={2} fill={isPos ? '#6ee7b7' : '#fda4af'} opacity={0.9} />
-              {Math.abs(d.pnl) > yMax * 0.12 && <text x={x + barW / 2} y={isPos ? y - 4 : y + safeH + 10} textAnchor="middle" fontSize={8} fill={isPos ? '#6ee7b7' : '#fda4af'} fontFamily="var(--font-mono)" fontWeight={700}>{d.pnl > 0 ? `+${d.pnl.toFixed(1)}` : d.pnl.toFixed(1)}</text>}
+              <rect x={x} y={y} width={barW} height={safeH} rx={2} fill={isPos ? '#00e676' : '#ff3366'} opacity={0.9} />
+              {Math.abs(d.pnl) > yMax * 0.12 && <text x={x + barW / 2} y={isPos ? y - 4 : y + safeH + 10} textAnchor="middle" fontSize={8} fill={isPos ? '#00e676' : '#ff3366'} fontFamily="var(--font-mono)" fontWeight={700}>{d.pnl > 0 ? `+${d.pnl.toFixed(1)}` : d.pnl.toFixed(1)}</text>}
             </g>
           );
         })}
@@ -248,7 +243,7 @@ export const AnalyticsView: React.FC<AnalyticsViewProps> = ({ wallet, onConnectW
   if (error && !data) {
     return (
       <div className="terminal-panel p-6 text-center">
-        <ExclamationTriangleIcon className="w-7 h-7 text-amber-400 mx-auto mb-3" />
+        <ExclamationTriangleIcon className="w-7 h-7 text-[#ffb700] mx-auto mb-3" />
         <div className="text-sm font-bold text-foreground mb-1">Analytics temporarily unavailable</div>
         <div className="text-xs text-muted-foreground mb-3">{error}</div>
         <button type="button" className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border bg-secondary/30 text-xs" onClick={() => refresh()}><ArrowPathIcon className="w-3.5 h-3.5" /> Retry</button>
@@ -269,9 +264,6 @@ export const AnalyticsView: React.FC<AnalyticsViewProps> = ({ wallet, onConnectW
       {/* Header */}
       <div className="flex items-center justify-between gap-3 flex-wrap flex-shrink-0">
         <div className="flex items-center gap-3">
-          <div className="w-8 h-8 rounded-lg grid place-items-center border bg-secondary/30 border-border/50 text-muted-foreground">
-            <PresentationChartLineIcon className="w-4 h-4" />
-          </div>
           <div>
             <div className="flex items-center gap-2 flex-wrap">
               <h2 className="text-sm font-bold tracking-tight text-foreground">Analytics & Performance</h2>
@@ -282,7 +274,7 @@ export const AnalyticsView: React.FC<AnalyticsViewProps> = ({ wallet, onConnectW
                 </Badge>
               )}
               {source === 'SWARM' && (
-                <Badge variant="outline" className="font-mono text-[10px] px-1.5 py-0 bg-amber-500/10 border-amber-500/30 text-amber-400">
+                <Badge variant="outline" className="font-mono text-[10px] px-1.5 py-0 bg-[#ffb700]/10 border-[#ffb700]/30 text-[#ffb700]">
                   SWARM COPY-TRADES
                 </Badge>
               )}
@@ -330,7 +322,7 @@ export const AnalyticsView: React.FC<AnalyticsViewProps> = ({ wallet, onConnectW
                 </span>
               )}
               {s.id === 'SWARM' && data?.sourceBreakdown?.find(b => b.source === 'SWARM')?.trades !== undefined && (
-                <span className={cn("px-1.5 py-0.2 rounded-full text-[9px] font-mono", source === 'SWARM' ? "bg-black/20 text-white" : "bg-amber-500/15 text-amber-400")}>
+                <span className={cn("px-1.5 py-0.2 rounded-full text-[9px] font-mono", source === 'SWARM' ? "bg-black/20 text-white" : "bg-[#ffb700]/15 text-[#ffb700]")}>
                   {data.sourceBreakdown.find(b => b.source === 'SWARM')?.trades}
                 </span>
               )}
@@ -342,7 +334,7 @@ export const AnalyticsView: React.FC<AnalyticsViewProps> = ({ wallet, onConnectW
         <div className="text-[11px] font-mono text-muted-foreground px-2 hidden md:flex items-center gap-2">
           {source === 'ALL' && <span>Showing all portfolio activity (Terminal orders + Swarm copy-trades)</span>}
           {source === 'TERMINAL' && <span className="text-brand-cyan font-semibold">Exclusively showing manual discretionary orders from Trader Cockpit</span>}
-          {source === 'SWARM' && <span className="text-amber-400 font-semibold">Exclusively showing autonomous Swarm AI copy-trades & mirror fills</span>}
+          {source === 'SWARM' && <span className="text-[#ffb700] font-semibold">Exclusively showing autonomous Swarm AI copy-trades & mirror fills</span>}
         </div>
       </div>
 
@@ -406,11 +398,11 @@ export const AnalyticsView: React.FC<AnalyticsViewProps> = ({ wallet, onConnectW
 
           <div className="terminal-panel p-3 border-border/50 bg-secondary/10 flex flex-col gap-2">
             <div className="flex items-center justify-between">
-              <div className="flex items-center gap-1.5 text-xs font-bold text-amber-400">
+              <div className="flex items-center gap-1.5 text-xs font-bold text-[#ffb700]">
                 <CpuChipIcon className="w-4 h-4" />
                 <span>Swarm AI Copy-Trades (Mirror)</span>
               </div>
-              <Badge variant="outline" className="text-[9px] font-mono border-amber-500/30 text-amber-400 bg-amber-500/5">
+              <Badge variant="outline" className="text-[9px] font-mono border-[#ffb700]/30 text-[#ffb700] bg-[#ffb700]/5">
                 AUTONOMOUS
               </Badge>
             </div>
@@ -453,43 +445,43 @@ export const AnalyticsView: React.FC<AnalyticsViewProps> = ({ wallet, onConnectW
       {/* KPI Grid — compact 4-col, 2 rows */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 flex-shrink-0">
         <div className="terminal-panel p-3 flex flex-col gap-1.5">
-          <div className="flex items-center justify-between"><span className="text-[10px] font-mono font-semibold tracking-wider text-muted-foreground uppercase">{isGuest ? 'SWARM TOTAL PnL' : 'YOUR TOTAL PnL'}</span><ArrowTrendingUpIcon className="w-3.5 h-3.5 text-muted-foreground/60" /></div>
+          <div className="flex items-center justify-between"><span className="text-[10px] font-mono font-semibold tracking-wider text-muted-foreground uppercase">{isGuest ? 'SWARM TOTAL PnL' : 'YOUR TOTAL PnL'}</span></div>
           <div className="text-lg font-mono font-bold" style={{ color: isUserPositive ? 'var(--trade-yes)' : 'var(--trade-no)' }}>{isUserPositive ? '+' : ''}{(summary?.totalPnl ?? 0).toFixed(2)} <span className="text-[10px] text-muted-foreground">tUSDC</span></div>
           <div className="flex items-center gap-1.5 text-[11px] font-mono text-muted-foreground"><span className="px-1.5 py-0.5 rounded border bg-secondary/30 border-border/40 text-[10px]">{summary?.totalTrades ?? 0} fills</span> Realized {(summary?.realizedPnl ?? 0).toFixed(1)}</div>
         </div>
         <div className="terminal-panel p-3 flex flex-col gap-1.5">
-          <div className="flex items-center justify-between"><span className="text-[10px] font-mono font-semibold tracking-wider text-muted-foreground uppercase">UNCLAIMED (ON-CHAIN)</span><Square3Stack3DIcon className="w-3.5 h-3.5 text-muted-foreground/60" /></div>
-          <div className="text-lg font-mono font-bold text-amber-400">{(summary?.unclaimedPnl ?? 0).toFixed(2)} <span className="text-[10px] text-muted-foreground">tUSDC</span></div>
+          <div className="flex items-center justify-between"><span className="text-[10px] font-mono font-semibold tracking-wider text-muted-foreground uppercase">UNCLAIMED (ON-CHAIN)</span></div>
+          <div className="text-lg font-mono font-bold text-[#ffb700]">{(summary?.unclaimedPnl ?? 0).toFixed(2)} <span className="text-[10px] text-muted-foreground">tUSDC</span></div>
           <div className="text-[11px] text-muted-foreground">{data?.symbolBreakdown?.length ?? 0} markets • Sweeper auto-claims</div>
         </div>
         <div className="terminal-panel p-3 flex flex-col gap-1.5">
-          <div className="flex items-center justify-between"><span className="text-[10px] font-mono font-semibold tracking-wider text-muted-foreground uppercase">WIN RATE</span><ViewfinderCircleIcon className="w-3.5 h-3.5 text-muted-foreground/60" /></div>
+          <div className="flex items-center justify-between"><span className="text-[10px] font-mono font-semibold tracking-wider text-muted-foreground uppercase">WIN RATE</span></div>
           <div className="text-lg font-mono font-bold text-foreground">{(summary?.winRate ?? 0).toFixed(1)}%</div>
           <div className="text-[11px] text-muted-foreground">{summary?.totalWins ?? 0}W / {summary?.totalLosses ?? 0}L • PF {summary?.profitFactor ?? 0}</div>
         </div>
         <div className="terminal-panel p-3 flex flex-col gap-1.5">
-          <div className="flex items-center justify-between"><span className="text-[10px] font-mono font-semibold tracking-wider text-muted-foreground uppercase">TOTAL VOLUME</span><ChartBarSquareIcon className="w-3.5 h-3.5 text-muted-foreground/60" /></div>
+          <div className="flex items-center justify-between"><span className="text-[10px] font-mono font-semibold tracking-wider text-muted-foreground uppercase">TOTAL VOLUME</span></div>
           <div className="text-lg font-mono font-bold text-foreground">{(summary?.totalVolume ?? 0).toFixed(1)} <span className="text-[10px] text-muted-foreground">tUSDC</span></div>
           <div className="text-[11px] text-muted-foreground">Avg {summary?.totalTrades ? (summary.totalVolume / summary.totalTrades).toFixed(2) : '0.00'} / fill</div>
         </div>
         <div className="terminal-panel p-3 flex flex-col gap-1.5">
-          <div className="flex items-center justify-between"><span className="text-[10px] font-mono font-semibold tracking-wider text-muted-foreground uppercase">PROFIT FACTOR</span><TrophyIcon className="w-3.5 h-3.5 text-muted-foreground/60" /></div>
+          <div className="flex items-center justify-between"><span className="text-[10px] font-mono font-semibold tracking-wider text-muted-foreground uppercase">PROFIT FACTOR</span></div>
           <div className="text-lg font-mono font-bold" style={{ color: (summary?.profitFactor ?? 0) >= 1 ? 'var(--trade-yes)' : 'var(--trade-no)' }}>{summary?.profitFactor === 99.99 ? '∞' : (summary?.profitFactor ?? 0).toFixed(2)}</div>
           <div className="text-[11px] text-muted-foreground">Expectancy {(summary?.expectancy ?? 0).toFixed(2)}</div>
         </div>
         <div className="terminal-panel p-3 flex flex-col gap-1.5">
-          <div className="flex items-center justify-between"><span className="text-[10px] font-mono font-semibold tracking-wider text-muted-foreground uppercase">MAX DRAWDOWN</span><ExclamationTriangleIcon className="w-3.5 h-3.5 text-muted-foreground/60" /></div>
-          <div className="text-lg font-mono font-bold text-rose-400">{(summary?.maxDrawdown ?? 0).toFixed(2)}</div>
+          <div className="flex items-center justify-between"><span className="text-[10px] font-mono font-semibold tracking-wider text-muted-foreground uppercase">MAX DRAWDOWN</span></div>
+          <div className="text-lg font-mono font-bold text-[#ff3366]">{(summary?.maxDrawdown ?? 0).toFixed(2)}</div>
           <div className="text-[11px] text-muted-foreground">{(summary?.maxDrawdownPct ?? 0).toFixed(1)}% • Sharpe {summary?.sharpeApprox ?? 0}</div>
         </div>
         <div className="terminal-panel p-3 flex flex-col gap-1.5 relative overflow-hidden">
-          <div className="absolute top-0 left-0 right-0 h-[2px] bg-amber-500/50" />
-          <div className="flex items-center justify-between"><span className="text-[10px] font-mono font-semibold tracking-wider text-muted-foreground uppercase">SWARM EQUITY</span><CpuChipIcon className="w-3.5 h-3.5 text-muted-foreground/60" /></div>
+          <div className="absolute top-0 left-0 right-0 h-[2px] bg-[#ffb700]/50" />
+          <div className="flex items-center justify-between"><span className="text-[10px] font-mono font-semibold tracking-wider text-muted-foreground uppercase">SWARM EQUITY</span></div>
           <div className="text-lg font-mono font-bold" style={{ color: isSwarmPositive ? 'var(--trade-yes)' : 'var(--trade-no)' }}>{isSwarmPositive ? '+' : ''}{swarmTotal.toFixed(2)} <span className="text-[10px] text-muted-foreground">tUSDC</span></div>
           <div className="text-[11px] font-mono font-semibold" style={{ color: delta >= 0 ? 'var(--trade-yes)' : 'var(--trade-no)' }}>{isGuest ? 'Protocol verified' : delta >= 0 ? `You +${delta.toFixed(1)}` : `Swarm +${Math.abs(delta).toFixed(1)}`}</div>
         </div>
         <div className="terminal-panel p-3 flex flex-col gap-1.5">
-          <div className="flex items-center justify-between"><span className="text-[10px] font-mono font-semibold tracking-wider text-muted-foreground uppercase">STREAK</span><ChartBarIcon className="w-3.5 h-3.5 text-muted-foreground/60" /></div>
+          <div className="flex items-center justify-between"><span className="text-[10px] font-mono font-semibold tracking-wider text-muted-foreground uppercase">STREAK</span></div>
           <div className="text-sm font-mono font-bold flex items-center gap-1.5" style={{ color: (summary?.currentStreak ?? 0) > 0 ? 'var(--trade-yes)' : (summary?.currentStreak ?? 0) < 0 ? 'var(--trade-no)' : 'var(--muted-foreground)' }}>
             {(summary?.currentStreak ?? 0) > 0 ? <><FireIcon className="w-3.5 h-3.5" /> +{summary?.currentStreak} streak</> : (summary?.currentStreak ?? 0) < 0 ? <><ArrowTrendingDownIcon className="w-3.5 h-3.5" /> {summary?.currentStreak}</> : '— Even'}
           </div>
@@ -514,7 +506,7 @@ export const AnalyticsView: React.FC<AnalyticsViewProps> = ({ wallet, onConnectW
             ))}
           </div>
           <div className="flex items-center gap-2 text-[11px] font-mono text-muted-foreground">
-            {activeTab === 'equity' && <><label className="inline-flex items-center gap-1.5 cursor-pointer"><input type="checkbox" checked={showSwarm} onChange={(e) => setShowSwarm(e.target.checked)} className="w-3 h-3 accent-amber-500" /> <span className="text-amber-400 font-semibold">Swarm</span></label><span className="w-px h-3 bg-border hidden sm:inline-block" /><span>{userCurve.length} days • {(summary?.totalTrades ?? 0)} fills</span></>}
+            {activeTab === 'equity' && <><label className="inline-flex items-center gap-1.5 cursor-pointer"><input type="checkbox" checked={showSwarm} onChange={(e) => setShowSwarm(e.target.checked)} className="w-3 h-3 accent-amber-500" /> <span className="text-[#ffb700] font-semibold">Swarm</span></label><span className="w-px h-3 bg-border hidden sm:inline-block" /><span>{userCurve.length} days • {(summary?.totalTrades ?? 0)} fills</span></>}
             {activeTab === 'daily' && <span>{dailyBars.filter((d) => d.pnl !== 0).length} active days</span>}
             {activeTab === 'ledger' && <span>{ledgerRows.length} days • verifiable</span>}
           </div>
@@ -579,16 +571,16 @@ export const AnalyticsView: React.FC<AnalyticsViewProps> = ({ wallet, onConnectW
                       const isCustom = a.agentType.startsWith('Custom:');
                       const customObj = isCustom ? customAgents.find((ca) => a.agentType.includes(ca.name)) : null;
                       const color = isCustom
-                        ? (customObj?.color || '#2dd4bf')
+                        ? (customObj?.color || '#00ffcc')
                         : isManual
-                        ? '#38bdf8'
+                        ? ' #00ffcc'
                         : a.agentType === 'Volt'
-                        ? '#fbbf24'
+                        ? '#ffb700'
                         : a.agentType === 'Oracle'
-                        ? '#2dd4bf'
+                        ? '#00ffcc'
                         : a.agentType === 'Titan'
-                        ? '#a78bfa'
-                        : '#6ee7b7';
+                        ? '#7928ca'
+                        : '#00e676';
                       const Icon = isCustom ? SparklesIcon : isManual ? CommandLineIcon : a.agentType === 'Volt' ? BoltIcon : a.agentType === 'Oracle' ? CpuChipIcon : a.agentType === 'Titan' ? ShieldCheckIcon : ChartBarIcon;
                       const displayName = isManual ? 'MANUAL (TERMINAL)' : a.agentType.toUpperCase();
                       return (
@@ -618,10 +610,10 @@ export const AnalyticsView: React.FC<AnalyticsViewProps> = ({ wallet, onConnectW
           {activeTab === 'dist' && (
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-3">
               <div className="terminal-panel p-3 flex flex-col gap-3">
-                <div className="flex items-center gap-1.5 text-xs font-bold"><ChartPieIcon className="w-3.5 h-3.5 text-muted-foreground" /> Outcome Split</div>
+                <div className="flex items-center gap-1.5 text-xs font-bold">Outcome Split</div>
                 {(() => {
                   const outcomes = data?.outcomeBreakdown || [];
-                  const pieData = outcomes.map((o) => ({ label: o.outcome, value: o.trades, color: o.outcome === 'YES' ? '#6ee7b7' : o.outcome === 'NO' ? '#fda4af' : '#a1a1aa' }));
+                  const pieData = outcomes.map((o) => ({ label: o.outcome, value: o.trades, color: o.outcome === 'YES' ? '#00e676' : o.outcome === 'NO' ? '#ff3366' : '#a1a1aa' }));
                   if (pieData.every((d) => d.value === 0)) return <div className="text-xs text-muted-foreground text-center py-6">No outcome data yet.</div>;
                   return <Donut data={pieData} size={130} />;
                 })()}
@@ -635,7 +627,7 @@ export const AnalyticsView: React.FC<AnalyticsViewProps> = ({ wallet, onConnectW
                 </div>
               </div>
               <div className="terminal-panel p-3 flex flex-col gap-3">
-                <div className="flex items-center gap-1.5 text-xs font-bold"><Square3Stack3DIcon className="w-3.5 h-3.5 text-muted-foreground" /> Symbol & Window</div>
+                <div className="flex items-center gap-1.5 text-xs font-bold">Symbol & Window</div>
                 <div className="flex flex-col gap-3">
                   <div>
                     <div className="text-[10px] font-mono font-semibold tracking-wider text-muted-foreground uppercase mb-1.5">By Symbol</div>
@@ -657,7 +649,7 @@ export const AnalyticsView: React.FC<AnalyticsViewProps> = ({ wallet, onConnectW
                 </div>
               </div>
               <div className="terminal-panel p-3 flex flex-col gap-2">
-                <div className="flex items-center justify-between"><span className="text-xs font-bold flex items-center gap-1.5"><ClockIcon className="w-3.5 h-3.5 text-muted-foreground" /> Volume Timeline</span><span className="text-[10px] font-mono text-muted-foreground">tUSDC / day</span></div>
+                <div className="flex items-center justify-between"><span className="text-xs font-bold flex items-center gap-1.5">Volume Timeline</span><span className="text-[10px] font-mono text-muted-foreground">tUSDC / day</span></div>
                 <div className="flex flex-col">
                   {(() => {
                     const vols = dailyBars.map((d) => d.volume);
@@ -686,7 +678,7 @@ export const AnalyticsView: React.FC<AnalyticsViewProps> = ({ wallet, onConnectW
             <div className="grid grid-cols-1 xl:grid-cols-[1.6fr_0.9fr] gap-3">
               <div className="terminal-panel p-0 flex flex-col overflow-hidden">
                 <div className="flex items-center justify-between px-3 py-2 border-b border-border/40 bg-secondary/10">
-                  <div className="flex items-center gap-1.5"><CalendarIcon className="w-3.5 h-3.5 text-muted-foreground" /><span className="text-xs font-bold">Daily Balance Ledger</span><Badge variant="outline" className="font-mono text-[10px] bg-secondary/30 border-border/40 text-muted-foreground">{ledgerRows.length} days</Badge></div>
+                  <div className="flex items-center gap-1.5"><span className="text-xs font-bold">Daily Balance Ledger</span><Badge variant="outline" className="font-mono text-[10px] bg-secondary/30 border-border/40 text-muted-foreground">{ledgerRows.length} days</Badge></div>
                   <button type="button" onClick={exportCsv} className="inline-flex items-center gap-1 px-2 py-1 rounded-md border bg-secondary/30 border-border/50 text-[11px] font-medium text-muted-foreground hover:text-foreground"><ArrowDownTrayIcon className="w-3 h-3" /> CSV</button>
                 </div>
                 <div className="max-h-[320px] overflow-y-auto">
@@ -700,12 +692,12 @@ export const AnalyticsView: React.FC<AnalyticsViewProps> = ({ wallet, onConnectW
                       {pagedLedger.map((r) => {
                         const isPos = r.dailyPnl > 0.01; const isNeg = r.dailyPnl < -0.01;
                         return (
-                          <tr key={r.date} className="hover:bg-secondary/10" style={{ background: isPos ? 'rgba(16,185,129,0.04)' : isNeg ? 'rgba(244,63,94,0.04)' : 'transparent' }}>
+                          <tr key={r.date} className="hover:bg-secondary/10" style={{ background: isPos ? 'rgba(0,230,118,0.04)' : isNeg ? 'rgba(255,51,102,0.04)' : 'transparent' }}>
                             <td className="px-2.5 py-2 font-mono text-muted-foreground">{r.date}</td>
                             <td className="px-2 py-2 text-right font-mono text-muted-foreground">{r.startBalance.toFixed(1)}</td>
                             <td className="px-2 py-2 text-right font-mono font-bold" style={{ color: isPos ? 'var(--trade-yes)' : isNeg ? 'var(--trade-no)' : 'var(--muted-foreground)' }}>{isPos ? '+' : ''}{r.dailyPnl.toFixed(2)}</td>
                             <td className="px-2 py-2 text-right font-mono font-bold" style={{ color: r.endBalance >= 0 ? 'var(--trade-yes)' : 'var(--trade-no)' }}>{r.endBalance >= 0 ? '+' : ''}{r.endBalance.toFixed(1)}</td>
-                            <td className="px-2 py-2 text-center"><span className="px-1.5 py-0.5 rounded border text-[10px] font-mono" style={{ background: r.trades ? 'rgba(45,212,191,0.08)' : 'transparent', borderColor: r.trades ? 'rgba(45,212,191,0.18)' : 'var(--border)', color: r.trades ? '#2dd4bf' : 'var(--muted-foreground)' }}>{r.trades}</span></td>
+                            <td className="px-2 py-2 text-center"><span className="px-1.5 py-0.5 rounded border text-[10px] font-mono" style={{ background: r.trades ? 'rgba(45,212,191,0.08)' : 'transparent', borderColor: r.trades ? 'rgba(45,212,191,0.18)' : 'var(--border)', color: r.trades ? '#00ffcc' : 'var(--muted-foreground)' }}>{r.trades}</span></td>
                             <td className="px-2 py-2 text-center font-mono text-[11px]"><span style={{ color: 'var(--trade-yes)' }}>{r.wins}W</span> / <span style={{ color: 'var(--trade-no)' }}>{r.losses}L</span></td>
                             <td className="px-2 py-2 text-right font-mono text-muted-foreground">{r.volume.toFixed(1)}</td>
                           </tr>
@@ -725,7 +717,7 @@ export const AnalyticsView: React.FC<AnalyticsViewProps> = ({ wallet, onConnectW
                       return (
                         <div key={t.id} className="flex items-center justify-between px-3 py-2 hover:bg-secondary/10">
                           <div className="flex items-center gap-2 min-w-0">
-                            <span className="text-[10px] font-mono px-1.5 py-0.5 rounded border font-bold flex-shrink-0" style={{ background: t.agentType === 'Volt' ? 'rgba(245,158,11,0.08)' : t.agentType === 'Oracle' ? 'rgba(45,212,191,0.08)' : 'rgba(167,139,250,0.08)', color: t.agentType === 'Volt' ? '#fbbf24' : t.agentType === 'Oracle' ? '#2dd4bf' : '#a78bfa', borderColor: t.agentType === 'Volt' ? 'rgba(245,158,11,0.18)' : t.agentType === 'Oracle' ? 'rgba(45,212,191,0.18)' : 'rgba(167,139,250,0.18)' }}>{t.agentType}</span>
+                            <span className="text-[10px] font-mono px-1.5 py-0.5 rounded border font-bold flex-shrink-0" style={{ background: t.agentType === 'Volt' ? 'rgba(255,183,0,0.08)' : t.agentType === 'Oracle' ? 'rgba(45,212,191,0.08)' : 'rgba(167,139,250,0.08)', color: t.agentType === 'Volt' ? '#ffb700' : t.agentType === 'Oracle' ? '#00ffcc' : '#7928ca', borderColor: t.agentType === 'Volt' ? 'rgba(255,183,0,0.18)' : t.agentType === 'Oracle' ? 'rgba(45,212,191,0.18)' : 'rgba(167,139,250,0.18)' }}>{t.agentType}</span>
                             <div className="min-w-0"><div className="text-xs font-semibold text-foreground flex items-center gap-1 truncate">{t.outcome} @ {t.price?.toFixed(2)} × {t.lotSize}<span className="text-[10px] font-mono text-muted-foreground">• {new Date(t.createdAt).toLocaleTimeString()}</span></div><div className="text-[10px] font-mono text-muted-foreground truncate">{t.marketId?.slice(0, 14)}…</div></div>
                           </div>
                           <div className="text-right flex-shrink-0 ml-2"><div className="text-xs font-mono font-bold" style={{ color: isWin ? 'var(--trade-yes)' : isLoss ? 'var(--trade-no)' : 'var(--muted-foreground)' }}>{t.isSettled ? (isWin ? `+${(t.pnl ?? 0).toFixed(2)}` : (t.pnl ?? 0).toFixed(2)) : 'OPEN'}</div><div className="text-[9px] font-mono text-muted-foreground">{t.isSettled ? 'SETTLED' : 'AWAITING'}</div></div>
@@ -742,7 +734,7 @@ export const AnalyticsView: React.FC<AnalyticsViewProps> = ({ wallet, onConnectW
                     <li>Operator (0x93e3…59Cf) curve public — compare delta live.</li>
                     <li>Unclaimed = gross pending, not double-counted.</li>
                   </ul>
-                  {!isGuest && !isOperator && <div className="mt-2 flex items-center gap-2 text-xs">Your delta vs swarm: <span className="px-2 py-0.5 rounded border font-mono font-bold text-xs" style={{ background: delta >= 0 ? 'rgba(16,185,129,0.12)' : 'rgba(244,63,94,0.12)', borderColor: delta >= 0 ? 'rgba(16,185,129,0.22)' : 'rgba(244,63,94,0.22)', color: delta >= 0 ? 'var(--trade-yes)' : 'var(--trade-no)' }}>{delta >= 0 ? '+' : ''}{delta.toFixed(2)} tUSDC</span></div>}
+                  {!isGuest && !isOperator && <div className="mt-2 flex items-center gap-2 text-xs">Your delta vs swarm: <span className="px-2 py-0.5 rounded border font-mono font-bold text-xs" style={{ background: delta >= 0 ? 'rgba(0,230,118,0.12)' : 'rgba(255,51,102,0.12)', borderColor: delta >= 0 ? 'rgba(0,230,118,0.22)' : 'rgba(255,51,102,0.22)', color: delta >= 0 ? 'var(--trade-yes)' : 'var(--trade-no)' }}>{delta >= 0 ? '+' : ''}{delta.toFixed(2)} tUSDC</span></div>}
                 </div>
               </div>
             </div>

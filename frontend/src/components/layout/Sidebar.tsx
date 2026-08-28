@@ -318,7 +318,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
               </span>
               <Badge
                 variant="outline"
-                className="h-4 px-1.5 text-[9px] border-emerald-500/30 text-emerald-400 font-mono"
+                className="h-4 px-1.5 text-[9px] border-[#00e676]/30 text-[#00e676] font-mono"
               >
                 Shannon 50312
               </Badge>
@@ -338,7 +338,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
             )}
           >
             <div className="flex items-center gap-2 min-w-0">
-              <div className="w-1.5 h-1.5 rounded-full bg-emerald-400 shrink-0" />
+              <div className="w-1.5 h-1.5 rounded-full bg-[#00e676] shrink-0" />
               {!effectiveCollapsed && (
                 <div className="text-left truncate">
                   <div className="font-mono text-xs text-foreground truncate">
@@ -352,7 +352,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
             </div>
             {!effectiveCollapsed && activeSession && (
               <span title="Session Key Active">
-                <ShieldCheckIcon className="w-3 h-3 text-emerald-400 shrink-0" />
+                <ShieldCheckIcon className="w-3 h-3 text-[#00e676] shrink-0" />
               </span>
             )}
           </div>

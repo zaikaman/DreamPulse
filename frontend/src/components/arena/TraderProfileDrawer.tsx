@@ -53,7 +53,7 @@ export const TraderProfileDrawer: React.FC<TraderProfileDrawerProps> = ({
       primaryMetricPositive: summary.realizedPnl >= 0,
       secondaryMetricLabel: 'Prediction Win Rate',
       secondaryMetricValue: `${summary.winRate}% (${summary.winsCount}W / ${summary.lossesCount}L)`,
-      accentColor: '#2dd4bf',
+      accentColor: '#00ffcc',
       walletOrAgentId: summary.userAddress,
       verifiedNetwork: 'Somnia Shannon Testnet',
       sparkline: summary.sparkline,
@@ -136,7 +136,7 @@ export const TraderProfileDrawer: React.FC<TraderProfileDrawerProps> = ({
                     <div className="text-[10px] text-muted-foreground uppercase font-mono">Realized Net PnL</div>
                     <div className={cn(
                       "text-base font-semibold mt-1 font-mono",
-                      summary.realizedPnl >= 0 ? "text-emerald-400" : "text-rose-400"
+                      summary.realizedPnl >= 0 ? "text-[#00e676]" : "text-[#ff3366]"
                     )}>
                       {summary.realizedPnl >= 0 ? `+${summary.realizedPnl.toFixed(2)}` : summary.realizedPnl.toFixed(2)} USDC
                     </div>
@@ -216,7 +216,7 @@ export const TraderProfileDrawer: React.FC<TraderProfileDrawerProps> = ({
                 <div className="p-3.5 rounded-lg bg-card/60 border border-border/50">
                   <div className="flex items-center justify-between mb-2">
                     <span className="text-xs font-semibold text-foreground">Cumulative Alpha Curve</span>
-                    <span className="text-[10px] text-emerald-400 font-mono font-medium">+{summary.realizedPnl.toFixed(2)} USDC</span>
+                    <span className="text-[10px] text-[#00e676] font-mono font-medium">+{summary.realizedPnl.toFixed(2)} USDC</span>
                   </div>
                   <div className="h-16 flex items-end gap-1 pt-2">
                     {profile.equityCurve.map((point, idx) => {
@@ -232,7 +232,7 @@ export const TraderProfileDrawer: React.FC<TraderProfileDrawerProps> = ({
                           <div
                             className={cn(
                               "w-full rounded-t transition-all",
-                              point.cumulativePnl >= 0 ? "bg-emerald-500/50 hover:bg-emerald-400" : "bg-rose-500/50 hover:bg-rose-400"
+                              point.cumulativePnl >= 0 ? "bg-[#00e676]/50 hover:bg-[#00e676]" : "bg-[#ff3366]/50 hover:bg-rose-400"
                             )}
                             style={{ height: `${heightPct}%` }}
                           />
@@ -256,7 +256,7 @@ export const TraderProfileDrawer: React.FC<TraderProfileDrawerProps> = ({
                           className="p-2 rounded-md bg-secondary/30 border border-border/40 flex items-center justify-between text-xs font-mono"
                         >
                           <div className="flex items-center gap-2">
-                            <span className={cn("font-bold text-[10px]", trade.direction === 'BUY' ? "text-emerald-400" : "text-rose-400")}>
+                            <span className={cn("font-bold text-[10px]", trade.direction === 'BUY' ? "text-[#00e676]" : "text-[#ff3366]")}>
                               {trade.direction}
                             </span>
                             <span className="text-foreground">{symbol}</span>
@@ -265,7 +265,7 @@ export const TraderProfileDrawer: React.FC<TraderProfileDrawerProps> = ({
                             </Badge>
                           </div>
                           <div className="flex items-center gap-2">
-                            <span className={cn("font-medium", pnl >= 0 ? "text-emerald-400" : "text-rose-400")}>
+                            <span className={cn("font-medium", pnl >= 0 ? "text-[#00e676]" : "text-[#ff3366]")}>
                               {pnl >= 0 ? `+${pnl.toFixed(2)}` : pnl.toFixed(2)} USDC
                             </span>
                             {trade.txHash && (
@@ -298,7 +298,7 @@ export const TraderProfileDrawer: React.FC<TraderProfileDrawerProps> = ({
                 disabled={isCopyTradeLoading}
                 className={cn(
                   "flex-1 h-8 text-xs font-medium gap-1.5",
-                  isCopyTrading && "border-rose-500/40 text-rose-400 hover:bg-rose-500/10"
+                  isCopyTrading && "border-[#ff3366]/40 text-[#ff3366] hover:bg-[#ff3366]/10"
                 )}
               >
                 {isCopyTradeLoading ? (

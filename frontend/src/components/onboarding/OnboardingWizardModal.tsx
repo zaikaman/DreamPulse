@@ -136,7 +136,7 @@ export const OnboardingWizardModal: React.FC<OnboardingWizardModalProps> = ({
                 </h3>
                 <Badge
                   variant="outline"
-                  className="font-mono text-[9px] px-1.5 py-0 h-4 border-emerald-500/30 text-emerald-400 bg-emerald-950/20"
+                  className="font-mono text-[9px] px-1.5 py-0 h-4 border-[#00e676]/30 text-[#00e676] bg-[#00e676]/10"
                 >
                   Somnia Shannon 50312
                 </Badge>
@@ -196,15 +196,15 @@ export const OnboardingWizardModal: React.FC<OnboardingWizardModalProps> = ({
                 </div>
                 <div className="flex items-center justify-between text-xs">
                   <span className="text-muted-foreground">Execution Latency</span>
-                  <span className="font-mono text-emerald-400">&lt;100ms Sub-Second Finality</span>
+                  <span className="font-mono text-[#00e676]">&lt;100ms Sub-Second Finality</span>
                 </div>
 
                 <div className="pt-2 border-t border-border/40 flex items-center justify-between">
                   <div className="flex items-center gap-2 text-xs">
                     {isCorrectNetwork ? (
-                      <CheckCircleIcon className="w-4 h-4 text-emerald-400 shrink-0" />
+                      <CheckCircleIcon className="w-4 h-4 text-[#00e676] shrink-0" />
                     ) : (
-                      <BoltIcon className="w-4 h-4 text-amber-400 shrink-0" />
+                      <BoltIcon className="w-4 h-4 text-[#ffb700] shrink-0" />
                     )}
                     <span className="text-xs">
                       {isCorrectNetwork
@@ -234,7 +234,7 @@ export const OnboardingWizardModal: React.FC<OnboardingWizardModalProps> = ({
                       <span>Switch Network</span>
                     </Button>
                   ) : (
-                    <Badge variant="outline" className="text-[10px] font-mono border-emerald-500/30 text-emerald-400 bg-emerald-950/20">
+                    <Badge variant="outline" className="text-[10px] font-mono border-[#00e676]/30 text-[#00e676] bg-[#00e676]/10">
                       Verified
                     </Badge>
                   )}
@@ -302,7 +302,7 @@ export const OnboardingWizardModal: React.FC<OnboardingWizardModalProps> = ({
                     </>
                   ) : hasClaimedThisSession || hasCollateral ? (
                     <>
-                      <CheckCircleIcon className="w-3.5 h-3.5 text-emerald-400" />
+                      <CheckCircleIcon className="w-3.5 h-3.5 text-[#00e676]" />
                       <span>Claim More</span>
                     </>
                   ) : (
@@ -315,7 +315,7 @@ export const OnboardingWizardModal: React.FC<OnboardingWizardModalProps> = ({
               </div>
 
               {hasCollateral && (
-                <div className="text-[11px] font-mono text-emerald-400 flex items-center gap-1.5 bg-emerald-950/20 border border-emerald-500/20 p-2 rounded-lg">
+                <div className="text-[11px] font-mono text-[#00e676] flex items-center gap-1.5 bg-[#00e676]/10 border border-[#00e676]/20 p-2 rounded-lg">
                   <CheckCircleIcon className="w-3.5 h-3.5 shrink-0" />
                   <span>Account funded with test collateral. Ready for trading execution.</span>
                 </div>
@@ -348,13 +348,13 @@ export const OnboardingWizardModal: React.FC<OnboardingWizardModalProps> = ({
                 </div>
 
                 <div className="p-2.5 rounded-xl border border-border/50 bg-secondary/30 space-y-1">
-                  <ShieldCheckIcon className="w-4 h-4 text-emerald-400" />
+                  <ShieldCheckIcon className="w-4 h-4 text-[#00e676]" />
                   <div className="text-xs font-semibold text-foreground">Strict Guardrails</div>
                   <div className="text-[10px] text-muted-foreground leading-tight">Custom trade size and volume limits</div>
                 </div>
 
                 <div className="p-2.5 rounded-xl border border-border/50 bg-secondary/30 space-y-1">
-                  <BoltIcon className="w-4 h-4 text-amber-400" />
+                  <BoltIcon className="w-4 h-4 text-[#ffb700]" />
                   <div className="text-xs font-semibold text-foreground">Instant Revoke</div>
                   <div className="text-[10px] text-muted-foreground leading-tight">Cancel operator access anytime in 1-click</div>
                 </div>
@@ -427,20 +427,20 @@ export const OnboardingWizardModal: React.FC<OnboardingWizardModalProps> = ({
                   <div className="p-2 rounded-lg bg-background/80 border border-border/50 flex items-center gap-1.5 text-foreground flex-wrap">
                     <span className="text-[10px] font-bold text-muted-foreground">[ IF ]</span>
                     <span className="text-foreground font-bold">RSI (14) &lt; 30</span>
-                    <span className="text-emerald-400 font-bold text-[11px]">↑ Oversold Dip</span>
+                    <span className="text-[#00e676] font-bold text-[11px]">↑ Oversold Dip</span>
                   </div>
 
                   {/* THEN */}
                   <div className="p-2 rounded-lg bg-background/80 border border-border/50 flex items-center gap-1.5 text-foreground">
                     <span className="text-[10px] font-bold text-muted-foreground">[ THEN ]</span>
-                    <span className="px-1.5 py-0.5 rounded bg-emerald-500/10 text-emerald-400 font-bold text-[10px] border border-emerald-500/20">CALL (UP)</span>
+                    <span className="px-1.5 py-0.5 rounded bg-[#00e676]/10 text-[#00e676] font-bold text-[10px] border border-[#00e676]/20">CALL (UP)</span>
                     <span className="text-muted-foreground text-[11px]">Expiry: 60s</span>
                   </div>
 
                   {/* BANKROLL */}
                   <div className="p-2 rounded-lg bg-background/80 border border-border/50 flex items-center gap-1.5 text-[11px] text-muted-foreground">
                     <span className="text-[10px] font-bold text-muted-foreground">[ FLEET ]</span>
-                    <span className="text-emerald-400 font-bold">$100 tUSDC Allowance</span>
+                    <span className="text-[#00e676] font-bold">$100 tUSDC Allowance</span>
                   </div>
                 </div>
               </div>
@@ -511,10 +511,10 @@ export const OnboardingWizardModal: React.FC<OnboardingWizardModalProps> = ({
                 {/* Option 2: Swarm Follower */}
                 <button
                   onClick={() => handleFinish('Swarm Cockpit')}
-                  className="rounded-xl border border-border/70 hover:border-emerald-500/40 bg-secondary/30 hover:bg-secondary/60 p-3 text-left transition-all group flex flex-col justify-between cursor-pointer"
+                  className="rounded-xl border border-border/70 hover:border-[#00e676]/40 bg-secondary/30 hover:bg-secondary/60 p-3 text-left transition-all group flex flex-col justify-between cursor-pointer"
                 >
                   <div className="flex flex-col gap-2">
-                    <div className="w-8 h-8 rounded-lg bg-emerald-500/10 text-emerald-400 grid place-items-center group-hover:scale-105 transition-transform">
+                    <div className="w-8 h-8 rounded-lg bg-[#00e676]/10 text-[#00e676] grid place-items-center group-hover:scale-105 transition-transform">
                       <CpuChipIcon className="w-4 h-4" />
                     </div>
                     <div>
@@ -522,7 +522,7 @@ export const OnboardingWizardModal: React.FC<OnboardingWizardModalProps> = ({
                         <span className="text-xs font-bold text-foreground">
                           Swarm Follower
                         </span>
-                        <Badge variant="outline" className="text-[8px] font-mono border-emerald-500/30 text-emerald-400 bg-emerald-950/20 px-1 py-0">
+                        <Badge variant="outline" className="text-[8px] font-mono border-[#00e676]/30 text-[#00e676] bg-[#00e676]/10 px-1 py-0">
                           1-Click
                         </Badge>
                       </div>
@@ -531,7 +531,7 @@ export const OnboardingWizardModal: React.FC<OnboardingWizardModalProps> = ({
                       </p>
                     </div>
                   </div>
-                  <div className="flex items-center justify-end text-xs font-mono text-emerald-400 group-hover:text-emerald-300 mt-2">
+                  <div className="flex items-center justify-end text-xs font-mono text-[#00e676] group-hover:text-[#00e676] mt-2">
                     <span className="text-[10px]">Fleet Cockpit</span>
                     <ArrowRightIcon className="w-3.5 h-3.5 ml-1 group-hover:translate-x-0.5 transition-transform" />
                   </div>

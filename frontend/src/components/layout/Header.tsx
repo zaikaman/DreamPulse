@@ -128,7 +128,7 @@ export const Header: React.FC<HeaderProps> = ({
           <div className="flex items-center gap-1.5 border-l border-border/40 pl-3">
             <div
               className={`w-1.5 h-1.5 rounded-full ${
-                isConnected ? "bg-emerald-400 animate-pulse" : "bg-rose-500"
+                isConnected ? "bg-[#00e676] animate-pulse" : "bg-[#ff3366]"
               }`}
             />
             <span className="text-[11px]">
@@ -141,9 +141,9 @@ export const Header: React.FC<HeaderProps> = ({
         <div className="flex items-center gap-2">
           {/* Somnia Shannon Testnet Badge */}
           <div className="hidden lg:flex items-center gap-1.5 rounded-lg border border-border/60 bg-muted/30 px-2.5 py-1 text-[11px] text-muted-foreground font-mono">
-            <BoltIcon className="w-3 h-3 text-cyan-400" />
+            <BoltIcon className="w-3 h-3 text-[#00ffcc]" />
             <span>Somnia 50312</span>
-            <span className="w-1.5 h-1.5 rounded-full bg-emerald-400"></span>
+            <span className="w-1.5 h-1.5 rounded-full bg-[#00e676]"></span>
           </div>
 
           {/* Session Key Status Pill */}
@@ -151,19 +151,19 @@ export const Header: React.FC<HeaderProps> = ({
             activeSession ? (
               <button
                 onClick={onOpenSessionModal}
-                className="hidden sm:flex items-center gap-1.5 rounded-lg border border-emerald-500/30 bg-emerald-500/10 px-2.5 py-1 text-[11px] text-emerald-400 font-mono hover:bg-emerald-500/20 transition-colors cursor-pointer"
+                className="hidden sm:flex items-center gap-1.5 rounded-lg border border-[#00e676]/30 bg-[#00e676]/10 px-2.5 py-1 text-[11px] text-[#00e676] font-mono hover:bg-[#00e676]/20 transition-colors cursor-pointer"
                 title="Session Key active and delegated"
               >
-                <ShieldCheckIcon className="w-3 h-3 text-emerald-400" />
+                <ShieldCheckIcon className="w-3 h-3 text-[#00e676]" />
                 <span>Session Active</span>
               </button>
             ) : (
               <button
                 onClick={onOpenSessionModal}
-                className="hidden sm:flex items-center gap-1.5 rounded-lg border border-amber-500/30 bg-amber-500/10 px-2.5 py-1 text-[11px] text-amber-400 font-mono hover:bg-amber-500/20 transition-colors cursor-pointer"
+                className="hidden sm:flex items-center gap-1.5 rounded-lg border border-[#ffb700]/30 bg-[#ffb700]/10 px-2.5 py-1 text-[11px] text-[#ffb700] font-mono hover:bg-[#ffb700]/20 transition-colors cursor-pointer"
                 title="Delegate session key for zero-popup trading"
               >
-                <SparklesIcon className="w-3 h-3 text-amber-400" />
+                <SparklesIcon className="w-3 h-3 text-[#ffb700]" />
                 <span>Delegate Session</span>
               </button>
             )
@@ -174,7 +174,7 @@ export const Header: React.FC<HeaderProps> = ({
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
                 <button className="flex items-center gap-2 rounded-lg border border-border/70 bg-card/60 backdrop-blur-md px-2.5 py-1 text-xs text-foreground hover:bg-card transition-colors cursor-pointer shadow-xs">
-                  <div className="w-2 h-2 rounded-full bg-emerald-400" />
+                  <div className="w-2 h-2 rounded-full bg-[#00e676]" />
                   <span className="font-mono text-xs">{formatAddress(wallet.address)}</span>
                   <ChevronDownIcon className="w-3 h-3 text-muted-foreground" />
                 </button>
@@ -208,19 +208,19 @@ export const Header: React.FC<HeaderProps> = ({
                   disabled={isFauceting}
                   className="gap-2 cursor-pointer"
                 >
-                  <CurrencyDollarIcon className="w-3.5 h-3.5 text-cyan-400" />
+                  <CurrencyDollarIcon className="w-3.5 h-3.5 text-[#00ffcc]" />
                   <span>{isFauceting ? "Claiming Faucet..." : "Claim 1,000 tUSDC Faucet"}</span>
                 </DropdownMenuItem>
 
                 {/* Session Delegation */}
                 <DropdownMenuItem onClick={onOpenSessionModal} className="gap-2 cursor-pointer">
-                  <ShieldCheckIcon className="w-3.5 h-3.5 text-emerald-400" />
+                  <ShieldCheckIcon className="w-3.5 h-3.5 text-[#00e676]" />
                   <span>{activeSession ? "Manage Session Key" : "Create Session Key"}</span>
                 </DropdownMenuItem>
 
                 {/* Switch Network if incorrect */}
                 {!wallet.isCorrectNetwork && (
-                  <DropdownMenuItem onClick={onSwitchNetwork} className="gap-2 text-amber-400 cursor-pointer">
+                  <DropdownMenuItem onClick={onSwitchNetwork} className="gap-2 text-[#ffb700] cursor-pointer">
                     <ChartBarIcon className="w-3.5 h-3.5" />
                     <span>Switch to Somnia Testnet</span>
                   </DropdownMenuItem>

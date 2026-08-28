@@ -238,8 +238,8 @@ export const WalletAccountDropdown: React.FC<WalletAccountDropdownProps> = ({
                 type="button"
                 onClick={onSwitchNetwork}
                 style={{
-                  background: 'rgba(245, 158, 11, 0.15)',
-                  border: '1px solid rgba(245, 158, 11, 0.35)',
+                  background: 'rgba(255, 183, 0, 0.15)',
+                  border: '1px solid rgba(255, 183, 0, 0.35)',
                   color: 'var(--trade-anomaly)',
                   borderRadius: '6px',
                   padding: '6px 10px',

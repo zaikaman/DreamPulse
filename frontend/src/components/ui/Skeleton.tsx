@@ -496,7 +496,7 @@ export const StrategyStudioSkeleton: React.FC<StrategyStudioSkeletonProps> = ({
   symbol = 'BTC/USD',
   timeframe = '5m',
   period = '7d',
-  color = '#2dd4bf',
+  color = '#00ffcc',
 }) => {
   return (
     <div className="flex flex-col gap-3.5">

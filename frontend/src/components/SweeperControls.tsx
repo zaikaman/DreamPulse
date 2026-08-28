@@ -295,24 +295,24 @@ export const SweeperControls: React.FC<SweeperControlsProps> = ({
               <div className="flex items-center justify-between">
                 <span className="text-[10px] font-mono font-semibold tracking-wider text-muted-foreground uppercase">{isViewingSelf ? 'Pending Personal Unclaimed' : 'Pending Protocol Unclaimed'}</span>
                 {unclaimedAmount > 0 ? (
-                  <Badge variant="outline" className="text-[10px] font-mono px-1.5 py-0 bg-amber-500/10 text-amber-400 border-amber-500/20">{claimableMarketsCount} MARKETS READY</Badge>
+                  <Badge variant="outline" className="text-[10px] font-mono px-1.5 py-0 bg-[#ffb700]/10 text-[#ffb700] border-[#ffb700]/20">{claimableMarketsCount} MARKETS READY</Badge>
                 ) : (
                   <span className="w-2 h-2 rounded-full bg-muted-foreground/30" />
                 )}
               </div>
-              <div className="text-xl font-mono font-bold mt-2" style={{ color: unclaimedAmount > 0 ? '#fbbf24' : 'var(--foreground)' }}>
+              <div className="text-xl font-mono font-bold mt-2" style={{ color: unclaimedAmount > 0 ? '#ffb700' : 'var(--foreground)' }}>
                 {unclaimedAmount.toFixed(2)} <span className="text-xs font-semibold">tUSDC</span>
               </div>
               <div className="text-[10px] font-mono text-muted-foreground mt-1">{unclaimedAmount > 0 ? `${claimableMarketsCount} claimable markets` : 'No pending claims — sweeper idle'}</div>
             </div>
             {/* Total Paid Out */}
             <div className="terminal-panel p-3.5 flex flex-col justify-between relative overflow-hidden">
-              <div className="absolute top-0 left-0 right-0 h-[2.5px] bg-emerald-500/60" />
+              <div className="absolute top-0 left-0 right-0 h-[2.5px] bg-[#00e676]/60" />
               <div className="flex items-center justify-between">
                 <span className="text-[10px] font-mono font-semibold tracking-wider text-muted-foreground uppercase">Total Paid Out to Wallet</span>
                 <Badge variant="outline" className="text-[10px] font-mono px-1.5 py-0 bg-secondary/30 border-border/40 text-muted-foreground">WALLET</Badge>
               </div>
-              <div className="text-xl font-mono font-bold mt-2" style={{ color: totalClaimedAllTime > 0 ? '#6ee7b7' : 'var(--muted-foreground)' }}>
+              <div className="text-xl font-mono font-bold mt-2" style={{ color: totalClaimedAllTime > 0 ? '#00e676' : 'var(--muted-foreground)' }}>
                 +{totalClaimedAllTime.toFixed(2)} <span className="text-xs font-semibold">tUSDC</span>
               </div>
               <div className="text-[10px] font-mono text-muted-foreground mt-1">{history.length} settlements • verified on-chain</div>
@@ -422,12 +422,12 @@ export const SweeperControls: React.FC<SweeperControlsProps> = ({
                       <td className="px-3 py-2.5 font-mono text-[11px] text-muted-foreground">{timeStr}</td>
                       <td className="px-3 py-2.5 font-semibold text-foreground font-mono text-xs">{sweep.marketId.slice(0, 10)}...</td>
                       <td className="px-3 py-2.5">
-                        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[11px] font-bold font-mono border" style={{ background: sweep.winningOutcome === 'YES' ? 'rgba(52,211,153,0.08)' : 'rgba(244,63,94,0.08)', borderColor: sweep.winningOutcome === 'YES' ? 'rgba(52,211,153,0.18)' : 'rgba(244,63,94,0.18)', color: sweep.winningOutcome === 'YES' ? '#6ee7b7' : '#fda4af' }}>
+                        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[11px] font-bold font-mono border" style={{ background: sweep.winningOutcome === 'YES' ? 'rgba(0,230,118,0.08)' : 'rgba(255,51,102,0.08)', borderColor: sweep.winningOutcome === 'YES' ? 'rgba(0,230,118,0.18)' : 'rgba(255,51,102,0.18)', color: sweep.winningOutcome === 'YES' ? '#00e676' : '#ff3366' }}>
                           {sweep.winningOutcome === 'YES' ? <ArrowUpRightIcon className="w-3 h-3" /> : <ArrowDownRightIcon className="w-3 h-3" />}
                           {sweep.winningOutcome}
                         </span>
                       </td>
-                      <td className="px-3 py-2.5 text-right font-mono font-bold text-xs" style={{ color: '#6ee7b7' }}>
+                      <td className="px-3 py-2.5 text-right font-mono font-bold text-xs" style={{ color: '#00e676' }}>
                         +{sweep.claimableAmount.toFixed(2)} tUSDC
                       </td>
                       <td className="px-3 py-2.5 text-center">
@@ -438,7 +438,7 @@ export const SweeperControls: React.FC<SweeperControlsProps> = ({
                       </td>
                       <td className="px-3 py-2.5 text-right">
                         {sweep.txHash && sweep.txHash.startsWith('0x') && sweep.txHash.length === 66 ? (
-                          <a href={explorerUrl} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 text-[11px] font-mono text-cyan-400 hover:text-cyan-300">
+                          <a href={explorerUrl} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 text-[11px] font-mono text-[#00ffcc] hover:text-[#00ffcc]">
                             <span>{shortTx}</span>
                             <ArrowTopRightOnSquareIcon className="w-3 h-3" />
                           </a>

@@ -154,7 +154,7 @@ export const TraderProfileView: React.FC<TraderProfileViewProps> = ({
       primaryMetricPositive: summary.realizedPnl >= 0,
       secondaryMetricLabel: 'Prediction Win Rate',
       secondaryMetricValue: `${summary.winRate}% (${summary.winsCount}W / ${summary.lossesCount}L)`,
-      accentColor: '#2dd4bf',
+      accentColor: '#00ffcc',
       walletOrAgentId: summary.userAddress,
       verifiedNetwork: 'Somnia Shannon Testnet',
       sparkline: summary.sparkline,
@@ -183,7 +183,7 @@ export const TraderProfileView: React.FC<TraderProfileViewProps> = ({
 
           <div>
             <div className="flex items-center gap-2">
-              <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
+              <span className="w-2 h-2 rounded-full bg-[#00e676] animate-pulse" />
               <h2 className="text-sm font-bold text-foreground tracking-tight font-mono">
                 {summary?.traderTitle || `Forecaster ${address ? `${address.slice(0, 6)}...${address.slice(-4)}` : 'Profile'}`}
               </h2>
@@ -202,7 +202,7 @@ export const TraderProfileView: React.FC<TraderProfileViewProps> = ({
                 className="hover:text-foreground transition-colors inline-flex items-center gap-0.5 text-[10px] text-muted-foreground bg-secondary/40 px-1.5 py-0.5 rounded border border-border/40"
                 title="Copy full address"
               >
-                {copiedAddress ? <CheckIcon className="w-2.5 h-2.5 text-emerald-400" /> : <DocumentDuplicateIcon className="w-2.5 h-2.5" />}
+                {copiedAddress ? <CheckIcon className="w-2.5 h-2.5 text-[#00e676]" /> : <DocumentDuplicateIcon className="w-2.5 h-2.5" />}
                 <span>{copiedAddress ? 'Copied' : 'Copy'}</span>
               </button>
               <span>•</span>
@@ -222,7 +222,7 @@ export const TraderProfileView: React.FC<TraderProfileViewProps> = ({
         {/* Action Controls */}
         <div className="flex items-center gap-2 flex-wrap">
           {copyTradeStatusMsg && (
-            <span className="text-xs font-mono text-emerald-400 bg-emerald-500/10 border border-emerald-500/20 px-2.5 py-1 rounded-md">
+            <span className="text-xs font-mono text-[#00e676] bg-[#00e676]/10 border border-[#00e676]/20 px-2.5 py-1 rounded-md">
               {copyTradeStatusMsg}
             </span>
           )}
@@ -245,14 +245,14 @@ export const TraderProfileView: React.FC<TraderProfileViewProps> = ({
             disabled={isCopyTradeLoading || !address}
             className={cn(
               "h-8 text-xs font-medium gap-1.5 font-mono px-3",
-              isCopyTrading && "border-rose-500/40 text-rose-400 hover:bg-rose-500/10"
+              isCopyTrading && "border-[#ff3366]/40 text-[#ff3366] hover:bg-[#ff3366]/10"
             )}
           >
             {isCopyTradeLoading ? (
               <Spinner size="sm" />
             ) : isCopyTrading ? (
               <>
-                <CheckCircleIcon className="w-3.5 h-3.5 text-emerald-400" />
+                <CheckCircleIcon className="w-3.5 h-3.5 text-[#00e676]" />
                 <span>Active Mirror (Stop)</span>
               </>
             ) : (
@@ -271,7 +271,7 @@ export const TraderProfileView: React.FC<TraderProfileViewProps> = ({
           <span className="text-xs text-muted-foreground font-mono">Loading verified on-chain forecaster metrics...</span>
         </div>
       ) : error ? (
-        <div className="terminal-panel p-8 text-center text-rose-400 font-mono text-xs">
+        <div className="terminal-panel p-8 text-center text-[#ff3366] font-mono text-xs">
           {error}
         </div>
       ) : summary ? (
@@ -287,7 +287,7 @@ export const TraderProfileView: React.FC<TraderProfileViewProps> = ({
               <div className="mt-2 font-mono">
                 <div className={cn(
                   "text-xl font-bold tracking-tight",
-                  summary.realizedPnl >= 0 ? "text-emerald-400" : "text-rose-400"
+                  summary.realizedPnl >= 0 ? "text-[#00e676]" : "text-[#ff3366]"
                 )}>
                   {summary.realizedPnl >= 0 ? `+${summary.realizedPnl.toFixed(2)}` : summary.realizedPnl.toFixed(2)} USDC
                 </div>
@@ -366,7 +366,7 @@ export const TraderProfileView: React.FC<TraderProfileViewProps> = ({
                   </div>
                   <span className={cn(
                     "text-xs font-mono font-semibold",
-                    summary.realizedPnl >= 0 ? "text-emerald-400" : "text-rose-400"
+                    summary.realizedPnl >= 0 ? "text-[#00e676]" : "text-[#ff3366]"
                   )}>
                     {summary.realizedPnl >= 0 ? `+${summary.realizedPnl.toFixed(2)}` : summary.realizedPnl.toFixed(2)} USDC Total
                   </span>
@@ -391,7 +391,7 @@ export const TraderProfileView: React.FC<TraderProfileViewProps> = ({
                           <div className="absolute bottom-full mb-2 hidden group-hover:flex flex-col items-center z-20 pointer-events-none">
                             <div className="bg-slate-900 border border-border/80 text-foreground text-[10px] font-mono px-2 py-1 rounded shadow-xl whitespace-nowrap">
                               <span className="text-muted-foreground">{point.date}: </span>
-                              <span className={point.cumulativePnl >= 0 ? "text-emerald-400 font-semibold" : "text-rose-400 font-semibold"}>
+                              <span className={point.cumulativePnl >= 0 ? "text-[#00e676] font-semibold" : "text-[#ff3366] font-semibold"}>
                                 {point.cumulativePnl >= 0 ? `+${point.cumulativePnl.toFixed(2)}` : point.cumulativePnl.toFixed(2)} USDC
                               </span>
                             </div>
@@ -401,8 +401,8 @@ export const TraderProfileView: React.FC<TraderProfileViewProps> = ({
                             className={cn(
                               "w-full rounded-t transition-all duration-300",
                               point.cumulativePnl >= 0
-                                ? "bg-emerald-500/40 group-hover:bg-emerald-400"
-                                : "bg-rose-500/40 group-hover:bg-rose-400"
+                                ? "bg-[#00e676]/40 group-hover:bg-[#00e676]"
+                                : "bg-[#ff3366]/40 group-hover:bg-rose-400"
                             )}
                             style={{ height: `${heightPct}%` }}
                           />
@@ -474,7 +474,7 @@ export const TraderProfileView: React.FC<TraderProfileViewProps> = ({
                               </td>
                               <td style={{ padding: '8px 14px' }}>
                                 <div className="flex items-center gap-1.5">
-                                  <span className={cn("text-[10px] font-bold", trade.direction === 'BUY' ? "text-emerald-400" : "text-rose-400")}>
+                                  <span className={cn("text-[10px] font-bold", trade.direction === 'BUY' ? "text-[#00e676]" : "text-[#ff3366]")}>
                                     {trade.direction}
                                   </span>
                                   <Badge variant="outline" className="font-mono text-[9px] px-1 py-0 text-muted-foreground border-border/50">
@@ -487,7 +487,7 @@ export const TraderProfileView: React.FC<TraderProfileViewProps> = ({
                               </td>
                               <td style={{ padding: '8px 14px', textAlign: 'right' }}>
                                 {trade.isSettled ? (
-                                  <span className={cn("font-medium", pnl >= 0 ? "text-emerald-400" : "text-rose-400")}>
+                                  <span className={cn("font-medium", pnl >= 0 ? "text-[#00e676]" : "text-[#ff3366]")}>
                                     {pnl >= 0 ? `+${pnl.toFixed(2)}` : pnl.toFixed(2)} USDC
                                   </span>
                                 ) : (
@@ -591,7 +591,7 @@ export const TraderProfileView: React.FC<TraderProfileViewProps> = ({
 
                   <div className="flex items-center justify-between p-2 rounded bg-secondary/20 border border-border/30">
                     <span className="text-muted-foreground">Profit Factor</span>
-                    <span className="text-emerald-400 font-semibold">
+                    <span className="text-[#00e676] font-semibold">
                       {summary.lossesCount > 0 ? (summary.winsCount / summary.lossesCount).toFixed(2) : `${summary.winsCount}.00`}x
                     </span>
                   </div>

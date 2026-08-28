@@ -67,7 +67,7 @@ export const MarketsExplorerView: React.FC<MarketsExplorerViewProps> = ({
             <span className="text-xl font-bold font-mono text-foreground">
               {markets.length}
             </span>
-            <Badge variant="outline" className="text-[9px] font-mono border-emerald-500/40 text-emerald-400 bg-emerald-500/10">
+            <Badge variant="outline" className="text-[9px] font-mono border-[#00e676]/40 text-[#00e676] bg-[#00e676]/10">
               LIVE CLOB
             </Badge>
           </div>
@@ -80,7 +80,7 @@ export const MarketsExplorerView: React.FC<MarketsExplorerViewProps> = ({
             TOP ALPHA MISPRICING
           </span>
           <div className="flex items-baseline justify-between mt-1">
-            <span className="text-xl font-bold font-mono text-emerald-400">
+            <span className="text-xl font-bold font-mono text-[#00e676]">
               +{topEdgeMarket.edge > 0 ? (topEdgeMarket.edge * 100).toFixed(1) : '49.9'}%
             </span>
             {topEdgeMarket.market && (
@@ -94,7 +94,7 @@ export const MarketsExplorerView: React.FC<MarketsExplorerViewProps> = ({
               </button>
             )}
           </div>
-          <BoltIcon className="w-4 h-4 text-emerald-400 mt-1.5" />
+          <BoltIcon className="w-4 h-4 text-[#00e676] mt-1.5" />
         </div>
 
         <div className="terminal-panel p-3 flex flex-col justify-between">

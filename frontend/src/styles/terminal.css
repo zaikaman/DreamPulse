@@ -17,9 +17,11 @@
   --text-muted: #8e94a0;
   --text-dim: #545b6b;
 
-  /* Accents & Trading Signals */
+  /* Accents & Trading Signals — DESIGN.md exact */
   --accent-cyan: #00ffcc;
   --accent-cyan-glow: rgba(0, 255, 204, 0.25);
+  --brand-violet: #7928ca;
+  --brand-violet-glow: rgba(121, 40, 202, 0.2);
   --color-yes: #00e676;
   --color-yes-glow: rgba(0, 230, 118, 0.2);
   --color-no: #ff3366;
@@ -552,7 +554,7 @@ input[type="number"] {
 
 .gauge-bar-implied {
   height: 100%;
-  background: linear-gradient(90deg, #323846, #6b7280);
+  background: #2a2f3e;
   border-radius: 3px;
   transition: width 0.3s ease;
 }

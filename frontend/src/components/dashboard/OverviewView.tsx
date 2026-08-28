@@ -1,10 +1,7 @@
 import React, { useMemo, useState, useEffect } from 'react';
 import {
-  BoltIcon,
   ArrowRightIcon,
   ArrowTopRightOnSquareIcon,
-  QueueListIcon,
-  CpuChipIcon,
 } from '@heroicons/react/24/outline';
 import type { Market, AgentThoughtLog, SessionGrant } from '../../types/index.js';
 import type { MarketTickData } from '../../hooks/useTelemetry.js';
@@ -191,9 +188,7 @@ const OverviewViewComponent: React.FC<OverviewViewProps> = ({
             padding: '12px 18px',
           }}
         >
-          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-            <BoltIcon className="w-4 h-4 text-muted-foreground" />
-            <span style={{ fontWeight: 600, fontSize: '13px' }} className="text-foreground">Top Arbitrage & Mispricing Opportunities</span>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}> <span style={{ fontWeight: 600, fontSize: '13px' }} className="text-foreground">Top Arbitrage & Mispricing Opportunities</span>
             <Badge variant="outline" className="font-mono text-[10px] text-muted-foreground bg-secondary/40 border-border/50">
               {opportunities.filter((o) => o.absEdge >= 0.03).length} ANOMALIES
             </Badge>
@@ -267,7 +262,7 @@ const OverviewViewComponent: React.FC<OverviewViewProps> = ({
                           {(fair * 100).toFixed(1)}%
                         </td>
                         <td style={{ padding: '10px 14px' }}>
-                          <span className={cn("font-mono font-semibold", isYesEdge ? "text-emerald-400" : "text-rose-400")}>
+                          <span className={cn("font-mono font-semibold", isYesEdge ? "text-[#00e676]" : "text-[#ff3366]")}>
                             {isYesEdge ? '+' : ''}{(edge * 100).toFixed(1)}%
                           </span>
                         </td>
@@ -277,9 +272,9 @@ const OverviewViewComponent: React.FC<OverviewViewProps> = ({
                             className={cn(
                               "font-mono text-[10px]",
                               action === 'BUY_YES'
-                                ? "border-emerald-500/30 text-emerald-400 bg-emerald-500/10"
+                                ? "border-[#00e676]/30 text-[#00e676] bg-[#00e676]/10"
                                 : action === 'BUY_NO'
-                                ? "border-rose-500/30 text-rose-400 bg-rose-500/10"
+                                ? "border-[#ff3366]/30 text-[#ff3366] bg-[#ff3366]/10"
                                 : "border-border/50 text-muted-foreground bg-secondary/40"
                             )}
                           >
@@ -316,9 +311,7 @@ const OverviewViewComponent: React.FC<OverviewViewProps> = ({
         {/* Left: Quick Active Markets - 3 items, internal scroll */}
         <div className="terminal-panel flex flex-col min-h-0 overflow-hidden" style={{ padding: '12px 14px' }}>
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '12px' }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-              <QueueListIcon className="w-4 h-4 text-muted-foreground" />
-              <span style={{ fontWeight: 600, fontSize: '13px' }} className="text-foreground">Active Prediction Catalog</span>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}> <span style={{ fontWeight: 600, fontSize: '13px' }} className="text-foreground">Active Prediction Catalog</span>
               <Badge variant="outline" className="font-mono text-[10px] text-muted-foreground bg-secondary/40 border-border/50">
                 {markets.length} Markets
               </Badge>
@@ -422,11 +415,9 @@ const OverviewViewComponent: React.FC<OverviewViewProps> = ({
           onMouseLeave={() => setIsHovered(false)}
         >
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '12px' }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-              <CpuChipIcon className="w-4 h-4 text-muted-foreground" />
-              <span style={{ fontWeight: 600, fontSize: '13px' }} className="text-foreground">Live Swarm Intelligence</span>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}> <span style={{ fontWeight: 600, fontSize: '13px' }} className="text-foreground">Live Swarm Intelligence</span>
               <Badge variant="outline" className="font-mono text-[10px] text-muted-foreground bg-secondary/40 border-border/50 gap-1.5">
-                <div className={cn("w-1.5 h-1.5 rounded-full", isHovered ? "bg-amber-400" : "bg-emerald-400")} />
+                <div className={cn("w-1.5 h-1.5 rounded-full", isHovered ? "bg-[#ffb700]" : "bg-[#00e676]")} />
                 <span>{isHovered ? 'PAUSED' : 'STREAMING'}</span>
               </Badge>
             </div>

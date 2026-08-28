@@ -44,18 +44,18 @@ const CARD_THEMES: Record<CardThemeKey, CardThemeConfig> = {
     name: 'Cyber Emerald',
     badge: 'CYBERPUNK OBSIDIAN',
     bgDark: '#05080c',
-    bgGrad1: 'rgba(16, 185, 129, 0.18)',
+    bgGrad1: 'rgba(0, 230, 118, 0.18)',
     bgGrad2: 'rgba(6, 182, 212, 0.12)',
-    primaryGlow: '#10b981',
+    primaryGlow: '#00e676',
     secondaryGlow: '#06b6d4',
-    accent: '#34d399',
+    accent: '#00e676',
     accentSecondary: '#22d3ee',
     accentText: '#a7f3d0',
-    borderGlow: 'rgba(52, 211, 153, 0.4)',
+    borderGlow: 'rgba(0, 230, 118, 0.4)',
     boxBg: 'rgba(6, 12, 18, 0.75)',
-    boxBorder: 'rgba(52, 211, 153, 0.18)',
-    gridColor: 'rgba(52, 211, 153, 0.05)',
-    hudColor: '#34d399',
+    boxBorder: 'rgba(0, 230, 118, 0.18)',
+    gridColor: 'rgba(0, 230, 118, 0.05)',
+    hudColor: '#00e676',
   },
   shannon: {
     name: 'Shannon Quantum',
@@ -63,49 +63,49 @@ const CARD_THEMES: Record<CardThemeKey, CardThemeConfig> = {
     bgDark: '#040714',
     bgGrad1: 'rgba(59, 130, 246, 0.22)',
     bgGrad2: 'rgba(14, 165, 233, 0.16)',
-    primaryGlow: '#3b82f6',
+    primaryGlow: ' #00ffcc',
     secondaryGlow: '#0ea5e9',
-    accent: '#38bdf8',
+    accent: ' #00ffcc',
     accentSecondary: '#60a5fa',
     accentText: '#bae6fd',
     borderGlow: 'rgba(56, 189, 248, 0.45)',
     boxBg: 'rgba(5, 11, 26, 0.75)',
     boxBorder: 'rgba(56, 189, 248, 0.2)',
     gridColor: 'rgba(56, 189, 248, 0.06)',
-    hudColor: '#38bdf8',
+    hudColor: ' #00ffcc',
   },
   apex: {
     name: 'Apex Gold',
     badge: 'TITANIUM APEX',
     bgDark: '#0c0904',
-    bgGrad1: 'rgba(245, 158, 11, 0.2)',
+    bgGrad1: 'rgba(255, 183, 0, 0.2)',
     bgGrad2: 'rgba(234, 179, 8, 0.14)',
-    primaryGlow: '#f59e0b',
+    primaryGlow: '#ffb700',
     secondaryGlow: '#eab308',
-    accent: '#fbbf24',
-    accentSecondary: '#f59e0b',
+    accent: '#ffb700',
+    accentSecondary: '#ffb700',
     accentText: '#fde68a',
-    borderGlow: 'rgba(251, 191, 36, 0.45)',
+    borderGlow: 'rgba(255, 183, 0, 0.45)',
     boxBg: 'rgba(18, 13, 5, 0.75)',
-    boxBorder: 'rgba(251, 191, 36, 0.22)',
-    gridColor: 'rgba(251, 191, 36, 0.05)',
-    hudColor: '#fbbf24',
+    boxBorder: 'rgba(255, 183, 0, 0.22)',
+    gridColor: 'rgba(255, 183, 0, 0.05)',
+    hudColor: '#ffb700',
   },
   crimson: {
     name: 'Crimson Titan',
     badge: 'NEBULA NOVA',
     bgDark: '#0c0408',
-    bgGrad1: 'rgba(244, 63, 94, 0.22)',
+    bgGrad1: 'rgba(255, 51, 102, 0.22)',
     bgGrad2: 'rgba(168, 85, 247, 0.15)',
-    primaryGlow: '#f43f5e',
-    secondaryGlow: '#a855f7',
+    primaryGlow: '#ff3366',
+    secondaryGlow: ' #7928ca',
     accent: '#fb7185',
-    accentSecondary: '#c084fc',
+    accentSecondary: '#d8b4fe',
     accentText: '#fecdd3',
     borderGlow: 'rgba(251, 113, 133, 0.45)',
     boxBg: 'rgba(18, 6, 12, 0.75)',
     boxBorder: 'rgba(251, 113, 133, 0.2)',
-    gridColor: 'rgba(244, 63, 94, 0.05)',
+    gridColor: 'rgba(255, 51, 102, 0.05)',
     hudColor: '#fb7185',
   },
   mono: {
@@ -375,9 +375,9 @@ export const ProofOfAlphaModal: React.FC<ProofOfAlphaModalProps> = ({
     ctx.fillText(config.primaryMetricLabel.toUpperCase(), boxMargin + 14, boxY + 24);
 
     // Box 1 Value (with neon text bloom)
-    ctx.fillStyle = config.primaryMetricPositive !== false ? theme.accent : '#f43f5e';
+    ctx.fillStyle = config.primaryMetricPositive !== false ? theme.accent : '#ff3366';
     ctx.font = 'bold 26px monospace, Inter, sans-serif';
-    ctx.shadowColor = config.primaryMetricPositive !== false ? theme.primaryGlow : '#f43f5e';
+    ctx.shadowColor = config.primaryMetricPositive !== false ? theme.primaryGlow : '#ff3366';
     ctx.shadowBlur = 10;
     ctx.fillText(config.primaryMetricValue, boxMargin + 14, boxY + 58);
     ctx.shadowBlur = 0; // reset shadow
@@ -585,12 +585,12 @@ export const ProofOfAlphaModal: React.FC<ProofOfAlphaModalProps> = ({
         <div className="p-3.5 px-5 border-b border-border/50 flex items-center justify-between bg-card/70">
           <div className="flex items-center gap-2.5">
             <div className="w-8 h-8 rounded-lg bg-secondary/70 border border-border/60 flex items-center justify-center">
-              <SparklesIcon className="w-4 h-4 text-emerald-400" />
+              <SparklesIcon className="w-4 h-4 text-[#00e676]" />
             </div>
             <div>
               <div className="flex items-center gap-2">
                 <h3 className="text-xs font-bold text-foreground font-mono">Proof-of-Alpha Card Studio</h3>
-                <Badge variant="outline" className="font-mono text-[9px] px-1.5 py-0 bg-emerald-500/10 text-emerald-400 border-emerald-500/30">
+                <Badge variant="outline" className="font-mono text-[9px] px-1.5 py-0 bg-[#00e676]/10 text-[#00e676] border-[#00e676]/30">
                   SOMNIA RETINA
                 </Badge>
               </div>
@@ -659,7 +659,7 @@ export const ProofOfAlphaModal: React.FC<ProofOfAlphaModalProps> = ({
                         />
                         <span className="truncate">{t.name}</span>
                       </div>
-                      {isSelected && <CheckIcon className="w-3 h-3 text-emerald-400" />}
+                      {isSelected && <CheckIcon className="w-3 h-3 text-[#00e676]" />}
                     </button>
                   );
                 })}
@@ -811,8 +811,8 @@ export const ProofOfAlphaModal: React.FC<ProofOfAlphaModalProps> = ({
             >
               {isCopied ? (
                 <>
-                  <CheckIcon className="w-3.5 h-3.5 text-emerald-400" />
-                  <span className="text-emerald-400">Copied to Clipboard</span>
+                  <CheckIcon className="w-3.5 h-3.5 text-[#00e676]" />
+                  <span className="text-[#00e676]">Copied to Clipboard</span>
                 </>
               ) : (
                 <>

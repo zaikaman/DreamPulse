@@ -22,7 +22,6 @@ import {
   CheckIcon,
   XMarkIcon,
   PlayIcon,
-  CpuChipIcon,
 } from '@heroicons/react/24/outline';
 import type { AgentType, CustomAgentDefinition } from '../types/index.js';
 import { usePersonalSwarm } from '../hooks/usePersonalSwarm.js';
@@ -41,10 +40,10 @@ interface PersonalSwarmCockpitProps {
 }
 
 const AGENT_THEME: Record<string, { color: string; bg: string; border: string; Icon: React.ElementType; label: string; sub: string }> = {
-  volt: { color: '#f59e0b', bg: 'rgba(245,158,11,0.08)', border: 'rgba(245,158,11,0.18)', Icon: BoltIcon, label: 'Volt Sniper', sub: 'Personal Latency Drift' },
-  oracle: { color: '#2dd4bf', bg: 'rgba(45,212,191,0.08)', border: 'rgba(45,212,191,0.18)', Icon: ArrowTrendingUpIcon, label: 'Oracle Vol Arb', sub: 'Personal Black-Scholes Φ(z)' },
-  titan: { color: '#a78bfa', bg: 'rgba(167,139,250,0.08)', border: 'rgba(167,139,250,0.18)', Icon: Square3Stack3DIcon, label: 'Titan MM', sub: 'Personal Inventory Skew' },
-  sweeper: { color: '#34d399', bg: 'rgba(52,211,153,0.08)', border: 'rgba(52,211,153,0.18)', Icon: SparklesIcon, label: 'Sweeper Daemon', sub: 'Personal Settlement' },
+  volt: { color: '#ffb700', bg: 'rgba(255,183,0,0.08)', border: 'rgba(255,183,0,0.18)', Icon: BoltIcon, label: 'Volt Sniper', sub: 'Personal Latency Drift' },
+  oracle: { color: '#00ffcc', bg: 'rgba(0,255,204,0.08)', border: 'rgba(0,255,204,0.18)', Icon: ArrowTrendingUpIcon, label: 'Oracle Vol Arb', sub: 'Personal Black-Scholes Φ(z)' },
+  titan: { color: '#7928ca', bg: 'rgba(121,40,202,0.08)', border: 'rgba(121,40,202,0.18)', Icon: Square3Stack3DIcon, label: 'Titan MM', sub: 'Personal Inventory Skew' },
+  sweeper: { color: '#00e676', bg: 'rgba(0,230,118,0.08)', border: 'rgba(0,230,118,0.18)', Icon: SparklesIcon, label: 'Sweeper Daemon', sub: 'Personal Settlement' },
 };
 
 export const PersonalSwarmCockpit: React.FC<PersonalSwarmCockpitProps> = ({
@@ -458,10 +457,7 @@ export const PersonalSwarmCockpit: React.FC<PersonalSwarmCockpitProps> = ({
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 p-3.5 bg-secondary/10 border-b border-border/30">
           {/* Card 1: Active Running Fleet */}
           <div className="p-3 rounded-xl border bg-card/70 border-border/50 flex flex-col justify-between gap-1">
-            <div className="flex items-center justify-between">
-              <span className="text-[10px] font-mono text-muted-foreground uppercase tracking-wider">Active Running Fleet</span>
-              <CpuChipIcon className="w-3.5 h-3.5 text-muted-foreground/60" />
-            </div>
+            <span className="text-[10px] font-mono text-muted-foreground uppercase tracking-wider">Active Running Fleet</span>
             <div className="text-base font-mono font-bold text-foreground">
               {totalActiveFleetCount} <span className="text-xs font-normal text-muted-foreground">Agents Live</span>
             </div>
@@ -486,10 +482,7 @@ export const PersonalSwarmCockpit: React.FC<PersonalSwarmCockpitProps> = ({
 
           {/* Card 3: Fleet Realized PnL */}
           <div className="p-3 rounded-xl border bg-card/70 border-border/50 flex flex-col justify-between gap-1">
-            <div className="flex items-center justify-between">
-              <span className="text-[10px] font-mono text-muted-foreground uppercase tracking-wider">Fleet Realized PnL</span>
-              <SignalIcon className="w-3.5 h-3.5 text-muted-foreground/60" />
-            </div>
+            <span className="text-[10px] font-mono text-muted-foreground uppercase tracking-wider">Fleet Realized PnL</span>
             <div
               className="text-base font-mono font-bold truncate"
               style={{ color: totalFleetPnl >= 0 ? '#6ee7b7' : '#fda4af' }}
@@ -504,10 +497,7 @@ export const PersonalSwarmCockpit: React.FC<PersonalSwarmCockpitProps> = ({
 
           {/* Card 4: Session Status */}
           <div className="p-3 rounded-xl border bg-card/70 border-border/50 flex flex-col justify-between gap-1">
-            <div className="flex items-center justify-between">
-              <span className="text-[10px] font-mono text-muted-foreground uppercase tracking-wider">Session Key Auth</span>
-              <ShieldCheckIcon className="w-3.5 h-3.5 text-muted-foreground/60" />
-            </div>
+            <span className="text-[10px] font-mono text-muted-foreground uppercase tracking-wider">Session Key Auth</span>
             <div
               className="text-base font-mono font-bold truncate"
               style={{ color: hasActiveSession ? '#6ee7b7' : '#fda4af' }}

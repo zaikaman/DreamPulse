@@ -427,7 +427,7 @@ export const App: React.FC = () => {
           </React.Suspense>
         ) : (
           <div className="glass-card p-8 rounded-xl text-center flex flex-col items-center justify-center">
-            <CommandLineIcon className="w-9 h-9 text-cyan-400 mb-4" />
+            <CommandLineIcon className="w-9 h-9 text-[#00ffcc] mb-4" />
             <h2 className="text-lg font-bold mb-2">{activeNav} Module</h2>
             <p className="text-muted-foreground text-xs max-w-sm">
               Configured for upcoming protocol phases. You can explore the live <strong>Terminal</strong> anytime.

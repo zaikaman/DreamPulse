@@ -1,7 +1,6 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import {
   BoltIcon,
-  SparklesIcon,
   CheckCircleIcon,
   ExclamationTriangleIcon,
   ClockIcon,
@@ -322,9 +321,9 @@ export const TraderCockpitTicket: React.FC<TraderCockpitTicketProps> = ({
 
           <div className={cn(
             "flex items-center gap-1 text-[11px] font-bold",
-            isTradingLocked ? "text-amber-400 animate-pulse" : "text-brand-cyan"
+            isTradingLocked ? "text-[#ffb700] animate-pulse" : "text-brand-cyan"
           )}>
-            {isTradingLocked ? <LockClosedIcon className="w-3.5 h-3.5 text-amber-400" /> : <ClockIcon className="w-3.5 h-3.5" />}
+            {isTradingLocked ? <LockClosedIcon className="w-3.5 h-3.5 text-[#ffb700]" /> : <ClockIcon className="w-3.5 h-3.5" />}
             <span>{isTradingLocked ? `${formattedCountdown} (LOCKED)` : formattedCountdown}</span>
           </div>
         </div>
@@ -459,7 +458,7 @@ export const TraderCockpitTicket: React.FC<TraderCockpitTicketProps> = ({
           className={cn(
             "flex flex-col p-3 rounded-xl border transition-all cursor-pointer text-left relative overflow-hidden",
             isYes
-              ? "bg-emerald-500/20 border-emerald-500 text-emerald-400 shadow-[0_0_20px_rgba(16,185,129,0.2)]"
+              ? "bg-[#00e676]/20 border-[#00e676] text-[#00e676] shadow-[0_0_20px_rgba(0,230,118,0.2)]"
               : "bg-secondary/30 border-border/40 text-muted-foreground hover:text-foreground hover:bg-secondary/60"
           )}
         >
@@ -473,7 +472,7 @@ export const TraderCockpitTicket: React.FC<TraderCockpitTicketProps> = ({
 
           <div className="text-[10px] text-muted-foreground">
             {collateralAmount > 0 ? (
-              <span className="text-emerald-400/90 font-mono">
+              <span className="text-[#00e676]/90 font-mono">
                 Payout: {calculations.payoutMultiplier}x (${calculations.grossPayout})
               </span>
             ) : (
@@ -492,7 +491,7 @@ export const TraderCockpitTicket: React.FC<TraderCockpitTicketProps> = ({
           className={cn(
             "flex flex-col p-3 rounded-xl border transition-all cursor-pointer text-left relative overflow-hidden",
             !isYes
-              ? "bg-rose-500/20 border-rose-500 text-rose-400 shadow-[0_0_20px_rgba(244,63,94,0.2)]"
+              ? "bg-[#ff3366]/20 border-[#ff3366] text-[#ff3366] shadow-[0_0_20px_rgba(255,51,102,0.2)]"
               : "bg-secondary/30 border-border/40 text-muted-foreground hover:text-foreground hover:bg-secondary/60"
           )}
         >
@@ -506,7 +505,7 @@ export const TraderCockpitTicket: React.FC<TraderCockpitTicketProps> = ({
 
           <div className="text-[10px] text-muted-foreground">
             {collateralAmount > 0 ? (
-              <span className="text-rose-400/90 font-mono">
+              <span className="text-[#ff3366]/90 font-mono">
                 Payout: {Number((1 / (1 - currentBestBid || 0.15)).toFixed(2))}x
               </span>
             ) : (
@@ -517,16 +516,14 @@ export const TraderCockpitTicket: React.FC<TraderCockpitTicketProps> = ({
       </div>
 
       {/* 4. DREAM PULSE AI ALPHA COPILOT CARD */}
-      <div className="p-2.5 rounded-xl bg-purple-950/20 border border-purple-500/30 mb-3.5 flex-shrink-0 space-y-2">
+      <div className="p-2.5 rounded-xl bg-[#7928ca]/10 border border-[#7928ca]/30 mb-3.5 flex-shrink-0 space-y-2">
         <div className="flex items-center justify-between">
-          <div className="flex items-center gap-1.5 text-purple-300 text-[11px] font-bold">
-            <SparklesIcon className="w-3.5 h-3.5 text-purple-400" />
-            <span>AI Alpha Copilot</span>
-            <Badge variant="outline" className="text-[8px] px-1 py-0 border-purple-500/40 text-purple-300 bg-purple-500/10">
+          <div className="flex items-center gap-1.5 text-[#d8b4fe] text-[11px] font-bold"> <span>AI Alpha Copilot</span>
+            <Badge variant="outline" className="text-[8px] px-1 py-0 border-[#7928ca]/40 text-[#d8b4fe] bg-[#7928ca]/10">
               Titan BSM
             </Badge>
           </div>
-          <span className="text-[9px] text-purple-400/80 font-mono">
+          <span className="text-[9px] text-[#d8b4fe]/80 font-mono">
             {aiRecommendation.edgeVal}% Edge
           </span>
         </div>
@@ -543,11 +540,11 @@ export const TraderCockpitTicket: React.FC<TraderCockpitTicketProps> = ({
           className={cn(
             "w-full py-1.5 px-2.5 rounded-lg border text-xs font-bold flex items-center justify-center gap-1.5 transition-all shadow-xs",
             isTradingLocked
-              ? "bg-purple-500/5 text-purple-400/40 border-purple-500/10 cursor-not-allowed"
-              : "bg-purple-500/20 hover:bg-purple-500/30 border-purple-500/40 text-purple-200 cursor-pointer"
+              ? "bg-[#7928ca]/5 text-[#d8b4fe]/40 border-purple-500/10 cursor-not-allowed"
+              : "bg-[#7928ca]/20 hover:bg-[#7928ca]/30 border-[#7928ca]/40 text-purple-200 cursor-pointer"
           )}
         >
-          <BoltIcon className="w-3.5 h-3.5 text-purple-300" />
+          <BoltIcon className="w-3.5 h-3.5 text-[#d8b4fe]" />
           <span>Follow AI Trade ({aiRecommendation.recommendedDirection} • {aiRecommendation.confidence}% Conf)</span>
         </button>
       </div>
@@ -601,7 +598,7 @@ export const TraderCockpitTicket: React.FC<TraderCockpitTicketProps> = ({
         </div>
         <div className="flex items-center justify-between text-muted-foreground pt-1 border-t border-border/20 text-[10px]">
           <span>Execution Path</span>
-          <span className={cn("font-bold", activeSession?.isActive ? "text-emerald-400" : "text-muted-foreground")}>
+          <span className={cn("font-bold", activeSession?.isActive ? "text-[#00e676]" : "text-muted-foreground")}>
             {activeSession?.isActive
               ? "1-Click Gasless (Session Active)"
               : "Direct Wallet Signing"}
@@ -611,14 +608,14 @@ export const TraderCockpitTicket: React.FC<TraderCockpitTicketProps> = ({
 
       {/* Error & Success Messages */}
       {executionError && (
-        <div className="p-2.5 mb-3 rounded-lg bg-rose-500/10 border border-rose-500/30 text-rose-400 text-xs flex items-start gap-2">
+        <div className="p-2.5 mb-3 rounded-lg bg-[#ff3366]/10 border border-[#ff3366]/30 text-[#ff3366] text-xs flex items-start gap-2">
           <ExclamationTriangleIcon className="w-4 h-4 flex-shrink-0 mt-0.5" />
           <span className="leading-snug">{executionError}</span>
         </div>
       )}
 
       {lastExecutedOrder && (
-        <div className="p-2.5 mb-3 rounded-lg bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 text-xs flex items-center justify-between">
+        <div className="p-2.5 mb-3 rounded-lg bg-[#00e676]/10 border border-[#00e676]/30 text-[#00e676] text-xs flex items-center justify-between">
           <span className="flex items-center gap-1 font-bold">
             <CheckCircleIcon className="w-4 h-4" />
             Placed {lastExecutedOrder.lotSize} {lastExecutedOrder.outcome} on Somnia!
@@ -650,9 +647,9 @@ export const TraderCockpitTicket: React.FC<TraderCockpitTicketProps> = ({
           <button
             type="button"
             disabled={true}
-            className="w-full py-3 rounded-xl font-bold text-xs uppercase tracking-wider bg-amber-500/10 text-amber-400 border border-amber-500/30 flex items-center justify-center gap-2 cursor-not-allowed opacity-90"
+            className="w-full py-3 rounded-xl font-bold text-xs uppercase tracking-wider bg-[#ffb700]/10 text-[#ffb700] border border-[#ffb700]/30 flex items-center justify-center gap-2 cursor-not-allowed opacity-90"
           >
-            <LockClosedIcon className="w-4 h-4 text-amber-400 animate-pulse" />
+            <LockClosedIcon className="w-4 h-4 text-[#ffb700] animate-pulse" />
             <span>Trading Locked • Resolving in {formattedCountdown}</span>
           </button>
         ) : (
@@ -660,17 +657,17 @@ export const TraderCockpitTicket: React.FC<TraderCockpitTicketProps> = ({
             type="button"
             disabled={isSubmitting}
             onClick={handleExecuteOrder}
-            className="w-full py-3 rounded-xl font-bold text-xs uppercase tracking-wider bg-white hover:bg-zinc-100 text-zinc-950 border border-white/40 shadow-lg shadow-white/10 transition-all cursor-pointer flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed active:scale-[0.99]"
+            className="w-full py-3 rounded-xl font-bold text-xs uppercase tracking-wider bg-[#00ffcc] hover:brightness-[1.08] text-[#060709] border border-[#00ffcc]/30 shadow-[0_0_14px_rgba(0,255,204,0.25)] transition-all cursor-pointer flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed active:scale-[0.99]"
           >
             {isSubmitting ? (
               <>
                 <Spinner size="sm" />
-                <span className="text-zinc-950 font-bold">Routing to Somnia Shannon...</span>
+                <span className="text-[#060709] font-bold">Routing to Somnia Shannon...</span>
               </>
             ) : (
               <>
-                {activeSession?.isActive && <BoltIcon className="w-4 h-4 text-zinc-950" />}
-                <span className="text-zinc-950 font-bold">
+                {activeSession?.isActive && <BoltIcon className="w-4 h-4 text-[#060709]" />}
+                <span className="text-[#060709] font-bold">
                   {outcome === 'YES' ? 'Buy UP' : 'Buy DOWN'} • ${calculations.totalCost.toFixed(2)} USDso
                 </span>
               </>

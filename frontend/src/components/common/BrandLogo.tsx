@@ -47,7 +47,7 @@ export const BrandIcon: React.FC<{
       )}
     >
       {glow && (
-        <div className="absolute inset-0 rounded-full bg-cyan-400/20 blur-md pointer-events-none scale-150" />
+        <div className="absolute inset-0 rounded-full bg-[#00ffcc]/20 blur-md pointer-events-none scale-150" />
       )}
       <svg
         viewBox="0 0 512 512"

@@ -30,16 +30,16 @@ export const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
 
     const variantStyles = {
       default:
-        "bg-primary text-primary-foreground hover:bg-primary/90 shadow-sm",
+        "bg-[#00ffcc] text-[#060709] border-[#00ffcc] hover:brightness-[1.08] hover:bg-[#00ffcc] shadow-[0_0_14px_rgba(0,255,204,0.25)] font-semibold",
       outline:
-        "border-border bg-background hover:bg-muted hover:text-foreground dark:border-input dark:bg-input/30 dark:hover:bg-input/50",
+        "border-[rgba(255,255,255,0.08)] bg-[rgba(255,255,255,0.04)] text-[#c4c2c3] hover:bg-[rgba(255,255,255,0.08)] hover:text-[#ffffff] hover:border-[rgba(255,255,255,0.12)]",
       secondary:
-        "bg-secondary text-secondary-foreground hover:bg-secondary/80",
+        "bg-secondary text-secondary-foreground hover:bg-secondary/80 border-border",
       ghost:
-        "hover:bg-muted hover:text-foreground dark:hover:bg-muted/50",
+        "bg-transparent text-[#8e94a0] hover:bg-[hsl(var(--muted)/0.5)] hover:text-foreground border-transparent",
       destructive:
-        "bg-destructive text-destructive-foreground hover:bg-destructive/90 shadow-sm",
-      link: "text-primary underline-offset-4 hover:underline",
+        "bg-[rgba(255,51,102,0.12)] text-[#ff3366] border-[rgba(255,51,102,0.30)] hover:bg-[rgba(255,51,102,0.18)] hover:border-[rgba(255,51,102,0.45)] hover:text-[#ff3366] shadow-none",
+      link: "text-[#00ffcc] underline-offset-4 hover:underline border-transparent",
     };
 
     const sizeStyles = {
