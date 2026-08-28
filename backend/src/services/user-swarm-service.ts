@@ -68,10 +68,15 @@ function toRecord(row: any): PersonalSwarmConfig {
 
 export class UserSwarmService {
   private cache = new Map<string, PersonalSwarmConfig>();
+  private readyPromise: Promise<void>;
 
   constructor() {
-    this.loadFromDb().catch(() => {});
+    this.readyPromise = this.loadFromDb().catch(() => {});
     this.initRealtime();
+  }
+
+  public async waitForInit(): Promise<void> {
+    return this.readyPromise;
   }
 
   private initRealtime(): void {
@@ -113,6 +118,7 @@ export class UserSwarmService {
   }
 
   public async getOrFetchConfig(userAddress: string): Promise<PersonalSwarmConfig> {
+    await this.waitForInit();
     const normalized = this.normalizeAddress(userAddress);
     const key = normalized.toLowerCase();
     const existing = this.cache.get(key);
@@ -146,6 +152,15 @@ export class UserSwarmService {
     return this.getConfig(userAddress);
   }
 
+  public hasUserConfig(userAddress: string): boolean {
+    try {
+      const normalized = this.normalizeAddress(userAddress);
+      return this.cache.has(normalized.toLowerCase());
+    } catch {
+      return false;
+    }
+  }
+
   public getConfig(userAddress: string): PersonalSwarmConfig {
     const normalized = this.normalizeAddress(userAddress);
     const key = normalized.toLowerCase();
@@ -153,10 +168,7 @@ export class UserSwarmService {
     if (existing) return { ...existing, voltConfig: { ...existing.voltConfig }, oracleConfig: { ...existing.oracleConfig }, titanConfig: { ...existing.titanConfig } };
     const def = buildDefaultConfig(normalized);
     this.cache.set(key, def);
-    // async persist default lazily
-    if (isPersistenceEnabled()) {
-      void this.persistConfig(def);
-    }
+    // Never persist default on cache miss — reads must never overwrite the database!
     return { ...def };
   }
 
@@ -166,8 +178,13 @@ export class UserSwarmService {
 
   public isCopyTradeEnabled(userAddress: string): boolean {
     try {
-      const cfg = this.getConfig(userAddress);
-      return cfg.copyTradeEnabled === true;
+      const normalized = this.normalizeAddress(userAddress);
+      const key = normalized.toLowerCase();
+      const existing = this.cache.get(key);
+      if (existing) {
+        return existing.copyTradeEnabled === true;
+      }
+      return false;
     } catch {
       return false;
     }
@@ -175,8 +192,13 @@ export class UserSwarmService {
 
   public isCopyMode(userAddress: string): boolean {
     try {
-      const cfg = this.getConfig(userAddress);
-      return cfg.mode === 'COPY' && cfg.copyTradeEnabled === true;
+      const normalized = this.normalizeAddress(userAddress);
+      const key = normalized.toLowerCase();
+      const existing = this.cache.get(key);
+      if (existing) {
+        return existing.mode === 'COPY' && existing.copyTradeEnabled === true;
+      }
+      return false;
     } catch {
       return false;
     }
@@ -299,16 +321,22 @@ export class UserSwarmService {
     this.cache.set(key, next);
     await this.persistConfig(next);
 
-    // Sync copy_trade_enabled with active sessions in Supabase
-    if (typeof updates.copyTradeEnabled === 'boolean' && isPersistenceEnabled()) {
-      try {
-        await supabase
-          .from('sessions')
-          .update({ copy_trade_enabled: updates.copyTradeEnabled, updated_at: now })
-          .ilike('user_address', normalized)
-          .eq('is_active', true);
-      } catch (err: any) {
-        console.warn('[UserSwarmService] Sync with sessions table notice:', err?.message || err);
+    // Sync copy_trade_enabled with active sessions (in-memory + Supabase)
+    if (typeof updates.copyTradeEnabled === 'boolean') {
+      void import('./session-service.js').then(({ sessionService }) => {
+        sessionService.setSessionCopyTradeEnabled(normalized, updates.copyTradeEnabled!);
+      }).catch(() => {});
+
+      if (isPersistenceEnabled()) {
+        try {
+          await supabase
+            .from('sessions')
+            .update({ copy_trade_enabled: updates.copyTradeEnabled, updated_at: now })
+            .ilike('user_address', normalized)
+            .eq('is_active', true);
+        } catch (err: any) {
+          console.warn('[UserSwarmService] Sync with sessions table notice:', err?.message || err);
+        }
       }
     }
 

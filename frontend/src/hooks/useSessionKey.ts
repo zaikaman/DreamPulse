@@ -40,6 +40,7 @@ export interface UseSessionKeyReturn {
   }) => Promise<SessionGrant>;
   revokeSession: (options?: { onChain?: boolean }) => Promise<void>;
   refreshSession: () => Promise<void>;
+  setSessionCopyTrade: (enabled: boolean) => void;
   ensureAllowances: () => Promise<void>;
   refreshAllowanceStatus: () => Promise<void>;
   clearError: () => void;
@@ -595,25 +596,58 @@ export function useSessionKey(): UseSessionKeyReturn {
 
     return () => unsubscribe();
   }, [disconnectWallet, refreshBalances, fetchActiveSession]);
+  const setSessionCopyTrade = useCallback((enabled: boolean) => {
+    setActiveSession((prev) => {
+      if (!prev) return null;
+      const updated = { ...prev, copyTradeEnabled: enabled };
+      try {
+        localStorage.setItem(LOCAL_SESSION_KEY, JSON.stringify(updated));
+      } catch (err) {
+        console.warn('[useSessionKey] Failed to update localStorage for session copyTrade:', err);
+      }
+      return updated;
+    });
+  }, []);
 
-  // Supabase Realtime subscription for sessions table
+  // Listen to cross-component session update events
+  useEffect(() => {
+    const handleSessionUpdate = (e: Event) => {
+      const detail = (e as CustomEvent)?.detail;
+      if (typeof detail?.copyTradeEnabled === 'boolean') {
+        setActiveSession((prev) => {
+          if (!prev) return null;
+          const updated = { ...prev, copyTradeEnabled: detail.copyTradeEnabled };
+          try {
+            localStorage.setItem(LOCAL_SESSION_KEY, JSON.stringify(updated));
+          } catch {}
+          return updated;
+        });
+      }
+    };
+    window.addEventListener('dreampulse:session-update', handleSessionUpdate);
+    return () => window.removeEventListener('dreampulse:session-update', handleSessionUpdate);
+  }, []);
+
+  // Supabase Realtime subscription for sessions table (case-insensitive)
   useEffect(() => {
     if (!wallet.address) return;
+    const targetAddr = wallet.address.toLowerCase();
 
     const channel = supabase
-      .channel(`public:sessions:${wallet.address.toLowerCase()}`)
+      .channel(`public:sessions:${targetAddr}`)
       .on(
         'postgres_changes',
         {
           event: '*',
           schema: 'public',
           table: 'sessions',
-          filter: `user_address=eq.${wallet.address}`,
         },
         (payload: { eventType: string; new: any; old: any }) => {
+          const row = payload.new;
+          if (!row || !row.user_address || row.user_address.toLowerCase() !== targetAddr) return;
+
           if (payload.eventType === 'UPDATE' || payload.eventType === 'INSERT') {
-            const row = payload.new;
-            if (row && row.is_active && new Date(row.expires_at).getTime() > Date.now()) {
+            if (row.is_active && new Date(row.expires_at).getTime() > Date.now()) {
               const updated: SessionGrant = {
                 id: row.id,
                 userAddress: row.user_address,
@@ -632,7 +666,7 @@ export function useSessionKey(): UseSessionKeyReturn {
               };
               setActiveSession(updated);
               localStorage.setItem(LOCAL_SESSION_KEY, JSON.stringify(updated));
-            } else if (row && !row.is_active) {
+            } else if (!row.is_active) {
               setActiveSession(null);
               localStorage.removeItem(LOCAL_SESSION_KEY);
             }
@@ -715,6 +749,7 @@ export function useSessionKey(): UseSessionKeyReturn {
     createSession,
     revokeSession,
     refreshSession,
+    setSessionCopyTrade,
     ensureAllowances,
     refreshAllowanceStatus,
     clearError,

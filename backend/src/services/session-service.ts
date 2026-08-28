@@ -99,7 +99,9 @@ export class SessionService {
                 existing.isActive = isActive;
                 existing.spentToday = Number(row.spent_today || 0);
                 existing.onChainAuthorized = row.on_chain_authorized === true;
-                existing.copyTradeEnabled = row.copy_trade_enabled === true || userSwarmService.isCopyTradeEnabled(row.user_address);
+                existing.copyTradeEnabled = userSwarmService.hasUserConfig(row.user_address)
+                  ? userSwarmService.isCopyTradeEnabled(row.user_address)
+                  : (row.copy_trade_enabled === true);
                 existing.updatedAt = row.updated_at || new Date().toISOString();
                 if (!isActive && this.userToActiveSessionId.get(userKey) === row.id) {
                   this.userToActiveSessionId.delete(userKey);
@@ -124,6 +126,8 @@ export class SessionService {
     if (!isSessionPersistenceEnabled()) {
       return;
     }
+
+    await userSwarmService.waitForInit();
 
     const { data, error } = await supabase
       .from('sessions')
@@ -165,7 +169,9 @@ export class SessionService {
         vaultDepositAmount: row.vault_deposit_amount ? Number(row.vault_deposit_amount) : undefined,
         targetPoolAddress: row.target_pool_address ? (getAddress(row.target_pool_address) as Address) : undefined,
         onChainAuthorized: row.on_chain_authorized === true,
-        copyTradeEnabled: row.copy_trade_enabled === true || userSwarmService.isCopyTradeEnabled(row.user_address),
+        copyTradeEnabled: userSwarmService.hasUserConfig(row.user_address)
+          ? userSwarmService.isCopyTradeEnabled(row.user_address)
+          : (row.copy_trade_enabled === true),
         createdAt: row.created_at,
         updatedAt: row.updated_at,
       };
@@ -349,12 +355,28 @@ export class SessionService {
   }
 
   /**
+   * Directly updates the copyTradeEnabled flag for an active session in memory.
+   */
+  public setSessionCopyTradeEnabled(userAddress: string, enabled: boolean): void {
+    const key = userAddress.toLowerCase();
+    const sessionId = this.userToActiveSessionId.get(key);
+    if (sessionId) {
+      const session = this.sessions.get(sessionId);
+      if (session) {
+        session.copyTradeEnabled = enabled;
+      }
+    }
+  }
+
+  /**
    * Retrieves the currently active session for a user address.
    */
   public async getUserActiveSession(userAddress: string): Promise<SessionRecord | null> {
     if (!userAddress || !isAddress(userAddress)) {
       return null;
     }
+
+    await userSwarmService.waitForInit();
 
     const userKey = getAddress(userAddress).toLowerCase();
     let sessionId = this.userToActiveSessionId.get(userKey);
@@ -398,7 +420,9 @@ export class SessionService {
               vaultDepositAmount: row.vault_deposit_amount ? Number(row.vault_deposit_amount) : undefined,
               targetPoolAddress: row.target_pool_address ? (getAddress(row.target_pool_address) as Address) : undefined,
               onChainAuthorized: row.on_chain_authorized === true,
-              copyTradeEnabled: userSwarmService.isCopyTradeEnabled(row.user_address),
+              copyTradeEnabled: userSwarmService.hasUserConfig(row.user_address)
+                ? userSwarmService.isCopyTradeEnabled(row.user_address)
+                : (row.copy_trade_enabled === true),
               createdAt: row.created_at,
               updatedAt: row.updated_at,
             };
@@ -445,7 +469,9 @@ export class SessionService {
       session.lastSpendResetTimestamp = now;
     }
 
-    session.copyTradeEnabled = userSwarmService.isCopyTradeEnabled(session.userAddress);
+    if (userSwarmService.hasUserConfig(session.userAddress)) {
+      session.copyTradeEnabled = userSwarmService.isCopyTradeEnabled(session.userAddress);
+    }
 
     return session;
   }
@@ -461,7 +487,9 @@ export class SessionService {
       session.isActive = false;
     }
 
-    session.copyTradeEnabled = userSwarmService.isCopyTradeEnabled(session.userAddress);
+    if (userSwarmService.hasUserConfig(session.userAddress)) {
+      session.copyTradeEnabled = userSwarmService.isCopyTradeEnabled(session.userAddress);
+    }
 
     return session;
   }
@@ -475,7 +503,9 @@ export class SessionService {
     for (const [_, sessionId] of this.userToActiveSessionId.entries()) {
       const session = this.sessions.get(sessionId);
       if (session && session.isActive && new Date(session.expiresAt).getTime() > now) {
-        session.copyTradeEnabled = userSwarmService.isCopyTradeEnabled(session.userAddress);
+        if (userSwarmService.hasUserConfig(session.userAddress)) {
+          session.copyTradeEnabled = userSwarmService.isCopyTradeEnabled(session.userAddress);
+        }
         result.push(session);
       }
     }

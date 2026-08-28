@@ -128,6 +128,17 @@ export const usePersonalSwarm = (userAddress?: string): UsePersonalSwarmReturn =
           const s = await apiClient.getPersonalSwarmStatus(userAddress).catch(() => null);
           if (s?.status) setStatus(s.status);
         }
+        try {
+          const saved = typeof window !== 'undefined' ? localStorage.getItem('dreampulse_active_session') : null;
+          if (saved) {
+            const parsed = JSON.parse(saved);
+            parsed.copyTradeEnabled = enabled;
+            localStorage.setItem('dreampulse_active_session', JSON.stringify(parsed));
+          }
+        } catch {}
+        if (typeof window !== 'undefined') {
+          window.dispatchEvent(new CustomEvent('dreampulse:session-update', { detail: { copyTradeEnabled: enabled } }));
+        }
         return true;
       } catch (err: any) {
         setError(err.message || 'Failed to toggle copy trading');
@@ -192,15 +203,28 @@ export const usePersonalSwarm = (userAddress?: string): UsePersonalSwarmReturn =
     }
   }, [userAddress]);
 
+  const fallbackCopyTradeEnabled = (): boolean => {
+    try {
+      const saved = typeof window !== 'undefined' ? localStorage.getItem('dreampulse_active_session') : null;
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (typeof parsed.copyTradeEnabled === 'boolean') return parsed.copyTradeEnabled;
+      }
+    } catch {}
+    return false;
+  };
+
+  const copyEnabled = config ? config.copyTradeEnabled === true : fallbackCopyTradeEnabled();
+
   return {
     config,
     status,
     isLoading,
     isSaving,
     error,
-    isCopyTradeEnabled: config?.copyTradeEnabled === true,
-    isCopyMode: config?.mode === 'COPY' && config?.copyTradeEnabled === true,
-    isPersonalMode: config?.mode === 'PERSONAL' && config?.copyTradeEnabled === true,
+    isCopyTradeEnabled: copyEnabled,
+    isCopyMode: (config?.mode ?? 'COPY') === 'COPY' && copyEnabled,
+    isPersonalMode: config?.mode === 'PERSONAL' && copyEnabled,
     refresh: fetchAll,
     setMode,
     toggleCopyTrade,
