@@ -61,25 +61,28 @@ export function useArenaLeaderboard(userAddress?: string | null) {
         }
       }).catch(() => {});
 
-      if (activeTrack === 'AGENTS') {
-        const res = await apiClient.getArenaAgents({
+      // 2. Fetch both Agents and Traders in parallel so both counts are always populated immediately
+      const [agentsRes, tradersRes] = await Promise.all([
+        apiClient.getArenaAgents({
           timeframe,
           symbol: symbolFilter,
           strategyType: strategyFilter,
-          sortBy,
+          sortBy: activeTrack === 'AGENTS' ? sortBy : 'pnl',
           search: searchQuery,
-        });
-        if (isMountedRef.current && res.success) {
-          setAgents(res.data);
-        }
-      } else {
-        const res = await apiClient.getArenaTraders({
+        }).catch(() => null),
+        apiClient.getArenaTraders({
           range: timeframe,
-          sortBy,
+          sortBy: activeTrack === 'TRADERS' ? sortBy : 'pnl',
           search: searchQuery,
-        });
-        if (isMountedRef.current && res.success) {
-          setTraders(res.data);
+        }).catch(() => null),
+      ]);
+
+      if (isMountedRef.current) {
+        if (agentsRes?.success) {
+          setAgents(agentsRes.data);
+        }
+        if (tradersRes?.success) {
+          setTraders(tradersRes.data);
         }
       }
     } catch (err: any) {
