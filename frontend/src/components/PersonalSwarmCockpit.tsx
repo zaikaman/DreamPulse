@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo, useRef } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import {
   BoltIcon,
   AdjustmentsHorizontalIcon,
@@ -27,8 +27,6 @@ import {
 import type { AgentType, CustomAgentDefinition } from '../types/index.js';
 import { usePersonalSwarm } from '../hooks/usePersonalSwarm.js';
 import { useCustomAgents } from '../hooks/useCustomAgents.js';
-import { AgentSwarmCockpit } from './AgentSwarmCockpit.js';
-import { useAgentSwarm } from '../hooks/useAgentSwarm.js';
 import { Spinner } from './ui/Spinner.js';
 import { Badge } from './ui/badge.js';
 import { cn } from '../lib/utils.js';
@@ -55,7 +53,7 @@ export const PersonalSwarmCockpit: React.FC<PersonalSwarmCockpitProps> = ({
   onOpenSessionModal,
   onConnectWallet,
   hasActiveSession = false,
-  isOperator = false,
+  isOperator: _isOperator = false,
 }) => {
   const {
     config,
@@ -80,27 +78,6 @@ export const PersonalSwarmCockpit: React.FC<PersonalSwarmCockpitProps> = ({
     setAgentAllowance,
   } = useCustomAgents(userAddress);
 
-  // Protocol Benchmark Swarm Data (Canonical Reference Swarm)
-  const {
-    detailed: benchmarkDetailed,
-    toggleAgent: benchmarkToggle,
-    updateConfig: benchmarkUpdate,
-  } = useAgentSwarm();
-
-  // Navigation tab state: 'FLEET' (Active Fleet) vs 'BENCHMARK' (Protocol Swarm)
-  // Guests without wallet connection default to 'BENCHMARK' to view the public benchmark swarm immediately
-  const [activeFleetTab, setActiveFleetTab] = useState<'FLEET' | 'BENCHMARK'>(() =>
-    userAddress ? 'FLEET' : 'BENCHMARK'
-  );
-
-  const prevUserAddressRef = useRef(userAddress);
-  useEffect(() => {
-    // When user connects their wallet, switch to their personal fleet view
-    if (!prevUserAddressRef.current && userAddress) {
-      setActiveFleetTab('FLEET');
-    }
-    prevUserAddressRef.current = userAddress;
-  }, [userAddress]);
 
   const [voltSliders, setVoltSliders] = useState({ driftThreshold: 0.2, minEdge: 3.0, lotSize: 5.0 });
   const [oracleSliders, setOracleSliders] = useState({ minEdge: 3.5, lotSize: 5.0, maxTradeSize: 20.0 });
@@ -254,108 +231,55 @@ export const PersonalSwarmCockpit: React.FC<PersonalSwarmCockpitProps> = ({
   const isEditable = isPersonalMode && hasActiveSession && isCopyTradeEnabled;
   const needsDelegation = isPersonalMode && !hasActiveSession;
 
-  return (
-    <div className="flex flex-col gap-4">
-      {/* ========================================================================= */}
-      {/* TOP DUAL-TAB NAVIGATION: MY ACTIVE FLEET vs PROTOCOL BENCHMARK SWARM      */}
-      {/* ========================================================================= */}
-      <div className="flex items-center justify-between gap-3 flex-wrap">
-        <div className="flex items-center gap-1.5 p-1 rounded-xl bg-secondary/30 border border-border/50">
-          <button
-            type="button"
-            onClick={() => setActiveFleetTab('FLEET')}
-            className={cn(
-              'inline-flex items-center gap-2 px-3.5 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer',
-              activeFleetTab === 'FLEET'
-                ? 'bg-primary text-primary-foreground shadow-sm'
-                : 'text-muted-foreground hover:text-foreground hover:bg-secondary/40'
-            )}
-          >
-            <BoltIcon className="w-3.5 h-3.5" />
-            <span>My Active Fleet</span>
-            {userAddress ? (
-              <span className="font-mono text-[10px] px-1.5 py-0.2 rounded-full bg-background/30 text-foreground font-semibold">
-                {3 + customAgents.length}
-              </span>
-            ) : (
-              <span className="font-mono text-[9px] px-1.5 py-0.2 rounded-full bg-amber-500/20 text-amber-300 font-semibold">
-                Connect Wallet
-              </span>
-            )}
-          </button>
-
-          <button
-            type="button"
-            onClick={() => setActiveFleetTab('BENCHMARK')}
-            className={cn(
-              'inline-flex items-center gap-2 px-3.5 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer',
-              activeFleetTab === 'BENCHMARK'
-                ? 'bg-primary text-primary-foreground shadow-sm'
-                : 'text-muted-foreground hover:text-foreground hover:bg-secondary/40'
-            )}
-          >
-            <CpuChipIcon className="w-3.5 h-3.5" />
-            <span>Protocol Benchmark Swarm</span>
-            <Badge variant="outline" className="text-[9px] font-mono border-border/50 text-muted-foreground">
-              0x93e3...59Cf
-            </Badge>
-          </button>
+  if (!userAddress) {
+    return (
+      <div className="terminal-panel p-5 overflow-hidden border-border/60 bg-card/60 backdrop-blur-md">
+        <div className="flex items-center gap-3 mb-3">
+          <div className="w-8 h-8 rounded-lg grid place-items-center border bg-secondary/30 border-border/50 text-muted-foreground">
+            <UserIcon className="w-4 h-4" />
+          </div>
+          <div>
+            <h3 className="text-sm font-bold text-foreground tracking-tight">Autonomous Fleet Command</h3>
+            <p className="text-[11px] text-muted-foreground">Unified control center for all running Core Protocol bots and Custom Strategy Agents.</p>
+          </div>
         </div>
-
-        {/* Live Network & Telemetry Pill */}
-        <div className="flex items-center gap-2 text-[11px] font-mono text-muted-foreground">
-          <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
-          <span>Somnia Shannon CLOB</span>
-          <span className="text-border">|</span>
-          <span>Chain ID 50312</span>
+        <div className="rounded-xl border border-dashed bg-secondary/10 border-border/40 p-6 flex flex-col items-center gap-3 text-center">
+          <div className="w-10 h-10 rounded-full bg-secondary/40 border border-border/40 grid place-items-center text-muted-foreground">
+            <ShieldCheckIcon className="w-5 h-5" />
+          </div>
+          <div>
+            <div className="text-sm font-semibold text-foreground">Connect your wallet to launch Fleet Command</div>
+            <div className="text-[11px] text-muted-foreground mt-1 max-w-md leading-relaxed">
+              Deploy unlimited custom agents with dedicated tUSDC bankroll allowances, tune real-time execution parameters, or copy the protocol benchmark swarm with zero custody.
+            </div>
+          </div>
+          {onConnectWallet && (
+            <button
+              type="button"
+              onClick={onConnectWallet}
+              className="px-4 py-2 rounded-lg bg-primary text-primary-foreground text-xs font-bold hover:bg-primary/90 transition-colors cursor-pointer shadow-sm"
+            >
+              Connect Wallet
+            </button>
+          )}
         </div>
       </div>
+    );
+  }
 
-      {/* ========================================================================= */}
-      {/* TAB A: MY ACTIVE FLEET (CORE PROTOCOL BOTS + CUSTOM STRATEGY AGENTS)       */}
-      {/* ========================================================================= */}
-      {activeFleetTab === 'FLEET' &&
-        (!userAddress ? (
-          <div className="terminal-panel p-5 overflow-hidden border-border/60 bg-card/60 backdrop-blur-md">
-            <div className="flex items-center gap-3 mb-3">
-              <div className="w-8 h-8 rounded-lg grid place-items-center border bg-secondary/30 border-border/50 text-muted-foreground">
-                <UserIcon className="w-4 h-4" />
-              </div>
-              <div>
-                <h3 className="text-sm font-bold text-foreground tracking-tight">Autonomous Fleet Command</h3>
-                <p className="text-[11px] text-muted-foreground">Unified control center for all running Core Protocol bots and Custom Strategy Agents.</p>
-              </div>
-            </div>
-            <div className="rounded-xl border border-dashed bg-secondary/10 border-border/40 p-6 flex flex-col items-center gap-3 text-center">
-              <div className="w-10 h-10 rounded-full bg-secondary/40 border border-border/40 grid place-items-center text-muted-foreground">
-                <ShieldCheckIcon className="w-5 h-5" />
-              </div>
-              <div>
-                <div className="text-sm font-semibold text-foreground">Connect your wallet to launch Fleet Command</div>
-                <div className="text-[11px] text-muted-foreground mt-1 max-w-md leading-relaxed">
-                  Deploy unlimited custom agents with dedicated tUSDC bankroll allowances, tune real-time execution parameters, or copy the protocol benchmark swarm with zero custody.
-                </div>
-              </div>
-              {onConnectWallet && (
-                <button
-                  type="button"
-                  onClick={onConnectWallet}
-                  className="px-4 py-2 rounded-lg bg-primary text-primary-foreground text-xs font-bold hover:bg-primary/90 transition-colors cursor-pointer shadow-sm"
-                >
-                  Connect Wallet
-                </button>
-              )}
-            </div>
-          </div>
-        ) : isPersonalLoading && !config ? (
-          <div className="terminal-panel p-6 flex items-center justify-center gap-2">
-            <Spinner size="sm" />
-            <span className="text-xs text-muted-foreground font-mono">Loading Autonomous Fleet Command telemetry…</span>
-          </div>
-        ) : (
-          <div className="flex flex-col gap-4">
-            {/* 1. GLOBAL FLEET TELEMETRY BANNER & EMERGENCY KILLSWITCH */}
-            <div className="terminal-panel p-0 overflow-hidden border-border/60 bg-card/60 backdrop-blur-md">
+  if (isPersonalLoading && !config) {
+    return (
+      <div className="terminal-panel p-6 flex items-center justify-center gap-2">
+        <Spinner size="sm" />
+        <span className="text-xs text-muted-foreground font-mono">Loading Autonomous Fleet Command telemetry…</span>
+      </div>
+    );
+  }
+
+  return (
+    <div className="flex flex-col gap-4">
+      {/* 1. GLOBAL FLEET TELEMETRY BANNER & EMERGENCY KILLSWITCH */}
+      <div className="terminal-panel p-0 overflow-hidden border-border/60 bg-card/60 backdrop-blur-md">
         {/* Header Toolbar */}
         <div className="flex items-center justify-between gap-3 px-4 py-3.5 border-b border-border/40 flex-wrap">
           <div className="flex items-center gap-3">
@@ -1337,43 +1261,8 @@ export const PersonalSwarmCockpit: React.FC<PersonalSwarmCockpitProps> = ({
           </div>
         </div>
       </div>
-    )
-  )}
-
-      {/* ========================================================================= */}
-      {/* TAB B: PROTOCOL BENCHMARK SWARM (OPERATOR REFERENCE 0x93e3...59Cf) */}
-      {/* ========================================================================= */}
-      {activeFleetTab === 'BENCHMARK' && (
-        <div className="flex flex-col gap-3">
-          <div className="p-3 rounded-xl border border-sky-500/20 bg-sky-500/5 flex items-center justify-between gap-3 flex-wrap">
-            <div className="flex items-center gap-2.5">
-              <div className="w-7 h-7 rounded-lg bg-sky-500/10 border border-sky-500/30 grid place-items-center text-sky-400 flex-shrink-0">
-                <CpuChipIcon className="w-4 h-4" />
-              </div>
-              <div>
-                <div className="text-xs font-bold text-foreground">Protocol Benchmark Swarm (Operator Reference)</div>
-                <div className="text-[11px] text-muted-foreground">
-                  Read-only telemetry streaming from operator <span className="font-mono text-foreground">0x93e3...59Cf</span> on Somnia Shannon Testnet.
-                </div>
-              </div>
-            </div>
-            <Badge variant="outline" className="text-[10px] font-mono border-sky-500/30 text-sky-400 bg-sky-500/10">
-              Reference Benchmark
-            </Badge>
-          </div>
-
-          <AgentSwarmCockpit
-            detailedAgents={benchmarkDetailed}
-            isOperator={isOperator}
-            onToggleAgent={benchmarkToggle}
-            onUpdateConfig={benchmarkUpdate}
-            onForkToStudio={onForkToStudio}
-          />
-        </div>
-      )}
-    </div>
-  );
-};
+    );
+  };
 
 const SliderRow: React.FC<{ label: string; value: string; color: string; children: React.ReactNode }> = ({
   label,

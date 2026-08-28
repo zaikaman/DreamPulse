@@ -1,4 +1,6 @@
 import React from 'react';
+import { useAgentSwarm } from '../../hooks/useAgentSwarm.js';
+import { AgentSwarmCockpit } from '../AgentSwarmCockpit.js';
 import { OrderHistoryTable } from '../OrderHistoryTable.js';
 import { PersonalSwarmCockpit } from '../PersonalSwarmCockpit.js';
 import type { WalletState } from '../../hooks/useSessionKey.js';
@@ -20,6 +22,7 @@ export const SwarmCockpitView: React.FC<SwarmCockpitViewProps> = ({
   onConnectWallet,
   onOpenSessionModal,
 }) => {
+  const { detailed, toggleAgent, updateConfig } = useAgentSwarm();
   const { isOperator } = useUserRole(wallet);
 
   return (
@@ -28,21 +31,32 @@ export const SwarmCockpitView: React.FC<SwarmCockpitViewProps> = ({
       style={{
         display: 'flex',
         flexDirection: 'column',
-        gap: '20px',
+        gap: '24px',
         paddingBottom: '32px',
       }}
     >
-      {/* 1. Unified Autonomous Fleet Command (Core + Custom Deployed Agents & Protocol Benchmark) */}
-      <PersonalSwarmCockpit
-        userAddress={wallet.address || undefined}
-        onForkToStudio={onForkToStudio}
-        onOpenSessionModal={onOpenSessionModal}
-        onConnectWallet={onConnectWallet}
-        hasActiveSession={!!activeSession?.isActive}
+      {/* 1. Protocol Benchmark Swarm — Read-only transparency for all users, operator controls */}
+      <AgentSwarmCockpit
+        detailedAgents={detailed}
         isOperator={isOperator}
+        onToggleAgent={toggleAgent}
+        onUpdateConfig={updateConfig}
+        onForkToStudio={onForkToStudio}
       />
 
-      {/* 2. Real-Time Order History & Fills — server-side paginated: only current page is fetched on demand */}
+      {/* 2. Personal Swarm (Autonomous Fleet Command) — Per-wallet isolated strategy, Core Bots & Custom Agents */}
+      {!isOperator && (
+        <PersonalSwarmCockpit
+          userAddress={wallet.address || undefined}
+          onForkToStudio={onForkToStudio}
+          onOpenSessionModal={onOpenSessionModal}
+          onConnectWallet={onConnectWallet}
+          hasActiveSession={!!activeSession?.isActive}
+          isOperator={isOperator}
+        />
+      )}
+
+      {/* 3. Real-Time Order History & Fills — server-side paginated: only current page is fetched on demand */}
       <OrderHistoryTable
         userAddress={wallet.address || undefined}
         onConnectWallet={onConnectWallet}
