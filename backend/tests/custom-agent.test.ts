@@ -207,21 +207,43 @@ describe('Custom Deployed Agents & Evaluation Engine', () => {
   });
 
   it('records trade fills and settlements updating metrics', async () => {
-    const testId = '00000000-0000-0000-0000-000000000003';
-    const initial = await customAgentService.getCustomAgentById(testId);
-    expect(initial).toBeDefined();
+    const dummy = await customAgentService.createCustomAgent({
+      userAddress: '0x0000000000000000000000000000000000000002',
+      name: 'Unit Test Isolated Agent',
+      description: 'Isolated test agent for metrics',
+      symbol: 'SOL/USD',
+      timeframe: '5m',
+      strategyType: 'MOMENTUM',
+      color: '#3b82f6',
+      icon: 'BoltIcon',
+      isActive: true,
+      rules: {
+        operator: 'AND',
+        conditions: [],
+        action: { direction: 'CALL', durationSec: 300, stakeType: 'FIXED', stakeAmount: 10 },
+        risk: { maxConsecutiveLosses: 2, cooldownMinutes: 1, minPoolPayoutPct: 75 },
+      },
+    });
+    const testId = dummy.id;
 
-    const initialTrades = initial?.tradesCount ?? 0;
-    const initialSpent = initial?.spentAllowance ?? 0;
+    try {
+      const initial = await customAgentService.getCustomAgentById(testId);
+      expect(initial).toBeDefined();
 
-    await customAgentService.recordTradeFill(testId, 15.5);
-    const afterFill = await customAgentService.getCustomAgentById(testId);
-    expect(afterFill?.tradesCount).toBe(initialTrades + 1);
-    expect(afterFill?.spentAllowance).toBe(Number((initialSpent + 15.5).toFixed(4)));
+      const initialTrades = initial?.tradesCount ?? 0;
+      const initialSpent = initial?.spentAllowance ?? 0;
 
-    await customAgentService.recordTradeSettlement(testId, 12.0, true);
-    const afterSettlement = await customAgentService.getCustomAgentById(testId);
-    expect(afterSettlement?.pnl).toBe(Number(((initial?.pnl ?? 0) + 12.0).toFixed(2)));
-    expect(afterSettlement?.winRate).toBeGreaterThan(0);
+      await customAgentService.recordTradeFill(testId, 15.5);
+      const afterFill = await customAgentService.getCustomAgentById(testId);
+      expect(afterFill?.tradesCount).toBe(initialTrades + 1);
+      expect(afterFill?.spentAllowance).toBe(Number((initialSpent + 15.5).toFixed(4)));
+
+      await customAgentService.recordTradeSettlement(testId, 12.0, true);
+      const afterSettlement = await customAgentService.getCustomAgentById(testId);
+      expect(afterSettlement?.pnl).toBe(Number(((initial?.pnl ?? 0) + 12.0).toFixed(2)));
+      expect(afterSettlement?.winRate).toBeGreaterThan(0);
+    } finally {
+      await customAgentService.deleteCustomAgent(testId, dummy.userAddress);
+    }
   });
 });

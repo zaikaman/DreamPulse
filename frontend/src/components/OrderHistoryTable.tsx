@@ -16,6 +16,7 @@ import {
   ArrowPathIcon,
   DocumentCheckIcon,
   XMarkIcon,
+  SparklesIcon,
 } from '@heroicons/react/24/outline';
 import type { OrderExecution, AgentType, OutcomeType } from '../types/index.js';
 import { apiClient } from '../services/api.js';
@@ -383,6 +384,13 @@ export const OrderHistoryTable: React.FC<OrderHistoryTableProps> = ({
             <span>Titan</span>
           </span>
         );
+      case 'CUSTOM':
+        return (
+          <span style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', padding: '2px 6px', borderRadius: '4px', background: 'rgba(45, 212, 191, 0.12)', border: '1px solid rgba(45, 212, 191, 0.3)', color: 'var(--brand-cyan)', fontSize: '11px', fontWeight: 700 }}>
+            <SparklesIcon className="w-3 h-3" />
+            <span>Custom</span>
+          </span>
+        );
       default:
         return <span style={{ fontSize: '11px', color: 'var(--muted-foreground)' }}>{agentType}</span>;
     }
@@ -446,7 +454,7 @@ export const OrderHistoryTable: React.FC<OrderHistoryTableProps> = ({
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '12px', padding: '12px 20px', background: 'rgba(255, 255, 255, 0.01)', borderBottom: '1px solid var(--border)' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
           <FunnelIcon className="w-3.5 h-3.5" style={{ color: 'var(--muted-foreground)', marginRight: '4px' }} />
-          {(['ALL', 'VOLT', 'ORACLE', 'TITAN'] as const).map((agent) => (
+          {(['ALL', 'VOLT', 'ORACLE', 'TITAN', 'CUSTOM'] as const).map((agent) => (
             <button key={agent} id={`filter-agent-${agent.toLowerCase()}`} type="button" className={`filter-btn ${selectedAgent === agent ? 'active' : ''}`} onClick={() => handleAgent(agent)} style={{ fontSize: '11px', padding: '4px 10px' }}>{agent}</button>
           ))}
           <div style={{ width: '1px', height: '18px', background: 'var(--border)', margin: '0 4px' }} />
@@ -587,6 +595,7 @@ export const OrderHistoryTable: React.FC<OrderHistoryTableProps> = ({
                     Oracle: 'Black-Scholes Φ(z)',
                     Titan: 'MM Depth Ladder',
                     Sweeper: 'Outcome Sweeper',
+                    CUSTOM: 'Custom Strategy',
                   };
 
                   const tooltipTitle = `[Order Execution Breakdown]
