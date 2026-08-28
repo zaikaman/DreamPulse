@@ -565,7 +565,11 @@ export const AnalyticsView: React.FC<AnalyticsViewProps> = ({ wallet, onConnectW
                         winRate: ca.winRate ?? 50,
                       }));
 
-                    const combined = [...baseBreakdown, ...customBreakdown.filter((cb) => !baseBreakdown.some((b) => b.agentType === cb.agentType))];
+                    const hasSpecificCustom = customBreakdown.length > 0;
+                    const filteredBase = hasSpecificCustom
+                      ? baseBreakdown.filter((b) => b.agentType !== 'Custom' && b.agentType !== 'CUSTOM')
+                      : baseBreakdown;
+                    const combined = [...filteredBase, ...customBreakdown.filter((cb) => !filteredBase.some((b) => b.agentType === cb.agentType))];
                     const maxAbs = Math.max(...combined.map((x) => Math.abs(x.pnl)), 1);
 
                     return combined.map((a) => {
