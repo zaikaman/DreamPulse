@@ -26,6 +26,51 @@ describe('Swarm Arena & Strategy Leaderboard Tests', () => {
       lotSize: 20,
       txHash: '0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
     });
+
+    // Seed at least two Swarm agent executions so the arena (which now only shows agents
+    // with ≥1 trade/order) is non-empty. Inject directly into OrderService in-memory store
+    // to avoid on-chain gas / allowance coupling in unit tests.
+    const nowIso = new Date().toISOString();
+    const { randomUUID } = await import('crypto');
+    const injectSwarmOrder = (agentType: 'Volt' | 'Oracle' | 'Titan', pnl: number) => {
+      const id = randomUUID();
+      const order: any = {
+        id,
+        userAddress: '0x0000000000000000000000000000000000000001' as `0x${string}`,
+        sessionId: undefined,
+        marketId: '0x2222222222222222222222222222222222222222',
+        agentType,
+        source: 'SWARM' as const,
+        outcome: 'YES' as const,
+        direction: 'BUY' as const,
+        orderType: 'IOC' as const,
+        price: 0.52,
+        lotSize: 10,
+        totalCost: 5.2,
+        status: 'FILLED' as const,
+        txHash: `0x${'b'.repeat(64)}` as `0x${string}`,
+        pnl,
+        isSettled: true,
+        settledAt: nowIso,
+        createdAt: nowIso,
+        filledAt: nowIso,
+        marketSnapshot: {
+          symbol: agentType === 'Oracle' ? 'ETH/USD' : 'BTC/USD',
+          strikePrice: agentType === 'Oracle' ? 3200 : 68000,
+          closeTimestamp: new Date(Date.now() + 300000).toISOString(),
+          windowDuration: agentType === 'Titan' ? '15m' : agentType === 'Oracle' ? '5m' : '1m',
+        },
+      };
+      (orderService as any).orders.unshift(order);
+      (orderService as any).orderMap.set(id, order);
+      // Ensure state cache invalidation mirrors real execution path
+      (orderService as any).notifyStateChange?.();
+    };
+
+    injectSwarmOrder('Volt', 12.5);
+    injectSwarmOrder('Volt', 8.0);
+    injectSwarmOrder('Oracle', 5.0);
+    injectSwarmOrder('Titan', 3.5);
   });
 
   describe('Leaderboard Service Unit Tests', () => {
@@ -37,12 +82,18 @@ describe('Swarm Arena & Strategy Leaderboard Tests', () => {
 
       expect(result.count).toBeGreaterThan(0);
       expect(result.data.length).toBeGreaterThan(0);
+      // All arena agents must have executed at least one trade/order
+      for (const a of result.data) {
+        expect(a.tradesCount).toBeGreaterThan(0);
+      }
 
       // Verify #1 ranked agent has APEX tier badge
       const topAgent = result.data[0];
       expect(topAgent.rank).toBe(1);
       expect(topAgent.tierBadge).toBe('APEX');
-      expect(topAgent.pnl).toBeGreaterThanOrEqual(result.data[1].pnl);
+      if (result.data.length > 1) {
+        expect(topAgent.pnl).toBeGreaterThanOrEqual(result.data[1].pnl);
+      }
       expect(topAgent.sharpeRatio).toBeGreaterThanOrEqual(0);
       expect(topAgent.sparkline.length).toBe(8);
     });
@@ -53,6 +104,7 @@ describe('Swarm Arena & Strategy Leaderboard Tests', () => {
       });
       for (const agent of btcResult.data) {
         expect(agent.symbol === 'BTC/USD' || agent.symbol === 'ALL').toBe(true);
+        expect(agent.tradesCount).toBeGreaterThan(0);
       }
 
       const momentumResult = await leaderboardService.getAgentLeaderboard({
@@ -60,6 +112,20 @@ describe('Swarm Arena & Strategy Leaderboard Tests', () => {
       });
       for (const agent of momentumResult.data) {
         expect(agent.strategyType).toBe('MOMENTUM');
+        expect(agent.tradesCount).toBeGreaterThan(0);
+      }
+    });
+
+    it('excludes agents with zero trades from arena leaderboard', async () => {
+      const all = await leaderboardService.getAgentLeaderboard({ timeframe: 'ALL' });
+      // Every returned agent must have at least one trade
+      for (const a of all.data) {
+        expect(a.tradesCount).toBeGreaterThan(0);
+      }
+      // Starter templates with zero trades should not appear at all
+      const starterIds = ['00000000-0000-0000-0000-000000000001', '00000000-0000-0000-0000-000000000002', '00000000-0000-0000-0000-000000000003'];
+      for (const id of starterIds) {
+        expect(all.data.some((a) => a.id === id)).toBe(false);
       }
     });
 
@@ -117,6 +183,9 @@ describe('Swarm Arena & Strategy Leaderboard Tests', () => {
       expect(Array.isArray(res.body.data)).toBe(true);
       expect(res.body.data.length).toBeGreaterThan(0);
       expect(res.body.data[0].tierBadge).toBe('APEX');
+      for (const a of res.body.data) {
+        expect(a.tradesCount).toBeGreaterThan(0);
+      }
     });
 
     it('GET /api/arena/leaderboard/traders returns ranked human traders', async () => {

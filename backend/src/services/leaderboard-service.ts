@@ -446,6 +446,9 @@ export class LeaderboardService {
     // 5. Combine Protocol Archetypes + Custom Agents
     let combined = [...archetypeEntries, ...customEntries];
 
+    // 5b. Only agents that have executed at least one trade/order in the selected timeframe may appear on the arena
+    combined = combined.filter((e) => e.tradesCount > 0);
+
     // 6. Apply Filters
     if (symbolFilter !== 'ALL') {
       combined = combined.filter((e) => e.symbol.toUpperCase() === symbolFilter || e.symbol === 'ALL');
