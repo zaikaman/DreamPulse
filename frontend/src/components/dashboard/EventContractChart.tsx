@@ -25,6 +25,73 @@ interface PricePoint {
   price: number;
 }
 
+function getLookbackSeconds(range: 'RTC' | '15m' | '1h' | 'ALL', windowDuration?: string): number {
+  if (range === '15m') return 900;
+  if (range === '1h') return 3600;
+  if (range === 'ALL') return 14400;
+  if (windowDuration === '1m') return 60;
+  if (windowDuration === '5m') return 300;
+  if (windowDuration === '15m') return 900;
+  if (windowDuration === '1h') return 3600;
+  if (windowDuration === '24h') return 86400;
+  return 300;
+}
+
+function generatePriceHistoryForRange(
+  range: 'RTC' | '15m' | '1h' | 'ALL',
+  strikePrice: number,
+  curSpot: number,
+  windowDuration?: string,
+): PricePoint[] {
+  const now = Date.now();
+  const history: PricePoint[] = [];
+  const basePrice = strikePrice > 0 ? strikePrice : curSpot;
+  const durationSec = getLookbackSeconds(range, windowDuration);
+
+  // Resolution and points count scaled to timeframe
+  const numPoints = range === 'RTC' ? 40 : range === '15m' ? 60 : range === '1h' ? 80 : 100;
+  const stepMs = (durationSec * 1000) / numPoints;
+
+  // Realistic starting drift offset per timeframe
+  const maxOffsetPct = range === 'RTC' ? 0.0008 : range === '15m' ? 0.0025 : range === '1h' ? 0.006 : 0.015;
+  const seed = (Math.sin(basePrice * 100 + durationSec) * 10000) % 1;
+  const startPrice = basePrice * (1 + (seed - 0.5) * maxOffsetPct);
+
+  // Multi-frequency harmonic counts: higher timeframes exhibit denser multi-wave structure
+  const primaryCycles = range === 'RTC' ? 1.5 : range === '15m' ? 3.5 : range === '1h' ? 6.5 : 11.0;
+  const secondaryCycles = primaryCycles * 2.6;
+  const microCycles = primaryCycles * 6.8;
+
+  const volatility = range === 'RTC' ? 0.0003 : range === '15m' ? 0.0007 : range === '1h' ? 0.0016 : 0.0038;
+
+  for (let i = numPoints; i >= 0; i--) {
+    const t = now - i * stepMs;
+    const progress = (numPoints - i) / numPoints; // 0.0 (start) to 1.0 (now)
+
+    // Linear trend connecting start to current spot
+    const driftPath = startPrice + progress * (curSpot - startPrice);
+
+    // Brownian bridge factor: variance smoothly pinches to 0 at now so it connects seamlessly to live spot
+    const bridgeFactor = 1 - Math.pow(progress, 2.2);
+
+    // Superposition of macro trend, swing cycle, and micro tick structure
+    const wave1 = Math.sin((progress * primaryCycles + seed) * Math.PI * 2) * 0.55;
+    const wave2 = Math.cos((progress * secondaryCycles + seed * 2) * Math.PI * 2) * 0.30;
+    const wave3 = Math.sin((progress * microCycles + seed * 3) * Math.PI * 2) * 0.15;
+
+    const totalOscillation = (wave1 + wave2 + wave3) * basePrice * volatility * bridgeFactor;
+    const price = Number((driftPath + totalOscillation).toFixed(2));
+    history.push({ time: t, price });
+  }
+
+  // Ensure last point is exactly current live spot
+  if (history.length > 0) {
+    history[history.length - 1].price = curSpot;
+    history[history.length - 1].time = now;
+  }
+  return history;
+}
+
 export const EventContractChart: React.FC<EventContractChartProps> = ({
   market,
   liveTick,
@@ -43,23 +110,9 @@ export const EventContractChart: React.FC<EventContractChartProps> = ({
   const spot = currentSpotPrice || liveTick?.spotPrice || market.strikePrice || 79664.46;
   const isITM = spot >= strike;
 
-  // Local price history trail
+  // Local price history trail based on active timeRange
   const [priceHistory, setPriceHistory] = useState<PricePoint[]>(() => {
-    const now = Date.now();
-    const history: PricePoint[] = [];
-    const basePrice = strike;
-    // Generate realistic initial 30 points leading up to current spot
-    for (let i = 30; i >= 0; i--) {
-      const t = now - i * 5000;
-      const progress = (30 - i) / 30;
-      const variance = (Math.sin(i * 0.8) * 0.0006 + (progress * (spot - basePrice) / (basePrice || 1))) * basePrice;
-      history.push({
-        time: t,
-        price: Number((basePrice + variance).toFixed(2)),
-      });
-    }
-    history[history.length - 1].price = spot;
-    return history;
+    return generatePriceHistoryForRange('RTC', strike, spot, market.windowDuration);
   });
 
   // Evaluate Multi-Factor Confluence
@@ -114,25 +167,11 @@ export const EventContractChart: React.FC<EventContractChartProps> = ({
     return { text: `AI Fair ${pct}% ${d}`, bg: '#1e1035', stroke: '#7928ca', color: '#d8b4fe', w: 145 };
   }, [fairValueYes, edge, isSyntheticOrSeed, hasEdge, isYesEdge, confluence]);
 
-  // Re-seed price history when switching market or symbol
+  // Re-seed price history when switching market, symbol, or timeframe range
   useEffect(() => {
-    const now = Date.now();
-    const history: PricePoint[] = [];
-    const basePrice = strike > 0 ? strike : spot;
-    for (let i = 30; i >= 0; i--) {
-      const t = now - i * 5000;
-      const progress = (30 - i) / 30;
-      const variance = (Math.sin(i * 0.8) * 0.0006 + (progress * (spot - basePrice) / (basePrice || 1))) * basePrice;
-      history.push({
-        time: t,
-        price: Number((basePrice + variance).toFixed(2)),
-      });
-    }
-    if (history.length > 0) {
-      history[history.length - 1].price = spot;
-    }
+    const history = generatePriceHistoryForRange(timeRange, strike, spot, market.windowDuration);
     setPriceHistory(history);
-  }, [market.id, market.symbol]);
+  }, [market.id, market.symbol, timeRange]);
 
   // Track live spot price changes
   useEffect(() => {
@@ -140,18 +179,19 @@ export const EventContractChart: React.FC<EventContractChartProps> = ({
     setPriceHistory((prev) => {
       const now = Date.now();
       const last = prev[prev.length - 1];
-      if (last && now - last.time < 1000) {
-        // Update last point if less than 1s
+      const throttleMs = timeRange === 'RTC' ? 1000 : timeRange === '15m' ? 3000 : 8000;
+      if (last && now - last.time < throttleMs) {
+        // Update last point
         const updated = [...prev];
         updated[updated.length - 1] = { time: now, price: spot };
         return updated;
       }
       const next = [...prev, { time: now, price: spot }];
-      // Keep max 120 points for buttery smooth 60fps rendering
-      if (next.length > 120) next.shift();
+      const maxPts = timeRange === 'RTC' ? 120 : timeRange === '15m' ? 90 : 80;
+      if (next.length > maxPts) next.shift();
       return next;
     });
-  }, [spot]);
+  }, [spot, timeRange]);
 
   // Handle responsive canvas sizing
   useEffect(() => {
@@ -555,7 +595,7 @@ export const EventContractChart: React.FC<EventContractChartProps> = ({
 
           {/* Time Labels on Bottom Axis */}
           <text x={padding.left + 5} y={height - 12} fill="#71717a" fontSize="10" fontFamily="JetBrains Mono, monospace">
-            {market.windowDuration || '15m'} ago
+            {timeRange === 'RTC' ? `${market.windowDuration || '5m'} round` : `${timeRange} ago`}
           </text>
           <text x={splitX - 35} y={height - 12} fill="#00ffcc" fontSize="10" fontFamily="JetBrains Mono, monospace" fontWeight="bold">
             now {new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false })}
