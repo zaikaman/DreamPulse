@@ -5,7 +5,7 @@ export interface MarketCountdownResult {
   formattedExpiry: string;    // e.g. "18:40"
   secondsLeft: number;
   isExpired: boolean;
-  isLocked: boolean;          // Trading lockout phase in final 30s before resolution
+  isLocked: boolean;          // Deprecated: always false (30s lock removed — trading open until expiry)
 }
 
 export function useMarketCountdown(
@@ -15,6 +15,13 @@ export function useMarketCountdown(
 ): MarketCountdownResult {
   const [now, setNow] = useState<number>(Date.now());
   const hasTriggeredExpireRef = useRef<boolean>(false);
+  const onExpireRef = useRef<(() => void) | undefined>(onExpire);
+
+  // Keep callback ref current synchronously without re-triggering expiry effect on identity change.
+  // Prevents infinite loops when parent passes an unstable inline callback (e.g. fetchMarkets).
+  // Synchronous assignment guarantees the freshest callback is invoked even on the same
+  // tick that isExpired flips to true, avoiding stale-closure bugs of an effect-based sync.
+  onExpireRef.current = onExpire;
 
   useEffect(() => {
     const interval = setInterval(() => setNow(Date.now()), 1000);
@@ -39,15 +46,11 @@ export function useMarketCountdown(
     if (rawDiff <= 0) {
       diff = 0;
       isExpired = true;
-      isLocked = true;
-      if (!hasTriggeredExpireRef.current) {
-        hasTriggeredExpireRef.current = true;
-        onExpire?.();
-      }
+      isLocked = false;
     } else {
       diff = rawDiff;
       isExpired = false;
-      isLocked = rawDiff <= 30; // 30-second lockout before contract resolution
+      isLocked = false;
     }
     expiryDate = new Date(closeTime);
   } else {
@@ -55,9 +58,21 @@ export function useMarketCountdown(
     const cycleSeconds = windowDuration === '1m' ? 60 : windowDuration === '1h' ? 3600 : windowDuration === '5m' ? 300 : 900;
     diff = cycleSeconds - (Math.floor(now / 1000) % cycleSeconds);
     isExpired = false;
-    isLocked = diff <= 30;
+    isLocked = false;
     expiryDate = new Date(now + diff * 1000);
   }
+
+  // Render-phase side-effect fix: expiry callback is now a passive effect, not a render mutation.
+  // Guarded by hasTriggeredExpireRef so StrictMode double-invoke and isExpired-stable re-renders
+  // fire at most once per closeTimestamp. onExpireRef avoids re-firing when parent recreates
+  // the callback identity (e.g. inline fetchMarkets). closeTimestamp in deps ensures an
+  // already-expired market switch (expired -> expired) re-evaluates after the reset effect.
+  useEffect(() => {
+    if (isExpired && hasValidCloseTime && !hasTriggeredExpireRef.current) {
+      hasTriggeredExpireRef.current = true;
+      onExpireRef.current?.();
+    }
+  }, [isExpired, hasValidCloseTime, closeTimestamp]);
 
   const m = Math.floor(diff / 60);
   const s = diff % 60;

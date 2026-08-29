@@ -4,7 +4,6 @@ import {
   ArrowTrendingDownIcon,
   SparklesIcon,
   ClockIcon,
-  LockClosedIcon,
 } from '@heroicons/react/24/outline';
 import type { Market, AgentThoughtLog } from '../../types/index.js';
 import type { MarketTickData } from '../../hooks/useTelemetry.js';
@@ -209,8 +208,8 @@ export const EventContractChart: React.FC<EventContractChartProps> = ({
     return () => window.removeEventListener('resize', handleResize);
   }, []);
 
-  // Real-time dynamic countdown & formatted expiry
-  const { formattedCountdown, formattedExpiry, isLocked } = useMarketCountdown(
+  // Real-time dynamic countdown & formatted expiry (30s lock removed)
+  const { formattedCountdown, formattedExpiry } = useMarketCountdown(
     market.closeTimestamp,
     market.windowDuration,
     onExpire
@@ -628,19 +627,19 @@ export const EventContractChart: React.FC<EventContractChartProps> = ({
         <div
           className={cn(
             "absolute z-20 flex flex-col items-center gap-0.5 px-2.5 py-1 rounded-lg border shadow-lg backdrop-blur-md transition-all",
-            isLocked ? "bg-[#ffb700]/10 border-[#ffb700]/50 text-[#ffb700]" : "bg-background/90 border-border/70 text-brand-cyan"
+            "bg-background/90 border-border/70 text-brand-cyan"
           )}
           style={{
             left: `${splitX + 14}px`,
             top: '8px',
           }}
         >
-          <div className={cn("flex items-center gap-1.5 text-xs font-mono font-bold", isLocked ? "text-[#ffb700]" : "text-brand-cyan")}>
-            {isLocked ? <LockClosedIcon className="w-3.5 h-3.5 animate-pulse text-[#ffb700]" /> : <ClockIcon className="w-3.5 h-3.5 animate-pulse text-brand-cyan" />}
-            <span>{isLocked ? `${formattedCountdown} (LOCKED)` : formattedCountdown}</span>
+          <div className={cn("flex items-center gap-1.5 text-xs font-mono font-bold", "text-brand-cyan")}>
+            <ClockIcon className="w-3.5 h-3.5 animate-pulse text-brand-cyan" />
+            <span>{formattedCountdown}</span>
           </div>
           <div className="text-[8px] font-mono text-muted-foreground tracking-wider uppercase">
-            {isLocked ? 'Resolving Phase' : 'Time to Settlement'}
+            Time to Settlement
           </div>
         </div>
 

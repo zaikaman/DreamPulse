@@ -765,18 +765,12 @@ export class OrderService {
         const nowSec = Math.floor(Date.now() / 1000);
         const onchainExpiry = Number(onchain.expiry || 0);
 
-        // Skip on-chain transaction submission if market is expiring within 30 seconds or already expired
-        const hasTimeRemaining = onchainExpiry > 0
-          ? onchainExpiry - nowSec > 30
-          : (market ? (new Date(market.closeTimestamp).getTime() - Date.now()) / 1000 > 30 : false);
+        const expiresAtSec = onchainExpiry > 0
+          ? Math.min(nowSec + 300, onchainExpiry)
+          : Math.floor(new Date(market!.closeTimestamp).getTime() / 1000);
+        const expireTimestampNs = BigInt(expiresAtSec) * 1_000_000_000n;
 
-        if (hasTimeRemaining) {
-          const expiresAtSec = onchainExpiry > 0
-            ? Math.min(nowSec + 300, onchainExpiry)
-            : Math.floor(new Date(market!.closeTimestamp).getTime() / 1000);
-          const expireTimestampNs = BigInt(expiresAtSec) * 1_000_000_000n;
-
-          if (isOperatorMaster) {
+        if (isOperatorMaster) {
             const placeRes = await executeOperatorTx(() =>
               somniaExchange.trader.placeOrder({
                 pool: onchain.pool,
@@ -916,9 +910,6 @@ export class OrderService {
               }
             }
           }
-        } else {
-          this.lastExecutionFailureReason = 'Trading is closed: Market is within final 30s settlement window.';
-        }
       } catch (err: any) {
         const msg: string = err?.message || String(err);
         this.lastExecutionFailureReason = `On-chain order placement failed: ${msg}`;
@@ -1245,14 +1236,11 @@ export class OrderService {
       throw new Error(`Market '${params.marketId}' not found.`);
     }
 
-    // Enforce market active status and 30s settlement lockout
+    // Enforce market active status (30s lock removed — trading open until expiry)
     const closeTimeMs = new Date(market.closeTimestamp).getTime();
     const timeLeftSec = Math.floor((closeTimeMs - Date.now()) / 1000);
     if (market.status !== 'Open' || (!isNaN(timeLeftSec) && timeLeftSec <= 0)) {
       throw new Error(`Market ${market.symbol} is closed and resolving. Orders are no longer accepted for this round.`);
-    }
-    if (!isNaN(timeLeftSec) && timeLeftSec <= 30) {
-      throw new Error('Trading is closed: Market is within final 30s settlement window.');
     }
 
     // Check risk limits directly
