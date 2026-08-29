@@ -363,12 +363,65 @@ export class OrderService {
   private orders: OrderExecution[] = [];
   private orderMap = new Map<string, OrderExecution>();
   private restingMakerQuotes = new Map<string, RestingMakerQuote>();
+  // --- Bounded-cache config (issue #13) ---
+  private static readonly MAX_CACHE_SIZE = 5000;
   // --- Cumulative PnL fast-path cache ---
   private lastPnlSyncAt = 0;
   private pnlSyncInFlight: Promise<void> | null = null;
   private cachedPnlByKey = new Map<string, { sum: number; timestamp: number }>();
   private stateChangeListeners: Array<() => void> = [];
   private lastExecutionFailureReason: string | null = null;
+
+  private isPersistenceEnabled(): boolean {
+    if (process.env.VITEST === 'true' || process.env.NODE_ENV === 'test') return false;
+    const url = process.env.SUPABASE_URL || '';
+    return url.length > 0 && !url.includes('mock-project');
+  }
+
+  private rowToOrder(row: any): OrderExecution {
+    const pnlVal = row.pnl !== null && row.pnl !== undefined ? Number(row.pnl) : 0;
+    const isSettled = row.is_settled === true || (row.is_settled !== false && (row.settled_at != null || (row.pnl != null && pnlVal !== 0)));
+    const isManual = row.source === 'TERMINAL' || row.agent_type === 'Manual' || row.agent_type === 'MANUAL';
+    const orderSource: OrderSource = isManual ? 'TERMINAL' : ((row.source as OrderSource) || 'SWARM');
+    const agentType: AgentType = isManual ? 'Manual' : ((row.agent_type as AgentType) || 'Titan');
+    return {
+      id: row.id,
+      userAddress: row.user_address,
+      sessionId: row.session_id || undefined,
+      marketId: row.market_id,
+      agentType,
+      source: orderSource,
+      outcome: row.outcome as OutcomeType,
+      direction: row.direction as OrderDirection,
+      orderType: row.order_type as OrderType,
+      price: Number(row.price),
+      lotSize: Number(row.lot_size),
+      totalCost: Number(row.total_cost),
+      status: row.status as OrderStatus,
+      txHash: (row.tx_hash as Hex) || undefined,
+      pnl: pnlVal,
+      isSettled,
+      settledAt: row.settled_at || (isSettled ? row.filled_at || row.created_at : undefined),
+      createdAt: row.created_at,
+      filledAt: row.filled_at || undefined,
+    };
+  }
+
+  /**
+   * Inserts into bounded cache, evicting oldest when cap is hit.
+   * Caller must have already persisted to Supabase (or is about to) — evicted rows remain in DB for history queries.
+   */
+  private insertIntoCache(order: OrderExecution): void {
+    this.orderMap.set(order.id, order);
+    this.orders.unshift(order);
+    if (this.orders.length > OrderService.MAX_CACHE_SIZE) {
+      const evicted = this.orders.pop();
+      if (evicted) {
+        this.orderMap.delete(evicted.id);
+        this.restingMakerQuotes.delete(evicted.id);
+      }
+    }
+  }
 
   /**
    * Registers an active resting limit maker quote placed by an agent (e.g. Titan).
@@ -507,7 +560,7 @@ export class OrderService {
       .from('orders')
       .select('*')
       .order('created_at', { ascending: false })
-      .limit(5000);
+      .limit(OrderService.MAX_CACHE_SIZE);
 
     if (error || !data || data.length === 0) {
       this.seedInitialOrders();
@@ -519,40 +572,7 @@ export class OrderService {
       if (row.tx_hash === '0x1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef') {
         continue;
       }
-
-      const pnlVal = row.pnl !== null && row.pnl !== undefined ? Number(row.pnl) : 0;
-      const isSettled = row.is_settled === true || (row.is_settled !== false && (row.settled_at != null || (row.pnl != null && pnlVal !== 0)));
-
-      const isManual =
-        row.source === 'TERMINAL' ||
-        row.agent_type === 'Manual' ||
-        row.agent_type === 'MANUAL';
-
-      const orderSource: OrderSource = isManual ? 'TERMINAL' : ((row.source as OrderSource) || 'SWARM');
-      const agentType: AgentType = isManual ? 'Manual' : ((row.agent_type as AgentType) || 'Titan');
-
-      const order: OrderExecution = {
-        id: row.id,
-        userAddress: row.user_address,
-        sessionId: row.session_id || undefined,
-        marketId: row.market_id,
-        agentType,
-        source: orderSource,
-        outcome: row.outcome as OutcomeType,
-        direction: row.direction as OrderDirection,
-        orderType: row.order_type as OrderType,
-        price: Number(row.price),
-        lotSize: Number(row.lot_size),
-        totalCost: Number(row.total_cost),
-        status: row.status as OrderStatus,
-        txHash: (row.tx_hash as Hex) || undefined,
-        pnl: pnlVal,
-        isSettled,
-        settledAt: row.settled_at || (isSettled ? row.filled_at || row.created_at : undefined),
-        createdAt: row.created_at,
-        filledAt: row.filled_at || undefined,
-      };
-
+      const order = this.rowToOrder(row);
       this.orderMap.set(order.id, order);
       this.orders.push(order);
     }
@@ -1015,16 +1035,8 @@ export class OrderService {
       session.spentToday = Number((session.spentToday + actualTotalCost).toFixed(4));
     }
 
-    // Store in-memory with bounded capacity (evict oldest from both array and map)
-    this.orderMap.set(orderId, orderExecution);
-    this.orders.unshift(orderExecution);
-    if (this.orders.length > 5000) {
-      const evicted = this.orders.pop();
-      if (evicted) {
-        this.orderMap.delete(evicted.id);
-        this.restingMakerQuotes.delete(evicted.id);
-      }
-    }
+    // Store in-memory with bounded capacity (evict oldest; history remains in Supabase for analytics/pagination)
+    this.insertIntoCache(orderExecution);
 
     // Register resting limit quote for swarm cross-agent self-trade protection
     if (orderExecution.orderType === 'LIMIT' || decision.action === 'LIMIT_QUOTE') {
@@ -1164,14 +1176,7 @@ export class OrderService {
           : undefined,
       };
 
-      this.orderMap.set(orderId, orderExecution);
-      this.orders.unshift(orderExecution);
-      if (this.orders.length > 5000) {
-        const evicted = this.orders.pop();
-        if (evicted) {
-          this.orderMap.delete(evicted.id);
-        }
-      }
+      this.insertIntoCache(orderExecution);
 
       telemetryWsGateway.broadcastOrderFilled({
         userAddress: params.userAddress,
@@ -1339,8 +1344,7 @@ export class OrderService {
           : undefined,
       };
 
-      this.orders.unshift(orderExecution);
-      this.orderMap.set(orderId, orderExecution);
+      this.insertIntoCache(orderExecution);
 
       telemetryWsGateway.broadcastOrderFilled({
         userAddress: params.userAddress,
@@ -1475,6 +1479,171 @@ export class OrderService {
   }
 
   /**
+   * Fetches orders from Supabase with the same filter semantics as getOrders.
+   * Used as history fallback when in-memory cache has been truncated at MAX_CACHE_SIZE.
+   */
+  public async fetchOrdersFromDb(params?: QueryOrdersParams & { page?: number; pageSize?: number }): Promise<{ orders: OrderExecution[]; total: number }> {
+    if (!this.isPersistenceEnabled()) return { orders: [], total: 0 };
+    try {
+      const pageSize = params?.pageSize || params?.limit || 1000;
+      const page = params?.page || 1;
+      const offset = params?.offset ?? (page - 1) * pageSize;
+      let query = supabase.from('orders').select('*', { count: 'exact' }).order('created_at', { ascending: false });
+
+      // Use eq on checksummed addresses for index-friendly lookups (functional lower() index backs RLS)
+      if (params?.userAddress && isAddress(params.userAddress)) {
+        try {
+          query = query.eq('user_address', getAddress(params.userAddress));
+        } catch {}
+      }
+      if (params?.agentType) query = query.eq('agent_type', params.agentType);
+      if (params?.marketId) query = query.eq('market_id', params.marketId);
+      if (params?.status) query = query.eq('status', params.status);
+      if (params?.outcome) query = query.eq('outcome', params.outcome);
+      // source filter maps to agent_type/source columns; handle via eq/in where possible
+      if (params?.source === 'TERMINAL') {
+        // TERMINAL = source TERMINAL OR agent_type Manual; Supabase OR filter
+        query = query.or('source.eq.TERMINAL,agent_type.eq.Manual,agent_type.eq.MANUAL');
+      } else if (params?.source === 'SWARM' || params?.swarmOnly || params?.scope === 'SWARM') {
+        query = query.neq('source', 'TERMINAL').neq('agent_type', 'Manual');
+        if (params?.swarmOnly || params?.scope === 'SWARM') {
+          const opAddr = getAddress(operatorAccount.address);
+          query = query.eq('user_address', opAddr);
+        }
+      }
+      if (params?.searchQuery && params.searchQuery.trim()) {
+        const q = params.searchQuery.trim().replace(/%/g, '').replace(/,/g, '');
+        // PostgREST ilike search across market_id/tx_hash/user_address via or
+        query = query.or(`market_id.ilike.%${q}%,tx_hash.ilike.%${q}%,user_address.ilike.%${q}%`);
+      }
+
+      // When caller wants all (limit undefined), paginate in 1000-row chunks up to 10k for analytics safety
+      if (params?.limit === undefined && params?.pageSize === undefined && params?.offset === undefined) {
+        const all: OrderExecution[] = [];
+        let total = 0;
+        const chunkSize = 1000;
+        let from = 0;
+        for (let iter = 0; iter < 10; iter++) {
+          const { data, count, error } = await query.range(from, from + chunkSize - 1);
+          if (error || !data) break;
+          if (iter === 0 && count !== null) total = count;
+          const mapped = data.filter((r: any) => r.tx_hash !== '0x1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef').map((r: any) => this.rowToOrder(r));
+          all.push(...mapped);
+          if (data.length < chunkSize) break;
+          from += chunkSize;
+          if (all.length >= (count ?? 0)) break;
+        }
+        return { orders: all, total: total || all.length };
+      }
+
+      const { data, count, error } = await query.range(offset, offset + pageSize - 1);
+      if (error || !data) return { orders: [], total: 0 };
+      const mapped = data.filter((r: any) => r.tx_hash !== '0x1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef').map((r: any) => this.rowToOrder(r));
+      return { orders: mapped, total: count ?? mapped.length };
+    } catch {
+      return { orders: [], total: 0 };
+    }
+  }
+
+  /**
+   * Hybrid getOrders: returns in-memory if complete, otherwise merges Supabase history when cache is capped.
+   * For analytics (limit undefined) this ensures evicted rows are included via DB fallback.
+   */
+  public async getOrdersAsync(params?: QueryOrdersParams): Promise<OrderExecution[]> {
+    const mem = this.getOrders(params);
+    // If cache is not at cap, in-memory is authoritative (all rows fit)
+    if (this.orders.length < OrderService.MAX_CACHE_SIZE || !this.isPersistenceEnabled()) {
+      return mem;
+    }
+    // Cache is capped — there may be evicted history. Fetch from DB and merge deduplicated.
+    // Optimization: if mem already satisfies a bounded limit with offset, skip DB unless mem appears truncated
+    const needsTotal = params?.limit === undefined;
+    if (!needsTotal && mem.length < (params?.limit ?? 50)) {
+      // Small page that fits in cache; assume cache covers recent pages 1-2. For deeper offsets, query DB.
+      const offset = params?.offset ?? 0;
+      if (offset + (params?.limit ?? 0) <= this.orders.length) return mem;
+    }
+    try {
+      const { orders: dbOrders } = await this.fetchOrdersFromDb(params);
+      if (dbOrders.length === 0) return mem;
+      // Merge: prefer mem entries (most recent) but include db-only older rows
+      const seen = new Set(mem.map((o) => o.id));
+      const merged = [...mem];
+      for (const o of dbOrders) {
+        if (!seen.has(o.id)) {
+          merged.push(o);
+          seen.add(o.id);
+        }
+      }
+      // Re-apply sort by createdAt desc for consistent pagination
+      merged.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+      // Re-apply limit/offset if needed (fetchOrdersFromDb already did, but merge may have more)
+      if (params?.limit !== undefined || params?.offset !== undefined) {
+        const off = params?.offset ?? 0;
+        const lim = params?.limit ?? merged.length;
+        return merged.slice(off, off + lim);
+      }
+      return merged;
+    } catch {
+      return mem;
+    }
+  }
+
+  /**
+   * Async paginated query that is DB-aware when cache is truncated.
+   * Use for API/history; sync queryOrdersPaginated remains for hot-path callers.
+   */
+  public async queryOrdersPaginatedAsync(params?: {
+    userAddress?: string;
+    agentType?: AgentType;
+    status?: OrderStatus;
+    outcome?: OutcomeType;
+    marketId?: string;
+    searchQuery?: string;
+    scope?: 'SWARM' | 'MY_ORDERS' | 'ALL';
+    swarmOnly?: boolean;
+    source?: 'SWARM' | 'TERMINAL' | 'ALL';
+    limit?: number;
+    page?: number;
+    pageSize?: number;
+  }): Promise<{ orders: OrderExecution[]; total: number; totalFills: number; totalVolume: number; page: number; pageSize: number; totalPages: number }> {
+    const pageSize = params?.pageSize || params?.limit || 50;
+    const page = Math.max(1, params?.page || 1);
+    const useDb = this.orders.length >= OrderService.MAX_CACHE_SIZE && this.isPersistenceEnabled();
+    if (!useDb) {
+      return this.queryOrdersPaginated(params);
+    }
+    // DB-aware path: fetch accurate total count from Supabase
+    const dbParams: any = { ...params, page, pageSize };
+    const { orders, total } = await this.fetchOrdersFromDb(dbParams);
+    // Also fetch fills/volume via a lightweight extra query if needed — approximate from fetched page + memory if DB count small
+    // For accurate aggregates we fetch a separate count of fills if total is large; otherwise compute from allOrders merge
+    let totalFills = 0;
+    let totalVolume = 0;
+    if (total <= 2000) {
+      const { orders: allForAgg } = await this.fetchOrdersFromDb({ ...params, limit: undefined } as any);
+      const fills = allForAgg.filter((o) => o.status === 'FILLED');
+      totalFills = fills.length;
+      totalVolume = Number(fills.reduce((s, o) => s + (o.totalCost || 0), 0).toFixed(4));
+    } else {
+      // For huge histories avoid full scan; estimate from fetched page and known syncResolved aggregates via getTotalRealizedPnl not volume
+      const fills = orders.filter((o) => o.status === 'FILLED');
+      // Fallback: compute totalFills via separate count query on Supabase
+      try {
+        let q = supabase.from('orders').select('id', { count: 'exact', head: true }).eq('status', 'FILLED');
+        if (params?.userAddress && isAddress(params.userAddress)) q = q.eq('user_address', getAddress(params.userAddress));
+        const { count } = await q;
+        totalFills = count ?? fills.length;
+      } catch {
+        totalFills = fills.length;
+      }
+      totalVolume = Number(fills.reduce((s, o) => s + (o.totalCost || 0), 0).toFixed(4));
+    }
+    const totalPages = Math.max(1, Math.ceil(total / pageSize));
+    return { orders, total, totalFills, totalVolume, page, pageSize, totalPages };
+  }
+
+  /**
    * Calculates exact statistics (total fills and executed volume) for the given filter parameters.
    */
   public getOrderStats(params?: Omit<QueryOrdersParams, 'limit' | 'offset'>): {
@@ -1562,6 +1731,22 @@ export class OrderService {
    */
   public getOrderById(id: string): OrderExecution | null {
     return this.orderMap.get(id) || null;
+  }
+
+  public async getOrderByIdAsync(id: string): Promise<OrderExecution | null> {
+    const mem = this.orderMap.get(id);
+    if (mem) return mem;
+    if (!this.isPersistenceEnabled()) return null;
+    try {
+      const { data } = await supabase.from('orders').select('*').eq('id', id).limit(1).single();
+      if (!data) return null;
+      const order = this.rowToOrder(data);
+      // Warm cache for future sync access
+      this.orderMap.set(order.id, order);
+      return order;
+    } catch {
+      return null;
+    }
   }
 
   /**
@@ -1680,6 +1865,8 @@ export class OrderService {
     await Promise.allSettled(dbUpdates);
 
     if (updatedEvents.length > 0) {
+      // Sync pre-aggregated daily_pnl for fast analytics (issue #16)
+      void this.syncDailyPnlForOrders(targetOrders.filter((o) => updatedEvents.some((e) => e.orderId === o.id))).catch(() => {});
       try {
         telemetryWsGateway.broadcastPnlUpdate({ updatedOrders: updatedEvents, timestamp: Date.now() });
         this.cachedPnlByKey.clear();
@@ -2045,6 +2232,9 @@ export class OrderService {
       }
 
       if (updatedOrderPnlEvents.length > 0) {
+        // Sync pre-aggregated daily_pnl for fast analytics (issue #16)
+        const settledBatch = candidates.filter((c) => updatedOrderPnlEvents.some((e) => e.orderId === c.id));
+        void this.syncDailyPnlForOrders(settledBatch).catch(() => {});
         try {
           telemetryWsGateway.broadcastPnlUpdate({ updatedOrders: updatedOrderPnlEvents, timestamp: Date.now() });
 
@@ -2099,6 +2289,102 @@ export class OrderService {
     };
     this.pnlSyncInFlight = doSync().finally(() => { this.pnlSyncInFlight = null; });
     return this.pnlSyncInFlight;
+  }
+
+  /**
+   * Upserts pre-aggregated daily PnL rows for the given settled orders.
+   * Covers issue #16: materialized daily_pnl avoids full table scans on analytics hot path.
+   */
+  private async syncDailyPnlForOrders(settledOrders: OrderExecution[]): Promise<void> {
+    if (!this.isPersistenceEnabled() || settledOrders.length === 0) return;
+    try {
+      // Group by (user_address lower, source bucket, day)
+      const bucket = new Map<string, { user_address: string; source: string; day: string; pnl: number; volume: number; trades: number; wins: number; losses: number }>();
+      for (const o of settledOrders) {
+        if (!o.userAddress || !isAddress(o.userAddress)) continue;
+        const day = (o.settledAt ? new Date(o.settledAt) : new Date(o.createdAt)).toISOString().slice(0, 10);
+        const userLower = getAddress(o.userAddress);
+        const sources: Array<'ALL' | 'SWARM' | 'TERMINAL'> = ['ALL', (o.source === 'TERMINAL' || o.agentType === 'Manual' ? 'TERMINAL' : 'SWARM') as any];
+        for (const src of sources) {
+          const key = `${userLower.toLowerCase()}|${src}|${day}`;
+          const entry = bucket.get(key) || { user_address: userLower, source: src, day, pnl: 0, volume: 0, trades: 0, wins: 0, losses: 0 };
+          const pnl = o.pnl ?? 0;
+          const isWin = (o.isSettled || pnl !== 0) && pnl > 0.01;
+          const isLoss = (o.isSettled || pnl !== 0) && pnl < -0.01;
+          entry.pnl += pnl;
+          entry.volume += o.totalCost || 0;
+          entry.trades += 1;
+          if (isWin) entry.wins += 1;
+          if (isLoss) entry.losses += 1;
+          bucket.set(key, entry);
+        }
+      }
+      // Upsert aggregated buckets. Need to merge with existing DB values, so fetch existing and sum correctly
+      // For simplicity incremental upsert: we recompute day's true totals from current in-memory + DB for those keys via a fresh query.
+      // Instead, do a precise upsert by reading current daily_pnl for those (user,day,source) and overwriting with recomputed totals from all orders for that day.
+      // To avoid N queries, batch fetch existing daily_pnl for affected user/day combos
+      const affectedUsers = new Set<string>();
+      const affectedDays = new Set<string>();
+      for (const v of bucket.values()) {
+        affectedUsers.add(v.user_address.toLowerCase());
+        affectedDays.add(v.day);
+      }
+      // Recompute authoritative totals per bucket from all orders (memory + DB fallback would be heavy; use memory which contains recent days)
+      // For recent days (last 30), memory at 5000 cap is likely complete. For older days correctness is not critical for real-time equity.
+      // So we can just upsert incremental deltas with on-conflict increment via RPC would be ideal; fallback: read-modify-write per bucket with retries
+      for (const entry of bucket.values()) {
+        try {
+          // Read existing
+          const { data: existing } = await supabase.from('daily_pnl').select('pnl, volume, trades, wins, losses').eq('user_address', entry.user_address).eq('source', entry.source).eq('day', entry.day).maybeSingle();
+          if (existing) {
+            // If already exists, we need to avoid double-counting on re-settlement; check if order already counted by comparing totals
+            // Simplest: rebuild day total from all orders in memory for that user/day/source
+            const dayOrders = this.orders.filter((o) => {
+              if (!o.userAddress || o.userAddress.toLowerCase() !== entry.user_address.toLowerCase()) return false;
+              const d = (o.settledAt ? new Date(o.settledAt) : new Date(o.createdAt)).toISOString().slice(0, 10);
+              if (d !== entry.day) return false;
+              const src = o.source === 'TERMINAL' || o.agentType === 'Manual' ? 'TERMINAL' : 'SWARM';
+              return entry.source === 'ALL' || src === entry.source;
+            });
+            // Also include settledOrders that are the just-settled batch (they are already in this.orders at this point if called after insertion, but for settle path they are mutated in place)
+            // Compute recomputed totals
+            let rePnl = 0, reVol = 0, reTrades = 0, reWins = 0, reLosses = 0;
+            for (const o of dayOrders) {
+              if (!o.isSettled) continue;
+              const pnl = o.pnl ?? 0;
+              rePnl += pnl;
+              reVol += o.totalCost || 0;
+              reTrades += 1;
+              if (pnl > 0.01) reWins += 1;
+              else if (pnl < -0.01) reLosses += 1;
+            }
+            await supabase.from('daily_pnl').upsert({
+              user_address: entry.user_address,
+              source: entry.source,
+              day: entry.day,
+              pnl: Number(rePnl.toFixed(4)),
+              volume: Number(reVol.toFixed(4)),
+              trades: reTrades,
+              wins: reWins,
+              losses: reLosses,
+              updated_at: new Date().toISOString(),
+            }, { onConflict: 'user_address,source,day' });
+          } else {
+            await supabase.from('daily_pnl').upsert({
+              user_address: entry.user_address,
+              source: entry.source,
+              day: entry.day,
+              pnl: Number(entry.pnl.toFixed(4)),
+              volume: Number(entry.volume.toFixed(4)),
+              trades: entry.trades,
+              wins: entry.wins,
+              losses: entry.losses,
+              updated_at: new Date().toISOString(),
+            }, { onConflict: 'user_address,source,day' });
+          }
+        } catch {}
+      }
+    } catch {}
   }
 
   /**

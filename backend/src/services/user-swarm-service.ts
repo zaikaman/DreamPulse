@@ -132,10 +132,12 @@ export class UserSwarmService {
     }
     if (isPersistenceEnabled()) {
       try {
+        // Index-friendly eq on checksummed address; idx_user_swarm_lower backs lower() RLS path
+        const checksummed = getAddress(normalized) as Address;
         const { data, error } = await supabase
           .from('user_swarm_configs')
           .select('*')
-          .ilike('user_address', normalized)
+          .eq('user_address', checksummed)
           .limit(1);
         if (!error && data && data.length > 0) {
           const rec = toRecord(data[0]);
@@ -332,7 +334,7 @@ export class UserSwarmService {
           await supabase
             .from('sessions')
             .update({ copy_trade_enabled: updates.copyTradeEnabled, updated_at: now })
-            .ilike('user_address', normalized)
+            .eq('user_address', normalized)
             .eq('is_active', true);
         } catch (err: any) {
           console.warn('[UserSwarmService] Sync with sessions table notice:', err?.message || err);

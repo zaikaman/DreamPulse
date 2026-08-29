@@ -238,6 +238,11 @@ CREATE POLICY "swarm_configs_service_role" ON public.user_swarm_configs
 --                agent_strategies, user_swarm_configs  (0 policies → default deny)
 --   authenticated with valid JWT (user_address claim matching row) can: CRUD own rows
 --   service_role (backend) can: ALL (backend is sole writer for now)
+-- Functional lower() indexes for case-insensitive lookups (avoid seq scans from lower() in RLS + service filters)
+CREATE INDEX IF NOT EXISTS idx_sessions_user_active_lower ON public.sessions(lower(user_address), is_active);
+CREATE INDEX IF NOT EXISTS idx_orders_user_created_lower ON public.orders(lower(user_address), created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_user_swarm_lower ON public.user_swarm_configs(lower(user_address));
+
 -- Frontend must use backend REST API for private data:
 --   GET  /api/v1/sessions/:userAddress        -> service_role read
 --   POST /api/v1/sessions/register            -> service_role insert

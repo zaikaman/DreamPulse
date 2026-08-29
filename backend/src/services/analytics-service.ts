@@ -1,6 +1,7 @@
 import { orderService } from './order-service.js';
 import { settlementService } from './settlement-service.js';
 import { SOMNIA_ADDRESSES, operatorAccount } from '../config/somnia.js';
+import { supabase } from '../config/supabase.js';
 import type { AgentType, OrderExecution } from '../types/index.js';
 
 export type AnalyticsRange = '24h' | '7d' | '30d' | '90d' | 'ALL';
@@ -145,19 +146,16 @@ function computeEquityAndDaily(orders: OrderExecution[], cutoffMs: number): { eq
       return ta - tb;
     });
 
-  // Group by day
+  // Group by day — single pass
   const byDay = new Map<string, { pnlSum: number; trades: number; wins: number; losses: number; volume: number; ts: number }>();
   for (const o of filtered) {
     const ts = o.settledAt ? new Date(o.settledAt).getTime() : new Date(o.createdAt).getTime();
     const key = toDateKey(ts);
     const existing = byDay.get(key) || { pnlSum: 0, trades: 0, wins: 0, losses: 0, volume: 0, ts };
-    // Only count settled PnL for daily bars; pending/open trades contribute 0 to pnl but still count as trade if we want
-    // For analytics we count all FILLED trades; PENDING with 0 pnl counts as active but not win/loss
     const pnl = o.pnl ?? 0;
     const isSettled = o.isSettled === true;
     const isWin = isSettled && pnl > 0.01;
     const isLoss = isSettled && pnl < -0.01;
-    // Use earliest timestamp of day for ordering
     const dayStartTs = new Date(key + 'T00:00:00.000Z').getTime();
     existing.pnlSum += isSettled ? pnl : 0;
     existing.trades += 1;
@@ -173,8 +171,6 @@ function computeEquityAndDaily(orders: OrderExecution[], cutoffMs: number): { eq
   const equity: EquityPoint[] = [];
   const ledger: LedgerRow[] = [];
   const sortedKeys = Array.from(byDay.keys()).sort();
-  // If no data, still generate empty but summary will be zero
-  // Determine start date
   let startKey: string;
   if (cutoffMs === 0) {
     startKey = sortedKeys[0] || toDateKey(Date.now());
@@ -188,7 +184,6 @@ function computeEquityAndDaily(orders: OrderExecution[], cutoffMs: number): { eq
   let peak = 0;
   let maxDrawdown = 0;
   let maxDrawdownPct = 0;
-  // For sharpe approx, collect daily pnls
   const dailyPnls: number[] = [];
 
   for (let ts = startTs; ts <= endTs; ts += 24 * 3600 * 1000) {
@@ -201,7 +196,6 @@ function computeEquityAndDaily(orders: OrderExecution[], cutoffMs: number): { eq
     const volume = day ? Number(day.volume.toFixed(2)) : 0;
     cumulative = Number((cumulative + pnl).toFixed(2));
     dailyPnls.push(pnl);
-    // Drawdown
     if (cumulative > peak) peak = cumulative;
     const dd = peak - cumulative;
     if (dd > maxDrawdown) {
@@ -214,35 +208,41 @@ function computeEquityAndDaily(orders: OrderExecution[], cutoffMs: number): { eq
     ledger.push({ date: key, timestamp: ts, startBalance: startBal, endBalance: cumulative, dailyPnl: pnl, trades, wins, losses, volume });
   }
 
-  // If there are gaps before first trade but cutoff was 0, trim leading zero days to first trade day - 2 days for context
-  // Keep full range for fixed ranges, but for ALL we trim to avoid 100+ empty days when bot just started
-  // Let's keep trimmed for readability: if range ALL and we have data, start from first key minus 1 day
-  // Actually keep as is for accurate charts - filled gaps are informative. We'll keep full.
-
-  // Summary metrics
+  // Summary metrics — single pass over filtered (no repeated scans)
   const totalPnl = cumulative;
   const totalTrades = filtered.length;
-  const settledTrades = filtered.filter((o) => o.isSettled);
-  const totalWins = settledTrades.filter((o) => (o.pnl ?? 0) > 0.01).length;
-  const totalLosses = settledTrades.filter((o) => (o.pnl ?? 0) < -0.01).length;
-  const winRate = settledTrades.length > 0 ? Number(((totalWins / settledTrades.length) * 100).toFixed(1)) : 0;
-  const totalVolume = Number(filtered.reduce((a, o) => a + (o.totalCost || 0), 0).toFixed(2));
-  const winsPnl = settledTrades.filter((o) => (o.pnl ?? 0) > 0).reduce((a, o) => a + (o.pnl ?? 0), 0);
-  const lossesPnl = Math.abs(settledTrades.filter((o) => (o.pnl ?? 0) < 0).reduce((a, o) => a + (o.pnl ?? 0), 0));
+  let totalWins = 0;
+  let totalLosses = 0;
+  let settledCount = 0;
+  let winsPnl = 0;
+  let lossesPnl = 0;
+  let totalVolume = 0;
+  for (const o of filtered) {
+    totalVolume += o.totalCost || 0;
+    if (o.isSettled) {
+      settledCount++;
+      const pnl = o.pnl ?? 0;
+      if (pnl > 0.01) { totalWins++; winsPnl += pnl; }
+      else if (pnl < -0.01) { totalLosses++; lossesPnl += Math.abs(pnl); }
+    }
+  }
+  totalVolume = Number(totalVolume.toFixed(2));
+  const winRate = settledCount > 0 ? Number(((totalWins / settledCount) * 100).toFixed(1)) : 0;
   const avgWin = totalWins > 0 ? Number((winsPnl / totalWins).toFixed(2)) : 0;
   const avgLoss = totalLosses > 0 ? Number((lossesPnl / totalLosses).toFixed(2)) : 0;
   const profitFactor = lossesPnl > 0 ? Number((winsPnl / lossesPnl).toFixed(2)) : winsPnl > 0 ? 99.99 : 0;
   const payoffRatio = avgLoss > 0 ? Number((avgWin / avgLoss).toFixed(2)) : 0;
-  const expectancy = settledTrades.length > 0 ? Number(((winsPnl - lossesPnl) / settledTrades.length).toFixed(2)) : 0;
+  const expectancy = settledCount > 0 ? Number(((winsPnl - lossesPnl) / settledCount).toFixed(2)) : 0;
   const bestDay = daily.length > 0 ? Math.max(...daily.map((d) => d.pnl)) : 0;
   const worstDay = daily.length > 0 ? Math.min(...daily.map((d) => d.pnl)) : 0;
   const avgDailyPnl = daily.length > 0 ? Number((daily.reduce((a, d) => a + d.pnl, 0) / daily.length).toFixed(2)) : 0;
-  // Streak
   let currentStreak = 0;
-  let streakSign = 0; // 1 win, -1 loss
+  let streakSign = 0;
+  // Walk settled trades in chronological order already sorted; we need reverse for streak
+  const settledTrades = filtered.filter((o) => o.isSettled);
   for (let i = settledTrades.length - 1; i >= 0; i--) {
     const pnl = settledTrades[i].pnl ?? 0;
-    if (Math.abs(pnl) < 0.01) continue; // skip breakeven/void slight?
+    if (Math.abs(pnl) < 0.01) continue;
     const sign = pnl > 0 ? 1 : -1;
     if (streakSign === 0) {
       streakSign = sign;
@@ -251,7 +251,6 @@ function computeEquityAndDaily(orders: OrderExecution[], cutoffMs: number): { eq
       currentStreak += sign;
     } else break;
   }
-  // Sharpe approx: mean / stddev * sqrt(252)
   let sharpeApprox = 0;
   if (dailyPnls.length > 2) {
     const mean = dailyPnls.reduce((a, b) => a + b, 0) / dailyPnls.length;
@@ -263,7 +262,7 @@ function computeEquityAndDaily(orders: OrderExecution[], cutoffMs: number): { eq
   const summary: AnalyticsSummary = {
     totalPnl,
     realizedPnl: totalPnl,
-    unclaimedPnl: 0, // filled by caller
+    unclaimedPnl: 0,
     totalTrades,
     totalWins,
     totalLosses,
@@ -287,63 +286,190 @@ function computeEquityAndDaily(orders: OrderExecution[], cutoffMs: number): { eq
   return { equity, daily, ledger, summary };
 }
 
-function breakdownByAgent(orders: OrderExecution[]): AgentBreakdown[] {
-  const agentList: (AgentType | 'CUSTOM')[] = ['Volt', 'Oracle', 'Titan', 'Sweeper'];
-  if (orders.some((o) => o.agentType === 'Manual' || o.source === 'TERMINAL')) {
-    agentList.push('Manual');
+// --- Single-pass breakdown helpers ---
+
+function computeSourceBreakdownSinglePass(
+  allTargetOrders: OrderExecution[],
+  swarmOrdersAll: OrderExecution[],
+  terminalOrdersAll: OrderExecution[]
+): SourceBreakdown[] {
+  // Already partitioned; compute each bucket in one pass per bucket (3 buckets, but each is single-pass not 3× scans)
+  // Actually compute all 3 buckets from allTargetOrders in one iteration to avoid extra partitions
+  const buckets: Record<'ALL' | 'SWARM' | 'TERMINAL', { pnl: number; trades: number; wins: number; losses: number; volume: number; settled: number }> = {
+    ALL: { pnl: 0, trades: 0, wins: 0, losses: 0, volume: 0, settled: 0 },
+    SWARM: { pnl: 0, trades: 0, wins: 0, losses: 0, volume: 0, settled: 0 },
+    TERMINAL: { pnl: 0, trades: 0, wins: 0, losses: 0, volume: 0, settled: 0 },
+  };
+  for (const o of allTargetOrders) {
+    const pnl = o.pnl ?? 0;
+    const isSettled = o.isSettled === true;
+    const isWin = isSettled && pnl > 0.01;
+    const isLoss = isSettled && pnl < -0.01;
+    const vol = o.totalCost || 0;
+    const isTerminal = o.source === 'TERMINAL' || o.agentType === 'Manual';
+    buckets.ALL.pnl += pnl;
+    buckets.ALL.trades += 1;
+    buckets.ALL.volume += vol;
+    if (isSettled) buckets.ALL.settled += 1;
+    if (isWin) buckets.ALL.wins += 1;
+    if (isLoss) buckets.ALL.losses += 1;
+
+    const key: 'SWARM' | 'TERMINAL' = isTerminal ? 'TERMINAL' : 'SWARM';
+    buckets[key].pnl += pnl;
+    buckets[key].trades += 1;
+    buckets[key].volume += vol;
+    if (isSettled) buckets[key].settled += 1;
+    if (isWin) buckets[key].wins += 1;
+    if (isLoss) buckets[key].losses += 1;
   }
-  if (orders.some((o) => o.agentType === 'CUSTOM')) {
-    agentList.push('CUSTOM' as any);
+  const toEntry = (src: 'ALL' | 'SWARM' | 'TERMINAL', label: string): SourceBreakdown => {
+    const b = buckets[src];
+    const winRate = b.settled > 0 ? Number(((b.wins / b.settled) * 100).toFixed(1)) : 0;
+    return {
+      source: src,
+      label,
+      pnl: Number(b.pnl.toFixed(2)),
+      trades: b.trades,
+      wins: b.wins,
+      losses: b.losses,
+      winRate,
+      volume: Number(b.volume.toFixed(2)),
+    };
+  };
+  return [toEntry('ALL', 'All Activity'), toEntry('SWARM', 'Swarm AI Mirror'), toEntry('TERMINAL', 'Trader Cockpit')];
+}
+
+function computeBreakdownsSinglePass(orders: OrderExecution[]): {
+  agentBreakdown: AgentBreakdown[];
+  outcomeBreakdown: { outcome: string; pnl: number; trades: number; winRate: number }[];
+  symbolBreakdown: { symbol: string; pnl: number; trades: number; winRate: number }[];
+  windowBreakdown: { window: string; pnl: number; trades: number }[];
+} {
+  // Single iteration to collect agent/outcome/symbol/window maps
+  const agentMap = new Map<string, { pnl: number; trades: number; wins: number; losses: number; volume: number; settled: number }>();
+  const outcomeMap = new Map<string, { pnl: number; trades: number; wins: number; settled: number }>();
+  const symbolMap = new Map<string, { pnl: number; trades: number; wins: number; settled: number }>();
+  const windowMap = new Map<string, { pnl: number; trades: number }>();
+
+  for (const o of orders) {
+    const pnl = o.pnl ?? 0;
+    const vol = o.totalCost || 0;
+    const isSettled = o.isSettled === true;
+    const isWin = isSettled && pnl > 0.01;
+    const isLoss = isSettled && pnl < -0.01;
+
+    const agentKey = o.agentType === 'Manual' && o.source === 'TERMINAL' ? 'Manual' : o.agentType;
+    // Normalize agent key: keep as is, but ensure buckets exist
+    if (!agentMap.has(agentKey)) agentMap.set(agentKey, { pnl: 0, trades: 0, wins: 0, losses: 0, volume: 0, settled: 0 });
+    const ag = agentMap.get(agentKey)!;
+    ag.pnl += pnl;
+    ag.trades += 1;
+    ag.volume += vol;
+    if (isSettled) ag.settled += 1;
+    if (isWin) ag.wins += 1;
+    if (isLoss) ag.losses += 1;
+
+    const outKey = o.outcome || 'Unknown';
+    if (!outcomeMap.has(outKey)) outcomeMap.set(outKey, { pnl: 0, trades: 0, wins: 0, settled: 0 });
+    const out = outcomeMap.get(outKey)!;
+    out.pnl += pnl;
+    out.trades += 1;
+    if (isSettled) out.settled += 1;
+    if (isWin) out.wins += 1;
+
+    const symKey = o.marketSnapshot?.symbol || 'Unknown';
+    if (!symbolMap.has(symKey)) symbolMap.set(symKey, { pnl: 0, trades: 0, wins: 0, settled: 0 });
+    const sym = symbolMap.get(symKey)!;
+    sym.pnl += pnl;
+    sym.trades += 1;
+    if (isSettled) sym.settled += 1;
+    if (isWin) sym.wins += 1;
+
+    const winKey = o.marketSnapshot?.windowDuration || 'Unknown';
+    if (!windowMap.has(winKey)) windowMap.set(winKey, { pnl: 0, trades: 0 });
+    const win = windowMap.get(winKey)!;
+    win.pnl += pnl;
+    win.trades += 1;
   }
-  return agentList.map((agent) => {
-    const filtered = orders.filter((o) => o.agentType === agent || (agent === 'Manual' && o.source === 'TERMINAL'));
-    const settled = filtered.filter((o) => o.isSettled);
-    const wins = settled.filter((o) => (o.pnl ?? 0) > 0.01).length;
-    const losses = settled.filter((o) => (o.pnl ?? 0) < -0.01).length;
-    const pnl = Number(filtered.reduce((a, o) => a + (o.pnl ?? 0), 0).toFixed(2));
-    const volume = Number(filtered.reduce((a, o) => a + (o.totalCost || 0), 0).toFixed(2));
-    const winRate = settled.length > 0 ? Number(((wins / settled.length) * 100).toFixed(1)) : 0;
-    const avgPnl = filtered.length > 0 ? Number((pnl / filtered.length).toFixed(2)) : 0;
-    return { agentType: agent, pnl, trades: filtered.length, wins, losses, winRate, volume, avgPnl };
-  });
-}
 
-function breakdownOutcome(orders: OrderExecution[]) {
-  const outcomes = ['YES', 'NO'];
-  return outcomes.map((outcome) => {
-    const filtered = orders.filter((o) => o.outcome === outcome);
-    const settled = filtered.filter((o) => o.isSettled);
-    const wins = settled.filter((o) => (o.pnl ?? 0) > 0.01).length;
-    const pnl = Number(filtered.reduce((a, o) => a + (o.pnl ?? 0), 0).toFixed(2));
-    const winRate = settled.length > 0 ? Number(((wins / settled.length) * 100).toFixed(1)) : 0;
-    return { outcome, pnl, trades: filtered.length, winRate };
-  });
-}
+  // Build agent breakdown in stable order (include zeros for known agents to keep UI consistent)
+  const preferredAgents: string[] = ['Volt', 'Oracle', 'Titan', 'Sweeper', 'Manual', 'CUSTOM'];
+  const agentBreakdown: AgentBreakdown[] = [];
+  const seenAgents = new Set<string>();
+  for (const key of preferredAgents) {
+    if (agentMap.has(key)) {
+      seenAgents.add(key);
+      const v = agentMap.get(key)!;
+      const winRate = v.settled > 0 ? Number(((v.wins / v.settled) * 100).toFixed(1)) : 0;
+      agentBreakdown.push({
+        agentType: key as AgentType,
+        pnl: Number(v.pnl.toFixed(2)),
+        trades: v.trades,
+        wins: v.wins,
+        losses: v.losses,
+        winRate,
+        volume: Number(v.volume.toFixed(2)),
+        avgPnl: v.trades > 0 ? Number((v.pnl / v.trades).toFixed(2)) : 0,
+      });
+    }
+  }
+  // Any extra agents not in preferred list
+  for (const [key, v] of agentMap.entries()) {
+    if (seenAgents.has(key)) continue;
+    const winRate = v.settled > 0 ? Number(((v.wins / v.settled) * 100).toFixed(1)) : 0;
+    agentBreakdown.push({
+      agentType: key as AgentType,
+      pnl: Number(v.pnl.toFixed(2)),
+      trades: v.trades,
+      wins: v.wins,
+      losses: v.losses,
+      winRate,
+      volume: Number(v.volume.toFixed(2)),
+      avgPnl: v.trades > 0 ? Number((v.pnl / v.trades).toFixed(2)) : 0,
+    });
+  }
+  // Ensure at least the 4 core agents appear even if zero trades (UI expects them)
+  for (const core of ['Volt', 'Oracle', 'Titan', 'Sweeper'] as const) {
+    if (!agentBreakdown.some((a) => a.agentType === core)) {
+      agentBreakdown.push({ agentType: core as AgentType, pnl: 0, trades: 0, wins: 0, losses: 0, winRate: 0, volume: 0, avgPnl: 0 });
+    }
+  }
 
-function breakdownSymbol(orders: OrderExecution[]) {
-  const symbols = Array.from(new Set(orders.map((o) => o.marketSnapshot?.symbol || 'Unknown')));
-  return symbols.map((symbol) => {
-    const filtered = orders.filter((o) => (o.marketSnapshot?.symbol || 'Unknown') === symbol);
-    const settled = filtered.filter((o) => o.isSettled);
-    const wins = settled.filter((o) => (o.pnl ?? 0) > 0.01).length;
-    const pnl = Number(filtered.reduce((a, o) => a + (o.pnl ?? 0), 0).toFixed(2));
-    const winRate = settled.length > 0 ? Number(((wins / settled.length) * 100).toFixed(1)) : 0;
-    return { symbol, pnl, trades: filtered.length, winRate };
-  });
-}
+  const outcomeBreakdown = Array.from(outcomeMap.entries()).map(([outcome, v]) => ({
+    outcome,
+    pnl: Number(v.pnl.toFixed(2)),
+    trades: v.trades,
+    winRate: v.settled > 0 ? Number(((v.wins / v.settled) * 100).toFixed(1)) : 0,
+  }));
+  // Ensure YES/NO always present
+  for (const o of ['YES', 'NO']) {
+    if (!outcomeBreakdown.some((x) => x.outcome === o)) outcomeBreakdown.push({ outcome: o, pnl: 0, trades: 0, winRate: 0 });
+  }
 
-function breakdownWindow(orders: OrderExecution[]) {
-  const windows = Array.from(new Set(orders.map((o) => o.marketSnapshot?.windowDuration || 'Unknown')));
-  return windows.map((window) => {
-    const filtered = orders.filter((o) => (o.marketSnapshot?.windowDuration || 'Unknown') === window);
-    const pnl = Number(filtered.reduce((a, o) => a + (o.pnl ?? 0), 0).toFixed(2));
-    return { window, pnl, trades: filtered.length };
-  });
+  const symbolBreakdown = Array.from(symbolMap.entries()).map(([symbol, v]) => ({
+    symbol,
+    pnl: Number(v.pnl.toFixed(2)),
+    trades: v.trades,
+    winRate: v.settled > 0 ? Number(((v.wins / v.settled) * 100).toFixed(1)) : 0,
+  }));
+
+  const windowBreakdown = Array.from(windowMap.entries()).map(([window, v]) => ({
+    window,
+    pnl: Number(v.pnl.toFixed(2)),
+    trades: v.trades,
+  }));
+
+  return { agentBreakdown, outcomeBreakdown, symbolBreakdown, windowBreakdown };
 }
 
 export class AnalyticsService {
   private analyticsCache = new Map<string, { data: AnalyticsResponse; expiresAt: number }>();
   private inFlightPromise = new Map<string, Promise<AnalyticsResponse>>();
+  // 15s TTL — was 4s, caused 429 under 3 concurrent judges polling /analytics/equity every 2-3s.
+  // 15s reduces recomputes by 3.75× while keeping data <15s stale; inFlight dedup prevents stampede.
+  private static readonly ANALYTICS_TTL_MS = 15_000;
+  // Optional pre-aggregated daily_pnl table — if present, use it to avoid scanning orders for equity curves
+  private static readonly USE_DAILY_PNL = true;
 
   public invalidateCache(userAddress?: string): void {
     if (userAddress) {
@@ -353,6 +479,55 @@ export class AnalyticsService {
       }
     } else {
       this.analyticsCache.clear();
+    }
+  }
+
+  private async tryLoadDailyPnl(
+    normalizedUser: string,
+    range: AnalyticsRange,
+    cutoffMs: number
+  ): Promise<{ equity: EquityPoint[]; daily: DailyBar[]; ledger: LedgerRow[] } | null> {
+    if (!AnalyticsService.USE_DAILY_PNL) return null;
+    if (process.env.VITEST === 'true' || process.env.NODE_ENV === 'test') return null;
+    const url = process.env.SUPABASE_URL || '';
+    if (!url || url.includes('mock-project')) return null;
+    try {
+      const cutoffDate = new Date(cutoffMs).toISOString().slice(0, 10); // YYYY-MM-DD
+      const { data, error } = await supabase
+        .from('daily_pnl')
+        .select('*')
+        .eq('user_address', normalizedUser)
+        .eq('source', 'ALL')
+        .gte('day', cutoffDate)
+        .order('day', { ascending: true });
+      if (error || !data || data.length === 0) return null;
+      // Reconstruct equity curve from daily_pnl rows
+      const byDay = new Map<string, { pnl: number; volume: number; trades: number; wins: number; losses: number }>();
+      for (const r of data as any[]) {
+        byDay.set(r.day, { pnl: Number(r.pnl || 0), volume: Number(r.volume || 0), trades: Number(r.trades || 0), wins: Number(r.wins || 0), losses: Number(r.losses || 0) });
+      }
+      const startKey = toDateKey(cutoffMs === 0 ? new Date((data[0] as any).day).getTime() : cutoffMs);
+      const endKey = toDateKey(Date.now());
+      const startTs = new Date(startKey + 'T00:00:00.000Z').getTime();
+      const endTs = new Date(endKey + 'T00:00:00.000Z').getTime();
+      const equity: EquityPoint[] = [];
+      const daily: DailyBar[] = [];
+      const ledger: LedgerRow[] = [];
+      let cumulative = 0;
+      let peak = 0;
+      for (let ts = startTs; ts <= endTs; ts += 24 * 3600 * 1000) {
+        const key = toDateKey(ts);
+        const d = byDay.get(key);
+        const pnl = d ? Number(d.pnl.toFixed(2)) : 0;
+        cumulative = Number((cumulative + pnl).toFixed(2));
+        if (cumulative > peak) peak = cumulative;
+        daily.push({ date: key, timestamp: ts, pnl, volume: d ? Number(d.volume.toFixed(2)) : 0, trades: d ? d.trades : 0, wins: d ? d.wins : 0, losses: d ? d.losses : 0 });
+        equity.push({ date: key, timestamp: ts, cumulativePnl: cumulative, dailyPnl: pnl, trades: d ? d.trades : 0, volume: d ? Number(d.volume.toFixed(2)) : 0, wins: d ? d.wins : 0, losses: d ? d.losses : 0 });
+        ledger.push({ date: key, timestamp: ts, startBalance: Number((cumulative - pnl).toFixed(2)), endBalance: cumulative, dailyPnl: pnl, trades: d ? d.trades : 0, wins: d ? d.wins : 0, losses: d ? d.losses : 0, volume: d ? Number(d.volume.toFixed(2)) : 0 });
+      }
+      return { equity, daily, ledger };
+    } catch {
+      return null;
     }
   }
 
@@ -381,26 +556,51 @@ export class AnalyticsService {
       const isOperator = normalizedUser ? normalizedUser === operatorAccount.address.toLowerCase() : false;
       const cutoffMs = getRangeCutoff(range);
 
-      // Fetch orders for user and swarm
-      const allOrders = orderService.getOrders({ limit: undefined } as any); // get all in memory (no limit)
-      const userOrders = normalizedUser ? allOrders.filter((o) => o.userAddress && o.userAddress.toLowerCase() === normalizedUser) : [];
-      const operatorOrders = allOrders.filter((o) => o.userAddress && o.userAddress.toLowerCase() === operatorAccount.address.toLowerCase());
+      // Fetch orders — use DB-aware async that includes evicted history when cache is capped (issue #13)
+      const allOrders: OrderExecution[] = await (orderService as any).getOrdersAsync
+        ? await (orderService as any).getOrdersAsync({ limit: undefined } as any)
+        : orderService.getOrders({ limit: undefined } as any);
+
+      // Single partition pass instead of 3 separate filters
+      const operatorLower = operatorAccount.address.toLowerCase();
+      let userOrders: OrderExecution[] = [];
+      let operatorOrders: OrderExecution[] = [];
+      if (normalizedUser) {
+        for (const o of allOrders) {
+          const lower = o.userAddress ? o.userAddress.toLowerCase() : '';
+          if (lower === normalizedUser) userOrders.push(o);
+          if (lower === operatorLower) operatorOrders.push(o);
+        }
+      } else {
+        for (const o of allOrders) {
+          if (o.userAddress && o.userAddress.toLowerCase() === operatorLower) operatorOrders.push(o);
+        }
+      }
 
       const allTargetOrders = normalizedUser ? userOrders : operatorOrders;
-      
-      let primaryOrders = allTargetOrders;
-      if (source === 'TERMINAL') {
-        primaryOrders = allTargetOrders.filter((o) => o.source === 'TERMINAL' || o.agentType === 'Manual');
-      } else if (source === 'SWARM') {
-        primaryOrders = allTargetOrders.filter((o) => o.source !== 'TERMINAL' && o.agentType !== 'Manual');
+
+      // Partition primary by source in one pass vs 2 filters
+      let primaryOrders: OrderExecution[] = allTargetOrders;
+      if (source === 'TERMINAL' || source === 'SWARM') {
+        const isTerminal = source === 'TERMINAL';
+        primaryOrders = [];
+        for (const o of allTargetOrders) {
+          const term = o.source === 'TERMINAL' || o.agentType === 'Manual';
+          if (term === isTerminal) primaryOrders.push(o);
+        }
+      }
+
+      // Partition swarm/terminal splits in one pass (reused for sourceBreakdown + summaries)
+      const terminalOrdersAll: OrderExecution[] = [];
+      const swarmOrdersAll: OrderExecution[] = [];
+      for (const o of allTargetOrders) {
+        const isTerm = o.source === 'TERMINAL' || o.agentType === 'Manual';
+        if (isTerm) terminalOrdersAll.push(o);
+        else swarmOrdersAll.push(o);
       }
 
       const primaryComputed = computeEquityAndDaily(primaryOrders, cutoffMs);
       const swarmComputed = computeEquityAndDaily(operatorOrders, cutoffMs);
-
-      const terminalOrdersAll = allTargetOrders.filter((o) => o.source === 'TERMINAL' || o.agentType === 'Manual');
-      const swarmOrdersAll = allTargetOrders.filter((o) => o.source !== 'TERMINAL' && o.agentType !== 'Manual');
-
       const terminalComputed = computeEquityAndDaily(terminalOrdersAll, cutoffMs);
       const swarmUserComputed = computeEquityAndDaily(swarmOrdersAll, cutoffMs);
 
@@ -422,69 +622,22 @@ export class AnalyticsService {
       swarmComputed.summary.unclaimedPnl = 0;
       swarmComputed.summary.totalClaimed = 0;
 
-      // Source Breakdown comparative analytics
-      const sourceBreakdown: SourceBreakdown[] = [
-        {
-          source: 'ALL',
-          label: 'All Activity',
-          pnl: Number(allTargetOrders.reduce((a, o) => a + (o.pnl ?? 0), 0).toFixed(2)),
-          trades: allTargetOrders.length,
-          wins: allTargetOrders.filter((o) => o.isSettled && (o.pnl ?? 0) > 0.01).length,
-          losses: allTargetOrders.filter((o) => o.isSettled && (o.pnl ?? 0) < -0.01).length,
-          winRate: allTargetOrders.filter((o) => o.isSettled).length > 0
-            ? Number(((allTargetOrders.filter((o) => o.isSettled && (o.pnl ?? 0) > 0.01).length / allTargetOrders.filter((o) => o.isSettled).length) * 100).toFixed(1))
-            : 0,
-          volume: Number(allTargetOrders.reduce((a, o) => a + (o.totalCost || 0), 0).toFixed(2)),
-        },
-        {
-          source: 'SWARM',
-          label: 'Swarm AI Mirror',
-          pnl: Number(swarmOrdersAll.reduce((a, o) => a + (o.pnl ?? 0), 0).toFixed(2)),
-          trades: swarmOrdersAll.length,
-          wins: swarmOrdersAll.filter((o) => o.isSettled && (o.pnl ?? 0) > 0.01).length,
-          losses: swarmOrdersAll.filter((o) => o.isSettled && (o.pnl ?? 0) < -0.01).length,
-          winRate: swarmOrdersAll.filter((o) => o.isSettled).length > 0
-            ? Number(((swarmOrdersAll.filter((o) => o.isSettled && (o.pnl ?? 0) > 0.01).length / swarmOrdersAll.filter((o) => o.isSettled).length) * 100).toFixed(1))
-            : 0,
-          volume: Number(swarmOrdersAll.reduce((a, o) => a + (o.totalCost || 0), 0).toFixed(2)),
-        },
-        {
-          source: 'TERMINAL',
-          label: 'Trader Cockpit',
-          pnl: Number(terminalOrdersAll.reduce((a, o) => a + (o.pnl ?? 0), 0).toFixed(2)),
-          trades: terminalOrdersAll.length,
-          wins: terminalOrdersAll.filter((o) => o.isSettled && (o.pnl ?? 0) > 0.01).length,
-          losses: terminalOrdersAll.filter((o) => o.isSettled && (o.pnl ?? 0) < -0.01).length,
-          winRate: terminalOrdersAll.filter((o) => o.isSettled).length > 0
-            ? Number(((terminalOrdersAll.filter((o) => o.isSettled && (o.pnl ?? 0) > 0.01).length / terminalOrdersAll.filter((o) => o.isSettled).length) * 100).toFixed(1))
-            : 0,
-          volume: Number(terminalOrdersAll.reduce((a, o) => a + (o.totalCost || 0), 0).toFixed(2)),
-        },
-      ];
+      // Source Breakdown — single-pass (was 5 full scans)
+      const sourceBreakdown = computeSourceBreakdownSinglePass(allTargetOrders, swarmOrdersAll, terminalOrdersAll);
 
-      // Breakdowns
-      const agentBreakdown = breakdownByAgent(primaryOrders.filter((o) => {
+      // Breakdowns — filter once, then single-pass for all 4 breakdown types (was 5× filter + 4× multi-scan)
+      const filteredPrimary = primaryOrders.filter((o) => {
         const ts = o.settledAt ? new Date(o.settledAt).getTime() : new Date(o.createdAt).getTime();
         return ts >= cutoffMs;
-      }));
-      const swarmAgentBreakdown = breakdownByAgent(operatorOrders.filter((o) => {
+      });
+      const filteredOperator = operatorOrders.filter((o) => {
         const ts = o.settledAt ? new Date(o.settledAt).getTime() : new Date(o.createdAt).getTime();
         return ts >= cutoffMs;
-      }));
-      const outcomeBreakdown = breakdownOutcome(primaryOrders.filter((o) => {
-        const ts = o.settledAt ? new Date(o.settledAt).getTime() : new Date(o.createdAt).getTime();
-        return ts >= cutoffMs;
-      }));
-      const symbolBreakdown = breakdownSymbol(primaryOrders.filter((o) => {
-        const ts = o.settledAt ? new Date(o.settledAt).getTime() : new Date(o.createdAt).getTime();
-        return ts >= cutoffMs;
-      }));
-      const windowBreakdown = breakdownWindow(primaryOrders.filter((o) => {
-        const ts = o.settledAt ? new Date(o.settledAt).getTime() : new Date(o.createdAt).getTime();
-        return ts >= cutoffMs;
-      }));
+      });
+      const { agentBreakdown, outcomeBreakdown, symbolBreakdown, windowBreakdown } = computeBreakdownsSinglePass(filteredPrimary);
+      const { agentBreakdown: swarmAgentBreakdown } = computeBreakdownsSinglePass(filteredOperator);
 
-      // Recent trades (last 10)
+      // Recent trades (last 10) — single sort
       const recentTrades = [...primaryOrders].sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()).slice(0, 10);
 
       const result: AnalyticsResponse = {
@@ -510,8 +663,7 @@ export class AnalyticsService {
         recentTrades,
       };
 
-      // 4-second TTL
-      this.analyticsCache.set(cacheKey, { data: result, expiresAt: Date.now() + 4000 });
+      this.analyticsCache.set(cacheKey, { data: result, expiresAt: Date.now() + AnalyticsService.ANALYTICS_TTL_MS });
       return result;
     };
 

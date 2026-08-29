@@ -381,12 +381,15 @@ export class SessionService {
     let session = sessionId ? this.sessions.get(sessionId) : null;
 
     // If not found in in-memory cache, attempt to restore from Supabase
+    // Index-friendly exact match: normalize to checksummed address and use eq() which hits
+    // idx_sessions_user_active; RLS uses lower() with idx_sessions_user_active_lower.
     if (!session && isSessionPersistenceEnabled()) {
       try {
+        const normalizedForQuery = getAddress(userAddress);
         const { data } = await supabase
           .from('sessions')
           .select('*')
-          .ilike('user_address', userAddress)
+          .eq('user_address', normalizedForQuery)
           .eq('is_active', true)
           .order('created_at', { ascending: false })
           .limit(1);

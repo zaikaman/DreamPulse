@@ -825,26 +825,31 @@ apiRouter.post('/swarm/reset', requireWalletAuth, async (req: Request, res: Resp
 // ------------------------------------------------------------------------------
 // 4. Order Execution & History Endpoints
 // ------------------------------------------------------------------------------
-apiRouter.get('/orders', optionalWalletAuth, (req: Request, res: Response) => {
+apiRouter.get('/orders', optionalWalletAuth, async (req: Request, res: Response) => {
   const { userAddress, agentType, status, outcome, marketId, limit, page, pageSize, search, swarmOnly, scope, source } = req.query;
 
   // Trigger non-blocking settlement sync of resolved on-chain / expired markets
   void orderService.syncResolvedOrdersPnLAsync().catch(() => {});
 
-  const result = orderService.queryOrdersPaginated({
+  const params: Parameters<typeof orderService.queryOrdersPaginated>[0] = {
     userAddress: typeof userAddress === 'string' ? userAddress : undefined,
     agentType: typeof agentType === 'string' ? (agentType as AgentType) : undefined,
     status: typeof status === 'string' ? (status as OrderStatus) : undefined,
     outcome: typeof outcome === 'string' && (outcome === 'YES' || outcome === 'NO' || outcome === 'VOID') ? (outcome as any) : undefined,
     marketId: typeof marketId === 'string' ? marketId : undefined,
     searchQuery: typeof search === 'string' ? search : undefined,
-    scope: scope === 'SWARM' || scope === 'MY_ORDERS' || scope === 'ALL' ? scope : undefined,
+    scope: scope === 'SWARM' || scope === 'MY_ORDERS' || scope === 'ALL' ? (scope as any) : undefined,
     swarmOnly: swarmOnly === 'true' || scope === 'SWARM',
-    source: source === 'SWARM' || source === 'TERMINAL' || source === 'ALL' ? source : undefined,
+    source: source === 'SWARM' || source === 'TERMINAL' || source === 'ALL' ? (source as any) : undefined,
     limit: limit !== undefined ? parseInt(limit as string, 10) : undefined,
     page: page !== undefined ? parseInt(page as string, 10) : undefined,
     pageSize: pageSize !== undefined ? parseInt(pageSize as string, 10) : undefined,
-  });
+  };
+  // Use DB-aware paginated query when cache is capped (issue #13) — evicted rows remain queryable via Supabase
+  const anyOrderService: any = orderService as any;
+  const result = typeof anyOrderService.queryOrdersPaginatedAsync === 'function' && (orderService as any)['orders']?.length >= 5000
+    ? await anyOrderService.queryOrdersPaginatedAsync(params).catch(() => orderService.queryOrdersPaginated(params))
+    : orderService.queryOrdersPaginated(params);
 
   res.json({
     success: true,
@@ -859,9 +864,9 @@ apiRouter.get('/orders', optionalWalletAuth, (req: Request, res: Response) => {
   });
 });
 
-apiRouter.get('/orders/:id', (req: Request, res: Response) => {
+apiRouter.get('/orders/:id', async (req: Request, res: Response) => {
   const { id } = req.params;
-  const order = orderService.getOrderById(id);
+  const order = orderService.getOrderById(id) || await (orderService as any).getOrderByIdAsync?.(id).catch(() => null);
 
   if (!order) {
     return res.status(404).json({ success: false, error: `Order ${id} not found` });

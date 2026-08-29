@@ -151,8 +151,10 @@ CREATE TABLE IF NOT EXISTS public.backtests (
 CREATE INDEX IF NOT EXISTS idx_markets_status ON public.markets(status);
 CREATE INDEX IF NOT EXISTS idx_markets_symbol_window ON public.markets(symbol, window_duration);
 CREATE INDEX IF NOT EXISTS idx_sessions_user_active ON public.sessions(user_address, is_active);
+CREATE INDEX IF NOT EXISTS idx_sessions_user_active_lower ON public.sessions(lower(user_address), is_active);
 CREATE INDEX IF NOT EXISTS idx_sessions_copy_trade_active ON public.sessions(is_active, copy_trade_enabled, on_chain_authorized) WHERE is_active = TRUE;
 CREATE INDEX IF NOT EXISTS idx_orders_user_created ON public.orders(user_address, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_orders_user_created_lower ON public.orders(lower(user_address), created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_orders_market ON public.orders(market_id, status);
 CREATE INDEX IF NOT EXISTS idx_sweeps_user ON public.sweeps(user_address, status);
 CREATE INDEX IF NOT EXISTS idx_agent_logs_created ON public.agent_logs(created_at DESC);
@@ -318,6 +320,7 @@ CREATE TABLE IF NOT EXISTS public.user_swarm_configs (
 
 CREATE INDEX IF NOT EXISTS idx_user_swarm_mode ON public.user_swarm_configs(mode);
 CREATE INDEX IF NOT EXISTS idx_user_swarm_copy_trade ON public.user_swarm_configs(copy_trade_enabled, mode);
+CREATE INDEX IF NOT EXISTS idx_user_swarm_lower ON public.user_swarm_configs(lower(user_address));
 
 ALTER TABLE public.user_swarm_configs ENABLE ROW LEVEL SECURITY;
 -- Drop legacy open policies

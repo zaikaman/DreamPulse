@@ -782,35 +782,85 @@ export class MarketService extends EventEmitter {
     }
   }
 
+  private marketSyncHashes = new Map<string, string>();
+  private static readonly MARKET_SYNC_EPSILON = 0.0005; // ignore micro jitter < 0.05%
+  private static readonly MARKET_SYNC_FORCE_MS = 60_000; // force sync at least once per minute even if unchanged
+
+  private lastForcedSyncAt = 0;
+
+  private hashMarketForSync(m: Market): string {
+    // Quantize floats to epsilon to avoid churn from 0.0001 level jitter
+    const q = (n: number | undefined, eps = MarketService.MARKET_SYNC_EPSILON) =>
+      n == null ? 'null' : (Math.round(n / eps) * eps).toFixed(4);
+    return [
+      m.symbol,
+      m.strikePrice,
+      m.windowDuration,
+      m.status,
+      m.settlementPrice ?? 'null',
+      m.winningOutcome ?? 'null',
+      q(m.bestBidYes),
+      q(m.bestAskYes),
+      q(m.bestBidNo),
+      q(m.bestAskNo),
+      q(m.impliedProbYes),
+      q(m.fairValueYes),
+      q(m.edgePercentage, 0.001),
+    ].join('|');
+  }
+
   /**
-   * Syncs active markets to Supabase database.
+   * Syncs active markets to Supabase database with diff-hash gating to avoid spamming
+   * 35 rows × 12/min = 420 upserts/min when nothing changed. Only upserts rows whose
+   * quantized hash changed by > epsilon or when forced interval elapsed.
    */
   public async syncActiveMarketsToDatabase(): Promise<void> {
     try {
       const supabase = getServiceSupabase();
-      const rows = Array.from(this.markets.values()).map((m) => ({
-        id: m.id,
-        symbol: m.symbol,
-        strike_price: m.strikePrice,
-        window_duration: m.windowDuration,
-        open_timestamp: m.openTimestamp,
-        close_timestamp: m.closeTimestamp,
-        resolution_timestamp: m.resolutionTimestamp,
-        status: m.status,
-        settlement_price: m.settlementPrice ?? null,
-        winning_outcome: m.winningOutcome ?? null,
-        best_bid_yes: m.bestBidYes,
-        best_ask_yes: m.bestAskYes,
-        best_bid_no: m.bestBidNo,
-        best_ask_no: m.bestAskNo,
-        implied_prob_yes: m.impliedProbYes,
-        fair_value_yes: m.fairValueYes,
-        edge_percentage: m.edgePercentage,
-        updated_at: new Date().toISOString(),
-      }));
+      const now = Date.now();
+      const force = now - this.lastForcedSyncAt > MarketService.MARKET_SYNC_FORCE_MS;
+      if (force) this.lastForcedSyncAt = now;
 
-      if (rows.length > 0) {
-        await supabase.from('markets').upsert(rows, { onConflict: 'id' });
+      const changedRows: any[] = [];
+      for (const m of this.markets.values()) {
+        const hash = this.hashMarketForSync(m);
+        const prev = this.marketSyncHashes.get(m.id);
+        if (!force && prev === hash) continue;
+        this.marketSyncHashes.set(m.id, hash);
+        changedRows.push({
+          id: m.id,
+          symbol: m.symbol,
+          strike_price: m.strikePrice,
+          window_duration: m.windowDuration,
+          open_timestamp: m.openTimestamp,
+          close_timestamp: m.closeTimestamp,
+          resolution_timestamp: m.resolutionTimestamp,
+          status: m.status,
+          settlement_price: m.settlementPrice ?? null,
+          winning_outcome: m.winningOutcome ?? null,
+          best_bid_yes: m.bestBidYes,
+          best_ask_yes: m.bestAskYes,
+          best_bid_no: m.bestBidNo,
+          best_ask_no: m.bestAskNo,
+          implied_prob_yes: m.impliedProbYes,
+          fair_value_yes: m.fairValueYes,
+          edge_percentage: m.edgePercentage,
+          updated_at: new Date().toISOString(),
+        });
+      }
+
+      if (changedRows.length > 0) {
+        // Batch in chunks of 50 to stay under PostgREST payload limits
+        for (let i = 0; i < changedRows.length; i += 50) {
+          const chunk = changedRows.slice(i, i + 50);
+          const { error } = await supabase.from('markets').upsert(chunk, { onConflict: 'id' });
+          if (error) {
+            // On error, clear hashes for this chunk so next tick retries
+            for (const r of chunk) this.marketSyncHashes.delete(r.id);
+            console.warn('[MarketService] syncActiveMarketsToDatabase upsert warning:', error.message);
+            break;
+          }
+        }
       }
     } catch (_err) {
       // Non-fatal: Supabase sync can fail silently in offline/local dev mode
