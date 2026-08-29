@@ -9,6 +9,7 @@ import {
 import type { Market, AgentThoughtLog } from '../../types/index.js';
 import type { MarketTickData } from '../../hooks/useTelemetry.js';
 import { useMarketCountdown } from '../../hooks/useMarketCountdown.js';
+import { evaluateTradeConfluence } from '../../lib/confluence.js';
 import { cn } from '../../lib/utils.js';
 
 interface EventContractChartProps {
@@ -42,20 +43,35 @@ export const EventContractChart: React.FC<EventContractChartProps> = ({
   const spot = currentSpotPrice || liveTick?.spotPrice || market.strikePrice || 79664.46;
   const isITM = spot >= strike;
 
-  // Continuous regularized sigmoid probability centered on strike (prevents pin-risk step collapse)
-  const smoothFallbackProb = useMemo(() => {
-    if (!strike || strike <= 0) return 0.50;
-    const relOffset = (spot - strike) / (strike * 0.005);
-    const sigmoid = 1 / (1 + Math.exp(-Math.max(-4, Math.min(4, relOffset * 2))));
-    return Number(sigmoid.toFixed(4));
-  }, [spot, strike]);
+  // Local price history trail
+  const [priceHistory, setPriceHistory] = useState<PricePoint[]>(() => {
+    const now = Date.now();
+    const history: PricePoint[] = [];
+    const basePrice = strike;
+    // Generate realistic initial 30 points leading up to current spot
+    for (let i = 30; i >= 0; i--) {
+      const t = now - i * 5000;
+      const progress = (30 - i) / 30;
+      const variance = (Math.sin(i * 0.8) * 0.0006 + (progress * (spot - basePrice) / (basePrice || 1))) * basePrice;
+      history.push({
+        time: t,
+        price: Number((basePrice + variance).toFixed(2)),
+      });
+    }
+    history[history.length - 1].price = spot;
+    return history;
+  });
 
-  const impliedProbYes = liveTick?.impliedProb ?? market.impliedProbYes ?? smoothFallbackProb;
-  const fairValueYes = liveTick?.fairValue ?? market.fairValueYes ?? smoothFallbackProb;
+  // Evaluate Multi-Factor Confluence
+  const confluence = useMemo(() => {
+    return evaluateTradeConfluence(market, liveTick, spot, priceHistory);
+  }, [market, liveTick, spot, priceHistory]);
+
+  const impliedProbYes = confluence.impliedProbYes;
+  const fairValueYes = confluence.fairValueYes;
   const isSyntheticOrSeed = Boolean(market.isSynthetic || market.isSeedDepth);
-  const rawEdge = liveTick?.edge ?? (fairValueYes - impliedProbYes);
-  const edge = isSyntheticOrSeed ? 0 : rawEdge;
-  const isYesEdge = edge > 0.004;
+  const edge = confluence.edgePercentage;
+  const isYesEdge = confluence.isYesEdge;
   const hasEdge = Math.abs(edge) >= 0.005;
 
   const aiBadge = useMemo(() => {
@@ -68,13 +84,26 @@ export const EventContractChart: React.FC<EventContractChartProps> = ({
         w: 150,
       };
     }
+    if (confluence.convictionState === 'CAUTION_COUNTER_TREND') {
+      const text = `Caution: Divergence (Waiting)`;
+      return { text, bg: 'rgba(255,183,0,0.15)', stroke: '#ffb700', color: '#ffb700', w: 185 };
+    }
+    if (confluence.convictionState === 'HIGH_CONVICTION') {
+      const dir = confluence.recommendedAction === 'BUY_UP' ? 'UP' : 'DOWN';
+      const text = `High Conviction ${dir} (${confluence.winProbability}% Win • ${confluence.signedEdgeLabel})`;
+      const w = Math.min(260, Math.max(180, text.length * 6.5 + 16));
+      const isUp = dir === 'UP';
+      const bg = isUp ? 'rgba(0,230,118,0.15)' : 'rgba(255,51,102,0.15)';
+      const stroke = isUp ? '#00e676' : '#ff3366';
+      const color = isUp ? '#00e676' : '#ff3366';
+      return { text, bg, stroke, color, w };
+    }
     if (hasEdge) {
       const edgePct = (Math.abs(edge) * 100).toFixed(1);
       const dir = isYesEdge ? 'YES' : 'NO';
       const fairStr = (fairValueYes * 100).toFixed(1);
-      const mktStr = (impliedProbYes * 100).toFixed(1);
-      const text = `AI Fair ${fairStr}% vs ${mktStr}% → ${dir} +${edgePct}%`;
-      const w = Math.min(220, Math.max(170, text.length * 6.8 + 16));
+      const text = `AI Fair ${fairStr}% → ${dir} +${edgePct}% Alpha`;
+      const w = Math.min(230, Math.max(170, text.length * 6.6 + 16));
       const bg = isYesEdge ? 'rgba(0,230,118,0.14)' : 'rgba(255,51,102,0.14)';
       const stroke = isYesEdge ? '#00e676' : '#ff3366';
       const color = isYesEdge ? '#00e676' : '#ff3366';
@@ -83,27 +112,7 @@ export const EventContractChart: React.FC<EventContractChartProps> = ({
     const pct = fairValueYes >= 0.5 ? (fairValueYes * 100).toFixed(1) : ((1 - fairValueYes) * 100).toFixed(1);
     const d = fairValueYes >= 0.5 ? 'UP' : 'DOWN';
     return { text: `AI Fair ${pct}% ${d}`, bg: '#1e1035', stroke: '#7928ca', color: '#d8b4fe', w: 145 };
-  }, [fairValueYes, impliedProbYes, edge, isSyntheticOrSeed, hasEdge, isYesEdge]);
-
-  // Local price history trail
-  const [priceHistory, setPriceHistory] = useState<PricePoint[]>(() => {
-    const now = Date.now();
-    const history: PricePoint[] = [];
-    const basePrice = strike;
-    // Generate realistic initial 30 points leading up to current spot
-    for (let i = 30; i >= 0; i--) {
-      const t = now - i * 5000;
-      const progress = (30 - i) / 30;
-      const variance = (Math.sin(i * 0.8) * 0.0006 + (progress * (spot - basePrice) / basePrice)) * basePrice;
-      history.push({
-        time: t,
-        price: Number((basePrice + variance).toFixed(2)),
-      });
-    }
-    // Ensure last point is exactly the current spot
-    history[history.length - 1].price = spot;
-    return history;
-  });
+  }, [fairValueYes, edge, isSyntheticOrSeed, hasEdge, isYesEdge, confluence]);
 
   // Re-seed price history when switching market or symbol
   useEffect(() => {

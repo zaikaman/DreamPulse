@@ -706,6 +706,9 @@ apiRouter.post('/swarm/reset', async (req: Request, res: Response) => {
 apiRouter.get('/orders', (req: Request, res: Response) => {
   const { userAddress, agentType, status, outcome, marketId, limit, page, pageSize, search, swarmOnly, scope, source } = req.query;
 
+  // Trigger non-blocking settlement sync of resolved on-chain / expired markets
+  void orderService.syncResolvedOrdersPnLAsync().catch(() => {});
+
   const result = orderService.queryOrdersPaginated({
     userAddress: typeof userAddress === 'string' ? userAddress : undefined,
     agentType: typeof agentType === 'string' ? (agentType as AgentType) : undefined,

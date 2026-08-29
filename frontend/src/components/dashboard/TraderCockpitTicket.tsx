@@ -7,12 +7,16 @@ import {
   LockClosedIcon,
   ArrowTrendingUpIcon,
   ArrowTrendingDownIcon,
+  SparklesIcon,
+  ShieldCheckIcon,
+  ShieldExclamationIcon,
 } from '@heroicons/react/24/outline';
 import type { Market, AgentThoughtLog } from '../../types/index.js';
 import type { MarketTickData } from '../../hooks/useTelemetry.js';
 import type { WalletState } from '../../hooks/useSessionKey.js';
 import type { SessionGrant } from '../../types/index.js';
 import { useMarketCountdown } from '../../hooks/useMarketCountdown.js';
+import { evaluateTradeConfluence } from '../../lib/confluence.js';
 import { apiClient } from '../../services/api.js';
 import { web3Service, SOMNIA_ADDRESSES } from '../../services/web3.js';
 import { soundEngine } from '../../services/audio.js';
@@ -97,9 +101,6 @@ export const TraderCockpitTicket: React.FC<TraderCockpitTicketProps> = ({
   const marketProbYes = isSyntheticOrSeed
     ? 0.5
     : (liveTick?.impliedProb ?? market.impliedProbYes ?? (currentBestAsk > 0 ? currentBestAsk : smoothFallbackProb));
-  const fairValueYes = liveTick?.fairValue ?? market.fairValueYes ?? smoothFallbackProb;
-  const rawBsmEdge = liveTick?.edge ?? (fairValueYes - marketProbYes);
-  const bsmEdge = isSyntheticOrSeed ? 0 : rawBsmEdge;
 
   // Implied odds
   const upOddsPct = Math.round(marketProbYes * 100);
@@ -161,63 +162,18 @@ export const TraderCockpitTicket: React.FC<TraderCockpitTicketProps> = ({
     };
   }, [price, collateralAmount]);
 
-  // Swarm AI Copilot intelligence — edge-driven recommendation (fixes YES vs DOWN mismatch)
-  const aiRecommendation = useMemo(() => {
-    const effectiveEdge = bsmEdge;
-    const EDGE_EPSILON = 0.004;
-    const isYesEdge = effectiveEdge > EDGE_EPSILON;
-    const isNoEdge = effectiveEdge < -EDGE_EPSILON;
-    const fairDirection: 'UP' | 'DOWN' = fairValueYes >= 0.50 ? 'UP' : 'DOWN';
-    const edgeDirection: 'UP' | 'DOWN' = isYesEdge ? 'UP' : isNoEdge ? 'DOWN' : fairDirection;
-    const recommendedOutcome: 'YES' | 'NO' = isYesEdge ? 'YES' : isNoEdge ? 'NO' : (fairValueYes >= 0.50 ? 'YES' : 'NO');
-    const recommendedDirection: 'UP' | 'DOWN' = edgeDirection;
-    const edgeVal = (Math.abs(effectiveEdge) * 100).toFixed(1);
-    const signedEdgeVal = `${effectiveEdge >= 0 ? '+' : ''}${(effectiveEdge * 100).toFixed(1)}%`;
-    const spotDiff = spotPrice - strike;
-    const pctDiff = strike > 0 ? (spotDiff / strike) * 100 : 0;
-    const diffText = spotDiff >= 0 
-      ? `+$${spotDiff < 1 ? spotDiff.toFixed(4) : spotDiff.toFixed(2)} (+${pctDiff.toFixed(2)}%) above strike` 
-      : `-$${Math.abs(spotDiff) < 1 ? Math.abs(spotDiff).toFixed(4) : Math.abs(spotDiff).toFixed(2)} (${pctDiff.toFixed(2)}%) below strike`;
-
-    // Confidence: when a meaningful edge exists, use edge-strength confidence (mirrors Oracle Arb 80%+ netEdge*2.8)
-    // so a 26% YES edge shows ~92% confidence UP rather than 28% UP (which would look weak despite strong alpha)
-    let confScore: number;
-    if (Math.abs(effectiveEdge) >= 0.015) {
-      confScore = Math.min(97, Math.max(58, Math.round(62 + Math.abs(effectiveEdge) * 130)));
-    } else {
-      confScore = recommendedDirection === 'UP' ? Math.round(fairValueYes * 100) : Math.round((1 - fairValueYes) * 100);
-    }
-    // When there's a meaningful edge, surface both market and model probabilities so YES-edge vs DOWN-model is not confusing
-    let rationale: string;
-    if (Math.abs(effectiveEdge) >= 0.005) {
-      rationale = `Spot is ${diffText}. Market ${(marketProbYes * 100).toFixed(1)}% UP vs Titan BSM fair ${(fairValueYes * 100).toFixed(1)}% UP → ${isYesEdge ? 'YES' : 'NO'} edge ${signedEdgeVal} (${edgeVal}% Alpha dislocation vs CLOB, ${confScore}% edge conviction ${recommendedDirection}).`;
-    } else {
-      rationale = `Spot is ${diffText}. Titan BSM & Confluence engine rates ${recommendedDirection} with ${confScore}% conviction (${signedEdgeVal} Alpha vs CLOB — fairly priced).`;
-    }
-
+  // Multi-Factor Confluence & High-Conviction Copilot Intelligence
+  const confluence = useMemo(() => {
     const recentThought = agentThoughts.find(
       (t) => t.marketId === market.id || t.marketId?.toLowerCase() === market.id.toLowerCase()
     );
-    // Only override with agent thought when it is not contradicting a strong edge signal
-    if (recentThought?.reasoningText && Math.abs(effectiveEdge) < 0.03) {
-      rationale = recentThought.reasoningText;
-    }
-
-    return {
-      recommendedOutcome,
-      recommendedDirection,
-      confidence: confScore,
-      edgeVal,
-      signedEdgeVal,
-      isYesEdge,
-      isNoEdge,
-      rationale,
-    };
-  }, [spotPrice, strike, fairValueYes, bsmEdge, marketProbYes, agentThoughts, market.id]);
+    return evaluateTradeConfluence(market, liveTick, spotPrice, undefined, recentThought?.reasoningText);
+  }, [market, liveTick, spotPrice, agentThoughts]);
 
   // 1-Click Auto Align with AI recommendation
   const handleAutoAlignAI = () => {
-    setOutcome(aiRecommendation.recommendedOutcome);
+    if (confluence.recommendedOutcome === 'NONE') return;
+    setOutcome(confluence.recommendedOutcome);
     setIsManualPrice(false);
     // Kelly Criterion optimal sizing: 15% of balance or preset $25
     const optimalSize = userBalance > 50 ? Math.min(50, Math.floor(userBalance * 0.15)) : 25;
@@ -395,7 +351,7 @@ export const TraderCockpitTicket: React.FC<TraderCockpitTicketProps> = ({
         <div className="flex items-center justify-between text-xs text-muted-foreground mb-1.5">
           <span className="font-bold text-foreground">Amount</span>
           <div className="flex items-center gap-1">
-            <span className="text-[10px]">Max: ${userBalance.toFixed(2)} USDso</span>
+            <span className="text-[10px]">Max: ${userBalance.toFixed(2)} tUSDC</span>
             <button
               type="button"
               onClick={() => setCollateralAmount(Math.max(1, Math.floor(userBalance)))}
@@ -421,7 +377,7 @@ export const TraderCockpitTicket: React.FC<TraderCockpitTicketProps> = ({
             placeholder="0.00"
           />
           <span className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground font-mono text-xs font-bold">
-            USDso
+            tUSDC
           </span>
         </div>
 
@@ -543,37 +499,152 @@ export const TraderCockpitTicket: React.FC<TraderCockpitTicketProps> = ({
         </button>
       </div>
 
-      {/* 4. DREAM PULSE AI ALPHA COPILOT CARD */}
-      <div className="p-2.5 rounded-xl bg-[#7928ca]/10 border border-[#7928ca]/30 mb-3.5 flex-shrink-0 space-y-2">
+      {/* 4. DREAM PULSE AI CONFLUENCE COPILOT CARD */}
+      <div className={cn(
+        "p-2.5 rounded-xl border mb-3.5 flex-shrink-0 space-y-2 transition-all backdrop-blur-md",
+        confluence.convictionState === 'HIGH_CONVICTION'
+          ? "bg-[#7928ca]/10 border-[#7928ca]/40 shadow-[0_0_20px_rgba(121,40,202,0.12)]"
+          : confluence.convictionState === 'CAUTION_COUNTER_TREND'
+          ? "bg-[#ffb700]/10 border-[#ffb700]/40 shadow-[0_0_20px_rgba(255,183,0,0.10)]"
+          : "bg-secondary/20 border-border/40"
+      )}>
+        {/* Copilot Header */}
         <div className="flex items-center justify-between">
-          <div className="flex items-center gap-1.5 text-[#d8b4fe] text-[11px] font-bold"> <span>AI Alpha Copilot</span>
-            <Badge variant="outline" className="text-[8px] px-1 py-0 border-[#7928ca]/40 text-[#d8b4fe] bg-[#7928ca]/10">
-              Titan BSM
+          <div className="flex items-center gap-1.5 font-bold text-[11px]">
+            <SparklesIcon className={cn("w-3.5 h-3.5", confluence.badgeStyle.iconColor)} />
+            <span className="text-foreground">AI Confluence Copilot</span>
+            <Badge variant="outline" className="text-[8px] px-1 py-0 border-border/50 bg-secondary/50 text-muted-foreground">
+              Titan + PA Matrix
             </Badge>
           </div>
-          <span className={cn("text-[9px] font-mono", (aiRecommendation as any).isYesEdge ? "text-[#00e676]" : (aiRecommendation as any).isNoEdge ? "text-[#ff3366]" : "text-[#d8b4fe]/80")}>
-            {(aiRecommendation as any).signedEdgeVal ?? `+${aiRecommendation.edgeVal}%`} {(aiRecommendation as any).isYesEdge ? 'YES' : (aiRecommendation as any).isNoEdge ? 'NO' : ''} Edge
-          </span>
+
+          <div className="flex items-center gap-1">
+            <span className={cn(
+              "text-[9px] font-mono font-bold px-1.5 py-0.5 rounded border flex items-center gap-1",
+              confluence.badgeStyle.bg,
+              confluence.badgeStyle.border,
+              confluence.badgeStyle.text,
+              confluence.badgeStyle.glow
+            )}>
+              {confluence.convictionState === 'HIGH_CONVICTION' && (
+                <span className="w-1.5 h-1.5 rounded-full bg-current animate-ping inline-block" />
+              )}
+              {confluence.convictionState === 'CAUTION_COUNTER_TREND' && (
+                <ShieldExclamationIcon className="w-3 h-3 text-[#ffb700]" />
+              )}
+              {confluence.convictionState === 'HIGH_CONVICTION' && (
+                <ShieldCheckIcon className="w-3 h-3" />
+              )}
+              <span>{confluence.badgeStyle.label}</span>
+            </span>
+          </div>
         </div>
 
-        <p className="text-[10px] text-purple-200/80 leading-relaxed font-sans">
-          {aiRecommendation.rationale}
+        {/* 4-Factor Confluence Signal Matrix */}
+        <div className="grid grid-cols-2 gap-1.5 text-[10px] font-mono">
+          {/* Factor 1: Price Action & Trend */}
+          <div className="p-1.5 rounded-lg bg-background/50 border border-border/30 flex flex-col justify-between">
+            <span className="text-[9px] text-muted-foreground">Price Action</span>
+            <div className="flex items-center justify-between mt-0.5">
+              <span className={cn(
+                "font-bold truncate",
+                confluence.priceActionTrend.includes('BULLISH') ? "text-[#00e676]" : confluence.priceActionTrend.includes('BEARISH') ? "text-[#ff3366]" : "text-muted-foreground"
+              )}>
+                {confluence.priceActionLabel}
+              </span>
+              {confluence.priceActionTrend.includes('BULLISH') ? (
+                <ArrowTrendingUpIcon className="w-3 h-3 text-[#00e676] flex-shrink-0" />
+              ) : confluence.priceActionTrend.includes('BEARISH') ? (
+                <ArrowTrendingDownIcon className="w-3 h-3 text-[#ff3366] flex-shrink-0" />
+              ) : null}
+            </div>
+          </div>
+
+          {/* Factor 2: Mathematical Edge */}
+          <div className="p-1.5 rounded-lg bg-background/50 border border-border/30 flex flex-col justify-between">
+            <span className="text-[9px] text-muted-foreground">Mathematical Edge</span>
+            <div className="flex items-center justify-between mt-0.5">
+              <span className={cn(
+                "font-bold",
+                confluence.isYesEdge ? "text-[#00e676]" : confluence.isNoEdge ? "text-[#ff3366]" : "text-muted-foreground"
+              )}>
+                {confluence.signedEdgeLabel} {confluence.isYesEdge ? 'YES' : confluence.isNoEdge ? 'NO' : 'Alpha'}
+              </span>
+              <span className="text-[9px] text-muted-foreground">
+                {Math.abs(confluence.edgePercentage) >= 0.015 ? 'Dislocation' : 'Fair'}
+              </span>
+            </div>
+          </div>
+
+          {/* Factor 3: Strike Proximity */}
+          <div className="p-1.5 rounded-lg bg-background/50 border border-border/30 flex flex-col justify-between">
+            <span className="text-[9px] text-muted-foreground">Strike Runway</span>
+            <span className="font-bold text-foreground mt-0.5 truncate">
+              {confluence.spotDiff >= 0 ? `+${confluence.spotDiff.toFixed(2)} ITM` : `-${Math.abs(confluence.spotDiff).toFixed(2)} OTM`}
+            </span>
+          </div>
+
+          {/* Factor 4: Win Probability */}
+          <div className="p-1.5 rounded-lg bg-background/50 border border-border/30 flex flex-col justify-between">
+            <span className="text-[9px] text-muted-foreground">Win Probability</span>
+            <div className="flex items-center justify-between mt-0.5">
+              <span className={cn(
+                "font-bold",
+                confluence.winProbability >= 65 ? "text-[#00e676]" : confluence.winProbability <= 45 ? "text-[#ff3366]" : "text-brand-cyan"
+              )}>
+                {confluence.winProbability}%
+              </span>
+              <span className="text-[9px] text-muted-foreground">
+                {confluence.confidenceScore}% Conf
+              </span>
+            </div>
+          </div>
+        </div>
+
+        {/* Dynamic Copilot Rationale */}
+        <p className={cn(
+          "text-[10px] leading-relaxed font-sans p-1.5 rounded-lg border",
+          confluence.convictionState === 'CAUTION_COUNTER_TREND'
+            ? "bg-[#ffb700]/10 border-[#ffb700]/30 text-[#ffb700]"
+            : "bg-background/40 border-border/20 text-muted-foreground/90"
+        )}>
+          {confluence.rationale}
         </p>
 
-        {/* 1-Click Auto-Align AI Button */}
+        {/* 1-Click Auto-Align AI Button with Conviction Safeguard */}
         <button
           type="button"
-          disabled={isTradingLocked}
+          disabled={isTradingLocked || confluence.recommendedAction === 'WAIT'}
           onClick={handleAutoAlignAI}
           className={cn(
-            "w-full py-1.5 px-2.5 rounded-lg border text-xs font-bold flex items-center justify-center gap-1.5 transition-all shadow-xs",
-            isTradingLocked
-              ? "bg-[#7928ca]/5 text-[#d8b4fe]/40 border-purple-500/10 cursor-not-allowed"
+            "w-full py-2 px-2.5 rounded-lg border text-xs font-bold flex items-center justify-center gap-1.5 transition-all shadow-xs",
+            isTradingLocked || confluence.recommendedAction === 'WAIT'
+              ? "bg-secondary/30 text-muted-foreground/40 border-border/30 cursor-not-allowed"
+              : confluence.convictionState === 'HIGH_CONVICTION'
+              ? confluence.recommendedAction === 'BUY_UP'
+                ? "bg-[#00e676]/20 hover:bg-[#00e676]/30 border-[#00e676]/50 text-[#00e676] cursor-pointer shadow-[0_0_15px_rgba(0,230,118,0.2)]"
+                : "bg-[#ff3366]/20 hover:bg-[#ff3366]/30 border-[#ff3366]/50 text-[#ff3366] cursor-pointer shadow-[0_0_15px_rgba(255,51,102,0.2)]"
               : "bg-[#7928ca]/20 hover:bg-[#7928ca]/30 border-[#7928ca]/40 text-purple-200 cursor-pointer"
           )}
         >
-          <BoltIcon className="w-3.5 h-3.5 text-[#d8b4fe]" />
-          <span>Follow AI Trade ({aiRecommendation.recommendedDirection} • {aiRecommendation.confidence}% Conf)</span>
+          {confluence.convictionState === 'HIGH_CONVICTION' ? (
+            <SparklesIcon className="w-4 h-4 text-current" />
+          ) : confluence.convictionState === 'CAUTION_COUNTER_TREND' ? (
+            <ExclamationTriangleIcon className="w-4 h-4 text-current" />
+          ) : (
+            <BoltIcon className="w-4 h-4 text-current" />
+          )}
+
+          <span>
+            {confluence.convictionState === 'HIGH_CONVICTION'
+              ? `Follow High-Conviction AI (${confluence.recommendedAction === 'BUY_UP' ? '▲ BUY UP' : '▼ BUY DOWN'} • ${confluence.winProbability}% Win Rate)`
+              : confluence.convictionState === 'CAUTION_COUNTER_TREND'
+              ? 'AI Advising Caution (Counter-Trend Divergence)'
+              : confluence.recommendedAction === 'WAIT'
+              ? 'AI Observing (Waiting for High Conviction)'
+              : `Follow AI Trade (${confluence.recommendedAction === 'BUY_UP' ? '▲ BUY UP' : '▼ BUY DOWN'} • ${confluence.confidenceScore}% Conf)`
+            }
+          </span>
         </button>
       </div>
 
@@ -581,7 +652,7 @@ export const TraderCockpitTicket: React.FC<TraderCockpitTicketProps> = ({
       <div className="p-2.5 rounded-xl bg-secondary/20 border border-border/30 text-xs space-y-1.5 mb-3 flex-shrink-0">
         <div className="flex items-center justify-between text-muted-foreground">
           <span>Cost (max loss)</span>
-          <span className="font-bold text-foreground">${calculations.totalCost.toFixed(2)} USDso</span>
+          <span className="font-bold text-foreground">${calculations.totalCost.toFixed(2)} tUSDC</span>
         </div>
         <div className="flex items-center justify-between text-muted-foreground">
           <span>Shares</span>
@@ -617,7 +688,7 @@ export const TraderCockpitTicket: React.FC<TraderCockpitTicketProps> = ({
           )}
         </div>
         <div className="flex items-center justify-between text-muted-foreground">
-          <span>USDso</span>
+          <span>tUSDC</span>
           <span className="font-bold text-foreground">{userBalance.toFixed(2)}</span>
         </div>
         <div className="flex items-center justify-between text-muted-foreground">
@@ -696,7 +767,7 @@ export const TraderCockpitTicket: React.FC<TraderCockpitTicketProps> = ({
               <>
                 {activeSession?.isActive && <BoltIcon className="w-4 h-4 text-[#060709]" />}
                 <span className="text-[#060709] font-bold">
-                  {outcome === 'YES' ? 'Buy UP' : 'Buy DOWN'} • ${calculations.totalCost.toFixed(2)} USDso
+                  {outcome === 'YES' ? 'Buy UP' : 'Buy DOWN'} • ${calculations.totalCost.toFixed(2)} tUSDC
                 </span>
               </>
             )}

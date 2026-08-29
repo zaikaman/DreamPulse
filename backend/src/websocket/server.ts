@@ -135,6 +135,14 @@ export class TelemetryWebSocketServer {
       fairValue: number;
       edge: number;
       hasAnomaly: boolean;
+      convictionState?: 'HIGH_CONVICTION' | 'MODERATE' | 'CAUTION_COUNTER_TREND' | 'NEUTRAL';
+      recommendedAction?: 'BUY_UP' | 'BUY_DOWN' | 'WAIT';
+      recommendedOutcome?: 'YES' | 'NO' | 'NONE';
+      winProbability?: number;
+      confidenceScore?: number;
+      priceActionTrend?: string;
+      priceActionScore?: number;
+      confluenceRationale?: string;
     }>,
   ): void {
     if (ticks.length === 0 || this.clients.size === 0) return;
@@ -165,6 +173,14 @@ export class TelemetryWebSocketServer {
     fairValue: number;
     edge: number;
     hasAnomaly: boolean;
+    convictionState?: 'HIGH_CONVICTION' | 'MODERATE' | 'CAUTION_COUNTER_TREND' | 'NEUTRAL';
+    recommendedAction?: 'BUY_UP' | 'BUY_DOWN' | 'WAIT';
+    recommendedOutcome?: 'YES' | 'NO' | 'NONE';
+    winProbability?: number;
+    confidenceScore?: number;
+    priceActionTrend?: string;
+    priceActionScore?: number;
+    confluenceRationale?: string;
   }): void {
     const payloadString = JSON.stringify({
       event: 'market_tick',

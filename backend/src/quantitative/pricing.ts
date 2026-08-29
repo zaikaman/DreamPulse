@@ -324,6 +324,310 @@ export function calculateFairValue(
 }
 
 /**
+ * Price action analysis metrics derived from high-frequency tick history.
+ */
+export interface PriceActionMetrics {
+  trend: 'BULLISH_EXPANSION' | 'BULLISH' | 'RANGE_BOUND' | 'BEARISH' | 'BEARISH_BREAKDOWN';
+  trendScore: number; // Normalized in [-1.0, 1.0] (bearish -> bullish)
+  velocity: number; // Price velocity per second (in USD)
+  emaFast: number; // 9-sample Exponential Moving Average
+  emaSlow: number; // 21-sample Exponential Moving Average
+  rsiShort: number; // 7-period fast Relative Strength Index [0, 100]
+  change1m: number;
+  change5m: number;
+  isPlunging: boolean; // Aggressive downward momentum
+  isSurging: boolean; // Aggressive upward breakout momentum
+}
+
+/**
+ * Calculates high-frequency technical price action indicators from rolling price observations.
+ */
+export function calculatePriceActionMetrics(
+  priceHistory?: Array<{ timestamp: number; price: number }>,
+  currentSpot: number = 0,
+): PriceActionMetrics {
+  if (!priceHistory || priceHistory.length < 3) {
+    return {
+      trend: 'RANGE_BOUND',
+      trendScore: 0,
+      velocity: 0,
+      emaFast: currentSpot,
+      emaSlow: currentSpot,
+      rsiShort: 50,
+      change1m: 0,
+      change5m: 0,
+      isPlunging: false,
+      isSurging: false,
+    };
+  }
+
+  const prices = priceHistory.map((p) => p.price);
+  const now = priceHistory[priceHistory.length - 1].timestamp;
+
+  // 1. Calculate Fast (k=9) and Slow (k=21) Exponential Moving Averages
+  const kFast = 2 / (Math.min(9, prices.length) + 1);
+  const kSlow = 2 / (Math.min(21, prices.length) + 1);
+
+  let emaFast = prices[0];
+  let emaSlow = prices[0];
+  for (let i = 1; i < prices.length; i++) {
+    emaFast = prices[i] * kFast + emaFast * (1 - kFast);
+    emaSlow = prices[i] * kSlow + emaSlow * (1 - kSlow);
+  }
+
+  // 2. Multi-timeframe deltas (1m and 5m)
+  const cutoff1m = now - 60000;
+  const cutoff5m = now - 300000;
+  const p1m = priceHistory.find((p) => p.timestamp >= cutoff1m)?.price || prices[0];
+  const p5m = priceHistory.find((p) => p.timestamp >= cutoff5m)?.price || prices[0];
+  const change1m = p1m > 0 ? (currentSpot - p1m) / p1m : 0;
+  const change5m = p5m > 0 ? (currentSpot - p5m) / p5m : 0;
+
+  // 3. Fast RSI (7 periods)
+  const rsiWindow = Math.min(8, prices.length);
+  let gainSum = 0;
+  let lossSum = 0;
+  for (let i = prices.length - rsiWindow + 1; i < prices.length; i++) {
+    const diff = prices[i] - prices[i - 1];
+    if (diff > 0) gainSum += diff;
+    else lossSum += Math.abs(diff);
+  }
+  const avgGain = gainSum / Math.max(1, rsiWindow - 1);
+  const avgLoss = lossSum / Math.max(1, rsiWindow - 1);
+  const rs = avgLoss > 0 ? avgGain / avgLoss : avgGain > 0 ? 10 : 1;
+  const rsiShort = Number((100 - (100 / (1 + rs))).toFixed(1));
+
+  // 4. Instantaneous Velocity (USD/sec over last 15 seconds)
+  const cutoff15s = now - 15000;
+  const p15sObj = priceHistory.find((p) => p.timestamp >= cutoff15s);
+  const p15s = p15sObj?.price || prices[Math.max(0, prices.length - 4)];
+  const dtSeconds = Math.max(1, (now - (p15sObj?.timestamp || (now - 15000))) / 1000);
+  const velocity = Number(((currentSpot - p15s) / dtSeconds).toFixed(4));
+
+  // 5. Composite Trend Score in [-1.0, 1.0]
+  // Combines EMA spread, 1m/5m return momentum, and RSI deviation
+  const emaSpreadPct = currentSpot > 0 ? (emaFast - emaSlow) / currentSpot : 0;
+  const rawScore = (
+    emaSpreadPct * 400 +
+    change1m * 120 +
+    change5m * 60 +
+    ((rsiShort - 50) / 50) * 0.35
+  );
+  const trendScore = Number(Math.max(-1.0, Math.min(1.0, rawScore)).toFixed(3));
+
+  // 6. Plunge / Surge detection:
+  // Plunge: rapid downward momentum (> -0.15% in 1m OR fast negative velocity with RSI < 32)
+  const isPlunging = change1m < -0.0015 || (change1m < -0.0008 && velocity < 0 && rsiShort < 35);
+  // Surge: rapid upward momentum (> +0.15% in 1m OR fast positive velocity with RSI > 68)
+  const isSurging = change1m > 0.0015 || (change1m > 0.0008 && velocity > 0 && rsiShort > 65);
+
+  let trend: 'BULLISH_EXPANSION' | 'BULLISH' | 'RANGE_BOUND' | 'BEARISH' | 'BEARISH_BREAKDOWN';
+  if (isSurging || trendScore > 0.55) {
+    trend = 'BULLISH_EXPANSION';
+  } else if (trendScore > 0.15) {
+    trend = 'BULLISH';
+  } else if (isPlunging || trendScore < -0.55) {
+    trend = 'BEARISH_BREAKDOWN';
+  } else if (trendScore < -0.15) {
+    trend = 'BEARISH';
+  } else {
+    trend = 'RANGE_BOUND';
+  }
+
+  return {
+    trend,
+    trendScore,
+    velocity,
+    emaFast: Number(emaFast.toFixed(2)),
+    emaSlow: Number(emaSlow.toFixed(2)),
+    rsiShort,
+    change1m: Number(change1m.toFixed(5)),
+    change5m: Number(change5m.toFixed(5)),
+    isPlunging,
+    isSurging,
+  };
+}
+
+/**
+ * Institutional Multi-Factor Confluence Analysis Result.
+ */
+export interface MultiFactorConfluenceResult {
+  confluenceProbYes: number;
+  fairValueYes: number;
+  impliedProbYes: number;
+  edgePercentage: number;
+  signedEdgeLabel: string;
+  convictionState: 'HIGH_CONVICTION' | 'MODERATE' | 'CAUTION_COUNTER_TREND' | 'NEUTRAL';
+  recommendedAction: 'BUY_UP' | 'BUY_DOWN' | 'WAIT';
+  recommendedOutcome: 'YES' | 'NO' | 'NONE';
+  winProbability: number; // 0 to 100
+  confidenceScore: number; // 0 to 100
+  priceAction: PriceActionMetrics;
+  strikeRunwayZ: number; // Z-score buffer from strike
+  isCounterTrendConflict: boolean;
+  rationale: string;
+}
+
+/**
+ * Evaluates full multi-factor confluence combining:
+ * 1. Mathematical theoretical fair value (BSM)
+ * 2. High-frequency price action and momentum (EMA, drift, velocity, RSI)
+ * 3. Strike proximity & trajectory runway (Z-score distance vs remaining time)
+ * 4. Order book depth skew
+ *
+ * Enforces Counter-Trend Safeguards and suppresses false signals when price action conflicts with edge.
+ */
+export function evaluateMultiFactorConfluence(
+  spot: number,
+  strike: number,
+  timeLeftSeconds: number,
+  symbol: string = 'BTC/USD',
+  bestBidYes: number = 0.50,
+  bestAskYes: number = 0.50,
+  priceHistory?: Array<{ timestamp: number; price: number }>,
+  orderBookSkew: number = 0,
+  previousFair?: number,
+): MultiFactorConfluenceResult {
+  // 1. Calculate Base BSM Fair Value
+  const bsm = calculateFairValue(spot, strike, timeLeftSeconds, symbol, undefined, priceHistory);
+  const rawBsmFairYes = bsm.fairValueYes;
+
+  // 2. Calculate Price Action Metrics
+  const pa = calculatePriceActionMetrics(priceHistory, spot);
+
+  // 3. Strike Proximity & Expected Move Runway
+  const vol = bsm.volatilityUsed || 0.60;
+  const timeYears = secondsToYears(Math.max(1, timeLeftSeconds));
+  const expectedMove = strike * vol * Math.sqrt(Math.max(0.00001, timeYears));
+  const spotDiff = spot - strike;
+  const strikeRunwayZ = expectedMove > 0 ? Number((spotDiff / expectedMove).toFixed(3)) : 0;
+
+  // 4. Calculate Stabilized Confluence Probability
+  const clampedProb = Math.min(0.999, Math.max(0.001, rawBsmFairYes));
+  const baseLogit = Math.log(clampedProb / (1.0 - clampedProb));
+
+  // Multi-factor momentum weighting (incorporating trend score and velocity)
+  const momentumAdjustment = Math.max(-0.90, Math.min(0.90,
+    pa.trendScore * 0.45 +
+    pa.change1m * 70 +
+    pa.change5m * 35 +
+    Math.max(-1, Math.min(1, orderBookSkew)) * 0.15
+  ));
+
+  const totalLogit = baseLogit + momentumAdjustment;
+  const rawConfluenceProb = 1.0 / (1.0 + Math.exp(-Math.max(-8, Math.min(8, totalLogit))));
+
+  // Adaptive smoothing to eliminate high-frequency micro-jitter
+  const prevProb = previousFair !== undefined && previousFair > 0 ? previousFair : rawConfluenceProb;
+  const smoothedProb = Number((0.20 * rawConfluenceProb + 0.80 * prevProb).toFixed(4));
+
+  // 5. Order Book Midpoint & Edge Dislocation
+  let midYes = 0.50;
+  if (bestBidYes > 0 && bestAskYes > 0) {
+    midYes = Number(((bestBidYes + bestAskYes) / 2).toFixed(4));
+  } else if (bestAskYes > 0) {
+    midYes = bestAskYes;
+  } else if (bestBidYes > 0) {
+    midYes = bestBidYes;
+  }
+
+  const rawEdge = Number((smoothedProb - midYes).toFixed(4));
+  // Apply a small deadband (0.5%) to stabilize edge transitions
+  const stabilizedEdge = Math.abs(rawEdge) < 0.005 ? 0 : rawEdge;
+
+  // 6. Confluence & Counter-Trend Alignment Engine
+  const EDGE_THRESHOLD = 0.015; // 1.5% edge hurdle
+  const isYesEdge = stabilizedEdge >= EDGE_THRESHOLD;
+  const isNoEdge = stabilizedEdge <= -EDGE_THRESHOLD;
+
+  // Check for Counter-Trend Conflict:
+  // Conflict A: YES Edge / Above Strike, but price action is plunging or bearish breakdown
+  const isBullishEdgeConflict = (isYesEdge || smoothedProb >= 0.55) && (pa.isPlunging || pa.trendScore <= -0.30);
+  // Conflict B: NO Edge / Below Strike, but price action is surging or bullish breakout
+  const isBearishEdgeConflict = (isNoEdge || smoothedProb <= 0.45) && (pa.isSurging || pa.trendScore >= 0.30);
+
+  const isCounterTrendConflict = isBullishEdgeConflict || isBearishEdgeConflict;
+
+  let convictionState: 'HIGH_CONVICTION' | 'MODERATE' | 'CAUTION_COUNTER_TREND' | 'NEUTRAL';
+  let recommendedAction: 'BUY_UP' | 'BUY_DOWN' | 'WAIT';
+  let recommendedOutcome: 'YES' | 'NO' | 'NONE';
+  let winProbability: number;
+  let confidenceScore: number;
+
+  const pctDiff = strike > 0 ? ((spotDiff / strike) * 100).toFixed(2) : '0.00';
+  const spotDiffStr = spotDiff >= 0
+    ? `+$${spotDiff < 1 ? spotDiff.toFixed(4) : spotDiff.toFixed(2)} (+${pctDiff}%) above strike`
+    : `-$${Math.abs(spotDiff) < 1 ? Math.abs(spotDiff).toFixed(4) : Math.abs(spotDiff).toFixed(2)} (${pctDiff}%) below strike`;
+
+  let rationale = '';
+
+  if (isCounterTrendConflict) {
+    convictionState = 'CAUTION_COUNTER_TREND';
+    recommendedAction = 'WAIT';
+    recommendedOutcome = 'NONE';
+    confidenceScore = 40;
+    winProbability = 50;
+
+    if (isBullishEdgeConflict) {
+      rationale = `Caution: Counter-trend divergence. Spot is ${spotDiffStr}, but aggressive downward momentum (${(pa.change1m * 100).toFixed(2)}% 1m, ${pa.trend.replace('_', ' ')}) threatens the strike. AI Copilot advises WAITING for price stabilization before buying UP.`;
+    } else {
+      rationale = `Caution: Counter-trend divergence. Spot is ${spotDiffStr}, but aggressive upward momentum (+${(pa.change1m * 100).toFixed(2)}% 1m, ${pa.trend.replace('_', ' ')}) is breaking out. AI Copilot advises WAITING for price stabilization before buying DOWN.`;
+    }
+  } else if (isYesEdge && pa.trendScore >= -0.05) {
+    // Aligned Bullish Setup
+    const isHighConviction = stabilizedEdge >= 0.025 && (pa.trendScore >= 0.20 || spotDiff > 0);
+    convictionState = isHighConviction ? 'HIGH_CONVICTION' : 'MODERATE';
+    recommendedAction = 'BUY_UP';
+    recommendedOutcome = 'YES';
+    confidenceScore = Math.min(96, Math.round(65 + Math.abs(stabilizedEdge) * 120 + Math.max(0, pa.trendScore) * 15));
+    winProbability = Math.min(94, Math.max(62, Math.round(smoothedProb * 100)));
+    const edgeLabel = `+${(stabilizedEdge * 100).toFixed(1)}% YES Alpha`;
+
+    rationale = `High Conviction UP: Spot is ${spotDiffStr} with ${pa.trend.replace('_', ' ')} price action (${pa.change1m >= 0 ? '+' : ''}${(pa.change1m * 100).toFixed(2)}% 1m). Confluence fair ${(smoothedProb * 100).toFixed(1)}% vs CLOB ${(midYes * 100).toFixed(1)}% gives ${edgeLabel} with ${winProbability}% estimated win probability.`;
+  } else if (isNoEdge && pa.trendScore <= 0.05) {
+    // Aligned Bearish Setup
+    const isHighConviction = stabilizedEdge <= -0.025 && (pa.trendScore <= -0.20 || spotDiff < 0);
+    convictionState = isHighConviction ? 'HIGH_CONVICTION' : 'MODERATE';
+    recommendedAction = 'BUY_DOWN';
+    recommendedOutcome = 'NO';
+    confidenceScore = Math.min(96, Math.round(65 + Math.abs(stabilizedEdge) * 120 + Math.abs(Math.min(0, pa.trendScore)) * 15));
+    winProbability = Math.min(94, Math.max(62, Math.round((1 - smoothedProb) * 100)));
+    const edgeLabel = `+${(Math.abs(stabilizedEdge) * 100).toFixed(1)}% NO Alpha`;
+
+    rationale = `High Conviction DOWN: Spot is ${spotDiffStr} with ${pa.trend.replace('_', ' ')} price action (${(pa.change1m * 100).toFixed(2)}% 1m). Confluence fair ${(smoothedProb * 100).toFixed(1)}% vs CLOB ${(midYes * 100).toFixed(1)}% gives ${edgeLabel} with ${winProbability}% estimated win probability.`;
+  } else {
+    // Neutral / Fairly Priced / Ranging
+    convictionState = 'NEUTRAL';
+    recommendedAction = 'WAIT';
+    recommendedOutcome = 'NONE';
+    confidenceScore = 50;
+    winProbability = Math.round(smoothedProb * 100);
+    const signedEdge = `${stabilizedEdge >= 0 ? '+' : ''}${(stabilizedEdge * 100).toFixed(1)}%`;
+
+    rationale = `Observing: Market is balanced near strike (${spotDiffStr}). Price action is ${pa.trend.replace('_', ' ')} with minimal edge (${signedEdge} Alpha vs CLOB). Waiting for a high-conviction breakout or mispricing setup.`;
+  }
+
+  const signedEdgeLabel = `${stabilizedEdge >= 0 ? '+' : ''}${(stabilizedEdge * 100).toFixed(1)}%`;
+
+  return {
+    confluenceProbYes: smoothedProb,
+    fairValueYes: smoothedProb,
+    impliedProbYes: midYes,
+    edgePercentage: stabilizedEdge,
+    signedEdgeLabel,
+    convictionState,
+    recommendedAction,
+    recommendedOutcome,
+    winProbability,
+    confidenceScore,
+    priceAction: pa,
+    strikeRunwayZ,
+    isCounterTrendConflict,
+    rationale,
+  };
+}
+
+/**
  * Calculates a stabilized, multi-factor confluence probability for binary event contracts.
  * Blends Black-Scholes theoretical value with short-term drift momentum and depth skew,
  * eliminating single-tick pin-risk flip-flopping.

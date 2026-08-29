@@ -1,6 +1,6 @@
 import { EventEmitter } from 'events';
 import type { Market, MarketStatus, OutcomeType } from '../types/index.js';
-import { calculateFairValue, calculateEdge, calculateConfluenceProbability, parseWindowToSeconds } from '../quantitative/pricing.js';
+import { calculateFairValue, calculateEdge, calculateConfluenceProbability, evaluateMultiFactorConfluence, parseWindowToSeconds } from '../quantitative/pricing.js';
 import { SOMNIA_ADDRESSES, somniaExchange, MARKET_STATUS } from '../config/somnia.js';
 import { env } from '../config/env.js';
 import { getServiceSupabase, supabase } from '../config/supabase.js';
@@ -85,23 +85,31 @@ export class MarketService extends EventEmitter {
       if (market.symbol === ticker.symbol && market.status === 'Open') {
         const closeTime = new Date(market.closeTimestamp).getTime();
         const timeLeftSeconds = Math.max(1, Math.floor((closeTime - now) / 1000));
-        const rawFair = calculateFairValue(ticker.price, market.strikePrice, timeLeftSeconds, market.symbol, undefined, ticker.priceHistory);
-        const confluence = calculateConfluenceProbability(
-          rawFair.fairValueYes,
-          ticker.change1m || 0,
-          ticker.change5m || 0,
+        const prevFair = this.smoothedFairValues.get(market.id);
+        const evalResult = evaluateMultiFactorConfluence(
+          ticker.price,
+          market.strikePrice,
+          timeLeftSeconds,
+          market.symbol,
+          market.bestBidYes,
+          market.bestAskYes,
+          ticker.priceHistory,
           0,
+          prevFair,
         );
 
-        const prevFair = this.smoothedFairValues.get(market.id) ?? confluence;
-        const smoothedFair = Number((0.25 * confluence + 0.75 * prevFair).toFixed(4));
-        this.smoothedFairValues.set(market.id, smoothedFair);
-
-        const edge = calculateEdge(smoothedFair, market.bestBidYes, market.bestAskYes);
-
-        market.fairValueYes = smoothedFair;
-        market.impliedProbYes = edge.impliedProbYes;
-        market.edgePercentage = market.isSeedDepth || market.isSynthetic ? 0 : edge.edgePercentage;
+        this.smoothedFairValues.set(market.id, evalResult.confluenceProbYes);
+        market.fairValueYes = evalResult.fairValueYes;
+        market.impliedProbYes = evalResult.impliedProbYes;
+        market.edgePercentage = market.isSeedDepth || market.isSynthetic ? 0 : evalResult.edgePercentage;
+        market.convictionState = evalResult.convictionState;
+        market.recommendedAction = evalResult.recommendedAction;
+        market.recommendedOutcome = evalResult.recommendedOutcome;
+        market.winProbability = evalResult.winProbability;
+        market.confidenceScore = evalResult.confidenceScore;
+        market.priceActionTrend = evalResult.priceAction.trend;
+        market.priceActionScore = evalResult.priceAction.trendScore;
+        market.confluenceRationale = evalResult.rationale;
       }
     }
     this.emit('spot_updated', ticker);
@@ -328,8 +336,19 @@ export class MarketService extends EventEmitter {
 
         // Calculate quantitative fair value and edge
         const ticker = this.spotPrices.get(symbol);
-        const fair = calculateFairValue(spot, strike, Math.max(1, timeLeftSeconds), symbol, undefined, ticker?.priceHistory);
-        const edge = calculateEdge(fair.fairValueYes, bestBidYes, bestAskYes);
+        const prevFair = this.smoothedFairValues.get(marketId);
+        const evalResult = evaluateMultiFactorConfluence(
+          spot,
+          strike,
+          Math.max(1, timeLeftSeconds),
+          symbol,
+          bestBidYes,
+          bestAskYes,
+          ticker?.priceHistory,
+          0,
+          prevFair,
+        );
+        this.smoothedFairValues.set(marketId, evalResult.confluenceProbYes);
 
         const marketObj: Market = {
           id: marketId,
@@ -355,9 +374,17 @@ export class MarketService extends EventEmitter {
           bestAskYes: Number(bestAskYes.toFixed(2)),
           bestBidNo: Number((1.0 - bestAskYes).toFixed(2)),
           bestAskNo: Number((1.0 - bestBidYes).toFixed(2)),
-          impliedProbYes: edge.impliedProbYes,
-          fairValueYes: fair.fairValueYes,
-          edgePercentage: hasRealClobDepth ? edge.edgePercentage : 0,
+          impliedProbYes: evalResult.impliedProbYes,
+          fairValueYes: evalResult.fairValueYes,
+          edgePercentage: hasRealClobDepth ? evalResult.edgePercentage : 0,
+          convictionState: evalResult.convictionState,
+          recommendedAction: evalResult.recommendedAction,
+          recommendedOutcome: evalResult.recommendedOutcome,
+          winProbability: evalResult.winProbability,
+          confidenceScore: evalResult.confidenceScore,
+          priceActionTrend: evalResult.priceAction.trend,
+          priceActionScore: evalResult.priceAction.trendScore,
+          confluenceRationale: evalResult.rationale,
           poolAddress: m.poolAddress as Address,
           marketIdHex: m.marketId as Hex,
           venueId: m.venueId || undefined,
@@ -594,10 +621,18 @@ export class MarketService extends EventEmitter {
         const marketId = `${SOMNIA_ADDRESSES.binaryModule}-${symbol.replace('/', '')}-${windowDur}-${strike}-${closeTimeMs}`;
         if (!this.markets.has(marketId)) {
           const timeLeft = Math.max(1, Math.floor((closeTimeMs - now) / 1000));
-          const fair = calculateFairValue(spot, strike, timeLeft, symbol);
+          const ticker = this.spotPrices.get(symbol);
           const seedBid = 0.49;
           const seedAsk = 0.51;
-          const edge = calculateEdge(fair.fairValueYes, seedBid, seedAsk);
+          const evalResult = evaluateMultiFactorConfluence(
+            spot,
+            strike,
+            timeLeft,
+            symbol,
+            seedBid,
+            seedAsk,
+            ticker?.priceHistory,
+          );
 
           const newMarket: Market = {
             id: marketId,
@@ -612,9 +647,17 @@ export class MarketService extends EventEmitter {
             bestAskYes: seedAsk,
             bestBidNo: 0.49,
             bestAskNo: 0.51,
-            impliedProbYes: edge.impliedProbYes,
-            fairValueYes: fair.fairValueYes,
+            impliedProbYes: evalResult.impliedProbYes,
+            fairValueYes: evalResult.fairValueYes,
             edgePercentage: 0,
+            convictionState: evalResult.convictionState,
+            recommendedAction: evalResult.recommendedAction,
+            recommendedOutcome: evalResult.recommendedOutcome,
+            winProbability: evalResult.winProbability,
+            confidenceScore: evalResult.confidenceScore,
+            priceActionTrend: evalResult.priceAction.trend,
+            priceActionScore: evalResult.priceAction.trendScore,
+            confluenceRationale: evalResult.rationale,
             isSynthetic: true,
             isSeedDepth: true,
           };
@@ -679,27 +722,38 @@ export class MarketService extends EventEmitter {
           }).catch(() => {});
         } else {
           market.status = 'Resolving';
+          void import('./order-service.js').then((mod) => {
+            void mod.orderService.syncResolvedOrdersPnLAsync({ force: true });
+          }).catch(() => {});
         }
       } else if (market.status === 'Open') {
         const ticker = this.spotPrices.get(market.symbol);
         const spot = ticker?.price || market.strikePrice;
-        const rawFair = calculateFairValue(spot, market.strikePrice, timeLeftSeconds, market.symbol, undefined, ticker?.priceHistory);
-        const confluence = calculateConfluenceProbability(
-          rawFair.fairValueYes,
-          ticker?.change1m || 0,
-          ticker?.change5m || 0,
+        const prevFair = this.smoothedFairValues.get(market.id);
+        const evalResult = evaluateMultiFactorConfluence(
+          spot,
+          market.strikePrice,
+          timeLeftSeconds,
+          market.symbol,
+          market.bestBidYes,
+          market.bestAskYes,
+          ticker?.priceHistory,
           0,
+          prevFair,
         );
 
-        const prevFair = this.smoothedFairValues.get(market.id) ?? confluence;
-        const smoothedFair = Number((0.25 * confluence + 0.75 * prevFair).toFixed(4));
-        this.smoothedFairValues.set(market.id, smoothedFair);
-
-        const edge = calculateEdge(smoothedFair, market.bestBidYes, market.bestAskYes);
-
-        market.fairValueYes = smoothedFair;
-        market.impliedProbYes = edge.impliedProbYes;
-        market.edgePercentage = market.isSeedDepth || market.isSynthetic ? 0 : edge.edgePercentage;
+        this.smoothedFairValues.set(market.id, evalResult.confluenceProbYes);
+        market.fairValueYes = evalResult.fairValueYes;
+        market.impliedProbYes = evalResult.impliedProbYes;
+        market.edgePercentage = market.isSeedDepth || market.isSynthetic ? 0 : evalResult.edgePercentage;
+        market.convictionState = evalResult.convictionState;
+        market.recommendedAction = evalResult.recommendedAction;
+        market.recommendedOutcome = evalResult.recommendedOutcome;
+        market.winProbability = evalResult.winProbability;
+        market.confidenceScore = evalResult.confidenceScore;
+        market.priceActionTrend = evalResult.priceAction.trend;
+        market.priceActionScore = evalResult.priceAction.trendScore;
+        market.confluenceRationale = evalResult.rationale;
       }
     }
 

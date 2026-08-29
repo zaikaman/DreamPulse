@@ -577,6 +577,13 @@ export class OrderService {
 
     // Reconcile remaining unsettled orders whose market expired
     await this.syncResolvedOrdersPnLAsync({ force: true }).catch(() => {});
+
+    // Start periodic background settlement sync (every 3 seconds) for real-time order lifecycle & resolution
+    if (process.env.NODE_ENV !== 'test') {
+      setInterval(() => {
+        void this.syncResolvedOrdersPnLAsync().catch(() => {});
+      }, 3000);
+    }
   }
 
   /**
@@ -2043,9 +2050,9 @@ export class OrderService {
               ]);
               onchainMarketCache.set(order.marketId, onchain);
             }
-            if (onchain && (onchain.isResolved || onchain.finalized)) {
+            if (onchain && (onchain.isResolved || onchain.finalized || onchain.status === 4 || onchain.status === 5)) {
               shouldResolve = true;
-              if (onchain.isVoided) {
+              if (onchain.isVoided || onchain.status === 5) {
                 winningOutcome = 'VOID';
                 isVoided = true;
               } else {

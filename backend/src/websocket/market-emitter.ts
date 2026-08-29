@@ -33,6 +33,14 @@ export function startMarketEmitter(tickIntervalMs: number = 100): void {
         fairValue: number;
         edge: number;
         hasAnomaly: boolean;
+        convictionState?: 'HIGH_CONVICTION' | 'MODERATE' | 'CAUTION_COUNTER_TREND' | 'NEUTRAL';
+        recommendedAction?: 'BUY_UP' | 'BUY_DOWN' | 'WAIT';
+        recommendedOutcome?: 'YES' | 'NO' | 'NONE';
+        winProbability?: number;
+        confidenceScore?: number;
+        priceActionTrend?: string;
+        priceActionScore?: number;
+        confluenceRationale?: string;
       }> = [];
 
       for (const market of activeMarkets) {
@@ -52,6 +60,14 @@ export function startMarketEmitter(tickIntervalMs: number = 100): void {
           fairValue: market.fairValueYes,
           edge: market.edgePercentage,
           hasAnomaly,
+          convictionState: market.convictionState,
+          recommendedAction: market.recommendedAction,
+          recommendedOutcome: market.recommendedOutcome,
+          winProbability: market.winProbability,
+          confidenceScore: market.confidenceScore,
+          priceActionTrend: market.priceActionTrend,
+          priceActionScore: market.priceActionScore,
+          confluenceRationale: market.confluenceRationale,
         });
       }
 

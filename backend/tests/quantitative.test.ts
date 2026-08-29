@@ -5,6 +5,8 @@ import {
   calculateConfluenceProbability,
   calculateEdge,
   calculateSpotDrift,
+  calculatePriceActionMetrics,
+  evaluateMultiFactorConfluence,
   parseWindowToSeconds,
   secondsToYears,
   calculateRealizedVolatility,
@@ -388,4 +390,192 @@ describe('Oracle Arbitrage Agent Decision & Filter Invariants', () => {
     expect(decision.rationale).toContain('optimal risk/reward boundary [0.25, 0.68]');
   });
 });
+
+describe('Multi-Factor Confluence & High-Conviction AI Copilot Engine', () => {
+  it('calculates price action metrics, EMAs, velocity, and trend classification accurately', () => {
+    const now = Date.now();
+    const history: Array<{ timestamp: number; price: number }> = [];
+
+    // Simulate an upward surging price series (higher highs, higher velocity)
+    let current = 96000;
+    for (let i = 25; i >= 0; i--) {
+      current += 20; // Upward trending
+      history.push({ timestamp: now - i * 3000, price: current });
+    }
+
+    const pa = calculatePriceActionMetrics(history, current);
+    expect(pa.trend).toMatch(/BULLISH/);
+    expect(pa.trendScore).toBeGreaterThan(0.20);
+    expect(pa.change1m).toBeGreaterThan(0);
+    expect(pa.emaFast).toBeGreaterThanOrEqual(pa.emaSlow);
+    expect(pa.velocity).toBeGreaterThan(0);
+  });
+
+  it('generates HIGH_CONVICTION BUY_UP trade when price action and mathematical edge align', () => {
+    const now = Date.now();
+    const history: Array<{ timestamp: number; price: number }> = [];
+
+    // Upward price action
+    let current = 96200;
+    for (let i = 20; i >= 0; i--) {
+      current += 15;
+      history.push({ timestamp: now - i * 3000, price: current });
+    }
+
+    // Spot = 96500, Strike = 96000 (Spot is $500 above strike, price action is bullish)
+    // CLOB ask = 0.55 (undervalued vs theoretical ~0.65+)
+    const result = evaluateMultiFactorConfluence(
+      96500,
+      96000,
+      300, // 5m left
+      'BTC/USD',
+      0.53,
+      0.55,
+      history,
+    );
+
+    expect(result.convictionState).toBe('HIGH_CONVICTION');
+    expect(result.recommendedAction).toBe('BUY_UP');
+    expect(result.recommendedOutcome).toBe('YES');
+    expect(result.winProbability).toBeGreaterThanOrEqual(60);
+    expect(result.isCounterTrendConflict).toBe(false);
+    expect(result.rationale).toContain('High Conviction UP');
+  });
+
+  it('generates HIGH_CONVICTION BUY_DOWN trade when price action and negative edge align', () => {
+    const now = Date.now();
+    const history: Array<{ timestamp: number; price: number }> = [];
+
+    // Downward price action
+    let current = 95800;
+    for (let i = 20; i >= 0; i--) {
+      current -= 15;
+      history.push({ timestamp: now - i * 3000, price: current });
+    }
+
+    // Spot = 95500, Strike = 96000 (Spot is $500 below strike, price action is bearish)
+    // CLOB bid = 0.45 (YES is overpriced vs theoretical ~0.35, so NO is underpriced)
+    const result = evaluateMultiFactorConfluence(
+      95500,
+      96000,
+      300,
+      'BTC/USD',
+      0.45,
+      0.47,
+      history,
+    );
+
+    expect(result.convictionState).toBe('HIGH_CONVICTION');
+    expect(result.recommendedAction).toBe('BUY_DOWN');
+    expect(result.recommendedOutcome).toBe('NO');
+    expect(result.winProbability).toBeGreaterThanOrEqual(60);
+    expect(result.isCounterTrendConflict).toBe(false);
+    expect(result.rationale).toContain('High Conviction DOWN');
+  });
+
+  it('triggers CAUTION_COUNTER_TREND and blocks BUY_UP when price is dumping despite spot > strike (Falling Knife Safeguard)', () => {
+    const now = Date.now();
+    const history: Array<{ timestamp: number; price: number }> = [];
+
+    // Spot was 96800 and is crashing down towards strike 96000
+    let current = 96800;
+    for (let i = 20; i >= 0; i--) {
+      current -= 30; // Sharp downward plunge
+      history.push({ timestamp: now - i * 3000, price: current });
+    }
+
+    // Current spot = 96200 (still $200 above strike 96000), but momentum is plunging hard
+    const result = evaluateMultiFactorConfluence(
+      96200,
+      96000,
+      300,
+      'BTC/USD',
+      0.52,
+      0.54,
+      history,
+    );
+
+    // Safeguard MUST activate: do not suggest buying UP into a falling knife!
+    expect(result.convictionState).toBe('CAUTION_COUNTER_TREND');
+    expect(result.isCounterTrendConflict).toBe(true);
+    expect(result.recommendedAction).toBe('WAIT');
+    expect(result.recommendedOutcome).toBe('NONE');
+    expect(result.rationale).toContain('Caution: Counter-trend divergence');
+    expect(result.rationale).toContain('WAITING for price stabilization');
+  });
+
+  it('triggers CAUTION_COUNTER_TREND and blocks BUY_DOWN when price is surging despite spot < strike (Breakout Rally Safeguard)', () => {
+    const now = Date.now();
+    const history: Array<{ timestamp: number; price: number }> = [];
+
+    // Spot was 95200 and is surging vertically up towards strike 96000
+    let current = 95200;
+    for (let i = 20; i >= 0; i--) {
+      current += 30; // Sharp breakout rally
+      history.push({ timestamp: now - i * 3000, price: current });
+    }
+
+    // Current spot = 95800 (still $200 below strike 96000), but momentum is surging hard
+    const result = evaluateMultiFactorConfluence(
+      95800,
+      96000,
+      300,
+      'BTC/USD',
+      0.46,
+      0.48,
+      history,
+    );
+
+    // Safeguard MUST activate: do not suggest buying DOWN into a surging breakout!
+    expect(result.convictionState).toBe('CAUTION_COUNTER_TREND');
+    expect(result.isCounterTrendConflict).toBe(true);
+    expect(result.recommendedAction).toBe('WAIT');
+    expect(result.recommendedOutcome).toBe('NONE');
+    expect(result.rationale).toContain('Caution: Counter-trend divergence');
+  });
+
+  it('maintains NEUTRAL state when market is fairly priced and ranging', () => {
+    const now = Date.now();
+    const history: Array<{ timestamp: number; price: number }> = [];
+
+    // Oscillating flat price around 96000
+    for (let i = 20; i >= 0; i--) {
+      const price = 96000 + (i % 2 === 0 ? 5 : -5);
+      history.push({ timestamp: now - i * 3000, price });
+    }
+
+    const result = evaluateMultiFactorConfluence(
+      96000,
+      96000,
+      300,
+      'BTC/USD',
+      0.49,
+      0.51,
+      history,
+    );
+
+    expect(result.convictionState).toBe('NEUTRAL');
+    expect(result.recommendedAction).toBe('WAIT');
+    expect(result.recommendedOutcome).toBe('NONE');
+    expect(result.rationale).toContain('Observing');
+  });
+
+  it('stabilizes edge transitions with smoothing and deadbands (eliminates micro-jitter)', () => {
+    // 0.3% dislocation (within 0.5% deadband)
+    const result = evaluateMultiFactorConfluence(
+      96000,
+      96000,
+      300,
+      'BTC/USD',
+      0.498,
+      0.502,
+      [],
+      0,
+      0.501, // Previous smoothed fair
+    );
+
+    expect(Math.abs(result.edgePercentage)).toBe(0); // Deadband suppresses jitter
+  });
+});
+
 

@@ -1,6 +1,6 @@
 import { EventEmitter } from 'events';
 import WebSocket from 'ws';
-import { calculateRealizedVolatility } from '../quantitative/pricing.js';
+import { calculateRealizedVolatility, calculatePriceActionMetrics, type PriceActionMetrics } from '../quantitative/pricing.js';
 
 export interface SpotTicker {
   symbol: string;
@@ -12,6 +12,7 @@ export interface SpotTicker {
   volume24h: number;
   timestamp: number;
   priceHistory: Array<{ timestamp: number; price: number }>;
+  priceAction?: PriceActionMetrics;
 }
 
 const SYMBOL_MAPPINGS: Record<string, string> = {
@@ -307,6 +308,7 @@ export class PriceFeedService extends EventEmitter {
     existing.timestamp = timestamp;
     existing.change1m = Number(((price - p1m) / p1m).toFixed(5));
     existing.change5m = Number(((price - p5m) / p5m).toFixed(5));
+    existing.priceAction = calculatePriceActionMetrics(existing.priceHistory, price);
 
     this.spotPrices.set(symbol, existing);
     this.emit('spotUpdate', existing);

@@ -11,6 +11,14 @@ export interface MarketTickData {
   edge: number;
   hasAnomaly: boolean;
   timestamp: number;
+  convictionState?: 'HIGH_CONVICTION' | 'MODERATE' | 'CAUTION_COUNTER_TREND' | 'NEUTRAL';
+  recommendedAction?: 'BUY_UP' | 'BUY_DOWN' | 'WAIT';
+  recommendedOutcome?: 'YES' | 'NO' | 'NONE';
+  winProbability?: number;
+  confidenceScore?: number;
+  priceActionTrend?: string;
+  priceActionScore?: number;
+  confluenceRationale?: string;
 }
 
 export interface DepthUpdateData {

@@ -11,6 +11,7 @@ import type { MarketTickData, DepthUpdateData } from '../../hooks/useTelemetry.j
 import type { WalletState } from '../../hooks/useSessionKey.js';
 import { useMarketCountdown } from '../../hooks/useMarketCountdown.js';
 import { useCustomAgents } from '../../hooks/useCustomAgents.js';
+import { evaluateTradeConfluence } from '../../lib/confluence.js';
 import { EventContractChart } from './EventContractChart.js';
 import { OrderBookDepth } from '../OrderBookDepth.js';
 import { TraderCockpitTicket, type LadderPrefillData } from './TraderCockpitTicket.js';
@@ -71,6 +72,15 @@ export const TradeTerminalView: React.FC<TradeTerminalViewProps> = ({
 
   const fleetMonitoringCount = 2 + activeCustomForSymbol.length; // Volt + Oracle (+ Custom)
 
+  // Multi-Factor Confluence evaluation
+  const confluence = useMemo(() => {
+    if (!market) return null;
+    const recentThought = agentThoughts?.find(
+      (t) => t.marketId === market.id || t.marketId?.toLowerCase() === market.id.toLowerCase()
+    );
+    return evaluateTradeConfluence(market, tick, spot, undefined, recentThought?.reasoningText);
+  }, [market, tick, spot, agentThoughts]);
+
   // Continuous smooth fallback probability centered on strike
   const smoothFallbackProb = strike > 0 
     ? 1 / (1 + Math.exp(-Math.max(-4, Math.min(4, ((spot - strike) / (strike * 0.005)) * 2))))
@@ -78,15 +88,9 @@ export const TradeTerminalView: React.FC<TradeTerminalViewProps> = ({
 
   const isSyntheticOrSeed = Boolean(market?.isSynthetic || market?.isSeedDepth);
   const marketProbYes = isSyntheticOrSeed ? 0.5 : (tick?.impliedProb ?? market?.impliedProbYes ?? smoothFallbackProb);
-  const fairValueYes = tick?.fairValue ?? market?.fairValueYes ?? smoothFallbackProb;
-  const rawEdge = tick?.edge ?? (fairValueYes - marketProbYes);
-  const edge = isSyntheticOrSeed ? 0 : rawEdge;
   const isMarketUp = marketProbYes >= 0.5;
   const marketDirection = isMarketUp ? 'Up' : 'Down';
   const marketConfidence = (isMarketUp ? marketProbYes * 100 : (1 - marketProbYes) * 100).toFixed(0);
-  const isYesEdge = edge > 0.004;
-  const isNoEdge = edge < -0.004;
-  const signedEdgeLabel = `${edge >= 0 ? '+' : ''}${(edge * 100).toFixed(1)}% ${isYesEdge ? 'YES' : isNoEdge ? 'NO' : ''}`.trim();
   const depth = market ? depthMap.get(market.id) : undefined;
 
   // Real-time dynamic countdown & formatted expiry
@@ -174,14 +178,29 @@ export const TradeTerminalView: React.FC<TradeTerminalViewProps> = ({
               </span>
             </div>
 
-            {/* AI Alpha Edge Badge — signed, directional (fixes YES vs DOWN mismatch) */}
-            <div className={cn(
-              "hidden sm:flex items-center gap-1 px-2 py-0.5 rounded border text-[11px]",
-              isYesEdge ? "bg-[#00e676]/10 text-[#00e676] border-[#00e676]/30" : isNoEdge ? "bg-[#ff3366]/10 text-[#ff3366] border-[#ff3366]/30" : "bg-[#7928ca]/10 text-[#d8b4fe] border-[#7928ca]/30"
-            )}>
-              <SparklesIcon className={cn("w-3.5 h-3.5", isYesEdge ? "text-[#00e676]" : isNoEdge ? "text-[#ff3366]" : "text-[#d8b4fe]")} />
-              <span>AI Edge: {signedEdgeLabel}{!isYesEdge && !isNoEdge ? '' : ' EDGE'}</span>
-            </div>
+            {/* AI Alpha Confluence Badge */}
+            {confluence && (
+              <div
+                className={cn(
+                  "hidden sm:flex items-center gap-1.5 px-2.5 py-0.5 rounded-lg border text-[11px] font-mono transition-all",
+                  confluence.badgeStyle.bg,
+                  confluence.badgeStyle.border,
+                  confluence.badgeStyle.text,
+                  confluence.badgeStyle.glow
+                )}
+                title={confluence.rationale}
+              >
+                <SparklesIcon className={cn("w-3.5 h-3.5", confluence.badgeStyle.iconColor)} />
+                <span>
+                  {confluence.convictionState === 'HIGH_CONVICTION'
+                    ? `AI: ${confluence.recommendedAction === 'BUY_UP' ? '▲ BUY UP' : '▼ BUY DOWN'} (${confluence.signedEdgeLabel})`
+                    : confluence.convictionState === 'CAUTION_COUNTER_TREND'
+                    ? `AI: Caution Divergence`
+                    : `AI Edge: ${confluence.signedEdgeLabel}`
+                  }
+                </span>
+              </div>
+            )}
 
             {/* Fleet Monitoring Status Pill */}
             <button
