@@ -15,7 +15,7 @@ describe('Phase 7 Strategy Studio & Historical Backtest Tests', () => {
 
   it('runs backtest simulation for Volt Sniper and computes quantitative metrics', async () => {
     const backtestService = new BacktestService();
-    const userAddress = '0x15C7e8CE38F021c5b45d098AaD788f63090bF20A';
+    const userAddress = '0x70997970C51812dc3A010C7d01b50e0d17dc79C8';
 
     const result = await backtestService.runSimulation({
       userAddress,
@@ -47,7 +47,7 @@ describe('Phase 7 Strategy Studio & Historical Backtest Tests', () => {
 
   it('runs backtest simulation for Oracle Volatility Arb with custom params', async () => {
     const backtestService = new BacktestService();
-    const userAddress = '0x15C7e8CE38F021c5b45d098AaD788f63090bF20A';
+    const userAddress = '0x70997970C51812dc3A010C7d01b50e0d17dc79C8';
 
     const result = await backtestService.runSimulation({
       userAddress,

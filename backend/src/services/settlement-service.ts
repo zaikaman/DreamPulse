@@ -681,13 +681,13 @@ export class SettlementService {
         claimedSweeps.push(sweep);
         totalClaimed += pos.claimableAmount;
 
-        // Persist to Supabase asynchronously (skip fake test artifacts)
+        // Persist to Supabase asynchronously
         if (
+          process.env.NODE_ENV !== 'test' &&
           txHash &&
-          txHash !== '0x1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef' &&
           !txHash.startsWith('0x0000000000000000000000000000000000000000000000000000000000000000') &&
-          pos.marketId !== '0x3333444455556666777788889999000011112222' &&
-          normalizedUser.toLowerCase() !== '0x15c7e8ce38f021c5b45d098aad788f63090bf20a'
+          txHash !== '0x1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef' &&
+          isAddress(normalizedUser)
         ) {
           try {
             await marketService.ensureMarketPersisted(pos.marketId, pos.symbol);
@@ -886,13 +886,13 @@ export class SettlementService {
         if (evicted) this.sweepsMap.delete(evicted.id);
       }
 
-      // Persist to Supabase asynchronously (skip fake test artifacts)
+      // Persist to Supabase asynchronously
       if (
+        process.env.NODE_ENV !== 'test' &&
         txHash &&
-        txHash !== '0x1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef' &&
-        !txHash.startsWith('0xaaaaaaaa') &&
         !txHash.startsWith('0x0000000000000000000000000000000000000000000000000000000000000000') &&
-        normalizedUser.toLowerCase() !== '0x15c7e8ce38f021c5b45d098aad788f63090bf20a'
+        txHash !== '0x1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef' &&
+        isAddress(normalizedUser)
       ) {
         try {
           const knownMarket = marketService.getMarketById(marketId);

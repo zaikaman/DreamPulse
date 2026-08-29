@@ -38,8 +38,8 @@ describe('Phase 6 Settlement Sweeper & Collateral Compounder Tests', () => {
 
   const validSession: SessionGrant = {
     id: 'sweeper-test-session',
-    userAddress: '0x15C7e8CE38F021c5b45d098AaD788f63090bF20A',
-    operatorAddress: '0x15C7e8CE38F021c5b45d098AaD788f63090bF20A',
+    userAddress: '0x70997970C51812dc3A010C7d01b50e0d17dc79C8',
+    operatorAddress: '0x93e300607c363E7D7a47e50f5c9fDf1723e859Cf',
     permissions: ['placeOrderFor', 'cancelOrderFor'],
     maxTradeSize: 100.0,
     dailyVolumeCap: 1000.0,
@@ -106,7 +106,7 @@ describe('Phase 6 Settlement Sweeper & Collateral Compounder Tests', () => {
 
     it('executes batch settlement claim, updates user balance, and generates valid tx hash', async () => {
       const settlementService = new SettlementService();
-      const userAddress = '0x15C7e8CE38F021c5b45d098AaD788f63090bF20A';
+      const userAddress = '0x70997970C51812dc3A010C7d01b50e0d17dc79C8';
 
       vi.spyOn(settlementService, 'scanUnclaimedSettlements').mockResolvedValue([
         {
@@ -141,7 +141,7 @@ describe('Phase 6 Settlement Sweeper & Collateral Compounder Tests', () => {
 
     it('scans unclaimed settlements and produces a comprehensive summary', async () => {
       const settlementService = new SettlementService();
-      const userAddress = '0x15C7e8CE38F021c5b45d098AaD788f63090bF20A';
+      const userAddress = '0x70997970C51812dc3A010C7d01b50e0d17dc79C8';
 
       vi.spyOn(somniaExchange.client, 'getClaimable').mockResolvedValue([]);
       vi.spyOn(somniaExchange.client, 'listBinaryMarkets').mockResolvedValue([]);
@@ -159,7 +159,7 @@ describe('Phase 6 Settlement Sweeper & Collateral Compounder Tests', () => {
 
     it('includes indexer getClaimable positions even when the resolved-market list is full of unrelated rows', async () => {
       const settlementService = new SettlementService();
-      const userAddress = '0x15C7e8CE38F021c5b45d098AaD788f63090bF20A';
+      const userAddress = '0x70997970C51812dc3A010C7d01b50e0d17dc79C8';
       const heldMarketId = (`0x${'ab'.repeat(32)}`) as Hex;
 
       vi.spyOn(somniaExchange.client, 'getClaimable').mockResolvedValue([
@@ -194,7 +194,7 @@ describe('Phase 6 Settlement Sweeper & Collateral Compounder Tests', () => {
 
     it('discovers on-chain winning balances for this wallet\'s traded markets when getClaimable is empty', async () => {
       const settlementService = new SettlementService();
-      const userAddress = '0x15C7e8CE38F021c5b45d098AaD788f63090bF20A';
+      const userAddress = '0x70997970C51812dc3A010C7d01b50e0d17dc79C8';
       const tradedMarketId = (`0x${'cd'.repeat(32)}`) as Hex;
 
       vi.spyOn(orderService, 'getOrders').mockReturnValue([
@@ -245,7 +245,7 @@ describe('Phase 6 Settlement Sweeper & Collateral Compounder Tests', () => {
 
     it('compounds claimed proceeds into active user allocation using 100% compounding', async () => {
       const compounderService = new CompounderService();
-      const userAddress = '0x15C7e8CE38F021c5b45d098AaD788f63090bF20A';
+      const userAddress = '0x70997970C51812dc3A010C7d01b50e0d17dc79C8';
 
       const initial = compounderService.getUserCompoundedStats(userAddress);
       expect(initial.totalCompoundedAmount).toBe(0);
@@ -261,7 +261,7 @@ describe('Phase 6 Settlement Sweeper & Collateral Compounder Tests', () => {
 
     it('claims individual market payout with valid confirmation', async () => {
       const settlementService = new SettlementService();
-      const userAddress = '0x15C7e8CE38F021c5b45d098AaD788f63090bF20A';
+      const userAddress = '0x70997970C51812dc3A010C7d01b50e0d17dc79C8';
 
       const { marketService } = await import('../src/services/market-service.js');
       vi.spyOn(marketService, 'getMarketById').mockReturnValue({

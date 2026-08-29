@@ -519,12 +519,8 @@ export class OrderService {
     }
 
     for (const row of data) {
-      // Exclude mock test artifacts and dummy placeholder orders
-      if (
-        row.tx_hash === '0x1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef' ||
-        row.market_id === '0x1111222233334444555566667777888899990000' ||
-        row.user_address?.toLowerCase() === '0x15c7e8ce38f021c5b45d098aad788f63090bf20a'
-      ) {
+      // Exclude test mock tx artifacts
+      if (row.tx_hash === '0x1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef') {
         continue;
       }
 
@@ -534,8 +530,7 @@ export class OrderService {
       const isManual =
         row.source === 'TERMINAL' ||
         row.agent_type === 'Manual' ||
-        row.agent_type === 'MANUAL' ||
-        row.id === 'a2346dff-ca1d-4fa8-82d0-6decd7ac6eab';
+        row.agent_type === 'MANUAL';
 
       const orderSource: OrderSource = isManual ? 'TERMINAL' : ((row.source as OrderSource) || 'SWARM');
       const agentType: AgentType = isManual ? 'Manual' : ((row.agent_type as AgentType) || 'Titan');
@@ -572,9 +567,6 @@ export class OrderService {
     // Authoritative on-chain healing: verify all on-chain hex orders against actual smart contract settlements
     await this.reconcileSettledOrdersWithOnChain().catch(() => {});
 
-    // Heal missing user trades from recorded sessions and on-chain payouts
-    await this.healMissingUserTradesFromSessionsAndOnChain().catch(() => {});
-
     // Reconcile remaining unsettled orders whose market expired
     await this.syncResolvedOrdersPnLAsync({ force: true }).catch(() => {});
 
@@ -583,110 +575,6 @@ export class OrderService {
       setInterval(() => {
         void this.syncResolvedOrdersPnLAsync().catch(() => {});
       }, 3000);
-    }
-  }
-
-  /**
-   * Reconciles and heals historical user trades and sweeps from sessions & on-chain payouts.
-   */
-  private async healMissingUserTradesFromSessionsAndOnChain(): Promise<void> {
-    if (process.env.NODE_ENV === 'test') return;
-    try {
-      const { data: dbSessions } = await supabase
-        .from('sessions')
-        .select('*')
-        .or('spent_today.gt.0,on_chain_tx_hash.not.is.null');
-
-      if (!dbSessions || dbSessions.length === 0) return;
-
-      for (const sess of dbSessions) {
-        const userAddr = (sess.user_address || '').trim();
-        if (!userAddr || userAddr.toLowerCase() === '0x15c7e8ce38f021c5b45d098aad788f63090bf20a') continue;
-
-        const existingOrders = this.orders.filter(
-          (o) => o.userAddress && o.userAddress.toLowerCase() === userAddr.toLowerCase(),
-        );
-
-        if (userAddr.toLowerCase() === '0x209e9ccc5962e46cceba63c0b2d3184875faf948'.toLowerCase()) {
-          const healedOrderId = 'a2346dff-ca1d-4fa8-82d0-6decd7ac6eab';
-          const healedMarketId = '0x000000000000000000000000000000000000000000000000000000000000bbfb';
-          const txHash = '0x9f0506cc6a51ad075bef7a2f97878bdd4b3a5fef458b13c14c2a2d22f2def29a' as Hex;
-
-          await marketService.ensureMarketPersisted(healedMarketId, 'BTC/USD');
-
-          const restoredOrder: OrderExecution = {
-            id: healedOrderId,
-            userAddress: userAddr,
-            sessionId: sess.id,
-            marketId: healedMarketId,
-            agentType: 'Manual',
-            source: 'TERMINAL',
-            outcome: 'YES',
-            direction: 'BUY',
-            orderType: 'IOC',
-            price: 0.51,
-            lotSize: 98,
-            totalCost: 49.98,
-            status: 'FILLED',
-            txHash,
-            pnl: 48.02,
-            isSettled: true,
-            settledAt: '2026-08-28T07:59:14.000Z',
-            createdAt: '2026-08-28T07:57:30.000Z',
-            filledAt: '2026-08-28T07:57:30.000Z',
-            marketSnapshot: {
-              symbol: 'BTC/USD',
-              strikePrice: 79613.4,
-              closeTimestamp: '2026-08-28T08:00:00.000Z',
-              settlementPrice: 79664.46,
-              winningOutcome: 'YES',
-              windowDuration: '5m',
-            },
-          };
-
-          if (!this.orderMap.has(healedOrderId)) {
-            this.orderMap.set(healedOrderId, restoredOrder);
-            this.orders.push(restoredOrder);
-          }
-
-          await supabase.from('orders').upsert({
-            id: healedOrderId,
-            user_address: userAddr,
-            session_id: sess.id,
-            market_id: healedMarketId,
-            agent_type: 'Manual',
-            source: 'TERMINAL',
-            outcome: 'YES',
-            direction: 'BUY',
-            order_type: 'IOC',
-            price: 0.51,
-            lot_size: 98,
-            total_cost: 49.98,
-            status: 'FILLED',
-            tx_hash: txHash,
-            pnl: 48.02,
-            is_settled: true,
-            settled_at: '2026-08-28T07:59:14.000Z',
-            created_at: '2026-08-28T07:57:30.000Z',
-            filled_at: '2026-08-28T07:57:30.000Z',
-          }, { onConflict: 'id' });
-
-          await supabase.from('sweeps').upsert({
-            id: 'b38491ae-6872-4d15-9988-51ec82bc77d9',
-            user_address: userAddr,
-            market_id: healedMarketId,
-            winning_outcome: 'YES',
-            claimable_amount: 98,
-            payout_token: 'tUSDC',
-            is_compounded: false,
-            tx_hash: txHash,
-            status: 'CONFIRMED',
-            claimed_at: '2026-08-28T07:59:14.000Z',
-          }, { onConflict: 'id' });
-        }
-      }
-    } catch (err: any) {
-      console.warn('[OrderService] healMissingUserTradesFromSessionsAndOnChain notice:', err?.message || err);
     }
   }
 
@@ -1174,10 +1062,11 @@ export class OrderService {
 
     this.notifyStateChange();
 
-    // Persist to Supabase asynchronously (skip fake test artifacts)
+    // Persist to Supabase asynchronously
     if (
-      txHash !== '0x1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef' &&
-      session.userAddress.toLowerCase() !== '0x15c7e8ce38f021c5b45d098aad788f63090bf20a'
+      process.env.NODE_ENV !== 'test' &&
+      isAddress(session.userAddress) &&
+      txHash !== '0x1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef'
     ) {
       try {
         await marketService.ensureMarketPersisted(decision.targetMarketId, market?.symbol);

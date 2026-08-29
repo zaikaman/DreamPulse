@@ -54,7 +54,7 @@ describe('Express REST API Endpoints', () => {
   });
 
   it('GET /api/v1/sweeper/summary returns live unclaimed and compounding metrics', async () => {
-    const res = await request(app).get('/api/v1/sweeper/summary?userAddress=0x15C7e8CE38F021c5b45d098AaD788f63090bF20A');
+    const res = await request(app).get('/api/v1/sweeper/summary?userAddress=0x70997970C51812dc3A010C7d01b50e0d17dc79C8');
     expect(res.status).toBe(200);
     expect(res.body.success).toBe(true);
     expect(res.body.data).toHaveProperty('unclaimedAmount');
@@ -63,7 +63,7 @@ describe('Express REST API Endpoints', () => {
   });
 
   it('GET /api/v1/sweeper/unclaimed scans positions across finalized markets', async () => {
-    const res = await request(app).get('/api/v1/sweeper/unclaimed?userAddress=0x15C7e8CE38F021c5b45d098AaD788f63090bF20A');
+    const res = await request(app).get('/api/v1/sweeper/unclaimed?userAddress=0x70997970C51812dc3A010C7d01b50e0d17dc79C8');
     expect(res.status).toBe(200);
     expect(res.body.success).toBe(true);
     expect(res.body).toHaveProperty('totalUnclaimedAmount');
@@ -81,7 +81,7 @@ describe('Express REST API Endpoints', () => {
 
     const res = await request(app)
       .post('/api/v1/sweeper/trigger')
-      .send({ userAddress: '0x15C7e8CE38F021c5b45d098AaD788f63090bF20A', autoCompound: true });
+      .send({ userAddress: '0x70997970C51812dc3A010C7d01b50e0d17dc79C8', autoCompound: true });
     expect(res.status).toBe(200);
     expect(res.body.success).toBe(true);
     expect(res.body.txHash).toMatch(/^0x[a-f0-9]{64}$/i);
@@ -129,7 +129,7 @@ describe('Express REST API Endpoints', () => {
 
   it('POST /api/v1/orders/place records client-signed order with txHash', async () => {
     const payload = {
-      userAddress: '0x15C7e8CE38F021c5b45d098AaD788f63090bF20A',
+      userAddress: '0x70997970C51812dc3A010C7d01b50e0d17dc79C8',
       marketId: 'test-market-id',
       outcome: 'YES',
       direction: 'BUY',
@@ -162,7 +162,7 @@ describe('Express REST API Endpoints', () => {
   });
 
   it('POST /api/v1/swarm/toggle-copytrade enables and disables autonomous copy-trading', async () => {
-    const user = '0x15C7e8CE38F021c5b45d098AaD788f63090bF20A';
+    const user = '0x70997970C51812dc3A010C7d01b50e0d17dc79C8';
 
     // Toggle ON
     const resOn = await request(app)

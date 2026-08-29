@@ -30,8 +30,8 @@ describe('Phase 5 Swarm Strategy & Agent Unit Tests', () => {
 
   const validSession: SessionGrant = {
     id: 'agent-test-session-001',
-    userAddress: '0x15C7e8CE38F021c5b45d098AaD788f63090bF20A',
-    operatorAddress: '0x15C7e8CE38F021c5b45d098AaD788f63090bF20A',
+    userAddress: '0x70997970C51812dc3A010C7d01b50e0d17dc79C8',
+    operatorAddress: '0x93e300607c363E7D7a47e50f5c9fDf1723e859Cf',
     permissions: ['placeOrderFor', 'cancelOrderFor'],
     maxTradeSize: 20.0,
     dailyVolumeCap: 200.0,
@@ -423,7 +423,7 @@ describe('Phase 5 Swarm Strategy & Agent Unit Tests', () => {
         status: 1,
       } as any;
 
-      const dummyOperator = '0x15C7e8CE38F021c5b45d098AaD788f63090bF20A' as Address;
+      const dummyOperator = '0x93e300607c363E7D7a47e50f5c9fDf1723e859Cf' as Address;
 
       // When checking assertFunded for SELL with held < quantity, throws error
       // Note: in local mock environment getOutcomeBalance returns 0n or catches

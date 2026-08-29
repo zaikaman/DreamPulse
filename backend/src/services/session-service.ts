@@ -10,10 +10,6 @@ import {
   OPERATOR_SELECTORS,
 } from '../config/permissions-abi.js';
 
-const BLOCKED_COPY_TRADE_USERS = new Set([
-  '0x1234567890123456789012345678901234567890',
-  '0x15c7e8ce38f021c5b45d098aad788f63090bf20a',
-]);
 
 function isSessionPersistenceEnabled(): boolean {
   if (process.env.VITEST === 'true' || process.env.NODE_ENV === 'test') {
@@ -523,7 +519,7 @@ export class SessionService {
     return this.getActiveSessions().filter((session) => {
       const user = session.userAddress.toLowerCase();
       if (user === operator) return false;
-      if (BLOCKED_COPY_TRADE_USERS.has(user)) return false;
+      if (!isAddress(session.userAddress)) return false;
       if (session.operatorAddress.toLowerCase() !== operator) return false;
       if (session.onChainAuthorized !== true) return false;
       if (!session.isActive) return false;
@@ -552,7 +548,7 @@ export class SessionService {
         const user = session.userAddress.toLowerCase();
         return (
           user !== operator.toLowerCase() &&
-          !BLOCKED_COPY_TRADE_USERS.has(user) &&
+          isAddress(session.userAddress) &&
           session.operatorAddress.toLowerCase() === operator.toLowerCase()
         );
       });

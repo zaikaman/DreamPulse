@@ -8,7 +8,7 @@ import { orderService } from '../src/services/order-service.js';
 
 describe('Swarm Arena & Strategy Leaderboard Tests', () => {
   let app: express.Express;
-  const testUser = '0x15C7e8CE38F021c5b45d098AaD788f63090bF20A';
+  const testUser = '0x70997970C51812dc3A010C7d01b50e0d17dc79C8';
 
   beforeAll(async () => {
     app = express();

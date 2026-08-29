@@ -148,7 +148,7 @@ export interface AgentThoughtLog {
 
 export interface BacktestResult {
   id: string;
-  userAddress: `0x${string}`;
+  userAddress?: `0x${string}`;
   agentType: AgentType;
   symbol: string;
   startDate: string;

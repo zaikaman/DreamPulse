@@ -160,10 +160,6 @@ export class BacktestService {
     }
 
     for (const row of data) {
-      if (row.user_address?.toLowerCase() === '0x15c7e8ce38f021c5b45d098aad788f63090bf20a') {
-        continue;
-      }
-
       const result: DetailedBacktestResult = {
         id: row.id,
         userAddress: row.user_address,
@@ -849,10 +845,11 @@ export class BacktestService {
       }
     }
 
+    const userAddr = req.userAddress && isAddress(req.userAddress) ? (getAddress(req.userAddress) as `0x${string}`) : undefined;
     const backtestId = crypto.randomUUID();
     const result: DetailedBacktestResult = {
       id: backtestId,
-      userAddress: (req.userAddress && isAddress(req.userAddress) ? req.userAddress : '0x15C7e8CE38F021c5b45d098AaD788f63090bF20A') as `0x${string}`,
+      userAddress: userAddr,
       agentType,
       symbol,
       timeframe,
@@ -886,29 +883,31 @@ export class BacktestService {
       this.history.pop();
     }
 
-    // Persist to Supabase asynchronously
-    (async () => {
-      try {
-        await supabase.from('backtests').insert({
-          id: backtestId,
-          user_address: result.userAddress,
-          agent_type: result.agentType,
-          symbol: result.symbol,
-          start_date: result.startDate,
-          end_date: result.endDate,
-          initial_capital: result.initialCapital,
-          strategy_config: result.strategyConfig,
-          total_trades: result.totalTrades,
-          win_rate: result.winRate,
-          net_pnl: result.netPnl,
-          max_drawdown: result.maxDrawdown,
-          sharpe_ratio: result.sharpeRatio,
-          created_at: result.createdAt,
-        });
-      } catch (err) {
-        console.warn('[BacktestService] Could not persist backtest to DB:', err);
-      }
-    })();
+    // Persist to Supabase asynchronously (only real user addresses, skip test runs)
+    if (userAddr && process.env.NODE_ENV !== 'test') {
+      (async () => {
+        try {
+          await supabase.from('backtests').insert({
+            id: backtestId,
+            user_address: userAddr,
+            agent_type: result.agentType,
+            symbol: result.symbol,
+            start_date: result.startDate,
+            end_date: result.endDate,
+            initial_capital: result.initialCapital,
+            strategy_config: result.strategyConfig,
+            total_trades: result.totalTrades,
+            win_rate: result.winRate,
+            net_pnl: result.netPnl,
+            max_drawdown: result.maxDrawdown,
+            sharpe_ratio: result.sharpeRatio,
+            created_at: result.createdAt,
+          });
+        } catch (err) {
+          console.warn('[BacktestService] Could not persist backtest to DB:', err);
+        }
+      })();
+    }
 
     return result;
   }

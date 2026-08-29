@@ -304,9 +304,10 @@ describe('Task T038 & T040: Session Management Service & Risk Guardrails', () =>
     expect(activeSession?.targetPoolAddress?.toLowerCase()).toBe(mockPool.toLowerCase());
   });
 
-  it('excludes unauthorized, dummy, and mismatched-operator sessions from copy-trade targets', async () => {
+  it('excludes unauthorized, disabled copy-trade, and mismatched-operator sessions from copy-trade targets', async () => {
     const unauthorized = privateKeyToAccount(generatePrivateKey());
     const authorized = privateKeyToAccount(generatePrivateKey());
+    const disabledCopy = privateKeyToAccount(generatePrivateKey());
     const wrongOperator = privateKeyToAccount(generatePrivateKey());
 
     await sessionService.registerSession({
@@ -327,13 +328,13 @@ describe('Task T038 & T040: Session Management Service & Risk Guardrails', () =>
     });
 
     await sessionService.registerSession({
-      userAddress: '0x1234567890123456789012345678901234567890',
+      userAddress: disabledCopy.address,
       operatorAddress: liveOperator.address,
       maxTradeSize: 10,
       dailyVolumeCap: 50,
       onChainAuthorized: true,
       onChainTxHash: '0x1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef',
-      copyTradeEnabled: true,
+      copyTradeEnabled: false,
     });
 
     await sessionService.registerSession({
@@ -349,7 +350,7 @@ describe('Task T038 & T040: Session Management Service & Risk Guardrails', () =>
     const targets = sessionService.getDelegatedCopyTradeSessions(liveOperator.address);
     expect(targets.some((s) => s.userAddress.toLowerCase() === authorized.address.toLowerCase())).toBe(true);
     expect(targets.some((s) => s.userAddress.toLowerCase() === unauthorized.address.toLowerCase())).toBe(false);
-    expect(targets.some((s) => s.userAddress.toLowerCase() === '0x1234567890123456789012345678901234567890')).toBe(false);
+    expect(targets.some((s) => s.userAddress.toLowerCase() === disabledCopy.address.toLowerCase())).toBe(false);
     expect(targets.some((s) => s.userAddress.toLowerCase() === wrongOperator.address.toLowerCase())).toBe(false);
   });
 
