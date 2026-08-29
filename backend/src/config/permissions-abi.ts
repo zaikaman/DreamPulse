@@ -8,6 +8,15 @@ import {
 import { SOMNIA_ADDRESSES, publicClient } from './somnia.js';
 
 /**
+ * Canonical tUSDC collateral decimals (Somnia TestUSDC = 6 decimals).
+ * Single source of truth — must match SOMNIA_ADDRESSES.decimals and on-chain ERC20 decimals.
+ * Used for EIP-712 SessionDelegation cap encoding (maxTradeSize / dailyVolumeCap).
+ */
+export const COLLATERAL_DECIMALS = SOMNIA_ADDRESSES.decimals; // 6
+/** Legacy decimals used before fix — kept for backward-compat verification only. */
+const LEGACY_COLLATERAL_DECIMALS = 18;
+
+/**
  * Somnia OperatorPermissionsRegistry ABI bindings.
  * Enables non-custodial session key authorization for trading bots.
  */
@@ -308,34 +317,94 @@ export interface SessionDelegationMessage {
 }
 
 /**
+ * Canonical helper: convert a human-readable cap amount to raw on-chain units.
+ * - `bigint` values are already raw (e.g., 10_000_000n for 10 tUSDC) and returned as-is.
+ * - `number | string` values are human amounts (e.g., 10, "10.5") and are parsed with the
+ *   provided decimals (default: COLLATERAL_DECIMALS = 6 for tUSDC).
+ * Handles exponential notation (e.g., 1e-7) by normalizing via toFixed before parseUnits.
+ */
+export function toCapUnits(
+  value: number | bigint | string,
+  decimals: number = COLLATERAL_DECIMALS,
+): bigint {
+  if (typeof value === 'bigint') return value;
+  const str = typeof value === 'string' ? value.trim() : String(value);
+  if (str === '' || str.toLowerCase() === 'nan') throw new Error(`Invalid cap value: ${String(value)}`);
+  // Normalize exponential notation to fixed-point decimal string to satisfy parseUnits
+  const normalized = str.includes('e') || str.includes('E')
+    ? Number(str).toFixed(decimals)
+    : str;
+  return parseUnits(normalized, decimals);
+}
+
+/**
  * Verify an EIP-712 typed signature for non-custodial session delegation.
+ * Caps are tUSDC amounts encoded with COLLATERAL_DECIMALS (6) — NOT 18.
+ * Production-ready: accepts human-readable (number/string) or raw bigint, and
+ * includes a legacy 18-decimal fallback for zero-downtime migration from the
+ * previous buggy implementation (logs a warning when fallback succeeds).
  */
 export async function verifySessionDelegationSignature(params: {
   delegator: Address;
   operator: Address;
-  maxTradeSize: number | bigint;
-  dailyVolumeCap: number | bigint;
-  nonce: number | bigint;
-  deadline: number | bigint;
+  maxTradeSize: number | bigint | string;
+  dailyVolumeCap: number | bigint | string;
+  nonce: number | bigint | string;
+  deadline: number | bigint | string;
   signature: Hex;
 }): Promise<boolean> {
-  const maxTradeSize = typeof params.maxTradeSize === 'bigint'
-    ? params.maxTradeSize
-    : parseUnits(params.maxTradeSize.toString(), 18);
+  const toBigInt = (v: number | bigint | string): bigint => {
+    if (typeof v === 'bigint') return v;
+    if (typeof v === 'string') {
+      const s = v.trim();
+      // Hex strings not expected for nonce/deadline; treat as decimal if parseable
+      if (/^0x/i.test(s)) return BigInt(s);
+      return BigInt(s);
+    }
+    return BigInt(v);
+  };
 
-  const dailyVolumeCap = typeof params.dailyVolumeCap === 'bigint'
-    ? params.dailyVolumeCap
-    : parseUnits(params.dailyVolumeCap.toString(), 18);
-
-  const nonce = typeof params.nonce === 'bigint'
-    ? params.nonce
-    : BigInt(params.nonce);
-
-  const deadline = typeof params.deadline === 'bigint'
-    ? params.deadline
-    : BigInt(params.deadline);
-
+  let nonce: bigint;
+  let deadline: bigint;
   try {
+    nonce = toBigInt(params.nonce);
+    deadline = toBigInt(params.deadline);
+  } catch (err) {
+    console.error('[SessionSignature] Invalid nonce/deadline:', err);
+    return false;
+  }
+
+  const isRawBigInt = typeof params.maxTradeSize === 'bigint' && typeof params.dailyVolumeCap === 'bigint';
+
+  // Fast path: both caps already raw bigint — verify directly without decimal ambiguity
+  if (isRawBigInt) {
+    try {
+      return await verifyTypedData({
+        address: params.delegator,
+        domain: SESSION_EIP712_DOMAIN,
+        types: SESSION_EIP712_TYPES,
+        primaryType: 'SessionDelegation',
+        message: {
+          delegator: params.delegator,
+          operator: params.operator,
+          maxTradeSize: params.maxTradeSize as bigint,
+          dailyVolumeCap: params.dailyVolumeCap as bigint,
+          nonce,
+          deadline,
+        },
+        signature: params.signature,
+      });
+    } catch (err) {
+      console.error('[SessionSignature] Verification error (raw bigint):', err);
+      return false;
+    }
+  }
+
+  // Primary: canonical tUSDC 6-decimal encoding
+  try {
+    const maxTradeSize = toCapUnits(params.maxTradeSize as number | string | bigint, COLLATERAL_DECIMALS);
+    const dailyVolumeCap = toCapUnits(params.dailyVolumeCap as number | string | bigint, COLLATERAL_DECIMALS);
+
     const isValid = await verifyTypedData({
       address: params.delegator,
       domain: SESSION_EIP712_DOMAIN,
@@ -352,11 +421,46 @@ export async function verifySessionDelegationSignature(params: {
       signature: params.signature,
     });
 
-    return isValid;
+    if (isValid) return true;
   } catch (err) {
-    console.error('[SessionSignature] Verification error:', err);
-    return false;
+    // parseUnits may throw for excessive fraction digits — log and fall through to legacy check
+    console.warn('[SessionSignature] Canonical 6-decimal verification branch failed:', (err as Error)?.message || err);
   }
+
+  // Fallback: legacy 18-decimal encoding (pre-fix clients). Keeps existing sessions alive during rollout.
+  // This path is deprecated and will be removed after all clients migrate to 6-decimal signing.
+  try {
+    const maxTradeSizeLegacy = toCapUnits(params.maxTradeSize as number | string | bigint, LEGACY_COLLATERAL_DECIMALS);
+    const dailyVolumeCapLegacy = toCapUnits(params.dailyVolumeCap as number | string | bigint, LEGACY_COLLATERAL_DECIMALS);
+
+    const isValidLegacy = await verifyTypedData({
+      address: params.delegator,
+      domain: SESSION_EIP712_DOMAIN,
+      types: SESSION_EIP712_TYPES,
+      primaryType: 'SessionDelegation',
+      message: {
+        delegator: params.delegator,
+        operator: params.operator,
+        maxTradeSize: maxTradeSizeLegacy,
+        dailyVolumeCap: dailyVolumeCapLegacy,
+        nonce,
+        deadline,
+      },
+      signature: params.signature,
+    });
+
+    if (isValidLegacy) {
+      console.warn(
+        '[SessionSignature] Verified via legacy 18-decimal fallback — client should upgrade to 6-decimal (tUSDC) signing. ' +
+          `delegator=${params.delegator} maxTradeSize=${String(params.maxTradeSize)} dailyVolumeCap=${String(params.dailyVolumeCap)}`,
+      );
+      return true;
+    }
+  } catch (err) {
+    console.warn('[SessionSignature] Legacy 18-decimal fallback also failed:', (err as Error)?.message || err);
+  }
+
+  return false;
 }
 
 /**

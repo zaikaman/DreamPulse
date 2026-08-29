@@ -52,6 +52,7 @@ export const somniaShannonTestnet = defineChain({
 
 export const SOMNIA_ADDRESSES = {
   chainId: 50312,
+  decimals: 6, // TestUSDC decimals — canonical for caps (maxTradeSize / dailyVolumeCap)
   operatorPermissionsRegistry: '0x15C7e8CE38F021c5b45d098AaD788f63090bF20A' as Address,
   operatorAccount: '0x93e300607c363E7D7a47e50f5c9fDf1723e859Cf' as Address,
   testUsdc: '0x70a86D8842FB63C4Ad2b7cdddF530eBf1BB25d8E' as Address,
@@ -60,6 +61,12 @@ export const SOMNIA_ADDRESSES = {
   collateralRouter: '0xbC0C9834B15ACE38bB50dDaa7d7f7C7CC4DC183C' as Address,
   batchHelper: '0x12c9c45fa740ce7469dacff368b08ca7edcaac26' as Address,
 };
+
+/**
+ * Canonical tUSDC collateral decimals (6). Single source of truth for cap encoding.
+ * Must match backend COLLATERAL_DECIMALS and on-chain TestUSDC decimals.
+ */
+export const COLLATERAL_DECIMALS = SOMNIA_ADDRESSES.decimals; // 6
 
 export const OPERATOR_SELECTORS = {
   placeOrderFor: '0x80054449' as Hex,
@@ -1028,8 +1035,9 @@ export class Web3Service {
     nonce: number;
     deadline: number;
   }): Promise<Hex> {
-    const maxTradeSizeWei = parseUnits(params.maxTradeSize.toString(), 18);
-    const dailyVolumeCapWei = parseUnits(params.dailyVolumeCap.toString(), 18);
+    // tUSDC caps are 6-decimal — must match backend COLLATERAL_DECIMALS
+    const maxTradeSizeWei = parseUnits(params.maxTradeSize.toString(), COLLATERAL_DECIMALS);
+    const dailyVolumeCapWei = parseUnits(params.dailyVolumeCap.toString(), COLLATERAL_DECIMALS);
 
     try {
       // 1. Try signing via Wagmi / active connector (supports WalletConnect, mobile, extension)
