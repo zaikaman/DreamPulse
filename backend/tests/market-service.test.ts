@@ -1,8 +1,9 @@
-import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import request from 'supertest';
 import { app } from '../src/index.js';
 import { MarketService } from '../src/services/market-service.js';
 import { AnomalyService } from '../src/services/anomaly-service.js';
+import { somniaExchange } from '../src/config/somnia.js';
 import type { Market } from '../src/types/index.js';
 
 describe('Market Service & Anomaly Detector Unit & Integration Tests', () => {
@@ -267,14 +268,28 @@ describe('Market Service & Anomaly Detector Unit & Integration Tests', () => {
   });
 
   describe('DreamDEX On-Chain Discovery & CLOB Integration', () => {
-    it('executes pollOnChainMarkets and gracefully falls back to rolling markets or parses active binary contracts', async () => {
+    it('executes pollOnChainMarkets and parses active binary contracts directly from indexer', async () => {
+      vi.spyOn(somniaExchange.client, 'listBinaryMarkets').mockResolvedValue([
+        {
+          id: '0x1111111111111111111111111111111111111111111111111111111111111111',
+          marketId: '0x1111111111111111111111111111111111111111111111111111111111111111',
+          poolAddress: '0x2222222222222222222222222222222222222222',
+          asset: 'BTC/USD',
+          strike: 85000,
+          status: 'Trading',
+          tradingStart: Math.floor(Date.now() / 1000) - 100,
+          expiry: Math.floor(Date.now() / 1000) + 800,
+          intervalSec: 900,
+        } as any,
+      ]);
       await marketService.pollOnChainMarkets();
       const markets = marketService.getActiveMarkets();
-      expect(markets.length).toBeGreaterThan(0);
+      expect(markets.length).toBe(1);
 
       const first = markets[0];
-      expect(first.id).toBeDefined();
-      expect(first.strikePrice).toBeGreaterThan(0);
+      expect(first.id).toBe('0x1111111111111111111111111111111111111111111111111111111111111111');
+      expect(first.strikePrice).toBe(85000);
+      expect(first.isSynthetic).toBe(false);
       expect(first.bestBidYes).toBeGreaterThanOrEqual(0);
       expect(first.bestAskYes).toBeLessThanOrEqual(1.0);
 
@@ -290,6 +305,59 @@ describe('Market Service & Anomaly Detector Unit & Integration Tests', () => {
       const unified = marketService.getUnifiedMarket(markets[0].id);
       // If running live indexer, unified might be present; if fallback, undefined
       expect(unified === undefined || typeof unified === 'object').toBe(true);
+    });
+
+    it('filters synthetic markets when real on-chain markets are present and allows poolAddress lookups', () => {
+      // 1. Seed fallback synthetic market
+      marketService.generateOfflineTestMarkets();
+      const initial = marketService.getActiveMarkets();
+      expect(initial.some((m) => m.isSynthetic)).toBe(true);
+
+      // 2. Insert a real on-chain market
+      const realMarket: Market = {
+        id: '0x1111111111111111111111111111111111111111111111111111111111111111',
+        symbol: 'BTC/USD',
+        strikePrice: 85000,
+        windowDuration: '15m',
+        openTimestamp: new Date().toISOString(),
+        closeTimestamp: new Date(Date.now() + 600000).toISOString(),
+        resolutionTimestamp: new Date(Date.now() + 660000).toISOString(),
+        status: 'Open',
+        bestBidYes: 0.48,
+        bestAskYes: 0.52,
+        bestBidNo: 0.48,
+        bestAskNo: 0.52,
+        impliedProbYes: 0.50,
+        fairValueYes: 0.50,
+        edgePercentage: 0,
+        convictionState: 'NEUTRAL',
+        recommendedAction: 'WAIT',
+        recommendedOutcome: 'NONE',
+        winProbability: 50,
+        confidenceScore: 50,
+        priceActionTrend: 'NEUTRAL',
+        priceActionScore: 50,
+        poolAddress: '0x2222222222222222222222222222222222222222',
+        marketIdHex: '0x1111111111111111111111111111111111111111111111111111111111111111',
+        isSynthetic: false,
+      };
+
+      (marketService as any).markets.set(realMarket.id, realMarket);
+
+      // 3. getActiveMarkets() should now return ONLY real markets by default
+      const filtered = marketService.getActiveMarkets();
+      expect(filtered.length).toBe(1);
+      expect(filtered[0].id).toBe(realMarket.id);
+      expect(filtered[0].isSynthetic).toBe(false);
+
+      // 4. getActiveMarkets({ includeSynthetic: true }) still retrieves all if requested
+      const withSynthetic = marketService.getActiveMarkets({ includeSynthetic: true });
+      expect(withSynthetic.length).toBeGreaterThan(1);
+
+      // 5. getMarketById resolves by id, lowercase id, poolAddress, and marketIdHex
+      expect(marketService.getMarketById(realMarket.id)?.id).toBe(realMarket.id);
+      expect(marketService.getMarketById(realMarket.id.toLowerCase())?.id).toBe(realMarket.id);
+      expect(marketService.getMarketById('0x2222222222222222222222222222222222222222')?.id).toBe(realMarket.id);
     });
   });
 });

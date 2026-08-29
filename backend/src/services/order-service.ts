@@ -695,7 +695,15 @@ export class OrderService {
     }
 
     // Resolve market and on-chain state
-    const market = marketService.getMarketById(decision.targetMarketId);
+    let market = marketService.getMarketById(decision.targetMarketId);
+    if (!market?.marketIdHex || market.marketIdHex.toLowerCase() === ZERO_ADDRESS.toLowerCase() || /^0x0+$/i.test(market.marketIdHex)) {
+      const openOnChain = marketService.getActiveMarkets({ status: 'Open' }).find(
+        (m) => m.symbol === (market?.symbol || decision.targetMarketId) && m.marketIdHex && !m.isSynthetic
+      );
+      if (openOnChain) {
+        market = openOnChain;
+      }
+    }
     let onchain: MarketOnchain | null = null;
 
     if (market?.marketIdHex && market.marketIdHex.startsWith('0x')) {

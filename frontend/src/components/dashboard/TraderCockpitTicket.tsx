@@ -43,6 +43,7 @@ interface TraderCockpitTicketProps {
   onConnectWallet?: () => void;
   bestBidYes?: number;
   bestAskYes?: number;
+  availableDurations?: string[];
   onSelectDuration?: (duration: '1m' | '5m' | '15m' | '1h') => void;
 }
 
@@ -57,6 +58,7 @@ export const TraderCockpitTicket: React.FC<TraderCockpitTicketProps> = ({
   onConnectWallet,
   bestBidYes,
   bestAskYes,
+  availableDurations,
   onSelectDuration,
 }) => {
   // Real-time dynamic countdown & formatted expiry
@@ -323,19 +325,27 @@ export const TraderCockpitTicket: React.FC<TraderCockpitTicketProps> = ({
         <div className="flex items-center gap-1.5 mt-2.5">
           {(['1m', '5m', '15m', '1h'] as const).map((duration) => {
             const isCur = (market.windowDuration || '15m') === duration;
+            const isAvailable = !availableDurations || availableDurations.length === 0 || availableDurations.includes(duration);
             return (
               <button
                 key={duration}
                 type="button"
+                disabled={!isAvailable && !isCur}
                 onClick={() => onSelectDuration?.(duration)}
                 className={cn(
-                  "flex-1 py-1 text-center rounded-lg text-xs font-mono font-bold transition-all cursor-pointer border",
+                  "flex-1 py-1 text-center rounded-lg text-xs font-mono font-bold transition-all border relative",
                   isCur
-                    ? "bg-secondary text-foreground border-border/70 shadow-xs"
-                    : "bg-secondary/20 text-muted-foreground border-border/30 hover:text-foreground hover:bg-secondary/40"
+                    ? "bg-secondary text-foreground border-border/70 shadow-xs cursor-default"
+                    : isAvailable
+                    ? "bg-secondary/20 text-muted-foreground border-border/30 hover:text-foreground hover:bg-secondary/40 cursor-pointer"
+                    : "bg-secondary/5 text-muted-foreground/30 border-border/10 cursor-not-allowed opacity-40"
                 )}
+                title={isAvailable ? `${duration} Contract` : `No active ${duration} pool for ${market.symbol}`}
               >
                 {duration}
+                {isAvailable && !isCur && (
+                  <span className="absolute top-1 right-1 w-1 h-1 rounded-full bg-brand-cyan/70" />
+                )}
               </button>
             );
           })}

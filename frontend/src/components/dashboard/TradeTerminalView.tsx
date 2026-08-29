@@ -290,9 +290,12 @@ export const TradeTerminalView: React.FC<TradeTerminalViewProps> = ({
               onConnectWallet={onConnectWallet}
               bestBidYes={market.bestBidYes}
               bestAskYes={market.bestAskYes}
+              availableDurations={markets
+                .filter((m) => m.symbol === market.symbol && m.status === 'Open')
+                .map((m) => m.windowDuration)}
               onSelectDuration={(duration) => {
                 // Find matching duration market if available
-                const match = markets.find((m) => m.symbol === market.symbol && m.windowDuration === duration);
+                const match = markets.find((m) => m.symbol === market.symbol && m.windowDuration === duration && m.status === 'Open');
                 if (match) onSelectMarket(match.id);
               }}
             />

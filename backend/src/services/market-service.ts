@@ -435,18 +435,19 @@ export class MarketService extends EventEmitter {
             }
           }
         }
-      }
 
-      // Ensure active live prediction windows exist if on-chain has no active open rounds
-      this.ensureRollingMarkets();
+        // When real on-chain markets are discovered, remove any synthetic fallback markets
+        for (const [id, m] of this.markets.entries()) {
+          if (m.isSynthetic) {
+            this.markets.delete(id);
+            this.depthBooks.delete(id);
+          }
+        }
+      }
 
       this.emit('markets_synced', { count: this.markets.size });
     } catch (err: any) {
       console.warn('[MarketService] pollOnChainMarkets error (retaining current onchain state):', err.message);
-      // If no markets exist yet (e.g. offline testing), seed minimal test fallback
-      if (this.markets.size === 0) {
-        this.ensureRollingMarkets();
-      }
     } finally {
       this.isPolling = false;
     }
@@ -581,12 +582,13 @@ export class MarketService extends EventEmitter {
 
   /**
    * Ensures active live prediction rounds exist across key asset pairs (BTC/USD, ETH/USD)
-   * and durations (5m, 15m, 1h, 4h, 24h).
+   * and durations (1m, 5m, 15m, 1h) as a graceful offline fallback.
    */
-  public ensureRollingMarkets(): void {
+  public ensureRollingMarkets(
+    symbols: string[] = ['BTC/USD', 'ETH/USD'],
+    windows: Array<'1m' | '5m' | '15m' | '1h' | '4h' | '24h' | '7d' | string> = ['1m', '5m', '15m', '1h'],
+  ): void {
     const now = Date.now();
-    const symbols = ['BTC/USD', 'ETH/USD', 'SOL/USD', 'BNB/USD', 'DOGE/USD'];
-    const windows: Array<'1m' | '5m' | '15m' | '1h' | '4h' | '24h' | '7d'> = ['1m', '5m', '15m', '1h', '4h', '24h', '7d'];
 
     for (const symbol of symbols) {
       const spot = this.getSpotPrice(symbol);
@@ -757,10 +759,6 @@ export class MarketService extends EventEmitter {
       }
     }
 
-    if (expiredCount > 0 || this.markets.size === 0) {
-      this.ensureRollingMarkets();
-    }
-
     if (expiredCount > 0) {
       this.emit('markets_expired', { expiredCount, timestamp: now });
     }
@@ -863,7 +861,7 @@ export class MarketService extends EventEmitter {
   // Public Accessors
   // ----------------------------------------------------------------------------
 
-  public getActiveMarkets(filters?: { symbol?: string; window?: string; status?: MarketStatus }): Market[] {
+  public getActiveMarkets(filters?: { symbol?: string; window?: string; status?: MarketStatus; includeSynthetic?: boolean }): Market[] {
     let result: Market[];
 
     if (filters?.status === 'Finalized' || filters?.status === 'Closed') {
@@ -873,6 +871,14 @@ export class MarketService extends EventEmitter {
     } else {
       // By default return live active open markets
       result = Array.from(this.markets.values()).filter((m) => m.status === 'Open');
+    }
+
+    // Filter synthetic markets if real on-chain markets are present and includeSynthetic is not explicitly true
+    if (!filters?.includeSynthetic) {
+      const hasRealOnchainMarkets = result.some((m) => !m.isSynthetic);
+      if (hasRealOnchainMarkets) {
+        result = result.filter((m) => !m.isSynthetic);
+      }
     }
 
     if (filters?.symbol) {
@@ -892,7 +898,30 @@ export class MarketService extends EventEmitter {
   }
 
   public getMarketById(id: string): Market | undefined {
-    return this.markets.get(id) || this.historicalMarkets.get(id);
+    if (!id) return undefined;
+    const direct = this.markets.get(id) || this.historicalMarkets.get(id);
+    if (direct) return direct;
+
+    const lower = id.toLowerCase();
+    for (const m of this.markets.values()) {
+      if (
+        m.id.toLowerCase() === lower ||
+        (m.poolAddress && m.poolAddress.toLowerCase() === lower) ||
+        (m.marketIdHex && m.marketIdHex.toLowerCase() === lower)
+      ) {
+        return m;
+      }
+    }
+    for (const m of this.historicalMarkets.values()) {
+      if (
+        m.id.toLowerCase() === lower ||
+        (m.poolAddress && m.poolAddress.toLowerCase() === lower) ||
+        (m.marketIdHex && m.marketIdHex.toLowerCase() === lower)
+      ) {
+        return m;
+      }
+    }
+    return undefined;
   }
 
   public getUnifiedMarket(id: string): UnifiedMarket | undefined {
