@@ -5,7 +5,11 @@ let serviceClientInstance: SupabaseClient | null = null;
 let anonClientInstance: SupabaseClient | null = null;
 
 /**
- * Returns the Supabase client with admin/service-role privileges (for backend daemon, sweeps & orders).
+ * Returns the Supabase client with admin/service-role privileges.
+ * Backend MUST use this for all private-table writes — it bypasses RLS (see
+ * supabase/migrations/012_harden_rls_policies.sql). The anon key shipped to
+ * the frontend is RLS-denied for sessions/orders/sweeps etc, so every
+ * frontend mutation goes through /api/v1/* here.
  */
 export function getServiceSupabase(): SupabaseClient {
   if (!serviceClientInstance) {
@@ -20,7 +24,11 @@ export function getServiceSupabase(): SupabaseClient {
 }
 
 /**
- * Returns the Supabase client with standard anon public privileges (for public market reads).
+ * Returns the Supabase client with standard anon public privileges.
+ * ONLY for public reads (markets, agent_logs, system_state, arena discovery).
+ * Never use for sessions/orders/sweeps/backtests/agent_strategies/user_swarm_configs —
+ * anon has no RLS policy on those tables (default deny) and all writes would
+ * be rejected. For tests/anonymous public market polls only.
  */
 export function getAnonSupabase(): SupabaseClient {
   if (!anonClientInstance) {
@@ -33,4 +41,5 @@ export function getAnonSupabase(): SupabaseClient {
   return anonClientInstance;
 }
 
+/** Default backend client = service_role (bypasses hardened RLS). */
 export const supabase = getServiceSupabase();

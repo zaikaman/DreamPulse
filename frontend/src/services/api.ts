@@ -294,6 +294,24 @@ export const apiClient = {
     return fetchJson(`/analytics/balance-history${q ? `?${q}` : ''}`);
   },
 
+  // Supabase Realtime JWT — wallet EIP-712 → backend mints HS256 JWT with user_address for RLS
+  async verifyWalletAuth(payload: {
+    userAddress: string;
+    signature: string;
+    nonce: string;
+    issuedAt: number;
+    expiresAt: number;
+  }): Promise<{ success: boolean; token: string; expiresAt: number; userAddress: string }> {
+    return fetchJson('/auth/wallet-verify', {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    });
+  },
+
+  async getAuthStatus(): Promise<{ success: boolean; supabaseJwtConfigured: boolean }> {
+    return fetchJson('/auth/status');
+  },
+
   // Personal Swarm — per-wallet isolated strategy
   async getPersonalSwarmConfig(userAddress: string): Promise<{ success: boolean; config: import('../types/index.js').PersonalSwarmConfig }> {
     return fetchJson(`/swarm/my-config?userAddress=${encodeURIComponent(userAddress)}`);

@@ -1,7 +1,9 @@
 import { useState, useEffect, useCallback } from 'react';
 import { apiClient } from '../services/api.js';
-import { supabase } from '../services/supabase.js';
 import type { AgentType, PersonalSwarmConfig, PersonalSwarmStatus } from '../types/index.js';
+import { subscribeToPrivateTable } from '../services/supabase.js';
+import { ensureSupabaseAuthForWallet } from '../services/supabase-auth.js';
+import type { RealtimeChannel } from '@supabase/supabase-js';
 
 export interface UsePersonalSwarmReturn {
   config: PersonalSwarmConfig | null;
@@ -55,46 +57,81 @@ export const usePersonalSwarm = (userAddress?: string): UsePersonalSwarmReturn =
     fetchAll();
   }, [fetchAll]);
 
-  // Realtime subscription for user_swarm_configs table in Supabase
+  // Authenticated Realtime for private `user_swarm_configs` — filtered by user_address
+  // plus polling fallback. Uses JWT from wallet-verify (user_address claim) so
+  // RLS `lower(auth.jwt()->>'user_address')=lower(user_address)` passes.
   useEffect(() => {
     if (!userAddress) return;
-    const targetAddr = userAddress.toLowerCase();
-    const channel = supabase
-      .channel(`public:user_swarm_configs:${targetAddr}`)
-      .on(
-        'postgres_changes',
-        {
-          event: '*',
-          schema: 'public',
-          table: 'user_swarm_configs',
+    const lower = userAddress.toLowerCase();
+    let channel: RealtimeChannel | null = null;
+    let cancelled = false;
+    (async () => {
+      await ensureSupabaseAuthForWallet(userAddress as any).catch(() => null);
+      if (cancelled) return;
+      channel = subscribeToPrivateTable<any>(
+        'user_swarm_configs',
+        lower,
+        // onInsert/update both upsert config
+        (row: any) => {
+          if (!row || !row.user_address || row.user_address.toLowerCase() !== lower) return;
+          setConfig({
+            userAddress: row.user_address,
+            mode: row.mode || 'COPY',
+            copyTradeEnabled: row.copy_trade_enabled === true,
+            voltEnabled: row.volt_enabled ?? true,
+            oracleEnabled: row.oracle_enabled ?? true,
+            titanEnabled: row.titan_enabled ?? true,
+            sweeperEnabled: row.sweeper_enabled ?? true,
+            voltConfig: row.volt_config || { driftThreshold: 0.002, minEdge: 0.03, lotSize: 5, maxTradeSize: 20 },
+            oracleConfig: row.oracle_config || { minEdge: 0.035, lotSize: 5, maxTradeSize: 20 },
+            titanConfig: row.titan_config || { targetSpread: 0.04, inventoryAversion: 0.015, lotSize: 2 },
+            customizedAt: row.customized_at || undefined,
+            createdAt: row.created_at,
+            updatedAt: row.updated_at,
+          });
         },
-        (payload: { eventType: string; new: any }) => {
-          if (payload.new && payload.new.user_address && payload.new.user_address.toLowerCase() === targetAddr) {
-            const row = payload.new;
-            setConfig({
-              userAddress: row.user_address,
-              mode: row.mode || 'COPY',
-              copyTradeEnabled: row.copy_trade_enabled === true,
-              voltEnabled: row.volt_enabled ?? true,
-              oracleEnabled: row.oracle_enabled ?? true,
-              titanEnabled: row.titan_enabled ?? true,
-              sweeperEnabled: row.sweeper_enabled ?? true,
-              voltConfig: row.volt_config || { driftThreshold: 0.002, minEdge: 0.03, lotSize: 5, maxTradeSize: 20 },
-              oracleConfig: row.oracle_config || { minEdge: 0.035, lotSize: 5, maxTradeSize: 20 },
-              titanConfig: row.titan_config || { targetSpread: 0.04, inventoryAversion: 0.015, lotSize: 2 },
-              customizedAt: row.customized_at || undefined,
-              createdAt: row.created_at,
-              updatedAt: row.updated_at,
-            });
-          }
-        }
-      )
-      .subscribe();
-
+        (row: any) => {
+          if (!row || !row.user_address || row.user_address.toLowerCase() !== lower) return;
+          setConfig({
+            userAddress: row.user_address,
+            mode: row.mode || 'COPY',
+            copyTradeEnabled: row.copy_trade_enabled === true,
+            voltEnabled: row.volt_enabled ?? true,
+            oracleEnabled: row.oracle_enabled ?? true,
+            titanEnabled: row.titan_enabled ?? true,
+            sweeperEnabled: row.sweeper_enabled ?? true,
+            voltConfig: row.volt_config || { driftThreshold: 0.002, minEdge: 0.03, lotSize: 5, maxTradeSize: 20 },
+            oracleConfig: row.oracle_config || { minEdge: 0.035, lotSize: 5, maxTradeSize: 20 },
+            titanConfig: row.titan_config || { targetSpread: 0.04, inventoryAversion: 0.015, lotSize: 2 },
+            customizedAt: row.customized_at || undefined,
+            createdAt: row.created_at,
+            updatedAt: row.updated_at,
+          });
+        },
+      );
+    })();
     return () => {
-      supabase.removeChannel(channel);
+      cancelled = true;
+      if (channel) channel.unsubscribe();
     };
   }, [userAddress]);
+
+  // Light polling restores cross-tab near-realtime without Supabase realtime
+  useEffect(() => {
+    if (!userAddress) return;
+    const interval = setInterval(() => {
+      fetchAll().catch(() => {});
+    }, 15000);
+    const onFocus = () => fetchAll().catch(() => {});
+    const onVis = () => { if (document.visibilityState === 'visible') fetchAll().catch(() => {}); };
+    window.addEventListener('focus', onFocus);
+    document.addEventListener('visibilitychange', onVis);
+    return () => {
+      clearInterval(interval);
+      window.removeEventListener('focus', onFocus);
+      document.removeEventListener('visibilitychange', onVis);
+    };
+  }, [userAddress, fetchAll]);
 
   const setMode = useCallback(
     async (mode: 'COPY' | 'PERSONAL'): Promise<boolean> => {

@@ -214,6 +214,59 @@ apiRouter.get('/markets/pools/future', async (req: Request, res: Response) => {
 });
 
 // ------------------------------------------------------------------------------
+// 1b. Wallet JWT Auth — mints Supabase Realtime JWT after EIP-712 proof
+//     Required for private-table realtime (sessions, orders, sweeps, etc)
+//     which are now RLS-denied for anon (012_harden_rls_policies).
+//     Heroku: `heroku config:set SUPABASE_JWT_SECRET=<Supabase Dashboard > API > JWT Secret>`
+//     and `SUPABASE_JWT_EXPIRY_SECONDS=86400`. Uses same HS256 secret as
+//     Supabase — verify via `auth.jwt() ->> 'user_address'` in RLS.
+// ------------------------------------------------------------------------------
+apiRouter.get('/auth/status', async (_req: Request, res: Response) => {
+  try {
+    const { isSupabaseJwtConfigured } = await import('../services/auth-service.js');
+    res.json({ success: true, supabaseJwtConfigured: isSupabaseJwtConfigured() });
+  } catch {
+    res.json({ success: true, supabaseJwtConfigured: false });
+  }
+});
+
+apiRouter.post('/auth/wallet-verify', async (req: Request, res: Response) => {
+  try {
+    const { userAddress, signature, nonce, issuedAt, expiresAt } = req.body || {};
+    if (!userAddress || !signature || !nonce || issuedAt === undefined || expiresAt === undefined) {
+      return res.status(400).json({
+        success: false,
+        error: 'Missing userAddress, signature, nonce, issuedAt, expiresAt. Sign EIP-712 Auth {wallet,nonce,issuedAt,expiresAt} with domain {name:"DreamPulse",version:"1",chainId:50312,verifyingContract:OperatorPermissionsRegistry}.',
+      });
+    }
+    const { verifyAndMint, isSupabaseJwtConfigured } = await import('../services/auth-service.js');
+    if (!isSupabaseJwtConfigured()) {
+      return res.status(503).json({
+        success: false,
+        error: 'SUPABASE_JWT_SECRET not configured on server — set on Heroku (Supabase Dashboard > API > JWT Secret) and redeploy.',
+      });
+    }
+    const minted = await verifyAndMint({
+      userAddress: String(userAddress),
+      signature: String(signature),
+      nonce: String(nonce),
+      issuedAt: Number(issuedAt),
+      expiresAt: Number(expiresAt),
+    });
+    return res.json({
+      success: true,
+      token: minted.token,
+      expiresAt: minted.expiresAt,
+      userAddress: minted.userAddress,
+      tokenType: 'Bearer',
+      note: 'Use as Supabase auth: supabase.auth.setSession({access_token: token, refresh_token: token}) or supabase.realtime.setAuth(token); then subscribe with filter user_address=eq.<lowercase>',
+    });
+  } catch (err: any) {
+    return res.status(401).json({ success: false, error: err.message || 'Wallet verification failed' });
+  }
+});
+
+// ------------------------------------------------------------------------------
 // 2. Session Key Delegation Endpoints
 // ------------------------------------------------------------------------------
 apiRouter.post('/sessions/register', async (req: Request, res: Response) => {

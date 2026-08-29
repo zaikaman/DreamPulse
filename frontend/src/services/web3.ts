@@ -86,6 +86,23 @@ export const SESSION_EIP712_TYPES = {
   ],
 } as const;
 
+// Supabase realtime JWT — same domain as backend verifies (auth-service.ts)
+export const AUTH_EIP712_DOMAIN = {
+  name: 'DreamPulse',
+  version: '1',
+  chainId: 50312,
+  verifyingContract: SOMNIA_ADDRESSES.operatorPermissionsRegistry,
+} as const;
+
+export const AUTH_EIP712_TYPES = {
+  Auth: [
+    { name: 'wallet', type: 'address' },
+    { name: 'nonce', type: 'string' },
+    { name: 'issuedAt', type: 'uint256' },
+    { name: 'expiresAt', type: 'uint256' },
+  ],
+} as const;
+
 export const OPERATOR_REGISTRY_ABI = [
   {
     type: 'function',
@@ -937,6 +954,67 @@ export class Web3Service {
 
     await publicClient.waitForTransactionReceipt({ hash });
     return { hash };
+  }
+
+  /**
+   * Signs Supabase realtime auth EIP-712 payload (wallet, nonce, issuedAt, expiresAt).
+   * Used to mint short-lived JWT with `user_address` claim for RLS private-table realtime.
+   */
+  public async signSupabaseAuth(params: {
+    wallet: Address;
+    nonce: string;
+    issuedAt: number;
+    expiresAt: number;
+  }): Promise<Hex> {
+    try {
+      const sig = await signTypedData(wagmiConfig, {
+        domain: {
+          name: AUTH_EIP712_DOMAIN.name,
+          version: AUTH_EIP712_DOMAIN.version,
+          chainId: AUTH_EIP712_DOMAIN.chainId,
+          verifyingContract: AUTH_EIP712_DOMAIN.verifyingContract,
+        },
+        types: AUTH_EIP712_TYPES,
+        primaryType: 'Auth',
+        message: {
+          wallet: params.wallet,
+          nonce: params.nonce,
+          issuedAt: BigInt(params.issuedAt),
+          expiresAt: BigInt(params.expiresAt),
+        },
+      });
+      return sig as Hex;
+    } catch (wagmiErr: any) {
+      if (wagmiErr?.code === 4001 || wagmiErr?.message?.includes('User rejected') || wagmiErr?.message?.includes('rejected')) {
+        throw new Error('Supabase auth signature rejected by user');
+      }
+      try {
+        const wallet = await this.getWalletClient(params.wallet);
+        const signature = await wallet.signTypedData({
+          account: params.wallet,
+          domain: {
+            name: AUTH_EIP712_DOMAIN.name,
+            version: AUTH_EIP712_DOMAIN.version,
+            chainId: AUTH_EIP712_DOMAIN.chainId,
+            verifyingContract: AUTH_EIP712_DOMAIN.verifyingContract,
+          },
+          types: AUTH_EIP712_TYPES,
+          primaryType: 'Auth',
+          message: {
+            wallet: params.wallet,
+            nonce: params.nonce,
+            issuedAt: BigInt(params.issuedAt),
+            expiresAt: BigInt(params.expiresAt),
+          },
+        });
+        return signature as Hex;
+      } catch (fallbackErr: any) {
+        if (fallbackErr?.code === 4001 || fallbackErr?.message?.includes('User rejected') || fallbackErr?.message?.includes('rejected')) {
+          throw new Error('Supabase auth signature rejected by user');
+        }
+        throw new Error(`Failed to sign Supabase auth: ${fallbackErr?.message || wagmiErr?.message}`);
+      }
+    }
   }
 
   /**

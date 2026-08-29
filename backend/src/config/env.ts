@@ -69,6 +69,8 @@ const envSchema = z.object({
   // Security & Admin
   OPERATOR_ADMIN_SECRET: z.string().optional(),
   FRONTEND_ORIGIN: z.string().default('*'),
+  SUPABASE_JWT_SECRET: z.string().optional(),
+  SUPABASE_JWT_EXPIRY_SECONDS: z.coerce.number().default(86400),
 
   // Protocol addresses & APIs (Somnia Shannon Testnet)
   REST_API_URL: z.string().default('https://stg.api.dreamdex.io/v0'),

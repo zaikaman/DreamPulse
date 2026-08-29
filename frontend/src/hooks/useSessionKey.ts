@@ -4,10 +4,12 @@ import { useAccount, useDisconnect, useSwitchChain } from 'wagmi';
 import { useConnectModal } from '@rainbow-me/rainbowkit';
 import type { SessionGrant } from '../types/index.js';
 import { apiClient } from '../services/api.js';
-import { supabase } from '../services/supabase.js';
 import { web3Service, SOMNIA_ADDRESSES, somniaShannonTestnet } from '../services/web3.js';
 import { telemetryClient, type OrderFillData, type SweepCompleteData } from '../services/telemetry-client.js';
 import { parseWeb3Error } from '../lib/errorUtils.js';
+import { subscribeToPrivateTable } from '../services/supabase.js';
+import { ensureSupabaseAuthForWallet, restoreSupabaseAuthIfCached, clearSupabaseAuthForLogout } from '../services/supabase-auth.js';
+import type { RealtimeChannel } from '@supabase/supabase-js';
 
 
 export interface WalletState {
@@ -175,13 +177,16 @@ export function useSessionKey(): UseSessionKeyReturn {
   }, [wallet.address, refreshAllowanceStatus, refreshBalances]);
 
   /**
-   * Fetches active session from backend API and Supabase.
+   * Fetches active session from backend API (service_role / RLS-hardened).
+   * Direct Supabase reads for private tables are denied for anon (no RLS policy);
+   * all reads must go through backend REST which uses service_role. See
+   * supabase/migrations/012_harden_rls_policies.sql and
+   * backend/src/config/schema.sql for security model.
    */
   const fetchActiveSession = useCallback(async (address: Address) => {
     let sessionFound: SessionGrant | null = null;
     let backendSuccess = false;
 
-    // 1. Fetch from Backend API via apiClient (handles configured backend URL)
     try {
       const data = await apiClient.getActiveSession(address);
       backendSuccess = true;
@@ -212,56 +217,17 @@ export function useSessionKey(): UseSessionKeyReturn {
       console.warn('[useSessionKey] Failed fetching active session from backend API:', err);
     }
 
-    // 2. Fallback: check Supabase directly if not found from backend
-    if (!sessionFound) {
-      try {
-        const { data } = await supabase
-          .from('sessions')
-          .select('*')
-          .ilike('user_address', address)
-          .eq('is_active', true)
-          .order('created_at', { ascending: false })
-          .limit(1);
-
-        if (data && data.length > 0) {
-          const row = data[0];
-          if (new Date(row.expires_at).getTime() > Date.now()) {
-            sessionFound = {
-              id: row.id,
-              userAddress: row.user_address,
-              operatorAddress: row.operator_address,
-              permissions: row.permissions || ['placeOrderFor', 'cancelOrderFor'],
-              maxTradeSize: Number(row.max_trade_size),
-              dailyVolumeCap: Number(row.daily_volume_cap),
-              spentToday: Number(row.spent_today || 0),
-              expiresAt: row.expires_at,
-              isActive: row.is_active,
-              onChainTxHash: row.on_chain_tx_hash,
-              vaultDepositAmount: row.vault_deposit_amount,
-              targetPoolAddress: row.target_pool_address,
-              onChainAuthorized: row.on_chain_authorized === true,
-              copyTradeEnabled: row.copy_trade_enabled === true,
-            };
-          }
-        }
-      } catch (err) {
-        console.warn('[useSessionKey] Supabase fallback error:', err);
-      }
-    }
-
     if (sessionFound) {
       setActiveSession(sessionFound);
       localStorage.setItem(LOCAL_SESSION_KEY, JSON.stringify(sessionFound));
       return;
     }
 
-    // 3. If neither backend nor Supabase returned a session:
-    // If backend was reached and explicitly reported no active session (and DB had none):
     if (backendSuccess) {
       setActiveSession(null);
       localStorage.removeItem(LOCAL_SESSION_KEY);
     } else {
-      // If network failed, check if localStorage has a valid unexpired session for this wallet
+      // Backend unreachable — keep localStorage session only if it is still valid for this wallet
       try {
         const saved = localStorage.getItem(LOCAL_SESSION_KEY);
         if (saved) {
@@ -328,6 +294,7 @@ export function useSessionKey(): UseSessionKeyReturn {
     } catch {}
     localStorage.removeItem(LOCAL_WALLET_CONNECTED_KEY);
     localStorage.removeItem(LOCAL_SESSION_KEY);
+    void clearSupabaseAuthForLogout().catch(() => {});
     setWallet({
       isConnected: false,
       address: null,
@@ -630,59 +597,113 @@ export function useSessionKey(): UseSessionKeyReturn {
     return () => window.removeEventListener('dreampulse:session-update', handleSessionUpdate);
   }, []);
 
-  // Supabase Realtime subscription for sessions table (case-insensitive)
+  // Restore cached Supabase JWT on mount (avoids extra prompt if still valid)
+  useEffect(() => {
+    restoreSupabaseAuthIfCached().catch(() => {});
+  }, []);
+
+  // Authenticated Supabase Realtime for private `sessions` — uses JWT with
+  // `user_address` claim (POST /api/v1/auth/wallet-verify → setSupabaseAuth).
+  // Filter `user_address=eq.<lower>` ensures RLS owner check passes.
+  // Falls back to polling below if JWT not configured or user rejects signature.
   useEffect(() => {
     if (!wallet.address) return;
-    const targetAddr = wallet.address.toLowerCase();
+    const lower = wallet.address.toLowerCase();
+    let channel: RealtimeChannel | null = null;
+    let cancelled = false;
 
-    const channel = supabase
-      .channel(`public:sessions:${targetAddr}`)
-      .on(
-        'postgres_changes',
-        {
-          event: '*',
-          schema: 'public',
-          table: 'sessions',
-        },
-        (payload: { eventType: string; new: any; old: any }) => {
-          const row = payload.new;
-          if (!row || !row.user_address || row.user_address.toLowerCase() !== targetAddr) return;
-
-          if (payload.eventType === 'UPDATE' || payload.eventType === 'INSERT') {
-            if (row.is_active && new Date(row.expires_at).getTime() > Date.now()) {
-              const updated: SessionGrant = {
-                id: row.id,
-                userAddress: row.user_address,
-                operatorAddress: row.operator_address,
-                permissions: row.permissions || ['placeOrderFor', 'cancelOrderFor'],
-                maxTradeSize: Number(row.max_trade_size),
-                dailyVolumeCap: Number(row.daily_volume_cap),
-                spentToday: Number(row.spent_today || 0),
-                expiresAt: row.expires_at,
-                isActive: row.is_active,
-                onChainTxHash: row.on_chain_tx_hash,
-                vaultDepositAmount: row.vault_deposit_amount,
-                targetPoolAddress: row.target_pool_address,
-                onChainAuthorized: row.on_chain_authorized === true,
-                copyTradeEnabled: row.copy_trade_enabled === true,
-              };
-              setActiveSession(updated);
-              localStorage.setItem(LOCAL_SESSION_KEY, JSON.stringify(updated));
-            } else if (!row.is_active) {
-              setActiveSession(null);
-              localStorage.removeItem(LOCAL_SESSION_KEY);
-            }
+    (async () => {
+      // Mint or reuse JWT — prompts one EIP-712 Auth signature per 24h
+      await ensureSupabaseAuthForWallet(wallet.address as Address).catch(() => null);
+      if (cancelled) return;
+      // Subscribe filtered — even without JWT it degrades to polling, but with JWT it pushes instantly
+      channel = subscribeToPrivateTable<any>(
+        'sessions',
+        lower,
+        // onInsert
+        (newRow: any) => {
+          if (!newRow || !newRow.user_address || newRow.user_address.toLowerCase() !== lower) return;
+          if (newRow.is_active && new Date(newRow.expires_at).getTime() > Date.now()) {
+            const updated: SessionGrant = {
+              id: newRow.id,
+              userAddress: newRow.user_address,
+              operatorAddress: newRow.operator_address,
+              permissions: newRow.permissions || ['placeOrderFor', 'cancelOrderFor'],
+              maxTradeSize: Number(newRow.max_trade_size),
+              dailyVolumeCap: Number(newRow.daily_volume_cap),
+              spentToday: Number(newRow.spent_today || 0),
+              expiresAt: newRow.expires_at,
+              isActive: newRow.is_active,
+              onChainTxHash: newRow.on_chain_tx_hash,
+              vaultDepositAmount: newRow.vault_deposit_amount,
+              targetPoolAddress: newRow.target_pool_address,
+              onChainAuthorized: newRow.on_chain_authorized === true,
+              copyTradeEnabled: newRow.copy_trade_enabled === true,
+            };
+            setActiveSession(updated);
+            try { localStorage.setItem(LOCAL_SESSION_KEY, JSON.stringify(updated)); } catch {}
           }
-        }
-      )
-      .subscribe();
+        },
+        // onUpdate
+        (updatedRow: any) => {
+          if (!updatedRow || !updatedRow.user_address || updatedRow.user_address.toLowerCase() !== lower) return;
+          if (updatedRow.is_active && new Date(updatedRow.expires_at).getTime() > Date.now()) {
+            const updated: SessionGrant = {
+              id: updatedRow.id,
+              userAddress: updatedRow.user_address,
+              operatorAddress: updatedRow.operator_address,
+              permissions: updatedRow.permissions || ['placeOrderFor', 'cancelOrderFor'],
+              maxTradeSize: Number(updatedRow.max_trade_size),
+              dailyVolumeCap: Number(updatedRow.daily_volume_cap),
+              spentToday: Number(updatedRow.spent_today || 0),
+              expiresAt: updatedRow.expires_at,
+              isActive: updatedRow.is_active,
+              onChainTxHash: updatedRow.on_chain_tx_hash,
+              vaultDepositAmount: updatedRow.vault_deposit_amount,
+              targetPoolAddress: updatedRow.target_pool_address,
+              onChainAuthorized: updatedRow.on_chain_authorized === true,
+              copyTradeEnabled: updatedRow.copy_trade_enabled === true,
+            };
+            setActiveSession(updated);
+            try { localStorage.setItem(LOCAL_SESSION_KEY, JSON.stringify(updated)); } catch {}
+          } else if (!updatedRow.is_active) {
+            setActiveSession(null);
+            try { localStorage.removeItem(LOCAL_SESSION_KEY); } catch {}
+          }
+        },
+        // onDelete
+        () => {
+          setActiveSession(null);
+          try { localStorage.removeItem(LOCAL_SESSION_KEY); } catch {}
+        },
+      );
+    })();
 
     return () => {
-      supabase.removeChannel(channel);
+      cancelled = true;
+      if (channel) channel.unsubscribe();
     };
   }, [wallet.address]);
 
-  // Real-time balance updates via telemetry WebSocket events + heartbeat
+  // Polling fallback while JWT not yet minted or backend not configured — keeps
+  // cross-tab sync without Supabase. With JWT + filtered channel this is just a safety net.
+  useEffect(() => {
+    if (!wallet.address) return;
+    const targetAddr = wallet.address;
+    const poll = () => fetchActiveSession(targetAddr).catch(() => {});
+    const interval = setInterval(poll, 20000);
+    const onFocus = () => poll();
+    const onVis = () => { if (document.visibilityState === 'visible') poll(); };
+    window.addEventListener('focus', onFocus);
+    document.addEventListener('visibilitychange', onVis);
+    return () => {
+      clearInterval(interval);
+      window.removeEventListener('focus', onFocus);
+      document.removeEventListener('visibilitychange', onVis);
+    };
+  }, [wallet.address, fetchActiveSession]);
+
+  // Real-time balance/session updates via telemetry WebSocket events + heartbeat
   useEffect(() => {
     if (!wallet.isConnected || !wallet.address) return;
     const targetAddr = wallet.address;
@@ -694,11 +715,19 @@ export function useSessionKey(): UseSessionKeyReturn {
         refreshBalances(targetAddr).catch(() => {});
       }, delay);
     };
+    let sessionDebounce: number | null = null;
+    const scheduleSessionRefresh = (delay = 400) => {
+      if (sessionDebounce) window.clearTimeout(sessionDebounce);
+      sessionDebounce = window.setTimeout(() => {
+        fetchActiveSession(targetAddr).catch(() => {});
+      }, delay);
+    };
 
-    // 1. WebSocket event triggers for instant balance updates
+    // 1. WebSocket event triggers for instant balance + session updates
     const unsubOrder = telemetryClient.on('order_filled', (order: OrderFillData) => {
       if (!order.userAddress || order.userAddress.toLowerCase() === targetAddr.toLowerCase()) {
         scheduleRefresh(300);
+        scheduleSessionRefresh(350);
       }
     });
 
@@ -719,12 +748,13 @@ export function useSessionKey(): UseSessionKeyReturn {
 
     return () => {
       if (debounceTimer) window.clearTimeout(debounceTimer);
+      if (sessionDebounce) window.clearTimeout(sessionDebounce);
       clearInterval(interval);
       unsubOrder();
       unsubSweep();
       unsubPnl();
     };
-  }, [wallet.isConnected, wallet.address, refreshBalances]);
+  }, [wallet.isConnected, wallet.address, refreshBalances, fetchActiveSession]);
 
   // Keep allowance status fresh while wallet is connected
   useEffect(() => {

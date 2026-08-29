@@ -160,7 +160,23 @@ CREATE INDEX IF NOT EXISTS idx_agent_logs_type ON public.agent_logs(agent_type, 
 CREATE INDEX IF NOT EXISTS idx_backtests_user ON public.backtests(user_address, created_at DESC);
 
 -- ------------------------------------------------------------------------------
--- Row Level Security (RLS) Policies
+-- Row Level Security (RLS) Policies — HARDENED
+-- ------------------------------------------------------------------------------
+-- Security model:
+--   • Frontend ships VITE_SUPABASE_ANON_KEY (extractable). Anon MUST NOT
+--     INSERT/UPDATE/DELETE user rows. Anyone with anon can otherwise DELETE FROM
+--     sessions/orders/sweeps — previous USING (true) was wide-open.
+--   • All mutations go through backend which uses SUPABASE_SERVICE_ROLE_KEY
+--     (bypasses RLS). Frontend writes via /api/v1/* only.
+--   • Direct Supabase reads for private tables require an authenticated JWT
+--     with claim `user_address` (lowercase hex, 0x...). Mint after SIWE/EIP-712
+--     verification: { "role": "authenticated", "user_address": "0xabc..." }.
+--     Until that flow is wired, anon has NO access to private tables and
+--     must use the backend REST API. See migration 012 for production deploy.
+--   • Public tables (markets, agent_logs, system_state) keep anon SELECT;
+--     DML is service_role only.
+--   • Arena discovery tables (custom_agents/custom_swarms) keep public SELECT;
+--     DML is owner-JWT + service_role only.
 -- ------------------------------------------------------------------------------
 ALTER TABLE public.markets ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.sessions ENABLE ROW LEVEL SECURITY;
@@ -170,23 +186,90 @@ ALTER TABLE public.sweeps ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.agent_logs ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.backtests ENABLE ROW LEVEL SECURITY;
 
--- Markets & Agent Logs are public read
-CREATE POLICY "Public Read Markets" ON public.markets FOR SELECT USING (true);
-CREATE POLICY "Public Read Agent Logs" ON public.agent_logs FOR SELECT USING (true);
+-- Drop legacy permissive policies (idempotent)
+DROP POLICY IF EXISTS "Public Read Markets" ON public.markets;
+DROP POLICY IF EXISTS "Public Read Agent Logs" ON public.agent_logs;
+DROP POLICY IF EXISTS "User Read Own Sessions" ON public.sessions;
+DROP POLICY IF EXISTS "User Modify Own Sessions" ON public.sessions;
+DROP POLICY IF EXISTS "User Read Own Strategies" ON public.agent_strategies;
+DROP POLICY IF EXISTS "User Modify Own Strategies" ON public.agent_strategies;
+DROP POLICY IF EXISTS "User Read Own Orders" ON public.orders;
+DROP POLICY IF EXISTS "User Insert Own Orders" ON public.orders;
+DROP POLICY IF EXISTS "User Read Own Sweeps" ON public.sweeps;
+DROP POLICY IF EXISTS "User Read Own Backtests" ON public.backtests;
+DROP POLICY IF EXISTS "User Insert Own Backtests" ON public.backtests;
+-- Drop hardened names if re-applying
+DROP POLICY IF EXISTS "Markets public read" ON public.markets;
+DROP POLICY IF EXISTS "Markets service_role all" ON public.markets;
+DROP POLICY IF EXISTS "Agent Logs public read" ON public.agent_logs;
+DROP POLICY IF EXISTS "Agent Logs service_role all" ON public.agent_logs;
+DROP POLICY IF EXISTS "sessions_owner_select" ON public.sessions;
+DROP POLICY IF EXISTS "sessions_owner_insert" ON public.sessions;
+DROP POLICY IF EXISTS "sessions_owner_update" ON public.sessions;
+DROP POLICY IF EXISTS "sessions_owner_delete" ON public.sessions;
+DROP POLICY IF EXISTS "sessions_service_role" ON public.sessions;
+DROP POLICY IF EXISTS "strategies_owner_select" ON public.agent_strategies;
+DROP POLICY IF EXISTS "strategies_owner_insert" ON public.agent_strategies;
+DROP POLICY IF EXISTS "strategies_owner_update" ON public.agent_strategies;
+DROP POLICY IF EXISTS "strategies_owner_delete" ON public.agent_strategies;
+DROP POLICY IF EXISTS "strategies_service_role" ON public.agent_strategies;
+DROP POLICY IF EXISTS "orders_owner_select" ON public.orders;
+DROP POLICY IF EXISTS "orders_owner_insert" ON public.orders;
+DROP POLICY IF EXISTS "orders_owner_update" ON public.orders;
+DROP POLICY IF EXISTS "orders_owner_delete" ON public.orders;
+DROP POLICY IF EXISTS "orders_service_role" ON public.orders;
+DROP POLICY IF EXISTS "sweeps_owner_select" ON public.sweeps;
+DROP POLICY IF EXISTS "sweeps_owner_insert" ON public.sweeps;
+DROP POLICY IF EXISTS "sweeps_owner_update" ON public.sweeps;
+DROP POLICY IF EXISTS "sweeps_owner_delete" ON public.sweeps;
+DROP POLICY IF EXISTS "sweeps_service_role" ON public.sweeps;
+DROP POLICY IF EXISTS "backtests_owner_select" ON public.backtests;
+DROP POLICY IF EXISTS "backtests_owner_insert" ON public.backtests;
+DROP POLICY IF EXISTS "backtests_owner_update" ON public.backtests;
+DROP POLICY IF EXISTS "backtests_owner_delete" ON public.backtests;
+DROP POLICY IF EXISTS "backtests_service_role" ON public.backtests;
 
--- User-scoped read/write for Sessions, Orders, Sweeps, Strategies, Backtests
-CREATE POLICY "User Read Own Sessions" ON public.sessions FOR SELECT USING (true);
-CREATE POLICY "User Modify Own Sessions" ON public.sessions FOR ALL USING (true);
+-- Markets & Agent Logs: public read, service_role writes only
+CREATE POLICY "Markets public read" ON public.markets FOR SELECT TO anon, authenticated USING (true);
+CREATE POLICY "Markets service_role all" ON public.markets FOR ALL TO service_role USING (true) WITH CHECK (true);
 
-CREATE POLICY "User Read Own Strategies" ON public.agent_strategies FOR SELECT USING (true);
-CREATE POLICY "User Modify Own Strategies" ON public.agent_strategies FOR ALL USING (true);
+CREATE POLICY "Agent Logs public read" ON public.agent_logs FOR SELECT TO anon, authenticated USING (true);
+CREATE POLICY "Agent Logs service_role all" ON public.agent_logs FOR ALL TO service_role USING (true) WITH CHECK (true);
 
-CREATE POLICY "User Read Own Orders" ON public.orders FOR SELECT USING (true);
-CREATE POLICY "User Insert Own Orders" ON public.orders FOR INSERT WITH CHECK (true);
+-- Sessions: owner JWT + service_role only (anon blocked)
+CREATE POLICY "sessions_owner_select" ON public.sessions FOR SELECT TO authenticated USING (lower(auth.jwt() ->> 'user_address') = lower(user_address));
+CREATE POLICY "sessions_owner_insert" ON public.sessions FOR INSERT TO authenticated WITH CHECK (lower(auth.jwt() ->> 'user_address') = lower(user_address));
+CREATE POLICY "sessions_owner_update" ON public.sessions FOR UPDATE TO authenticated USING (lower(auth.jwt() ->> 'user_address') = lower(user_address)) WITH CHECK (lower(auth.jwt() ->> 'user_address') = lower(user_address));
+CREATE POLICY "sessions_owner_delete" ON public.sessions FOR DELETE TO authenticated USING (lower(auth.jwt() ->> 'user_address') = lower(user_address));
+CREATE POLICY "sessions_service_role" ON public.sessions FOR ALL TO service_role USING (true) WITH CHECK (true);
 
-CREATE POLICY "User Read Own Sweeps" ON public.sweeps FOR SELECT USING (true);
-CREATE POLICY "User Read Own Backtests" ON public.backtests FOR SELECT USING (true);
-CREATE POLICY "User Insert Own Backtests" ON public.backtests FOR INSERT WITH CHECK (true);
+-- Agent Strategies: owner JWT + service_role only
+CREATE POLICY "strategies_owner_select" ON public.agent_strategies FOR SELECT TO authenticated USING (lower(auth.jwt() ->> 'user_address') = lower(user_address));
+CREATE POLICY "strategies_owner_insert" ON public.agent_strategies FOR INSERT TO authenticated WITH CHECK (lower(auth.jwt() ->> 'user_address') = lower(user_address));
+CREATE POLICY "strategies_owner_update" ON public.agent_strategies FOR UPDATE TO authenticated USING (lower(auth.jwt() ->> 'user_address') = lower(user_address)) WITH CHECK (lower(auth.jwt() ->> 'user_address') = lower(user_address));
+CREATE POLICY "strategies_owner_delete" ON public.agent_strategies FOR DELETE TO authenticated USING (lower(auth.jwt() ->> 'user_address') = lower(user_address));
+CREATE POLICY "strategies_service_role" ON public.agent_strategies FOR ALL TO service_role USING (true) WITH CHECK (true);
+
+-- Orders: owner JWT + service_role only
+CREATE POLICY "orders_owner_select" ON public.orders FOR SELECT TO authenticated USING (lower(auth.jwt() ->> 'user_address') = lower(user_address));
+CREATE POLICY "orders_owner_insert" ON public.orders FOR INSERT TO authenticated WITH CHECK (lower(auth.jwt() ->> 'user_address') = lower(user_address));
+CREATE POLICY "orders_owner_update" ON public.orders FOR UPDATE TO authenticated USING (lower(auth.jwt() ->> 'user_address') = lower(user_address)) WITH CHECK (lower(auth.jwt() ->> 'user_address') = lower(user_address));
+CREATE POLICY "orders_owner_delete" ON public.orders FOR DELETE TO authenticated USING (lower(auth.jwt() ->> 'user_address') = lower(user_address));
+CREATE POLICY "orders_service_role" ON public.orders FOR ALL TO service_role USING (true) WITH CHECK (true);
+
+-- Sweeps: owner JWT (read) + service_role (backend inserts claims)
+CREATE POLICY "sweeps_owner_select" ON public.sweeps FOR SELECT TO authenticated USING (lower(auth.jwt() ->> 'user_address') = lower(user_address));
+CREATE POLICY "sweeps_owner_insert" ON public.sweeps FOR INSERT TO authenticated WITH CHECK (lower(auth.jwt() ->> 'user_address') = lower(user_address));
+CREATE POLICY "sweeps_owner_update" ON public.sweeps FOR UPDATE TO authenticated USING (lower(auth.jwt() ->> 'user_address') = lower(user_address)) WITH CHECK (lower(auth.jwt() ->> 'user_address') = lower(user_address));
+CREATE POLICY "sweeps_owner_delete" ON public.sweeps FOR DELETE TO authenticated USING (lower(auth.jwt() ->> 'user_address') = lower(user_address));
+CREATE POLICY "sweeps_service_role" ON public.sweeps FOR ALL TO service_role USING (true) WITH CHECK (true);
+
+-- Backtests: owner JWT + service_role only
+CREATE POLICY "backtests_owner_select" ON public.backtests FOR SELECT TO authenticated USING (lower(auth.jwt() ->> 'user_address') = lower(user_address));
+CREATE POLICY "backtests_owner_insert" ON public.backtests FOR INSERT TO authenticated WITH CHECK (lower(auth.jwt() ->> 'user_address') = lower(user_address));
+CREATE POLICY "backtests_owner_update" ON public.backtests FOR UPDATE TO authenticated USING (lower(auth.jwt() ->> 'user_address') = lower(user_address)) WITH CHECK (lower(auth.jwt() ->> 'user_address') = lower(user_address));
+CREATE POLICY "backtests_owner_delete" ON public.backtests FOR DELETE TO authenticated USING (lower(auth.jwt() ->> 'user_address') = lower(user_address));
+CREATE POLICY "backtests_service_role" ON public.backtests FOR ALL TO service_role USING (true) WITH CHECK (true);
 
 -- ------------------------------------------------------------------------------
 -- 8. Persistent System State & Key Rotation Index
@@ -199,8 +282,14 @@ CREATE TABLE IF NOT EXISTS public.system_state (
 );
 
 ALTER TABLE public.system_state ENABLE ROW LEVEL SECURITY;
-CREATE POLICY "Public Read System State" ON public.system_state FOR SELECT USING (true);
-CREATE POLICY "Service Role Modify System State" ON public.system_state FOR ALL USING (true);
+-- Drop legacy open policies
+DROP POLICY IF EXISTS "Public Read System State" ON public.system_state;
+DROP POLICY IF EXISTS "Service Role Modify System State" ON public.system_state;
+DROP POLICY IF EXISTS "System State public read" ON public.system_state;
+DROP POLICY IF EXISTS "System State service_role all" ON public.system_state;
+-- Public read is safe; writes are service_role only (backend key rotation)
+CREATE POLICY "System State public read" ON public.system_state FOR SELECT TO anon, authenticated USING (true);
+CREATE POLICY "System State service_role all" ON public.system_state FOR ALL TO service_role USING (true) WITH CHECK (true);
 
 INSERT INTO public.system_state (key, value, description)
 VALUES ('groq_key_rotation', '{"current_index": 0, "total_keys": 20}'::jsonb, 'Tracks round-robin Groq key index across server restarts')
@@ -231,8 +320,21 @@ CREATE INDEX IF NOT EXISTS idx_user_swarm_mode ON public.user_swarm_configs(mode
 CREATE INDEX IF NOT EXISTS idx_user_swarm_copy_trade ON public.user_swarm_configs(copy_trade_enabled, mode);
 
 ALTER TABLE public.user_swarm_configs ENABLE ROW LEVEL SECURITY;
-CREATE POLICY "Public Read Swarm Configs" ON public.user_swarm_configs FOR SELECT USING (true);
-CREATE POLICY "User Modify Own Swarm Config" ON public.user_swarm_configs FOR ALL USING (true);
+-- Drop legacy open policies
+DROP POLICY IF EXISTS "Public Read Swarm Configs" ON public.user_swarm_configs;
+DROP POLICY IF EXISTS "User Modify Own Swarm Config" ON public.user_swarm_configs;
+DROP POLICY IF EXISTS "swarm_configs_owner_select" ON public.user_swarm_configs;
+DROP POLICY IF EXISTS "swarm_configs_owner_insert" ON public.user_swarm_configs;
+DROP POLICY IF EXISTS "swarm_configs_owner_update" ON public.user_swarm_configs;
+DROP POLICY IF EXISTS "swarm_configs_owner_delete" ON public.user_swarm_configs;
+DROP POLICY IF EXISTS "swarm_configs_service_role" ON public.user_swarm_configs;
+DROP POLICY IF EXISTS "UserSwarm public read fallback" ON public.user_swarm_configs;
+-- Private per-wallet: owner JWT + service_role only (anon blocked)
+CREATE POLICY "swarm_configs_owner_select" ON public.user_swarm_configs FOR SELECT TO authenticated USING (lower(auth.jwt() ->> 'user_address') = lower(user_address));
+CREATE POLICY "swarm_configs_owner_insert" ON public.user_swarm_configs FOR INSERT TO authenticated WITH CHECK (lower(auth.jwt() ->> 'user_address') = lower(user_address));
+CREATE POLICY "swarm_configs_owner_update" ON public.user_swarm_configs FOR UPDATE TO authenticated USING (lower(auth.jwt() ->> 'user_address') = lower(user_address)) WITH CHECK (lower(auth.jwt() ->> 'user_address') = lower(user_address));
+CREATE POLICY "swarm_configs_owner_delete" ON public.user_swarm_configs FOR DELETE TO authenticated USING (lower(auth.jwt() ->> 'user_address') = lower(user_address));
+CREATE POLICY "swarm_configs_service_role" ON public.user_swarm_configs FOR ALL TO service_role USING (true) WITH CHECK (true);
 
 -- ------------------------------------------------------------------------------
 -- 10. Custom User-Defined Agents & Multi-Agent Swarms
@@ -284,9 +386,32 @@ CREATE INDEX IF NOT EXISTS idx_custom_swarms_user ON public.custom_swarms(user_a
 ALTER TABLE public.custom_agents ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.custom_swarms ENABLE ROW LEVEL SECURITY;
 
-CREATE POLICY "Public Read Custom Agents" ON public.custom_agents FOR SELECT USING (true);
-CREATE POLICY "User Modify Own Custom Agents" ON public.custom_agents FOR ALL USING (true);
+-- Drop legacy open policies
+DROP POLICY IF EXISTS "Public Read Custom Agents" ON public.custom_agents;
+DROP POLICY IF EXISTS "User Modify Own Custom Agents" ON public.custom_agents;
+DROP POLICY IF EXISTS "Public Read Custom Swarms" ON public.custom_swarms;
+DROP POLICY IF EXISTS "User Modify Own Custom Swarms" ON public.custom_swarms;
+DROP POLICY IF EXISTS "Custom Agents public read" ON public.custom_agents;
+DROP POLICY IF EXISTS "custom_agents_owner_insert" ON public.custom_agents;
+DROP POLICY IF EXISTS "custom_agents_owner_update" ON public.custom_agents;
+DROP POLICY IF EXISTS "custom_agents_owner_delete" ON public.custom_agents;
+DROP POLICY IF EXISTS "custom_agents_service_role" ON public.custom_agents;
+DROP POLICY IF EXISTS "Custom Swarms public read" ON public.custom_swarms;
+DROP POLICY IF EXISTS "custom_swarms_owner_insert" ON public.custom_swarms;
+DROP POLICY IF EXISTS "custom_swarms_owner_update" ON public.custom_swarms;
+DROP POLICY IF EXISTS "custom_swarms_owner_delete" ON public.custom_swarms;
+DROP POLICY IF EXISTS "custom_swarms_service_role" ON public.custom_swarms;
 
-CREATE POLICY "Public Read Custom Swarms" ON public.custom_swarms FOR SELECT USING (true);
-CREATE POLICY "User Modify Own Custom Swarms" ON public.custom_swarms FOR ALL USING (true);
+-- Arena discovery: public SELECT for leaderboard/social clone; DML is owner JWT + service_role only
+CREATE POLICY "Custom Agents public read" ON public.custom_agents FOR SELECT TO anon, authenticated USING (true);
+CREATE POLICY "custom_agents_owner_insert" ON public.custom_agents FOR INSERT TO authenticated WITH CHECK (lower(auth.jwt() ->> 'user_address') = lower(user_address));
+CREATE POLICY "custom_agents_owner_update" ON public.custom_agents FOR UPDATE TO authenticated USING (lower(auth.jwt() ->> 'user_address') = lower(user_address)) WITH CHECK (lower(auth.jwt() ->> 'user_address') = lower(user_address));
+CREATE POLICY "custom_agents_owner_delete" ON public.custom_agents FOR DELETE TO authenticated USING (lower(auth.jwt() ->> 'user_address') = lower(user_address));
+CREATE POLICY "custom_agents_service_role" ON public.custom_agents FOR ALL TO service_role USING (true) WITH CHECK (true);
+
+CREATE POLICY "Custom Swarms public read" ON public.custom_swarms FOR SELECT TO anon, authenticated USING (true);
+CREATE POLICY "custom_swarms_owner_insert" ON public.custom_swarms FOR INSERT TO authenticated WITH CHECK (lower(auth.jwt() ->> 'user_address') = lower(user_address));
+CREATE POLICY "custom_swarms_owner_update" ON public.custom_swarms FOR UPDATE TO authenticated USING (lower(auth.jwt() ->> 'user_address') = lower(user_address)) WITH CHECK (lower(auth.jwt() ->> 'user_address') = lower(user_address));
+CREATE POLICY "custom_swarms_owner_delete" ON public.custom_swarms FOR DELETE TO authenticated USING (lower(auth.jwt() ->> 'user_address') = lower(user_address));
+CREATE POLICY "custom_swarms_service_role" ON public.custom_swarms FOR ALL TO service_role USING (true) WITH CHECK (true);
 
