@@ -11,6 +11,17 @@ import {
   type PublicClient,
 } from 'viem';
 
+
+import {
+  getWalletClient as getWagmiWalletClient,
+  getAccount,
+  switchChain,
+  signTypedData,
+  watchAccount,
+} from 'wagmi/actions';
+import { wagmiConfig } from '../config/wagmi.js';
+
+
 /**
  * Somnia Shannon Testnet chain definition (Chain ID 50312).
  */
@@ -279,122 +290,154 @@ declare global {
 
 export class Web3Service {
   /**
-   * Checks if an injected Ethereum wallet (MetaMask, Rabby, etc.) is available.
+   * Checks if a Web3 wallet is connected via Wagmi or injected window.ethereum is available.
    */
   public isWalletAvailable(): boolean {
+    const account = getAccount(wagmiConfig);
+    if (account.isConnected) return true;
     return typeof window !== 'undefined' && Boolean(window.ethereum);
   }
 
   /**
-   * Gets a viem WalletClient wrapping window.ethereum for contract transactions.
+   * Gets the active viem WalletClient from Wagmi (supports mobile WalletConnect, Rabby, Coinbase, etc.)
+   * or falls back to injected window.ethereum.
    */
-  public getWalletClient(userAddress: Address) {
-    if (!this.isWalletAvailable()) {
-      throw new Error('No Ethereum wallet detected.');
+  public async getWalletClient(userAddress?: Address): Promise<any> {
+    try {
+      const client = await getWagmiWalletClient(wagmiConfig);
+      if (client) return client;
+    } catch {}
+
+    if (typeof window !== 'undefined' && Boolean(window.ethereum) && userAddress) {
+      return createWalletClient({
+        account: userAddress,
+        chain: somniaShannonTestnet,
+        transport: custom(window.ethereum),
+      });
     }
-    return createWalletClient({
-      account: userAddress,
-      chain: somniaShannonTestnet,
-      transport: custom(window.ethereum),
-    });
+
+    throw new Error('No active wallet connected. Please connect your wallet via RainbowKit.');
+  }
+
+
+  /**
+   * Checks if an account is already authorized without opening a prompt (Wagmi account or eth_accounts).
+   */
+  public async getAuthorizedAccount(): Promise<{ address: Address; chainId: number } | null> {
+    const account = getAccount(wagmiConfig);
+    if (account.isConnected && account.address) {
+      return {
+        address: account.address,
+        chainId: account.chainId ?? somniaShannonTestnet.id,
+      };
+    }
+
+    if (typeof window !== 'undefined' && Boolean(window.ethereum)) {
+      try {
+        const accounts: string[] = await window.ethereum.request({
+          method: 'eth_accounts',
+        });
+
+        if (!accounts || accounts.length === 0) {
+          return null;
+        }
+
+        const rawChainId = await window.ethereum.request({ method: 'eth_chainId' });
+        const chainId = parseInt(rawChainId, 16);
+
+        return {
+          address: accounts[0] as Address,
+          chainId,
+        };
+      } catch {
+        return null;
+      }
+    }
+
+    return null;
   }
 
   /**
-   * Checks if an account is already authorized in window.ethereum without opening a prompt (eth_accounts).
+   * Connects to the Web3 wallet and requests account access.
    */
-  public async getAuthorizedAccount(): Promise<{ address: Address; chainId: number } | null> {
-    if (!this.isWalletAvailable()) {
-      return null;
+  public async connectWallet(): Promise<{ address: Address; chainId: number }> {
+    const account = getAccount(wagmiConfig);
+    if (account.isConnected && account.address) {
+      return {
+        address: account.address,
+        chainId: account.chainId ?? somniaShannonTestnet.id,
+      };
     }
 
-    try {
+    if (typeof window !== 'undefined' && Boolean(window.ethereum)) {
       const accounts: string[] = await window.ethereum.request({
-        method: 'eth_accounts',
+        method: 'eth_requestAccounts',
       });
 
       if (!accounts || accounts.length === 0) {
-        return null;
+        throw new Error('No accounts selected');
       }
 
       const rawChainId = await window.ethereum.request({ method: 'eth_chainId' });
       const chainId = parseInt(rawChainId, 16);
 
-      return {
-        address: accounts[0] as Address,
-        chainId,
-      };
-    } catch {
-      return null;
+      const address = accounts[0] as Address;
+
+      // Auto switch to Somnia Shannon Testnet if on another network
+      if (chainId !== somniaShannonTestnet.id) {
+        await this.switchOrAddSomniaTestnet();
+      }
+
+      return { address, chainId: somniaShannonTestnet.id };
     }
+
+    throw new Error('No Ethereum wallet detected. Please connect using RainbowKit.');
   }
 
   /**
-   * Connects to the injected Web3 wallet and requests account access.
-   */
-  public async connectWallet(): Promise<{ address: Address; chainId: number }> {
-    if (!this.isWalletAvailable()) {
-      throw new Error('No Ethereum wallet detected. Please install MetaMask, Rabby, or Coinbase Wallet.');
-    }
-
-    const accounts: string[] = await window.ethereum.request({
-      method: 'eth_requestAccounts',
-    });
-
-    if (!accounts || accounts.length === 0) {
-      throw new Error('No accounts selected');
-    }
-
-    const rawChainId = await window.ethereum.request({ method: 'eth_chainId' });
-    const chainId = parseInt(rawChainId, 16);
-
-    const address = accounts[0] as Address;
-
-    // Auto switch to Somnia Shannon Testnet if on another network
-    if (chainId !== somniaShannonTestnet.id) {
-      await this.switchOrAddSomniaTestnet();
-    }
-
-    return { address, chainId: somniaShannonTestnet.id };
-  }
-
-  /**
-   * Switches network to Somnia Shannon Testnet, prompting wallet to add it if missing.
+   * Switches network to Somnia Shannon Testnet via Wagmi with fallback to injected provider.
    */
   public async switchOrAddSomniaTestnet(): Promise<boolean> {
-    if (!this.isWalletAvailable()) return false;
-
-    const chainIdHex = `0x${somniaShannonTestnet.id.toString(16)}`;
-
     try {
-      await window.ethereum.request({
-        method: 'wallet_switchEthereumChain',
-        params: [{ chainId: chainIdHex }],
-      });
+      await switchChain(wagmiConfig, { chainId: somniaShannonTestnet.id });
       return true;
-    } catch (switchError: any) {
-      // Error 4902 indicates chain is not yet added to wallet
-      if (switchError.code === 4902 || switchError?.data?.originalError?.code === 4902) {
+    } catch (err: any) {
+      if (typeof window !== 'undefined' && Boolean(window.ethereum)) {
+        const chainIdHex = `0x${somniaShannonTestnet.id.toString(16)}`;
         try {
           await window.ethereum.request({
-            method: 'wallet_addEthereumChain',
-            params: [
-              {
-                chainId: chainIdHex,
-                chainName: somniaShannonTestnet.name,
-                nativeCurrency: somniaShannonTestnet.nativeCurrency,
-                rpcUrls: ['https://dream-rpc.somnia.network'],
-                blockExplorerUrls: ['https://shannon-explorer.somnia.network'],
-              },
-            ],
+            method: 'wallet_switchEthereumChain',
+            params: [{ chainId: chainIdHex }],
           });
           return true;
-        } catch (addError: any) {
-          throw new Error(`Failed to add Somnia Shannon Testnet: ${addError.message}`);
+        } catch (switchError: any) {
+          // Error 4902 indicates chain is not yet added to wallet
+          if (switchError.code === 4902 || switchError?.data?.originalError?.code === 4902) {
+            try {
+              await window.ethereum.request({
+                method: 'wallet_addEthereumChain',
+                params: [
+                  {
+                    chainId: chainIdHex,
+                    chainName: somniaShannonTestnet.name,
+                    nativeCurrency: somniaShannonTestnet.nativeCurrency,
+                    rpcUrls: ['https://dream-rpc.somnia.network'],
+                    blockExplorerUrls: ['https://shannon-explorer.somnia.network'],
+                  },
+                ],
+              });
+              return true;
+            } catch (addError: any) {
+              throw new Error(`Failed to add Somnia Shannon Testnet: ${addError.message}`);
+            }
+          }
+          throw switchError;
         }
       }
-      throw switchError;
+      throw err;
     }
   }
+
 
   /**
    * Queries native STT balance for a wallet address.
@@ -444,7 +487,7 @@ export class Web3Service {
     ];
     const approved = params.approved ?? true;
 
-    const wallet = this.getWalletClient(params.userAddress);
+    const wallet = await this.getWalletClient(params.userAddress);
     const hash = await wallet.writeContract({
       address: SOMNIA_ADDRESSES.operatorPermissionsRegistry,
       abi: OPERATOR_REGISTRY_ABI,
@@ -474,7 +517,7 @@ export class Web3Service {
     ];
     const approved = params.approved ?? true;
 
-    const wallet = this.getWalletClient(params.userAddress);
+    const wallet = await this.getWalletClient(params.userAddress);
     const hash = await wallet.writeContract({
       address: SOMNIA_ADDRESSES.operatorPermissionsRegistry,
       abi: OPERATOR_REGISTRY_ABI,
@@ -503,7 +546,7 @@ export class Web3Service {
   }> {
     const token = params.token || SOMNIA_ADDRESSES.testUsdc;
     const amountRaw = parseUnits(params.amount.toString(), 6);
-    const wallet = this.getWalletClient(params.userAddress);
+    const wallet = await this.getWalletClient(params.userAddress);
     const result: { approvalHash?: Hex; vaultModeHash?: Hex; depositHash?: Hex } = {};
 
     // 1. Ensure token allowance is approved for DreamDEX trading
@@ -664,7 +707,7 @@ export class Web3Service {
       });
       if (allowance >= amount) return undefined;
     } catch {}
-    const wallet = this.getWalletClient(params.userAddress);
+    const wallet = await this.getWalletClient(params.userAddress);
     const hash = await wallet.writeContract({
       address: token,
       abi: ERC20_ABI,
@@ -729,7 +772,7 @@ export class Web3Service {
    */
   public async delegateToBatch(userAddress: Address): Promise<Hex | undefined> {
     if (await this.isDelegatedToBatch(userAddress)) return undefined;
-    const wallet = this.getWalletClient(userAddress) as any;
+    const wallet = (await this.getWalletClient(userAddress)) as any;
     if (typeof wallet.signAuthorization !== 'function') return undefined;
     try {
       const batchAddress = SOMNIA_ADDRESSES.batchHelper;
@@ -873,7 +916,7 @@ export class Web3Service {
       OPERATOR_SELECTORS.placeBinaryOrderFor,
       OPERATOR_SELECTORS.cancelOrderFor,
     ];
-    const wallet = this.getWalletClient(params.userAddress);
+    const wallet = await this.getWalletClient(params.userAddress);
 
     let hash: Hex;
     if (params.pool && params.pool !== SOMNIA_ADDRESSES.binaryModule) {
@@ -907,59 +950,73 @@ export class Web3Service {
     nonce: number;
     deadline: number;
   }): Promise<Hex> {
-    if (!this.isWalletAvailable()) {
-      throw new Error('Wallet not available for signing');
-    }
-
-    const maxTradeSizeWei = parseUnits(params.maxTradeSize.toString(), 18).toString();
-    const dailyVolumeCapWei = parseUnits(params.dailyVolumeCap.toString(), 18).toString();
-
-    const typedData = {
-      types: {
-        EIP712Domain: [
-          { name: 'name', type: 'string' },
-          { name: 'version', type: 'string' },
-          { name: 'chainId', type: 'uint256' },
-          { name: 'verifyingContract', type: 'address' },
-        ],
-        SessionDelegation: [
-          { name: 'delegator', type: 'address' },
-          { name: 'operator', type: 'address' },
-          { name: 'maxTradeSize', type: 'uint256' },
-          { name: 'dailyVolumeCap', type: 'uint256' },
-          { name: 'nonce', type: 'uint256' },
-          { name: 'deadline', type: 'uint256' },
-        ],
-      },
-      primaryType: 'SessionDelegation',
-      domain: {
-        name: SESSION_EIP712_DOMAIN.name,
-        version: SESSION_EIP712_DOMAIN.version,
-        chainId: SESSION_EIP712_DOMAIN.chainId,
-        verifyingContract: SESSION_EIP712_DOMAIN.verifyingContract,
-      },
-      message: {
-        delegator: params.delegator,
-        operator: params.operator,
-        maxTradeSize: maxTradeSizeWei,
-        dailyVolumeCap: dailyVolumeCapWei,
-        nonce: params.nonce,
-        deadline: params.deadline,
-      },
-    };
+    const maxTradeSizeWei = parseUnits(params.maxTradeSize.toString(), 18);
+    const dailyVolumeCapWei = parseUnits(params.dailyVolumeCap.toString(), 18);
 
     try {
-      const signature = await window.ethereum.request({
-        method: 'eth_signTypedData_v4',
-        params: [params.delegator, JSON.stringify(typedData)],
+      // 1. Try signing via Wagmi / active connector (supports WalletConnect, mobile, extension)
+      const sig = await signTypedData(wagmiConfig, {
+        domain: {
+          name: SESSION_EIP712_DOMAIN.name,
+          version: SESSION_EIP712_DOMAIN.version,
+          chainId: SESSION_EIP712_DOMAIN.chainId,
+          verifyingContract: SESSION_EIP712_DOMAIN.verifyingContract,
+        },
+        types: SESSION_EIP712_TYPES,
+        primaryType: 'SessionDelegation',
+        message: {
+          delegator: params.delegator,
+          operator: params.operator,
+          maxTradeSize: maxTradeSizeWei,
+          dailyVolumeCap: dailyVolumeCapWei,
+          nonce: BigInt(params.nonce),
+          deadline: BigInt(params.deadline),
+        },
       });
 
-      return signature as Hex;
-    } catch (err: any) {
-      if (err.code === 4001) {
+      return sig as Hex;
+    } catch (wagmiErr: any) {
+      if (
+        wagmiErr?.code === 4001 ||
+        wagmiErr?.message?.includes('User rejected') ||
+        wagmiErr?.message?.includes('rejected')
+      ) {
         throw new Error('Signature request rejected by user');
       }
-      throw new Error(`Failed to sign session delegation: ${err.message}`);
+
+      // 2. Fallback to viem walletClient signTypedData if needed
+      try {
+        const wallet = await this.getWalletClient(params.delegator);
+        const signature = await wallet.signTypedData({
+          account: params.delegator,
+          domain: {
+            name: SESSION_EIP712_DOMAIN.name,
+            version: SESSION_EIP712_DOMAIN.version,
+            chainId: SESSION_EIP712_DOMAIN.chainId,
+            verifyingContract: SESSION_EIP712_DOMAIN.verifyingContract,
+          },
+          types: SESSION_EIP712_TYPES,
+          primaryType: 'SessionDelegation',
+          message: {
+            delegator: params.delegator,
+            operator: params.operator,
+            maxTradeSize: maxTradeSizeWei,
+            dailyVolumeCap: dailyVolumeCapWei,
+            nonce: BigInt(params.nonce),
+            deadline: BigInt(params.deadline),
+          },
+        });
+        return signature as Hex;
+      } catch (fallbackErr: any) {
+        if (
+          fallbackErr?.code === 4001 ||
+          fallbackErr?.message?.includes('User rejected') ||
+          fallbackErr?.message?.includes('rejected')
+        ) {
+          throw new Error('Signature request rejected by user');
+        }
+        throw new Error(`Failed to sign session delegation: ${fallbackErr?.message || wagmiErr?.message}`);
+      }
     }
   }
 
@@ -971,7 +1028,7 @@ export class Web3Service {
     amount: number = 1000,
   ): Promise<{ hash: Hex }> {
     const amountRaw = parseUnits(amount.toString(), 6);
-    const wallet = this.getWalletClient(userAddress);
+    const wallet = await this.getWalletClient(userAddress);
     const hash = await wallet.writeContract({
       address: SOMNIA_ADDRESSES.testUsdc,
       abi: ERC20_ABI,
@@ -984,7 +1041,7 @@ export class Web3Service {
   }
 
   /**
-   * Places a binary order directly using the user's connected wallet (MetaMask).
+   * Places a binary order directly using the user's connected wallet (MetaMask, Rainbow, Mobile).
    * Ensures necessary ERC20 TestUSDC approval exists before calling the pool.
    */
   public async placeBinaryOrderWithWallet(params: {
@@ -995,7 +1052,7 @@ export class Web3Service {
     price: number;
     lotSize: number;
   }): Promise<{ hash: Hex }> {
-    const wallet = this.getWalletClient(params.userAddress);
+    const wallet = await this.getWalletClient(params.userAddress);
     const one = 10n ** 6n;
     const rawQuantity = BigInt(Math.floor(params.lotSize * 1_000_000));
     const rawPrice = BigInt(Math.floor(params.price * 1_000_000));
@@ -1053,7 +1110,18 @@ export class Web3Service {
     onChainChanged?: (chainId: string) => void;
     onDisconnect?: () => void;
   }): () => void {
-    if (!this.isWalletAvailable()) return () => {};
+    const unwatch = watchAccount(wagmiConfig, {
+      onChange: (account, prevAccount) => {
+        if (!account.isConnected) {
+          handlers.onDisconnect?.();
+        } else if (account.address && account.address !== prevAccount?.address) {
+          handlers.onAccountsChanged?.([account.address]);
+        }
+        if (account.chainId && account.chainId !== prevAccount?.chainId) {
+          handlers.onChainChanged?.(`0x${account.chainId.toString(16)}`);
+        }
+      },
+    });
 
     const handleAccounts = (accounts: string[]) => {
       handlers.onAccountsChanged?.(accounts);
@@ -1067,17 +1135,23 @@ export class Web3Service {
       handlers.onDisconnect?.();
     };
 
-    window.ethereum.on?.('accountsChanged', handleAccounts);
-    window.ethereum.on?.('chainChanged', handleChain);
-    window.ethereum.on?.('disconnect', handleDisconnect);
+    if (typeof window !== 'undefined' && Boolean(window.ethereum)) {
+      window.ethereum.on?.('accountsChanged', handleAccounts);
+      window.ethereum.on?.('chainChanged', handleChain);
+      window.ethereum.on?.('disconnect', handleDisconnect);
+    }
 
     return () => {
-      window.ethereum.removeListener?.('accountsChanged', handleAccounts);
-      window.ethereum.removeListener?.('chainChanged', handleChain);
-      window.ethereum.removeListener?.('disconnect', handleDisconnect);
+      unwatch();
+      if (typeof window !== 'undefined' && Boolean(window.ethereum)) {
+        window.ethereum.removeListener?.('accountsChanged', handleAccounts);
+        window.ethereum.removeListener?.('chainChanged', handleChain);
+        window.ethereum.removeListener?.('disconnect', handleDisconnect);
+      }
     };
   }
 }
 
 export const web3Service = new Web3Service();
+
 

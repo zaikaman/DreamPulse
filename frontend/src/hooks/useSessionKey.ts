@@ -1,11 +1,14 @@
 import { useState, useEffect, useCallback } from 'react';
 import type { Address } from 'viem';
+import { useAccount, useDisconnect, useSwitchChain } from 'wagmi';
+import { useConnectModal } from '@rainbow-me/rainbowkit';
 import type { SessionGrant } from '../types/index.js';
 import { apiClient } from '../services/api.js';
 import { supabase } from '../services/supabase.js';
 import { web3Service, SOMNIA_ADDRESSES, somniaShannonTestnet } from '../services/web3.js';
 import { telemetryClient, type OrderFillData, type SweepCompleteData } from '../services/telemetry-client.js';
 import { parseWeb3Error } from '../lib/errorUtils.js';
+
 
 export interface WalletState {
   isConnected: boolean;
@@ -50,6 +53,11 @@ const LOCAL_SESSION_KEY = 'dreampulse_active_session';
 const LOCAL_WALLET_CONNECTED_KEY = 'dreampulse_wallet_connected';
 
 export function useSessionKey(): UseSessionKeyReturn {
+  const { address: wagmiAddress, isConnected: wagmiIsConnected, chainId: wagmiChainId } = useAccount();
+  const { disconnect: wagmiDisconnect } = useDisconnect();
+  const { switchChainAsync } = useSwitchChain();
+  const { openConnectModal } = useConnectModal();
+
   const [wallet, setWallet] = useState<WalletState>({
     isConnected: false,
     address: null,
@@ -58,6 +66,7 @@ export function useSessionKey(): UseSessionKeyReturn {
     chainId: null,
     isCorrectNetwork: false,
   });
+
 
   const [activeSession, setActiveSession] = useState<SessionGrant | null>(() => {
     try {
@@ -274,11 +283,16 @@ export function useSessionKey(): UseSessionKeyReturn {
   }, []);
 
   /**
-   * Connects to Web3 wallet.
+   * Connects to Web3 wallet via RainbowKit modal (or direct injected fallback).
    */
   const connectWallet = useCallback(async () => {
-    setIsLoading(true);
     setError(null);
+    if (openConnectModal) {
+      openConnectModal();
+      return;
+    }
+
+    setIsLoading(true);
     try {
       const { address, chainId } = await web3Service.connectWallet();
       const isCorrect = chainId === somniaShannonTestnet.id;
@@ -296,7 +310,6 @@ export function useSessionKey(): UseSessionKeyReturn {
 
       await refreshBalances(address);
       await fetchActiveSession(address);
-      // Probe per-pool allowance so UI can surface 0x3fb0ba2e fix banner
       try { await refreshAllowanceStatus(); } catch {}
     } catch (err: any) {
       const parsed = parseWeb3Error(err);
@@ -304,12 +317,15 @@ export function useSessionKey(): UseSessionKeyReturn {
     } finally {
       setIsLoading(false);
     }
-  }, [refreshBalances, fetchActiveSession, refreshAllowanceStatus]);
+  }, [openConnectModal, refreshBalances, fetchActiveSession, refreshAllowanceStatus]);
 
   /**
-   * Disconnects current wallet.
+   * Disconnects current wallet via Wagmi.
    */
   const disconnectWallet = useCallback(() => {
+    try {
+      wagmiDisconnect();
+    } catch {}
     localStorage.removeItem(LOCAL_WALLET_CONNECTED_KEY);
     localStorage.removeItem(LOCAL_SESSION_KEY);
     setWallet({
@@ -322,16 +338,20 @@ export function useSessionKey(): UseSessionKeyReturn {
     });
     setActiveSession(null);
     setAllowanceStatus(null);
-  }, []);
+  }, [wagmiDisconnect]);
 
   /**
-   * Switches network to Somnia Shannon testnet.
+   * Switches network to Somnia Shannon testnet via Wagmi.
    */
   const switchNetwork = useCallback(async () => {
     setIsLoading(true);
     setError(null);
     try {
-      await web3Service.switchOrAddSomniaTestnet();
+      if (switchChainAsync) {
+        await switchChainAsync({ chainId: somniaShannonTestnet.id });
+      } else {
+        await web3Service.switchOrAddSomniaTestnet();
+      }
       setWallet((prev) => ({
         ...prev,
         chainId: somniaShannonTestnet.id,
@@ -343,7 +363,8 @@ export function useSessionKey(): UseSessionKeyReturn {
     } finally {
       setIsLoading(false);
     }
-  }, []);
+  }, [switchChainAsync]);
+
 
   /**
    * Full non-custodial session onboarding with on-chain operator permissions & vault setup.
@@ -496,44 +517,54 @@ export function useSessionKey(): UseSessionKeyReturn {
     }
   }, [wallet.address, refreshBalances, fetchActiveSession, refreshAllowanceStatus]);
 
-  // Auto-reconnect on mount if previously connected in localStorage
+  // Synchronize state when Wagmi account or chain changes (mobile WalletConnect, extension, etc.)
   useEffect(() => {
-    let isMounted = true;
+    if (wagmiIsConnected && wagmiAddress) {
+      const userAddr = wagmiAddress as Address;
+      const isCorrect = wagmiChainId === somniaShannonTestnet.id;
+      localStorage.setItem(LOCAL_WALLET_CONNECTED_KEY, 'true');
 
-    async function autoReconnect() {
-      const wasConnected = localStorage.getItem(LOCAL_WALLET_CONNECTED_KEY) === 'true';
-      if (!wasConnected) return;
-
-      try {
-        const auth = await web3Service.getAuthorizedAccount();
-        if (!auth || !isMounted) return;
-
-        const isCorrect = auth.chainId === somniaShannonTestnet.id;
-        setWallet({
+      setWallet((prev) => {
+        if (
+          prev.isConnected &&
+          prev.address?.toLowerCase() === userAddr.toLowerCase() &&
+          prev.chainId === (wagmiChainId ?? prev.chainId) &&
+          prev.isCorrectNetwork === isCorrect
+        ) {
+          return prev;
+        }
+        return {
+          ...prev,
           isConnected: true,
-          address: auth.address,
-          balanceSTT: '0.00',
-          balanceCollateral: '0.00',
-          chainId: auth.chainId,
+          address: userAddr,
+          chainId: wagmiChainId ?? somniaShannonTestnet.id,
           isCorrectNetwork: isCorrect,
-        });
+        };
+      });
 
-        await refreshBalances(auth.address);
-        await fetchActiveSession(auth.address);
-        await refreshAllowanceStatus().catch(() => {});
-      } catch (err) {
-        console.warn('[useSessionKey] Auto-reconnect notice:', err);
+      refreshBalances(userAddr);
+      fetchActiveSession(userAddr);
+      refreshAllowanceStatus().catch(() => {});
+    } else if (!wagmiIsConnected) {
+      const wasConnected = localStorage.getItem(LOCAL_WALLET_CONNECTED_KEY) === 'true';
+      if (wasConnected) {
+        localStorage.removeItem(LOCAL_WALLET_CONNECTED_KEY);
+        localStorage.removeItem(LOCAL_SESSION_KEY);
       }
+      setWallet({
+        isConnected: false,
+        address: null,
+        balanceSTT: '0.00',
+        balanceCollateral: '0.00',
+        chainId: null,
+        isCorrectNetwork: false,
+      });
+      setActiveSession(null);
+      setAllowanceStatus(null);
     }
+  }, [wagmiIsConnected, wagmiAddress, wagmiChainId, refreshBalances, fetchActiveSession, refreshAllowanceStatus]);
 
-    autoReconnect();
-
-    return () => {
-      isMounted = false;
-    };
-  }, [refreshBalances, fetchActiveSession, refreshAllowanceStatus]);
-
-  // Wallet event subscriptions
+  // Extra safety: Wallet event subscriptions for injected providers
   useEffect(() => {
     const unsubscribe = web3Service.subscribeToWalletEvents({
       onAccountsChanged: (accounts) => {
@@ -565,7 +596,8 @@ export function useSessionKey(): UseSessionKeyReturn {
     });
 
     return () => unsubscribe();
-  }, [disconnectWallet, refreshBalances, fetchActiveSession]);
+  }, [disconnectWallet, refreshBalances, fetchActiveSession, refreshAllowanceStatus]);
+
   const setSessionCopyTrade = useCallback((enabled: boolean) => {
     setActiveSession((prev) => {
       if (!prev) return null;
