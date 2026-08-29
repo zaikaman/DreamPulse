@@ -11,7 +11,7 @@ web
 DreamPulse AI serves two primary user archetypes operating on Somnia Shannon Testnet:
 
 1. **Institutional & Quantitative Traders / Liquidity Providers**:
-   - **Situation**: Operating in high-volatility, fast-decaying binary prediction markets (5m, 15m, and 1h horizons on BTC, ETH, SOL, BNB, DOGE).
+   - **Situation**: Operating in high-volatility, fast-decaying binary prediction markets (1m, 5m, and 15m horizons on BTC and ETH).
    - **Jobs to be Done**: Continuously scan decentralized CLOB order books for mispricings against continuous Black-Scholes normal distributions $\Phi(z)$, execute latency-arbitrage sniper orders when spot prices jump before binary limit quotes adjust, provide automated two-sided market making with inventory skewing, and simulate custom quantitative parameters in a historical backtesting sandbox.
 
 2. **Retail Prediction Traders & Web3 DeFi Participants**:
@@ -52,7 +52,7 @@ Unlike conventional monolithic trading bots or static prediction market frontend
   - **Top Arbitrage Opportunities Table**: High-priority anomaly scanner displaying Asset & Strike, Expiry, Implied Prob, Fair Value $\Phi(z)$, Edge Delta ($>3\%$ highlighted), dynamic Action badges (`BUY YES` / `BUY NO`), and 1-click CLOB inspection.
   - **Split Telemetry Panels**: Left side **Active Prediction Catalog** (quick market switcher with probability distributions); Right side **Live Swarm Intelligence** (streaming thoughts with pause-on-hover capability).
 - **Edge Radar View (`EdgeRadarView` & `EdgeRadarHeatmap`)**:
-  - **Full-Width $\Phi(z)$ Mispricing Matrix**: Real-time 2D matrix crossing all supported assets (BTC, ETH, SOL, BNB, DOGE) against expiration horizons (5m, 15m, 1h), color-coded by alpha direction (green for YES, rose for NO, yellow glow for $\ge 3\%$ anomalies).
+  - **Full-Width $\Phi(z)$ Mispricing Matrix**: Real-time 2D matrix crossing all supported assets (BTC, ETH) against expiration horizons (1m, 5m, 15m), color-coded by alpha direction (green for YES, rose for NO, yellow glow for $\ge 3\%$ anomalies).
   - **Mathematical Inspector Card**: Deep-dive analytics on the active contract comparing CLOB implied mid probability, Black-Scholes theoretical normal distribution, edge spread, and direct 1-click execution routing.
 - **Markets & Depth Explorer (`MarketsExplorerView` & `MarketsDepthView` & `MarketMatrix`)**:
   - Filterable catalog of all active and upcoming Somnia Event Contract pools (filter by Asset, Horizon, Edge Anomaly, or Expiry).

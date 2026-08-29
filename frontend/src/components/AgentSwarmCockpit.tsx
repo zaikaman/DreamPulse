@@ -314,7 +314,7 @@ export const AgentSwarmCockpit: React.FC<AgentSwarmCockpitProps> = ({
               midColor="var(--foreground)"
               pnl={voltData.pnlAmount}
             />
-            <TargetPills theme={AGENT_THEME.volt} targets={['BTC/USD 5m', 'ETH/USD 5m', 'SOL/USD 5m', 'BNB/USD 5m', 'DOGE/USD 5m']} />
+            <TargetPills theme={AGENT_THEME.volt} targets={['BTC/USD 1m', 'BTC/USD 5m', 'ETH/USD 1m', 'ETH/USD 5m']} />
             <div className="flex flex-col gap-3 p-3 rounded-xl border" style={{ background: 'hsl(var(--secondary)/0.20)', borderColor: 'hsl(var(--border)/0.6)' }}>
               <SliderRow label="Spot Drift Trigger" value={`${voltSliders.driftThreshold.toFixed(2)}%`} color={AGENT_THEME.volt.color}>
                 <input type="range" min="0.05" max="1.0" step="0.05" disabled={!isOperator} value={voltSliders.driftThreshold} onChange={(e) => setVoltSliders({ ...voltSliders, driftThreshold: parseFloat(e.target.value) })} style={{ width: '100%', accentColor: AGENT_THEME.volt.color, cursor: isOperator ? 'pointer' : 'default', opacity: isOperator ? 1 : 0.6 }} />
@@ -335,7 +335,7 @@ export const AgentSwarmCockpit: React.FC<AgentSwarmCockpitProps> = ({
           <AgentCardFrame theme={AGENT_THEME.oracle} enabled={oracleData.isEnabled}>
             <AgentCardHeader theme={AGENT_THEME.oracle} status={oracleData.status} enabled={oracleData.isEnabled} isOperator={isOperator} onToggle={() => onToggleAgent('Oracle', !oracleData.isEnabled)} />
             <AgentMetrics latency={oracleData.evalLatencyMs} latencyColor={AGENT_THEME.oracle.color} midLabel="FILLS" midValue={`${oracleData.tradesToday} fills`} midColor="var(--foreground)" pnl={oracleData.pnlAmount} />
-            <TargetPills theme={AGENT_THEME.oracle} targets={['BTC/USD 15m', 'ETH/USD 15m', 'SOL/USD 1h', 'BNB/USD 15m', 'DOGE/USD 5m']} />
+            <TargetPills theme={AGENT_THEME.oracle} targets={['BTC/USD 5m', 'BTC/USD 15m', 'ETH/USD 5m', 'ETH/USD 15m']} />
             <div className="flex flex-col gap-3 p-3 rounded-xl border" style={{ background: 'hsl(var(--secondary)/0.20)', borderColor: 'hsl(var(--border)/0.6)' }}>
               <SliderRow label="Min Mathematical Edge Φ(z)" value={`${oracleSliders.minEdge.toFixed(1)}%`} color={AGENT_THEME.oracle.color}>
                 <input type="range" min="1.5" max="12.0" step="0.5" disabled={!isOperator} value={oracleSliders.minEdge} onChange={(e) => setOracleSliders({ ...oracleSliders, minEdge: parseFloat(e.target.value) })} style={{ width: '100%', accentColor: AGENT_THEME.oracle.color, cursor: isOperator ? 'pointer' : 'default', opacity: isOperator ? 1 : 0.6 }} />
@@ -353,7 +353,7 @@ export const AgentSwarmCockpit: React.FC<AgentSwarmCockpitProps> = ({
           <AgentCardFrame theme={AGENT_THEME.titan} enabled={titanData.isEnabled}>
             <AgentCardHeader theme={AGENT_THEME.titan} status={titanData.status} enabled={titanData.isEnabled} isOperator={isOperator} onToggle={() => onToggleAgent('Titan', !titanData.isEnabled)} />
             <AgentMetrics latency={titanData.evalLatencyMs} latencyColor={AGENT_THEME.titan.color} midLabel="Active Quotes" midValue="6 levels" midColor="#fafafa" pnl={titanData.pnlAmount} isSpread />
-            <TargetPills theme={AGENT_THEME.titan} targets={['BTC/USD 5m', 'ETH/USD 5m', 'SOL/USD 5m', 'BNB/USD 5m', 'DOGE/USD 5m']} />
+            <TargetPills theme={AGENT_THEME.titan} targets={['BTC/USD 1m', 'BTC/USD 5m', 'ETH/USD 1m', 'ETH/USD 5m']} />
             <div className="flex flex-col gap-3 p-3 rounded-xl border" style={{ background: 'hsl(var(--secondary)/0.20)', borderColor: 'hsl(var(--border)/0.6)' }}>
               <SliderRow label="Target Bid-Ask Spread" value={`${titanSliders.targetSpread.toFixed(1)}%`} color={AGENT_THEME.titan.color}>
                 <input type="range" min="2.0" max="8.0" step="0.5" disabled={!isOperator} value={titanSliders.targetSpread} onChange={(e) => setTitanSliders({ ...titanSliders, targetSpread: parseFloat(e.target.value) })} style={{ width: '100%', accentColor: AGENT_THEME.titan.color, cursor: isOperator ? 'pointer' : 'default', opacity: isOperator ? 1 : 0.6 }} />

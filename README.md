@@ -88,7 +88,7 @@ flowchart TB
     end
 
     subgraph DataFeeds ["High-Frequency Feeds"]
-        BINANCE["Binance WebSocket\n(Spot Tickers: BTC, ETH, SOL, BNB, DOGE)"]
+        BINANCE["Binance WebSocket\n(Spot Tickers: BTC, ETH)"]
         GRAPHQL["Somnia Markets SDK Indexer\n(On-Chain Order Books & Market States)"]
     end
 
@@ -125,7 +125,7 @@ flowchart TB
 
 ### 1. Volt (Spot Staleness Sniper)
 * **Strategy**: Latency & Spot Velocity Momentum Taker.
-* **Mechanism**: Ingests sub-second spot ticker price movements across underlying assets (BTC, ETH, SOL, BNB, DOGE). When a rapid spot jump ($|\Delta_{\text{1m}}| \ge \text{adaptive drift threshold}$) occurs faster than market makers adjust their quotes on the DreamDEX CLOB, Volt executes an aggressive Immediate-Or-Cancel (`IOC`) taker order.
+* **Mechanism**: Ingests sub-second spot ticker price movements across underlying assets (BTC, ETH). When a rapid spot jump ($|\Delta_{\text{1m}}| \ge \text{adaptive drift threshold}$) occurs faster than market makers adjust their quotes on the DreamDEX CLOB, Volt executes an aggressive Immediate-Or-Cancel (`IOC`) taker order.
 * **Risk Invariants**:
   * Expiry boundary guard: Holds execution in the final 15 seconds before expiration to prevent block-boundary mining reverts.
   * Macro trend confluence: Rejects trades if the 1-minute spike conflicts with the 5-minute macro directional trend ($\Delta_{\text{5m}}$).
@@ -283,7 +283,7 @@ flowchart LR
 
 #### Core Studio Capabilities:
 * **Interactive Sentence & Capsule Canvas**:
-  * **Market & Timeframe Peg**: Select asset (`BTC/USD`, `ETH/USD`, `SOL/USD`, `BNB/USD`, `DOGE/USD`) and candle resolution (`1m`, `5m`, `15m`, `1h`).
+  * **Market & Timeframe Peg**: Select asset (`BTC/USD`, `ETH/USD`) and candle resolution (`1m`, `5m`, `15m`, `1h`).
   * **Trigger Condition Capsules**: Add multi-indicator triggers (`RSI`, `BOLLINGER_LOWER`, `BOLLINGER_UPPER`, `EMA`, `SMA`, `PRICE_DRIFT`) with custom periods, comparison operators (`<`, `>`, `↑ Crosses Above`, `↓ Crosses Below`), and threshold values.
   * **Configurable Logic Gate**: Switch seamlessly between `ALL Must Agree (AND)` and `ANY May Trigger (OR)`.
   * **Binary Action Specification**: Direction (`CALL` / `PUT`), contract duration / expiration (`60s Turbo`, `5m`, `15m`, `1h`), and fixed lot sizing.
@@ -392,7 +392,7 @@ flowchart TD
 ### 3. Dedicated Full-Page Trader Profile (`#profile/:address`)
 * **Interactive Cumulative Alpha Performance Curve**: Visualizes cumulative realized PnL trajectory across trading rounds with interactive date/delta inspection.
 * **Recent On-Chain Executions Ledger**: Complete transaction history with market window badges, execution side (`BUY CALL` / `SELL NO`), stake amount, settled PnL, and direct Somnia Shannon Explorer verification links.
-* **Asset Allocation & Horizon Breakdown**: Horizontal percentage allocation bars across asset pairs (`BTC/USD`, `ETH/USD`, `SOL/USD`) and preferred binary expiry horizons (`1m`, `5m`, `15m`).
+* **Asset Allocation & Horizon Breakdown**: Horizontal percentage allocation bars across asset pairs (`BTC/USD`, `ETH/USD`) and preferred binary expiry horizons (`1m`, `5m`, `15m`).
 * **Deep-Linkable URL Architecture**: Supports canonical `#profile/0x...`, `#trader/0x...`, and `#arena` deep linking.
 
 ### 4. Proof-of-Alpha Card Studio (`ProofOfAlphaModal.tsx`)
@@ -418,7 +418,7 @@ The DreamPulse frontend is crafted with a high-aesthetic, minimalist institution
 * **Procedural Silk WebGL Shader Background**: Real-time Three.js GPU-accelerated fluid cloth simulation (`Silk.tsx`) creating smooth atmospheric depth behind the terminal.
 * **Cinematic Landing Showcase**: Immersive entry portal featuring interactive live swarm telemetry, protocol architecture breakdown, and seamless Web3 wallet authentication.
 * **Revamped Pro Event Contracts Trade Terminal With AI Alpha Copilot**:
-  * **Full-Bleed Trading Arena (`TradeTerminalView.tsx`)**: Edge-to-edge full viewport width layout with top-level DEX navigation bar, asset switcher dropdown (BTC, ETH, SOL, BNB, DOGE), live spot feed with 24h delta, localized contract question, and instant probability indicators.
+  * **Full-Bleed Trading Arena (`TradeTerminalView.tsx`)**: Edge-to-edge full viewport width layout with top-level DEX navigation bar, asset switcher dropdown (BTC, ETH), live spot feed with 24h delta, localized contract question, and instant probability indicators.
   * **Visual Binary Settlement Chart (`EventContractChart.tsx`)**: Real-time SVG settlement chart featuring a dashed Strike reference line, live spot price trail with glowing pulse ripple, shaded **UP (Emerald)** and **DOWN (Rose)** payout zones, AI Forecast projection cone overlay, interactive crosshair tooltip, and floating time-to-settlement badge.
   * **Dual-View Single-Click Book Toggle (`Show book / Hide book`)**: Effortlessly switch the main canvas between the visual binary settlement chart and the granular CLOB Order Book Depth Ladder without disrupting order configuration.
   * **Recently Settled Rounds Carousel (`RecentlySettledRounds.tsx`)**: Horizontal scrolling strip below the chart tracking past 5m/15m/1h round resolutions with settlement prices, localized timestamps (24h format), and UP/DOWN resolution badges.

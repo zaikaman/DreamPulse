@@ -125,45 +125,6 @@ const DashboardHeaderComponent: React.FC<DashboardHeaderProps> = ({
               )}
             </span>
           </div>
-
-          <div className="header-spot-item">
-            <span className="spot-sym">SOL</span>
-            <span className="spot-val tabular-num">
-              {spotPrices['SOL/USD'] ? (
-                `$${spotPrices['SOL/USD'].toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
-              ) : (
-                <span style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', color: 'var(--muted-foreground)' }}>
-                  <Spinner size="xs" variant="muted" /> Syncing
-                </span>
-              )}
-            </span>
-          </div>
-
-          <div className="header-spot-item">
-            <span className="spot-sym">BNB</span>
-            <span className="spot-val tabular-num">
-              {spotPrices['BNB/USD'] ? (
-                `$${spotPrices['BNB/USD'].toLocaleString(undefined, { minimumFractionDigits: 1, maximumFractionDigits: 1 })}`
-              ) : (
-                <span style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', color: 'var(--muted-foreground)' }}>
-                  <Spinner size="xs" variant="muted" /> Syncing
-                </span>
-              )}
-            </span>
-          </div>
-
-          <div className="header-spot-item">
-            <span className="spot-sym">DOGE</span>
-            <span className="spot-val tabular-num">
-              {spotPrices['DOGE/USD'] ? (
-                `$${spotPrices['DOGE/USD'].toLocaleString(undefined, { minimumFractionDigits: 3, maximumFractionDigits: 3 })}`
-              ) : (
-                <span style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', color: 'var(--muted-foreground)' }}>
-                  <Spinner size="xs" variant="muted" /> Syncing
-                </span>
-              )}
-            </span>
-          </div>
         </div>
       </div>
 

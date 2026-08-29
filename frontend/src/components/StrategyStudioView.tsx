@@ -67,7 +67,7 @@ const OPERATOR_OPTIONS: Array<{ value: ComparisonOperator; label: string }> = [
 const SUGGESTED_PROMPTS = [
   'Aggressive BTC 60s Call sniper when RSI drops below 25 after a sharp dip',
   'Contrarian ETH 5m Put fade when price punctures upper Bollinger band and RSI > 72',
-  'Fast SOL 5m Call rider on 9/21 EMA golden cross with rising velocity',
+  'Fast ETH 5m Call rider on 9/21 EMA golden cross with rising velocity',
   'Conservative BTC 15m Call mean-reversion when RSI is oversold and payout >= 80%',
 ];
 
@@ -718,9 +718,6 @@ export const StrategyStudioView: React.FC<StrategyStudioViewProps> = ({
                   >
                     <option value="BTC/USD">BTC/USD (Bitcoin)</option>
                     <option value="ETH/USD">ETH/USD (Ethereum)</option>
-                    <option value="SOL/USD">SOL/USD (Solana)</option>
-                    <option value="BNB/USD">BNB/USD (BNB Chain)</option>
-                    <option value="DOGE/USD">DOGE/USD (Dogecoin)</option>
                   </select>
                   <span className="text-xs font-mono font-bold text-muted-foreground">on</span>
                   <select

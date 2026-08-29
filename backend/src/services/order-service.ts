@@ -92,16 +92,12 @@ const orderOnchainMarketCache = new Map<string, { data: MarketOnchain; expiresAt
 
 function parseSymbolFromRaw(raw: string): string {
   const upper = (raw || '').toUpperCase().trim();
-  if (upper.includes('BTC')) return 'BTC/USD';
   if (upper.includes('ETH')) return 'ETH/USD';
-  if (upper.includes('SOL')) return 'SOL/USD';
-  if (upper.includes('BNB')) return 'BNB/USD';
-  if (upper.includes('DOGE')) return 'DOGE/USD';
-  if (upper.includes('STT')) return 'STT/USD';
+  if (upper.includes('BTC')) return 'BTC/USD';
   if (upper.includes('/')) return upper;
   if (upper.endsWith('USD')) return `${upper.slice(0, -3)}/USD`;
   if (upper.endsWith('USDT')) return `${upper.slice(0, -4)}/USD`;
-  return `${upper}/USD`;
+  return 'BTC/USD';
 }
 
 /**

@@ -700,7 +700,7 @@ export class MultiAgentSwarmRunner {
       const spent = agent.spentAllowance ?? 0;
       if (allocated - spent < 1.0) continue;
 
-      // Filter markets matching agent symbol (e.g. SOL/USD)
+      // Filter markets matching agent symbol (e.g. BTC/USD or ETH/USD)
       const matchingMarkets = openMarkets.filter(
         (m) => m.symbol.toUpperCase() === agent.symbol.toUpperCase()
       );

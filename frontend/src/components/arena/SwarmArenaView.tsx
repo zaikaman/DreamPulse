@@ -37,7 +37,7 @@ export interface SwarmArenaViewProps {
   onNavigateToTraderProfile?: (address: string) => void;
 }
 
-const ASSET_OPTIONS = ['ALL', 'BTC/USD', 'ETH/USD', 'SOL/USD'];
+const ASSET_OPTIONS = ['ALL', 'BTC/USD', 'ETH/USD'];
 const STRATEGY_OPTIONS = ['ALL', 'MOMENTUM', 'ARBITRAGE', 'MEAN_REVERSION', 'CUSTOM'];
 
 function formatAssetLabel(symbol?: string): string {

@@ -288,7 +288,7 @@ export const MarketMatrix: React.FC<MarketMatrixProps> = ({
           <div className="flex items-center gap-2 flex-wrap">
             {/* Symbol Filter */}
             <div className="flex items-center gap-1 bg-secondary/30 p-0.5 rounded-lg border border-border/40 overflow-x-auto">
-              {['ALL', 'BTC/USD', 'ETH/USD', 'SOL/USD', 'BNB/USD', 'DOGE/USD'].map((sym) => {
+              {['ALL', ...Array.from(new Set(markets.map((m) => m.symbol)))].map((sym) => {
                 const isActive = selectedSymbol === sym;
                 return (
                   <button
@@ -310,7 +310,7 @@ export const MarketMatrix: React.FC<MarketMatrixProps> = ({
 
             {/* Horizon Filter */}
             <div className="flex items-center gap-1 bg-secondary/30 p-0.5 rounded-lg border border-border/40 overflow-x-auto">
-              {['ALL', '1m', '5m', '15m', '1h', '4h', '24h'].map((win) => {
+              {['ALL', '1m', '5m', '15m', '1h'].map((win) => {
                 const isActive = selectedWindow === win;
                 return (
                   <button

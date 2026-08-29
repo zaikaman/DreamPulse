@@ -18,6 +18,13 @@ export function errorHandler(
   res: Response,
   _next: NextFunction,
 ): void {
+  if (err.message === 'Not allowed by CORS') {
+    res.status(403).json({
+      success: false,
+      error: 'Not allowed by CORS',
+    });
+    return;
+  }
   console.error('[API Error]:', err.stack || err.message);
   res.status(500).json({
     success: false,

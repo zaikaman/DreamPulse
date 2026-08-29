@@ -327,7 +327,7 @@ export const StatCardsGrid: React.FC<StatCardsGridProps> = ({
                   <span>5m • 15m • 1h</span>
                 </span>
                 <span className="font-mono text-[11px] text-muted-foreground whitespace-nowrap truncate">
-                  BTC • ETH • SOL
+                  BTC • ETH
                 </span>
               </div>
             </div>

@@ -115,7 +115,7 @@ export const STARTER_TEMPLATES: CustomAgentDefinition[] = [
     userAddress: '0x0000000000000000000000000000000000000000',
     name: 'Fast EMA Momentum Rider',
     description: 'Surfs trend velocity on 9/21 EMA golden crosses during expanding directional volume.',
-    symbol: 'SOL/USD',
+    symbol: 'ETH/USD',
     timeframe: '5m',
     strategyType: 'MOMENTUM',
     color: '#a78bfa',
@@ -817,7 +817,7 @@ Given a trader's natural language concept, generate a structured strategy specif
 {
   "name": "Strategy Title",
   "description": "Short 1-sentence summary",
-  "symbol": "BTC/USD" | "ETH/USD" | "SOL/USD" | "BNB/USD" | "DOGE/USD",
+  "symbol": "BTC/USD" | "ETH/USD",
   "timeframe": "1m" | "5m" | "15m" | "1h",
   "strategyType": "MOMENTUM" | "MEAN_REVERSION" | "BREAKOUT" | "VOLATILITY" | "CUSTOM",
   "color": "#2dd4bf" | "#f59e0b" | "#a78bfa",
@@ -870,11 +870,8 @@ Respond ONLY with valid JSON. No markdown codeblocks, no explanations.`;
         if (name && rules && Array.isArray(rules.conditions) && rules.conditions.length > 0) {
           // Normalize symbol
           let symbol = parsed.symbol || 'BTC/USD';
-          if (symbol.includes('SOL')) symbol = 'SOL/USD';
-          else if (symbol.includes('ETH')) symbol = 'ETH/USD';
-          else if (symbol.includes('BNB')) symbol = 'BNB/USD';
-          else if (symbol.includes('DOGE')) symbol = 'DOGE/USD';
-          else if (symbol.includes('BTC')) symbol = 'BTC/USD';
+          if (symbol.includes('ETH')) symbol = 'ETH/USD';
+          else symbol = 'BTC/USD';
 
           // Normalize timeframe
           let timeframe = parsed.timeframe || '5m';
@@ -921,11 +918,8 @@ Respond ONLY with valid JSON. No markdown codeblocks, no explanations.`;
     // Intelligent Deterministic Keyword Fallback
     const p = prompt.toLowerCase();
     const isCall = p.includes('call') || p.includes('buy') || p.includes('long') || p.includes('bounce') || p.includes('dip') || p.includes('golden') || p.includes('above');
-    const isEth = p.includes('eth');
-    const isSol = p.includes('sol');
-    const isBnb = p.includes('bnb');
-    const isDoge = p.includes('doge');
-    const symbol = isEth ? 'ETH/USD' : isSol ? 'SOL/USD' : isBnb ? 'BNB/USD' : isDoge ? 'DOGE/USD' : 'BTC/USD';
+    const isEth = p.includes('eth') || p.includes('ethereum');
+    const symbol = isEth ? 'ETH/USD' : 'BTC/USD';
     const is60s = p.includes('60') || p.includes('1m') || p.includes('turbo');
     const is15m = p.includes('15m') || p.includes('15 min');
     const is1h = p.includes('1h') || p.includes('hour');

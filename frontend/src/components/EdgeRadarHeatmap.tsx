@@ -28,7 +28,7 @@ const EdgeRadarHeatmapComponent: React.FC<EdgeRadarHeatmapProps> = ({
   }
 
   const discoveredSymbols = Array.from(new Set(markets.map((m) => m.symbol)));
-  const symbols = discoveredSymbols.length > 0 ? discoveredSymbols : ['BTC/USD', 'ETH/USD', 'SOL/USD', 'BNB/USD', 'DOGE/USD'];
+  const symbols = discoveredSymbols.length > 0 ? discoveredSymbols : ['BTC/USD', 'ETH/USD'];
   const windows: Array<'1m' | '5m' | '15m' | '1h'> = ['1m', '5m', '15m', '1h'];
 
   // Find most severe anomaly across real executable on-chain markets

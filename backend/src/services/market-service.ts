@@ -71,9 +71,6 @@ export class MarketService extends EventEmitter {
     if (ticker && ticker.price > 0) return ticker.price;
     if (symbol === 'BTC/USD') return 96500;
     if (symbol === 'ETH/USD') return 2750;
-    if (symbol === 'SOL/USD') return 188;
-    if (symbol === 'BNB/USD') return 624;
-    if (symbol === 'DOGE/USD') return 0.25;
     return 100;
   }
 
@@ -246,7 +243,7 @@ export class MarketService extends EventEmitter {
             }
           } else {
             // ATM market ("closes at or above opening price"): lock in fixed spot at creation time
-            strike = symbol === 'DOGE/USD' ? Number(spot.toFixed(3)) : Math.round(spot);
+            strike = Math.round(spot);
           }
         }
 
@@ -618,7 +615,7 @@ export class MarketService extends EventEmitter {
           openTimeMs = now;
         }
 
-        const strike = symbol === 'DOGE/USD' ? Number(spot.toFixed(3)) : Math.round(spot);
+        const strike = Math.round(spot);
 
         const marketId = `${SOMNIA_ADDRESSES.binaryModule}-${symbol.replace('/', '')}-${windowDur}-${strike}-${closeTimeMs}`;
         if (!this.markets.has(marketId)) {
@@ -686,9 +683,6 @@ export class MarketService extends EventEmitter {
       let volatility = 0.5;
       if (symbol === 'BTC/USD') volatility = 4.5;
       else if (symbol === 'ETH/USD') volatility = 0.45;
-      else if (symbol === 'SOL/USD') volatility = 0.25;
-      else if (symbol === 'BNB/USD') volatility = 0.35;
-      else if (symbol === 'DOGE/USD') volatility = 0.001;
       const delta = (Math.random() - 0.498) * volatility;
       priceFeedService.simulateMicroTick(symbol, delta);
     }

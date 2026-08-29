@@ -158,10 +158,10 @@ describe('Quantitative Pricing & Edge Calculation Engine', () => {
     expect(btcThreshold).toBeGreaterThanOrEqual(0.0015);
     expect(btcThreshold).toBeLessThanOrEqual(0.0025);
 
-    // SOL with 100% vol: higher vol produces proportionally higher drift threshold
-    const solThreshold = calculateVolatilityNormalizedDriftThreshold(1.0, 2.5, 60);
-    expect(solThreshold).toBeGreaterThan(btcThreshold);
-    expect(solThreshold).toBeLessThanOrEqual(0.0080);
+    // High-volatility asset with 100% vol: higher vol produces proportionally higher drift threshold
+    const highVolThreshold = calculateVolatilityNormalizedDriftThreshold(1.0, 2.5, 60);
+    expect(highVolThreshold).toBeGreaterThan(btcThreshold);
+    expect(highVolThreshold).toBeLessThanOrEqual(0.0080);
 
     // Enforces institutional bounds [0.0010, 0.0080]
     expect(calculateVolatilityNormalizedDriftThreshold(0.01, 2.5, 60)).toBe(0.0010);

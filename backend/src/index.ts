@@ -22,17 +22,33 @@ app.use(
         return callback(null, true);
       }
       const normalizedOrigin = origin.replace(/\/+$/, '');
-      if (
-        allowedOrigins.includes(normalizedOrigin) ||
-        normalizedOrigin.endsWith('.vercel.app') ||
-        normalizedOrigin.includes('localhost') ||
-        normalizedOrigin.includes('127.0.0.1')
-      ) {
-        return callback(null, true);
+      try {
+        const url = new URL(normalizedOrigin);
+        const hostname = url.hostname.toLowerCase();
+        if (
+          allowedOrigins.includes(normalizedOrigin) ||
+          hostname === 'localhost' ||
+          hostname === '127.0.0.1' ||
+          hostname === 'vercel.app' ||
+          hostname.endsWith('.vercel.app')
+        ) {
+          return callback(null, true);
+        }
+      } catch {
+        if (
+          allowedOrigins.includes(normalizedOrigin) ||
+          normalizedOrigin.endsWith('.vercel.app') ||
+          normalizedOrigin.includes('localhost') ||
+          normalizedOrigin.includes('127.0.0.1')
+        ) {
+          return callback(null, true);
+        }
       }
-      return callback(null, true); // Permissive fallback to prevent breaking cross-domain requests
+      return callback(new Error('Not allowed by CORS'));
     },
     credentials: true,
+    methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
+    allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With'],
   })
 );
 app.use(express.json());

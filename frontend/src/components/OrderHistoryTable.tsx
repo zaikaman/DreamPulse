@@ -44,12 +44,8 @@ interface ParsedMarketInfo {
 function normalizeMarketSymbol(raw: string): string {
   if (!raw) return 'BTC/USD';
   const s = raw.trim().toUpperCase().replace(/\/USD\/USD$/i, '/USD');
-  if (s.includes('BTC')) return 'BTC/USD';
   if (s.includes('ETH')) return 'ETH/USD';
-  if (s.includes('SOL')) return 'SOL/USD';
-  if (s.includes('BNB')) return 'BNB/USD';
-  if (s.includes('DOGE')) return 'DOGE/USD';
-  if (s.includes('STT')) return 'STT/USD';
+  if (s.includes('BTC')) return 'BTC/USD';
   if (s.includes('/')) return s;
   if (s.endsWith('USD')) return `${s.slice(0, -3)}/USD`;
   if (s.endsWith('USDT')) return `${s.slice(0, -4)}/USD`;
@@ -57,12 +53,8 @@ function normalizeMarketSymbol(raw: string): string {
 }
 
 function getAssetDisplayName(symbol: string): string {
-  if (symbol.includes('BTC')) return 'Bitcoin';
   if (symbol.includes('ETH')) return 'Ethereum';
-  if (symbol.includes('SOL')) return 'Solana';
-  if (symbol.includes('BNB')) return 'BNB';
-  if (symbol.includes('DOGE')) return 'Dogecoin';
-  if (symbol.includes('STT')) return 'Somnia';
+  if (symbol.includes('BTC')) return 'Bitcoin';
   return symbol.split('/')[0];
 }
 

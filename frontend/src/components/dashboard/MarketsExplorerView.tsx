@@ -114,8 +114,8 @@ export const MarketsExplorerView: React.FC<MarketsExplorerViewProps> = ({
           <span className="text-[10px] text-muted-foreground font-mono uppercase tracking-wider font-semibold">
             UNDERLYING SPOT TICKERS
           </span>
-          <div className="flex items-center gap-2 mt-1 overflow-x-auto text-xs font-mono">
-            {['BTC', 'ETH', 'SOL', 'BNB'].map((sym) => {
+          <div className="flex items-center gap-4 mt-1 overflow-x-auto text-xs font-mono">
+            {['BTC', 'ETH'].map((sym) => {
               const spot = currentSpotPrices[`${sym}/USD`];
               return (
                 <div key={sym} className="flex flex-col">

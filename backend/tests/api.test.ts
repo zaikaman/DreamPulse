@@ -190,4 +190,90 @@ describe('Express REST API Endpoints', () => {
     expect(resCfg2.status).toBe(200);
     expect(resCfg2.body.config.copyTradeEnabled).toBe(false);
   });
+
+  describe('CORS and Security Headers', () => {
+    it('allows requests from localhost with credentials support', async () => {
+      const res = await request(app)
+        .get('/api/health')
+        .set('Origin', 'http://localhost:5173');
+
+      expect(res.status).toBe(200);
+      expect(res.headers['access-control-allow-origin']).toBe('http://localhost:5173');
+      expect(res.headers['access-control-allow-credentials']).toBe('true');
+    });
+
+    it('allows requests from Vercel deployments with credentials support', async () => {
+      const res = await request(app)
+        .get('/api/health')
+        .set('Origin', 'https://dreampulse-demo.vercel.app');
+
+      expect(res.status).toBe(200);
+      expect(res.headers['access-control-allow-origin']).toBe('https://dreampulse-demo.vercel.app');
+      expect(res.headers['access-control-allow-credentials']).toBe('true');
+    });
+
+    it('handles CORS preflight OPTIONS requests cleanly', async () => {
+      const res = await request(app)
+        .options('/api/v1/markets')
+        .set('Origin', 'https://dreampulse.vercel.app')
+        .set('Access-Control-Request-Method', 'GET');
+
+      expect([200, 204]).toContain(res.status);
+      expect(res.headers['access-control-allow-origin']).toBe('https://dreampulse.vercel.app');
+      expect(res.headers['access-control-allow-credentials']).toBe('true');
+    });
+
+    it('blocks disallowed origins when custom origin list is configured', async () => {
+      const express = (await import('express')).default;
+      const cors = (await import('cors')).default;
+      const { errorHandler } = await import('../src/api/middleware.js');
+
+      const customApp = express();
+      const customAllowedOrigins = ['https://dreampulse.vercel.app'];
+      customApp.use(
+        cors({
+          origin: (origin, callback) => {
+            if (!origin || customAllowedOrigins.includes('*')) {
+              return callback(null, true);
+            }
+            const normalizedOrigin = origin.replace(/\/+$/, '');
+            try {
+              const url = new URL(normalizedOrigin);
+              const hostname = url.hostname.toLowerCase();
+              if (
+                customAllowedOrigins.includes(normalizedOrigin) ||
+                hostname === 'localhost' ||
+                hostname === '127.0.0.1' ||
+                hostname === 'vercel.app' ||
+                hostname.endsWith('.vercel.app')
+              ) {
+                return callback(null, true);
+              }
+            } catch {
+              if (customAllowedOrigins.includes(normalizedOrigin)) {
+                return callback(null, true);
+              }
+            }
+            return callback(new Error('Not allowed by CORS'));
+          },
+          credentials: true,
+        })
+      );
+      customApp.get('/test', (_req, res) => res.json({ ok: true }));
+      customApp.use(errorHandler);
+
+      const okRes = await request(customApp)
+        .get('/test')
+        .set('Origin', 'https://dreampulse.vercel.app');
+      expect(okRes.status).toBe(200);
+      expect(okRes.headers['access-control-allow-origin']).toBe('https://dreampulse.vercel.app');
+
+      const blockedRes = await request(customApp)
+        .get('/test')
+        .set('Origin', 'https://malicious-external-site.com');
+      expect(blockedRes.status).toBe(403);
+      expect(blockedRes.body.error).toBe('Not allowed by CORS');
+    });
+  });
 });
+

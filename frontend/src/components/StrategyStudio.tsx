@@ -34,11 +34,8 @@ import { Badge } from './ui/badge.js';
 import { cn } from '../lib/utils.js';
 
 const MARKET_OPTIONS = [
-  { symbol: 'BTC/USD', name: 'BTC/USD', label: '5m Binary Contracts', badge: 'BTC · 5m', color: '#fbbf24' },
-  { symbol: 'ETH/USD', name: 'ETH/USD', label: '15m Binary Contracts', badge: 'ETH · 15m', color: '#2dd4bf' },
-  { symbol: 'SOL/USD', name: 'SOL/USD', label: '1h Binary Contracts', badge: 'SOL · 1h', color: '#a78bfa' },
-  { symbol: 'BNB/USD', name: 'BNB/USD', label: '5m Binary Contracts', badge: 'BNB · 5m', color: '#eab308' },
-  { symbol: 'DOGE/USD', name: 'DOGE/USD', label: '5m Binary Contracts', badge: 'DOGE · 5m', color: '#d97706' },
+  { symbol: 'BTC/USD', name: 'BTC/USD', label: '1m / 5m / 15m Binary Contracts', badge: 'BTC · Core', color: '#fbbf24' },
+  { symbol: 'ETH/USD', name: 'ETH/USD', label: '1m / 5m / 15m Binary Contracts', badge: 'ETH · Core', color: '#2dd4bf' },
 ];
 
 export type BacktestAgentType = 'Volt' | 'Oracle' | 'Titan';

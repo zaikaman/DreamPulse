@@ -82,14 +82,8 @@ export interface DetailedBacktestResult extends BacktestResult {
 const BINANCE_PAIR_MAPPINGS: Record<string, string> = {
   'BTC/USD': 'BTCUSDT',
   'ETH/USD': 'ETHUSDT',
-  'SOL/USD': 'SOLUSDT',
-  'BNB/USD': 'BNBUSDT',
-  'DOGE/USD': 'DOGEUSDT',
   'BTCUSDT': 'BTCUSDT',
   'ETHUSDT': 'ETHUSDT',
-  'SOLUSDT': 'SOLUSDT',
-  'BNBUSDT': 'BNBUSDT',
-  'DOGEUSDT': 'DOGEUSDT',
 };
 
 function calculateSeriesRSI(candles: HistoricalCandle[], period = 14): number {
@@ -308,13 +302,6 @@ export class BacktestService {
       let decimals = 2;
       if (symbol.startsWith('ETH')) {
         basePrice = 2750;
-      } else if (symbol.startsWith('SOL')) {
-        basePrice = 188;
-      } else if (symbol.startsWith('BNB')) {
-        basePrice = 624;
-      } else if (symbol.startsWith('DOGE')) {
-        basePrice = 0.25;
-        decimals = 4;
       }
 
       let stepMs = 5 * 60 * 1000;

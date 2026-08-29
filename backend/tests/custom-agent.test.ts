@@ -40,7 +40,7 @@ describe('Custom Deployed Agents & Evaluation Engine', () => {
       userAddress: testUser,
       name: 'Fast EMA Momentum Rider',
       description: 'Test Fast EMA Momentum Strategy',
-      symbol: 'SOL/USD',
+      symbol: 'ETH/USD',
       timeframe: '5m',
       strategyType: 'MOMENTUM',
       color: '#3b82f6',
@@ -84,9 +84,9 @@ describe('Custom Deployed Agents & Evaluation Engine', () => {
     };
 
     const mockMarket: Market = {
-      id: '0x3ecC694Cef705358864a646142ac17A90E29e388-SOLUSD-5m-188-1787895207306',
-      symbol: 'SOL/USD',
-      strikePrice: 188,
+      id: '0x3ecC694Cef705358864a646142ac17A90E29e388-ETHUSD-5m-2750-1787895207306',
+      symbol: 'ETH/USD',
+      strikePrice: 2750,
       windowDuration: '5m',
       openTimestamp: new Date(Date.now() - 60000).toISOString(),
       closeTimestamp: new Date(Date.now() + 240000).toISOString(),
@@ -116,8 +116,8 @@ describe('Custom Deployed Agents & Evaluation Engine', () => {
 
     const context: IAgentContext = {
       spotTicker: {
-        symbol: 'SOL/USD',
-        price: 188.5,
+        symbol: 'ETH/USD',
+        price: 2755.5,
         change1m: 0.002,
         change5m: 0.0025, // passes > 0.0015
         timestamp: Date.now(),
@@ -149,7 +149,7 @@ describe('Custom Deployed Agents & Evaluation Engine', () => {
       userAddress: testUser,
       name: 'Exhausted Strategy',
       description: 'Exhausted allowance test strategy',
-      symbol: 'SOL/USD',
+      symbol: 'BTC/USD',
       timeframe: '5m',
       strategyType: 'MOMENTUM',
       color: '#ef4444',
@@ -177,9 +177,9 @@ describe('Custom Deployed Agents & Evaluation Engine', () => {
     };
 
     const mockMarket: Market = {
-      id: '0x3ecC694Cef705358864a646142ac17A90E29e388-SOLUSD-5m-188-1787895207306',
-      symbol: 'SOL/USD',
-      strikePrice: 188,
+      id: '0x3ecC694Cef705358864a646142ac17A90E29e388-BTCUSD-5m-96500-1787895207306',
+      symbol: 'BTC/USD',
+      strikePrice: 96500,
       windowDuration: '5m',
       openTimestamp: new Date(Date.now() - 60000).toISOString(),
       closeTimestamp: new Date(Date.now() + 240000).toISOString(),
@@ -195,7 +195,7 @@ describe('Custom Deployed Agents & Evaluation Engine', () => {
     };
 
     const context: IAgentContext = {
-      spotTicker: { symbol: 'SOL/USD', price: 188, change1m: 0, change5m: 0, timestamp: Date.now() },
+      spotTicker: { symbol: 'BTC/USD', price: 96500, change1m: 0, change5m: 0, timestamp: Date.now() },
       market: mockMarket,
       depth: { yesBids: [], yesAsks: [] },
       activeSessions: [],
@@ -211,7 +211,7 @@ describe('Custom Deployed Agents & Evaluation Engine', () => {
       userAddress: '0x0000000000000000000000000000000000000002',
       name: 'Unit Test Isolated Agent',
       description: 'Isolated test agent for metrics',
-      symbol: 'SOL/USD',
+      symbol: 'BTC/USD',
       timeframe: '5m',
       strategyType: 'MOMENTUM',
       color: '#3b82f6',

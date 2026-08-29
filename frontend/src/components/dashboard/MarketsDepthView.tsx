@@ -125,7 +125,7 @@ const MarketsDepthViewComponent: React.FC<MarketsDepthViewProps> = ({
             UNDERLYING ASSETS
           </span>
           <span className="text-xs font-mono font-bold text-foreground mt-1">
-            BTC • ETH • SOL • BNB • DOGE
+            BTC • ETH
           </span>
           <CurrencyDollarIcon className="w-4 h-4 text-muted-foreground/60 mt-1.5" />
         </div>

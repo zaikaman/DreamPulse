@@ -4,18 +4,12 @@ import { quantizeLotSize } from './quantizer.js';
 export const DEFAULT_ANNUAL_VOLATILITY: Record<string, number> = {
   'BTC/USD': 0.52,
   'ETH/USD': 0.68,
-  'SOL/USD': 0.85,
-  'BNB/USD': 0.65,
-  'DOGE/USD': 0.95,
   DEFAULT: 0.60,
 };
 
 export const MIN_ANNUAL_VOLATILITY: Record<string, number> = {
   'BTC/USD': 0.35,
   'ETH/USD': 0.45,
-  'SOL/USD': 0.55,
-  'BNB/USD': 0.45,
-  'DOGE/USD': 0.60,
   DEFAULT: 0.30,
 };
 
