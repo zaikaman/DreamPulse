@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import type { Address } from 'viem';
 import { useAccount, useDisconnect, useSwitchChain } from 'wagmi';
 import { useConnectModal } from '@rainbow-me/rainbowkit';
@@ -51,8 +51,51 @@ export interface UseSessionKeyReturn {
   clearError: () => void;
 }
 
-const LOCAL_SESSION_KEY = 'dreampulse_active_session';
+// SECURITY: SessionGrant is intentionally NOT persisted in localStorage.
+// Previous implementation stored SessionGrant plaintext in localStorage (XSS -> session hijack).
+// localStorage is readable by any injected script (XSS, malicious dependency, browser extension).
+// Attacker could: steal SessionGrant, inject a forged never-expiring session, or hijack
+// across tabs via localStorage sync. Re-hydrating on backend failure without expiry/wallet
+// binding amplified the issue.
+// Production fix:
+//   • Single source of truth is backend getUserActiveSession() (service_role / JWT-bound RLS).
+//   • Session lives only in React memory (useState) — zero bytes in localStorage / sessionStorage.
+//   • Every mount, wallet change, focus/visibility, and storage tamper event re-validates via backend.
+//   • Legacy key is purged on load and on every storage event. Expired / wallet-mismatched sessions
+//     are rejected before state update. httpOnly cookie (see api.ts + backend wallet-auth.ts)
+//     is the long-term hardening path for JWT/EIP auth; SessionGrant itself never needs JS-readable persistence.
+const LEGACY_SESSION_KEY = 'dreampulse_active_session';
 const LOCAL_WALLET_CONNECTED_KEY = 'dreampulse_wallet_connected';
+
+/**
+ * Returns true iff session is active, not expired, and bound to the expected wallet (if provided).
+ * Defense: prevents XSS-injected or stale sessions from being accepted even if backend were spoofed.
+ */
+function isSessionValid(session: SessionGrant | null | undefined, expectedWallet?: Address | string | null): boolean {
+  if (!session || !session.isActive) return false;
+  if (!session.expiresAt) return false;
+  const exp = new Date(session.expiresAt).getTime();
+  if (!Number.isFinite(exp) || exp <= Date.now()) return false;
+  if (expectedWallet && session.userAddress) {
+    try {
+      if (session.userAddress.toLowerCase() !== String(expectedWallet).toLowerCase()) return false;
+    } catch {
+      return false;
+    }
+  }
+  if (!session.id || !session.userAddress) return false;
+  return true;
+}
+
+function purgeLegacySessionStorage(): void {
+  if (typeof window === 'undefined' || typeof localStorage === 'undefined') return;
+  try {
+    // One-time migration: remove any plaintext SessionGrant left by pre-fix builds
+    if (localStorage.getItem(LEGACY_SESSION_KEY) !== null) {
+      localStorage.removeItem(LEGACY_SESSION_KEY);
+    }
+  } catch {}
+}
 
 export function useSessionKey(): UseSessionKeyReturn {
   const { address: wagmiAddress, isConnected: wagmiIsConnected, chainId: wagmiChainId } = useAccount();
@@ -69,21 +112,9 @@ export function useSessionKey(): UseSessionKeyReturn {
     isCorrectNetwork: false,
   });
 
-
-  const [activeSession, setActiveSession] = useState<SessionGrant | null>(() => {
-    try {
-      const saved = localStorage.getItem(LOCAL_SESSION_KEY);
-      if (saved) {
-        const parsed = JSON.parse(saved);
-        if (new Date(parsed.expiresAt).getTime() > Date.now() && parsed.isActive) {
-          return parsed;
-        }
-      }
-    } catch {
-      // ignore
-    }
-    return null;
-  });
+  // SECURITY: memory-only. No localStorage hydration — prevents XSS from forging a session
+  // by writing to localStorage before React mounts. Purge legacy key eagerly.
+  const [activeSession, setActiveSession] = useState<SessionGrant | null>(null);
 
   const [isLoading, setIsLoading] = useState<boolean>(false);
   const [isSigning, setIsSigning] = useState<boolean>(false);
@@ -100,6 +131,77 @@ export function useSessionKey(): UseSessionKeyReturn {
   } | null>(null);
 
   const clearError = useCallback(() => setError(null), []);
+
+  // Track the wallet we last validated for — used to detect mismatch/tamper
+  const lastValidatedWalletRef = useRef<Address | null>(null);
+
+  // Purge legacy plaintext storage once on mount (defense for users upgrading from vulnerable builds)
+  useEffect(() => {
+    purgeLegacySessionStorage();
+  }, []);
+
+  // Auto-expire in-memory session when wall clock passes expiresAt (prevents stale UI if backend poll lags)
+  useEffect(() => {
+    if (!activeSession?.expiresAt) return;
+    const exp = new Date(activeSession.expiresAt).getTime();
+    if (!Number.isFinite(exp)) return;
+    const msUntilExpiry = exp - Date.now();
+    if (msUntilExpiry <= 0) {
+      setActiveSession(null);
+      return;
+    }
+    // Re-check at expiry + every 60s as safety net against clock skew
+    const timeout = window.setTimeout(() => setActiveSession(null), msUntilExpiry + 500);
+    const interval = window.setInterval(() => {
+      if (activeSession && new Date(activeSession.expiresAt).getTime() <= Date.now()) {
+        setActiveSession(null);
+      }
+    }, 60_000);
+    return () => {
+      window.clearTimeout(timeout);
+      window.clearInterval(interval);
+    };
+  }, [activeSession?.expiresAt, activeSession?.id]);
+
+  // Cross-tab tamper detection: if any tab (or XSS) writes to legacy session key, JWT keys,
+  // or api-auth, force re-validation and purge. `storage` event fires in *other* tabs,
+  // so we also proactively purge on visibility/focus (below) for same-tab XSS writes.
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const sensitiveKeys = new Set([
+      LEGACY_SESSION_KEY,
+      'dreampulse_supabase_jwt',
+      'dreampulse_supabase_jwt_exp',
+      'dreampulse_api_auth',
+      LOCAL_WALLET_CONNECTED_KEY,
+    ]);
+    const onStorage = (e: StorageEvent) => {
+      if (!e.key || !sensitiveKeys.has(e.key)) return;
+      // Any write to legacy session key is by definition tampering post-fix — purge and re-validate
+      if (e.key === LEGACY_SESSION_KEY) {
+        purgeLegacySessionStorage();
+        // If attacker injected a forged session, ensure memory session is cleared unless backend confirms it
+        // We trigger a re-fetch if we have a wallet; otherwise just clear
+        if (wallet.address) {
+          void fetchActiveSession(wallet.address).catch(() => {});
+        } else {
+          setActiveSession(null);
+        }
+        return;
+      }
+      // JWT / api-auth tampered or removed in another tab -> force re-validation
+      // Clearing in another tab should log out this tab's session view
+      if ((e.key === 'dreampulse_supabase_jwt' || e.key === 'dreampulse_api_auth') && e.newValue === null) {
+        setActiveSession(null);
+      }
+      // If wallet-connected flag cleared cross-tab, treat as logout
+      if (e.key === LOCAL_WALLET_CONNECTED_KEY && e.newValue === null) {
+        setActiveSession(null);
+      }
+    };
+    window.addEventListener('storage', onStorage);
+    return () => window.removeEventListener('storage', onStorage);
+  }, [wallet.address]);
 
   /**
    * Claims 1,000 TestUSDC collateral tokens from testnet faucet.
@@ -182,14 +284,16 @@ export function useSessionKey(): UseSessionKeyReturn {
    * all reads must go through backend REST which uses service_role. See
    * supabase/migrations/012_harden_rls_policies.sql and
    * backend/src/config/schema.sql for security model.
+   *
+   * SECURITY: This is the sole source of truth. Never falls back to localStorage.
+   * On backend failure we preserve the in-memory session only if it is still
+   * valid (expiry + wallet binding); otherwise we clear. Legacy localStorage
+   * is purged on every path.
    */
   const fetchActiveSession = useCallback(async (address: Address) => {
-    let sessionFound: SessionGrant | null = null;
-    let backendSuccess = false;
-
+    purgeLegacySessionStorage();
     try {
       const data = await apiClient.getActiveSession(address);
-      backendSuccess = true;
       if (data?.success && data?.session) {
         const s = data.session;
         const grant: SessionGrant = {
@@ -209,42 +313,27 @@ export function useSessionKey(): UseSessionKeyReturn {
           copyTradeEnabled: Boolean(s.copyTradeEnabled),
         };
 
-        if (new Date(grant.expiresAt).getTime() > Date.now() && grant.isActive) {
-          sessionFound = grant;
+        if (isSessionValid(grant, address)) {
+          lastValidatedWalletRef.current = address;
+          setActiveSession(grant);
+          return;
         }
       }
+      // Backend confirmed: no valid session for this wallet
+      lastValidatedWalletRef.current = address;
+      setActiveSession(null);
     } catch (err) {
       console.warn('[useSessionKey] Failed fetching active session from backend API:', err);
-    }
-
-    if (sessionFound) {
-      setActiveSession(sessionFound);
-      localStorage.setItem(LOCAL_SESSION_KEY, JSON.stringify(sessionFound));
-      return;
-    }
-
-    if (backendSuccess) {
-      setActiveSession(null);
-      localStorage.removeItem(LOCAL_SESSION_KEY);
-    } else {
-      // Backend unreachable — keep localStorage session only if it is still valid for this wallet
-      try {
-        const saved = localStorage.getItem(LOCAL_SESSION_KEY);
-        if (saved) {
-          const parsed = JSON.parse(saved);
-          if (
-            parsed?.userAddress &&
-            parsed.userAddress.toLowerCase() === address.toLowerCase() &&
-            parsed.isActive &&
-            new Date(parsed.expiresAt).getTime() > Date.now()
-          ) {
-            setActiveSession(parsed);
-            return;
-          }
+      // Backend unreachable — do NOT re-hydrate from localStorage (XSS vector).
+      // Keep in-memory session only if it is still valid for this wallet and not expired.
+      // This prevents an attacker from offline-forging a localStorage entry and forcing a
+      // re-hydration during a transient backend outage.
+      setActiveSession((prev) => {
+        if (prev && isSessionValid(prev, address)) {
+          return prev;
         }
-      } catch {}
-      setActiveSession(null);
-      localStorage.removeItem(LOCAL_SESSION_KEY);
+        return null;
+      });
     }
   }, []);
 
@@ -287,14 +376,19 @@ export function useSessionKey(): UseSessionKeyReturn {
 
   /**
    * Disconnects current wallet via Wagmi.
+   * Also clears httpOnly cookies via backend POST /auth/logout (defense: ensures
+   * even if localStorage is cleared, the HttpOnly dreampulse_jwt cannot be reused).
    */
   const disconnectWallet = useCallback(() => {
     try {
       wagmiDisconnect();
     } catch {}
-    localStorage.removeItem(LOCAL_WALLET_CONNECTED_KEY);
-    localStorage.removeItem(LOCAL_SESSION_KEY);
+    try { localStorage.removeItem(LOCAL_WALLET_CONNECTED_KEY); } catch {}
+    purgeLegacySessionStorage();
+    // Clear httpOnly JWT/session cookies (fire-and-forget; best-effort)
+    void apiClient.logout().catch(() => {});
     void clearSupabaseAuthForLogout().catch(() => {});
+    lastValidatedWalletRef.current = null;
     setWallet({
       isConnected: false,
       address: null,
@@ -427,8 +521,10 @@ export function useSessionKey(): UseSessionKeyReturn {
           copyTradeEnabled: params.copyTradeEnabled ?? false,
         };
 
+        if (!isSessionValid(createdSession, wallet.address)) {
+          throw new Error('Created session failed validation (expired or wallet mismatch)');
+        }
         setActiveSession(createdSession);
-        localStorage.setItem(LOCAL_SESSION_KEY, JSON.stringify(createdSession));
         await refreshBalances(wallet.address);
 
         return createdSession;
@@ -464,7 +560,7 @@ export function useSessionKey(): UseSessionKeyReturn {
         }
         await apiClient.revokeSession(activeSession.id);
         setActiveSession(null);
-        localStorage.removeItem(LOCAL_SESSION_KEY);
+        purgeLegacySessionStorage();
       } catch (err: any) {
         const parsed = parseWeb3Error(err);
         setError(parsed.message);
@@ -489,7 +585,7 @@ export function useSessionKey(): UseSessionKeyReturn {
     if (wagmiIsConnected && wagmiAddress) {
       const userAddr = wagmiAddress as Address;
       const isCorrect = wagmiChainId === somniaShannonTestnet.id;
-      localStorage.setItem(LOCAL_WALLET_CONNECTED_KEY, 'true');
+      try { localStorage.setItem(LOCAL_WALLET_CONNECTED_KEY, 'true'); } catch {}
 
       setWallet((prev) => {
         if (
@@ -509,15 +605,22 @@ export function useSessionKey(): UseSessionKeyReturn {
         };
       });
 
+      // Wallet switch must re-validate session binding — never reuse previous wallet's session
+      if (lastValidatedWalletRef.current && lastValidatedWalletRef.current.toLowerCase() !== userAddr.toLowerCase()) {
+        setActiveSession(null);
+      }
       refreshBalances(userAddr);
       fetchActiveSession(userAddr);
       refreshAllowanceStatus().catch(() => {});
     } else if (!wagmiIsConnected) {
-      const wasConnected = localStorage.getItem(LOCAL_WALLET_CONNECTED_KEY) === 'true';
+      const wasConnected = (() => {
+        try { return localStorage.getItem(LOCAL_WALLET_CONNECTED_KEY) === 'true'; } catch { return false; }
+      })();
       if (wasConnected) {
-        localStorage.removeItem(LOCAL_WALLET_CONNECTED_KEY);
-        localStorage.removeItem(LOCAL_SESSION_KEY);
+        try { localStorage.removeItem(LOCAL_WALLET_CONNECTED_KEY); } catch {}
+        purgeLegacySessionStorage();
       }
+      lastValidatedWalletRef.current = null;
       setWallet({
         isConnected: false,
         address: null,
@@ -539,6 +642,9 @@ export function useSessionKey(): UseSessionKeyReturn {
           disconnectWallet();
         } else {
           const newAddress = accounts[0] as Address;
+          // Address change invalidates previous session
+          setActiveSession(null);
+          lastValidatedWalletRef.current = null;
           setWallet((prev) => ({
             ...prev,
             isConnected: true,
@@ -568,27 +674,22 @@ export function useSessionKey(): UseSessionKeyReturn {
   const setSessionCopyTrade = useCallback((enabled: boolean) => {
     setActiveSession((prev) => {
       if (!prev) return null;
+      // Validate before updating — prevent stale/expired session from being mutated
+      if (!isSessionValid(prev)) return null;
       const updated = { ...prev, copyTradeEnabled: enabled };
-      try {
-        localStorage.setItem(LOCAL_SESSION_KEY, JSON.stringify(updated));
-      } catch (err) {
-        console.warn('[useSessionKey] Failed to update localStorage for session copyTrade:', err);
-      }
       return updated;
     });
   }, []);
 
-  // Listen to cross-component session update events
+  // Listen to cross-component session update events (memory-only, no localStorage)
   useEffect(() => {
     const handleSessionUpdate = (e: Event) => {
       const detail = (e as CustomEvent)?.detail;
       if (typeof detail?.copyTradeEnabled === 'boolean') {
         setActiveSession((prev) => {
           if (!prev) return null;
+          if (!isSessionValid(prev)) return null;
           const updated = { ...prev, copyTradeEnabled: detail.copyTradeEnabled };
-          try {
-            localStorage.setItem(LOCAL_SESSION_KEY, JSON.stringify(updated));
-          } catch {}
           return updated;
         });
       }
@@ -640,8 +741,9 @@ export function useSessionKey(): UseSessionKeyReturn {
               onChainAuthorized: newRow.on_chain_authorized === true,
               copyTradeEnabled: newRow.copy_trade_enabled === true,
             };
-            setActiveSession(updated);
-            try { localStorage.setItem(LOCAL_SESSION_KEY, JSON.stringify(updated)); } catch {}
+            if (isSessionValid(updated, lower)) {
+              setActiveSession(updated);
+            }
           }
         },
         // onUpdate
@@ -664,17 +766,18 @@ export function useSessionKey(): UseSessionKeyReturn {
               onChainAuthorized: updatedRow.on_chain_authorized === true,
               copyTradeEnabled: updatedRow.copy_trade_enabled === true,
             };
-            setActiveSession(updated);
-            try { localStorage.setItem(LOCAL_SESSION_KEY, JSON.stringify(updated)); } catch {}
+            if (isSessionValid(updated, lower)) {
+              setActiveSession(updated);
+            } else {
+              setActiveSession(null);
+            }
           } else if (!updatedRow.is_active) {
             setActiveSession(null);
-            try { localStorage.removeItem(LOCAL_SESSION_KEY); } catch {}
           }
         },
         // onDelete
         () => {
           setActiveSession(null);
-          try { localStorage.removeItem(LOCAL_SESSION_KEY); } catch {}
         },
       );
     })();
@@ -687,9 +790,12 @@ export function useSessionKey(): UseSessionKeyReturn {
 
   // Polling fallback while JWT not yet minted or backend not configured — keeps
   // cross-tab sync without Supabase. With JWT + filtered channel this is just a safety net.
+  // Also re-validates on every mount, focus, and visibility change (production requirement).
   useEffect(() => {
     if (!wallet.address) return;
     const targetAddr = wallet.address;
+    // Immediate re-validation on mount (covers remount, tab restore, and XSS-forged localStorage)
+    void fetchActiveSession(targetAddr).catch(() => {});
     const poll = () => fetchActiveSession(targetAddr).catch(() => {});
     const interval = setInterval(poll, 20000);
     const onFocus = () => poll();

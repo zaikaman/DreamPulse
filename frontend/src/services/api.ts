@@ -81,9 +81,14 @@ async function fetchJson<T>(endpoint: string, options?: RequestInit): Promise<T>
     delete (mergedHeaders as any)['Authorization'];
     delete (mergedHeaders as any)['authorization'];
   }
-  const { headers: _ignoredHeaders, ...restOptions } = (options as Record<string, any>) || {};
+  const { headers: _ignoredHeaders, credentials: _ignoredCreds, ...restOptions } = (options as Record<string, any>) || {};
   const response = await fetch(url, {
     ...restOptions,
+    // SECURITY: httpOnly cookie hardening — backend sets dreampulse_jwt as HttpOnly (see wallet-auth.ts).
+    // credentials:'include' ensures Cookie is sent cross-site (Heroku ↔ Vercel) when backend sets SameSite=None;Secure.
+    // Cookie is not readable via JS (XSS cannot steal it), unlike localStorage Bearer. Fetch will send both
+    // Authorization header (fallback for legacy localStorage) and Cookie (preferred httpOnly). Backend checks both.
+    credentials: 'include',
     headers: mergedHeaders,
   });
 
@@ -360,6 +365,15 @@ export const apiClient = {
 
   async getAuthStatus(): Promise<{ success: boolean; supabaseJwtConfigured: boolean }> {
     return fetchJson('/auth/status');
+  },
+
+  async logout(): Promise<{ success: boolean; message: string }> {
+    try {
+      return await fetchJson('/auth/logout', { method: 'POST' });
+    } catch (e: any) {
+      // Best-effort — clearing local state matters even if backend unreachable
+      return { success: true, message: 'Local logout (backend unreachable)' };
+    }
   },
 
   // Personal Swarm — per-wallet isolated strategy

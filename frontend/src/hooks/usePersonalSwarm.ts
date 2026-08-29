@@ -167,14 +167,8 @@ export const usePersonalSwarm = (userAddress?: string): UsePersonalSwarmReturn =
           const s = await apiClient.getPersonalSwarmStatus(userAddress).catch(() => null);
           if (s?.status) setStatus(s.status);
         }
-        try {
-          const saved = typeof window !== 'undefined' ? localStorage.getItem('dreampulse_active_session') : null;
-          if (saved) {
-            const parsed = JSON.parse(saved);
-            parsed.copyTradeEnabled = enabled;
-            localStorage.setItem('dreampulse_active_session', JSON.stringify(parsed));
-          }
-        } catch {}
+        // SECURITY: no localStorage SessionGrant mutation — session is memory-only + backend truth.
+        // Notify other hooks via in-memory event only.
         if (typeof window !== 'undefined') {
           window.dispatchEvent(new CustomEvent('dreampulse:session-update', { detail: { copyTradeEnabled: enabled } }));
         }
@@ -242,18 +236,9 @@ export const usePersonalSwarm = (userAddress?: string): UsePersonalSwarmReturn =
     }
   }, [userAddress]);
 
-  const fallbackCopyTradeEnabled = (): boolean => {
-    try {
-      const saved = typeof window !== 'undefined' ? localStorage.getItem('dreampulse_active_session') : null;
-      if (saved) {
-        const parsed = JSON.parse(saved);
-        if (typeof parsed.copyTradeEnabled === 'boolean') return parsed.copyTradeEnabled;
-      }
-    } catch {}
-    return false;
-  };
-
-  const copyEnabled = config ? config.copyTradeEnabled === true : fallbackCopyTradeEnabled();
+  // SECURITY: copyTradeEnabled is determined solely by backend config.
+  // Legacy localStorage fallback removed — prevented XSS from injecting copyTradeEnabled via dreampulse_active_session.
+  const copyEnabled = config ? config.copyTradeEnabled === true : false;
 
   return {
     config,

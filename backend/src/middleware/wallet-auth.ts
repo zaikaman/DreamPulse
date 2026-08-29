@@ -3,6 +3,7 @@ import jwt from 'jsonwebtoken';
 import { isAddress, getAddress, type Address, type Hex, verifyMessage } from 'viem';
 import { verifyAuthSignature, AUTH_EIP712_DOMAIN, AUTH_EIP712_TYPES } from '../services/auth-service.js';
 import { env } from '../config/env.js';
+import { getCookie, JWT_COOKIE_NAME } from '../config/cookie.js';
 
 // Augment Express Request to carry authenticated wallet
 declare global {
@@ -74,47 +75,52 @@ interface AuthResult {
 
 export async function authenticateRequest(req: Request): Promise<AuthResult> {
   // 1) Bearer JWT — Authorization: Bearer <token>  (minted via POST /auth/wallet-verify)
+  //    Also checks httpOnly cookie `dreampulse_jwt` (XSS-hardened; not readable via JS).
+  //    Cookie is preferred in production because XSS cannot steal it, unlike localStorage Bearer.
   const authHeader = getHeader(req, ['authorization', 'x-auth-token', 'x-authorization']);
+  // Try Authorization header first (legacy localStorage path), then httpOnly cookie
+  let bearerCandidate: string | null = null;
   if (authHeader && /^bearer\s+/i.test(authHeader)) {
-    const token = authHeader.replace(/^bearer\s+/i, '').trim();
-    if (token && token.length > 20) {
-      const secret = getJwtSecret();
-      if (secret) {
-        try {
-          const payload: any = jwt.verify(token, secret, { algorithms: ['HS256'] });
-          const candidate = String(payload.user_address || payload.wallet || payload.sub || '').trim();
-          if (candidate && isAddress(candidate)) {
-            const normalized = getAddress(candidate) as Address;
-            // exp already verified by jwt.verify, but double-check
-            if (payload.exp && Number(payload.exp) <= Math.floor(Date.now() / 1000)) {
-              return { address: null, method: null, error: 'Bearer token expired' };
-            }
-            return { address: normalized, method: 'bearer', error: null };
-          }
-          return { address: null, method: null, error: 'Bearer token missing user_address claim' };
-        } catch (e: any) {
-          return { address: null, method: null, error: `Invalid Bearer token: ${e.message || 'verify failed'}` };
-        }
-      } else {
-        // JWT secret not configured — cannot verify bearer, fall through to EIP-712
-      }
+    const t = authHeader.replace(/^bearer\s+/i, '').trim();
+    if (t && t.length > 20) bearerCandidate = t;
+  }
+  // Raw x-auth-token fallback (legacy)
+  if (!bearerCandidate) {
+    const raw = getHeader(req, ['x-auth-token']);
+    if (raw && raw.startsWith('eyJ') && !authHeader?.toLowerCase().startsWith('bearer')) {
+      bearerCandidate = raw;
     }
   }
-
-  // Also support raw token in x-auth-token without Bearer prefix (legacy)
-  const rawTokenHeader = getHeader(req, ['x-auth-token']);
-  if (rawTokenHeader && rawTokenHeader.startsWith('eyJ') && !authHeader?.toLowerCase().startsWith('bearer')) {
+  // httpOnly cookie — production path (Set-Cookie: dreampulse_jwt=...; HttpOnly; Secure; SameSite=None)
+  // XSS cannot read this via document.cookie or localStorage; only the browser sends it.
+  if (!bearerCandidate) {
+    try {
+      const cookieJwt = getCookie(req, JWT_COOKIE_NAME);
+      if (cookieJwt && cookieJwt.length > 20 && cookieJwt.startsWith('eyJ')) {
+        bearerCandidate = cookieJwt;
+      }
+    } catch {}
+  }
+  if (bearerCandidate) {
+    const token = bearerCandidate;
     const secret = getJwtSecret();
     if (secret) {
       try {
-        const payload: any = jwt.verify(rawTokenHeader, secret, { algorithms: ['HS256'] });
+        const payload: any = jwt.verify(token, secret, { algorithms: ['HS256'] });
         const candidate = String(payload.user_address || payload.wallet || payload.sub || '').trim();
         if (candidate && isAddress(candidate)) {
-          return { address: getAddress(candidate) as Address, method: 'bearer', error: null };
+          const normalized = getAddress(candidate) as Address;
+          if (payload.exp && Number(payload.exp) <= Math.floor(Date.now() / 1000)) {
+            return { address: null, method: null, error: 'Bearer token expired' };
+          }
+          return { address: normalized, method: 'bearer', error: null };
         }
+        return { address: null, method: null, error: 'Bearer token missing user_address claim' };
       } catch (e: any) {
-        // fall through
+        return { address: null, method: null, error: `Invalid Bearer token: ${e.message || 'verify failed'}` };
       }
+    } else {
+      // JWT secret not configured — cannot verify bearer, fall through to EIP-712
     }
   }
 
@@ -330,7 +336,12 @@ export async function requireWalletAuth(req: Request, res: Response, next: NextF
  * fallback). This hardens private reads without breaking unauthenticated public queries.
  */
 export async function optionalWalletAuth(req: Request, res: Response, next: NextFunction): Promise<void> {
+  // Include httpOnly cookie as auth hint — if browser sent dreampulse_jwt, we must verify it (otherwise
+  // an attacker could bypass mismatch checks by omitting header but keeping cookie).
+  let hasCookieHint = false;
+  try { hasCookieHint = Boolean(getCookie(req, JWT_COOKIE_NAME)); } catch {}
   const hasAnyAuthHint =
+    hasCookieHint ||
     Boolean(getHeader(req, ['authorization', 'x-auth-token'])) ||
     Boolean(getHeader(req, ['x-user-address', 'x-wallet-address', 'x-address', 'x-auth-signature', 'x-siwe-address']));
 

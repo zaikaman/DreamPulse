@@ -269,15 +269,7 @@ export const SessionStatusBar: React.FC<SessionStatusBarProps> = ({
                         if (activeSession) {
                           activeSession.copyTradeEnabled = next;
                         }
-                        try {
-                          const saved = typeof window !== 'undefined' ? localStorage.getItem('dreampulse_active_session') : null;
-                          if (saved) {
-                            const parsed = JSON.parse(saved);
-                            parsed.copyTradeEnabled = next;
-                            localStorage.setItem('dreampulse_active_session', JSON.stringify(parsed));
-                          }
-                        } catch {}
-                        if (typeof window !== 'undefined') {
+                            if (typeof window !== 'undefined') {
                           window.dispatchEvent(new CustomEvent('dreampulse:session-update', { detail: { copyTradeEnabled: next } }));
                         }
                         setLocalCopyEnabled(next);

@@ -231,6 +231,15 @@ apiRouter.get('/auth/status', async (_req: Request, res: Response) => {
   }
 });
 
+apiRouter.post('/auth/logout', async (_req: Request, res: Response) => {
+  try {
+    const { clearAuthCookie, clearSessionCookie } = await import('../config/cookie.js');
+    clearAuthCookie(res);
+    clearSessionCookie(res);
+  } catch {}
+  return res.json({ success: true, message: 'Logged out — httpOnly cookies cleared' });
+});
+
 apiRouter.post('/auth/wallet-verify', async (req: Request, res: Response) => {
   try {
     const { userAddress, signature, nonce, issuedAt, expiresAt } = req.body || {};
@@ -254,6 +263,15 @@ apiRouter.post('/auth/wallet-verify', async (req: Request, res: Response) => {
       issuedAt: Number(issuedAt),
       expiresAt: Number(expiresAt),
     });
+    // SECURITY: httpOnly cookie hardening — store JWT in HttpOnly cookie so XSS cannot steal it
+    // from localStorage. Frontend api.ts sends credentials:'include' so browser attaches Cookie
+    // automatically on every /api/v1/* request. Token is still returned in body for
+    // backward-compat (legacy localStorage fallback) and for Supabase realtime auth, but
+    // the Cookie is the production source of truth (see wallet-auth.ts `getCookie`).
+    try {
+      const { setAuthCookie } = await import('../config/cookie.js');
+      setAuthCookie(res, minted.token, minted.expiresAt);
+    } catch {}
     return res.json({
       success: true,
       token: minted.token,
@@ -307,6 +325,15 @@ apiRouter.post('/sessions/register', requireWalletAuth, async (req: Request, res
       onChainAuthorized,
       copyTradeEnabled: typeof copyTradeEnabled === 'boolean' ? copyTradeEnabled : undefined,
     });
+
+    // SECURITY: bind session to httpOnly cookie (defense-in-depth fingerprint).
+    // Even if an attacker steals a SessionGrant snapshot via XSS, they cannot
+    // replay it without the httpOnly dreampulse_session cookie which is never
+    // accessible to JS. Frontend does not need to read this cookie.
+    try {
+      const { setSessionCookie } = await import('../config/cookie.js');
+      setSessionCookie(res, session.id, session.expiresAt);
+    } catch {}
 
     return res.status(201).json({
       success: true,
@@ -393,6 +420,11 @@ apiRouter.post('/sessions/:id/revoke', requireWalletAuth, async (req: Request, r
       }
     }
     const revoked = await sessionService.revokeSession(id);
+    // Clear httpOnly session fingerprint cookie on revoke (prevents replay of stale sessionId)
+    try {
+      const { clearSessionCookie } = await import('../config/cookie.js');
+      clearSessionCookie(res);
+    } catch {}
 
     return res.json({
       success: true,
