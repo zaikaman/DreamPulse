@@ -7,6 +7,7 @@ import {
   getStoredSupabaseJwt,
   clearStoredSupabaseJwt,
 } from './supabase.js';
+import { setStoredApiAuth, clearStoredApiAuth } from './api-auth.js';
 
 const AUTH_NONCE_KEY = 'dreampulse_auth_nonce';
 const AUTH_EXPIRY_SECONDS = 86400; // 24h, must match backend SUPABASE_JWT_EXPIRY_SECONDS default
@@ -48,17 +49,18 @@ export async function ensureSupabaseAuthForWallet(userAddress: Address): Promise
   }
 
   // 2. Check backend is configured before prompting signature (avoid needless popup)
+  // We still want to cache EIP-712 headers for API auth even when JWT is not configured,
+  // so don't early-return before signing — just warn and continue to mint attempt.
   try {
     const status = await apiClient.getAuthStatus().catch(() => null);
     if (status && status.supabaseJwtConfigured === false) {
-      console.warn('[SupabaseAuth] SUPABASE_JWT_SECRET not configured on server — realtime will use polling fallback.');
-      return null;
+      console.warn('[SupabaseAuth] SUPABASE_JWT_SECRET not configured on server — API will use EIP-712 headers, realtime will use polling fallback.');
     }
   } catch {
     // ignore, try mint anyway
   }
 
-  // 3. Mint fresh JWT via EIP-712 Auth
+  // 3. Mint fresh JWT via EIP-712 Auth (single wallet prompt for both Supabase and API)
   const nonce = getOrCreateNonce();
   const issuedAt = Math.floor(Date.now() / 1000);
   const expiresAt = issuedAt + AUTH_EXPIRY_SECONDS;
@@ -80,6 +82,17 @@ export async function ensureSupabaseAuthForWallet(userAddress: Address): Promise
     throw e;
   }
 
+  // Cache EIP-712 headers for API auth fallback (used when JWT not configured or as Bearer alternative)
+  try {
+    setStoredApiAuth({
+      address: userAddress,
+      signature: signature as `0x${string}`,
+      nonce,
+      issuedAt,
+      expiresAt,
+    });
+  } catch {}
+
   try {
     const res = await apiClient.verifyWalletAuth({
       userAddress: normalized,
@@ -98,7 +111,8 @@ export async function ensureSupabaseAuthForWallet(userAddress: Address): Promise
   } catch (e: any) {
     const msg = String(e?.message || '');
     if (msg.includes('503') || msg.toLowerCase().includes('not configured')) {
-      console.warn('[SupabaseAuth] Backend JWT not configured — polling fallback active.');
+      console.warn('[SupabaseAuth] Backend JWT not configured — API will continue with EIP-712 headers, polling fallback active for realtime.');
+      // Keep the cached EIP-712 headers for API auth
       return null;
     }
     console.warn('[SupabaseAuth] Mint failed:', e);
@@ -116,6 +130,10 @@ export async function restoreSupabaseAuthIfCached(): Promise<void> {
 
 export async function clearSupabaseAuthForLogout(): Promise<void> {
   clearStoredSupabaseJwt();
+  clearStoredApiAuth();
+  try {
+    localStorage.removeItem(AUTH_NONCE_KEY);
+  } catch {}
   try {
     const { clearSupabaseAuth } = await import('./supabase.js');
     await clearSupabaseAuth();

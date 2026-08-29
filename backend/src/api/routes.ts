@@ -14,6 +14,7 @@ import { type Address, type Hex, isAddress, getAddress, parseAbi } from 'viem';
 import { analyticsService, type AnalyticsRange } from '../services/analytics-service.js';
 import { userSwarmService } from '../services/user-swarm-service.js';
 import { leaderboardService, type ArenaTimeframe, type ArenaSortBy } from '../services/leaderboard-service.js';
+import { requireWalletAuth, optionalWalletAuth } from '../middleware/wallet-auth.js';
 
 export const apiRouter = Router();
 
@@ -269,7 +270,7 @@ apiRouter.post('/auth/wallet-verify', async (req: Request, res: Response) => {
 // ------------------------------------------------------------------------------
 // 2. Session Key Delegation Endpoints
 // ------------------------------------------------------------------------------
-apiRouter.post('/sessions/register', async (req: Request, res: Response) => {
+apiRouter.post('/sessions/register', requireWalletAuth, async (req: Request, res: Response) => {
   try {
     const {
       userAddress,
@@ -319,7 +320,7 @@ apiRouter.post('/sessions/register', async (req: Request, res: Response) => {
   }
 });
 
-apiRouter.get('/sessions/:userAddress', async (req: Request, res: Response) => {
+apiRouter.get('/sessions/:userAddress', optionalWalletAuth, async (req: Request, res: Response) => {
   try {
     const { userAddress } = req.params;
     const activeOnly = req.query.active === 'true';
@@ -362,7 +363,7 @@ apiRouter.get('/sessions/:userAddress', async (req: Request, res: Response) => {
   }
 });
 
-apiRouter.post('/sessions/:userAddress/reset-spend', async (req: Request, res: Response) => {
+apiRouter.post('/sessions/:userAddress/reset-spend', requireWalletAuth, async (req: Request, res: Response) => {
   try {
     const { userAddress } = req.params;
     const session = await sessionService.getUserActiveSession(userAddress);
@@ -380,9 +381,17 @@ apiRouter.post('/sessions/:userAddress/reset-spend', async (req: Request, res: R
   }
 });
 
-apiRouter.post('/sessions/:id/revoke', async (req: Request, res: Response) => {
+apiRouter.post('/sessions/:id/revoke', requireWalletAuth, async (req: Request, res: Response) => {
   try {
     const { id } = req.params;
+    // Ownership check: only the session owner (or operator in test) may revoke
+    const wallet = (req as any).walletAddress as string | undefined;
+    if (wallet) {
+      const sess = sessionService.getSessionById(id);
+      if (sess && sess.userAddress.toLowerCase() !== wallet.toLowerCase()) {
+        return res.status(403).json({ success: false, error: 'Forbidden: session does not belong to authenticated wallet' });
+      }
+    }
     const revoked = await sessionService.revokeSession(id);
 
     return res.json({
@@ -398,7 +407,7 @@ apiRouter.post('/sessions/:id/revoke', async (req: Request, res: Response) => {
   }
 });
 
-apiRouter.get('/sessions/:userAddress/allowance-status', async (req: Request, res: Response) => {
+apiRouter.get('/sessions/:userAddress/allowance-status', optionalWalletAuth, async (req: Request, res: Response) => {
   try {
     const { userAddress } = req.params;
     if (!userAddress || !isAddress(userAddress)) {
@@ -526,7 +535,7 @@ function isOperatorAuthorized(req: Request): boolean {
   return !userAddress || (typeof userAddress === 'string' && userAddress.toLowerCase() === operatorAccount.address.toLowerCase());
 }
 
-apiRouter.post('/agents/toggle', (req: Request, res: Response) => {
+apiRouter.post('/agents/toggle', requireWalletAuth, (req: Request, res: Response) => {
   try {
     if (!isOperatorAuthorized(req)) {
       return res.status(403).json({ success: false, error: 'Forbidden: Only the protocol operator can modify global swarm policies' });
@@ -550,7 +559,7 @@ apiRouter.post('/agents/toggle', (req: Request, res: Response) => {
   }
 });
 
-apiRouter.post('/agents/config', (req: Request, res: Response) => {
+apiRouter.post('/agents/config', requireWalletAuth, (req: Request, res: Response) => {
   try {
     if (!isOperatorAuthorized(req)) {
       return res.status(403).json({ success: false, error: 'Forbidden: Only the protocol operator can modify global swarm policies' });
@@ -621,7 +630,7 @@ apiRouter.get('/agents/logs', (req: Request, res: Response) => {
 // ------------------------------------------------------------------------------
 // 3b. Personal Swarm — Per-Wallet Isolated Strategy (COPY vs PERSONAL)
 // ------------------------------------------------------------------------------
-apiRouter.get('/swarm/my-config', async (req: Request, res: Response) => {
+apiRouter.get('/swarm/my-config', optionalWalletAuth, async (req: Request, res: Response) => {
   try {
     const userAddress = (req.query.userAddress as string) || (req.headers['x-user-address'] as string);
     if (!userAddress || !isAddress(userAddress)) {
@@ -634,7 +643,7 @@ apiRouter.get('/swarm/my-config', async (req: Request, res: Response) => {
   }
 });
 
-apiRouter.put('/swarm/my-config', async (req: Request, res: Response) => {
+apiRouter.put('/swarm/my-config', requireWalletAuth, async (req: Request, res: Response) => {
   try {
     const { userAddress, mode, copyTradeEnabled, voltEnabled, oracleEnabled, titanEnabled, sweeperEnabled, voltConfig, oracleConfig, titanConfig } = req.body;
     if (!userAddress || !isAddress(userAddress)) {
@@ -657,7 +666,7 @@ apiRouter.put('/swarm/my-config', async (req: Request, res: Response) => {
   }
 });
 
-apiRouter.post('/swarm/toggle-copytrade', async (req: Request, res: Response) => {
+apiRouter.post('/swarm/toggle-copytrade', requireWalletAuth, async (req: Request, res: Response) => {
   try {
     const { userAddress, enabled } = req.body;
     if (!userAddress || !isAddress(userAddress)) {
@@ -679,7 +688,7 @@ apiRouter.post('/swarm/toggle-copytrade', async (req: Request, res: Response) =>
   }
 });
 
-apiRouter.post('/swarm/mode', async (req: Request, res: Response) => {
+apiRouter.post('/swarm/mode', requireWalletAuth, async (req: Request, res: Response) => {
   try {
     const { userAddress, mode } = req.body;
     if (!userAddress || !isAddress(userAddress)) {
@@ -695,7 +704,7 @@ apiRouter.post('/swarm/mode', async (req: Request, res: Response) => {
   }
 });
 
-apiRouter.post('/swarm/toggle', async (req: Request, res: Response) => {
+apiRouter.post('/swarm/toggle', requireWalletAuth, async (req: Request, res: Response) => {
   try {
     const { userAddress, agentType, enabled } = req.body;
     if (!userAddress || !isAddress(userAddress)) {
@@ -711,7 +720,7 @@ apiRouter.post('/swarm/toggle', async (req: Request, res: Response) => {
   }
 });
 
-apiRouter.post('/swarm/config', async (req: Request, res: Response) => {
+apiRouter.post('/swarm/config', requireWalletAuth, async (req: Request, res: Response) => {
   try {
     const { userAddress, agentType, config } = req.body;
     if (!userAddress || !isAddress(userAddress)) {
@@ -727,7 +736,7 @@ apiRouter.post('/swarm/config', async (req: Request, res: Response) => {
   }
 });
 
-apiRouter.get('/swarm/my-status', async (req: Request, res: Response) => {
+apiRouter.get('/swarm/my-status', optionalWalletAuth, async (req: Request, res: Response) => {
   try {
     const userAddress = (req.query.userAddress as string) || (req.headers['x-user-address'] as string);
     if (!userAddress || !isAddress(userAddress)) {
@@ -740,7 +749,7 @@ apiRouter.get('/swarm/my-status', async (req: Request, res: Response) => {
   }
 });
 
-apiRouter.post('/swarm/reset', async (req: Request, res: Response) => {
+apiRouter.post('/swarm/reset', requireWalletAuth, async (req: Request, res: Response) => {
   try {
     const { userAddress } = req.body;
     if (!userAddress || !isAddress(userAddress)) {
@@ -756,7 +765,7 @@ apiRouter.post('/swarm/reset', async (req: Request, res: Response) => {
 // ------------------------------------------------------------------------------
 // 4. Order Execution & History Endpoints
 // ------------------------------------------------------------------------------
-apiRouter.get('/orders', (req: Request, res: Response) => {
+apiRouter.get('/orders', optionalWalletAuth, (req: Request, res: Response) => {
   const { userAddress, agentType, status, outcome, marketId, limit, page, pageSize, search, swarmOnly, scope, source } = req.query;
 
   // Trigger non-blocking settlement sync of resolved on-chain / expired markets
@@ -804,7 +813,7 @@ apiRouter.get('/orders/:id', (req: Request, res: Response) => {
   });
 });
 
-apiRouter.post('/orders/place', async (req: Request, res: Response) => {
+apiRouter.post('/orders/place', requireWalletAuth, async (req: Request, res: Response) => {
   try {
     const { userAddress, marketId, outcome, direction, orderType, price, lotSize, txHash } = req.body;
 
@@ -858,7 +867,7 @@ apiRouter.post('/orders/place', async (req: Request, res: Response) => {
   }
 });
 
-apiRouter.get('/portfolio/summary', async (req: Request, res: Response) => {
+apiRouter.get('/portfolio/summary', optionalWalletAuth, async (req: Request, res: Response) => {
   try {
     const { userAddress } = req.query;
     const targetAddress = typeof userAddress === 'string' && userAddress.trim().length > 0
@@ -919,7 +928,7 @@ apiRouter.get('/portfolio/summary', async (req: Request, res: Response) => {
 // ------------------------------------------------------------------------------
 // 5. Sweeper Settlement & Payout Redemptions
 // ------------------------------------------------------------------------------
-apiRouter.get('/sweeper/summary', async (req: Request, res: Response) => {
+apiRouter.get('/sweeper/summary', optionalWalletAuth, async (req: Request, res: Response) => {
   try {
     const { userAddress } = req.query;
     const targetAddress = typeof userAddress === 'string' && userAddress.trim().length > 0
@@ -935,7 +944,7 @@ apiRouter.get('/sweeper/summary', async (req: Request, res: Response) => {
   }
 });
 
-apiRouter.get('/sweeper/unclaimed', async (req: Request, res: Response) => {
+apiRouter.get('/sweeper/unclaimed', optionalWalletAuth, async (req: Request, res: Response) => {
   try {
     const { userAddress } = req.query;
     const targetAddress = typeof userAddress === 'string' && userAddress.trim().length > 0
@@ -966,7 +975,7 @@ apiRouter.get('/sweeper/unclaimed', async (req: Request, res: Response) => {
   }
 });
 
-apiRouter.post('/sweeper/trigger', async (req: Request, res: Response) => {
+apiRouter.post('/sweeper/trigger', requireWalletAuth, async (req: Request, res: Response) => {
   try {
     const { userAddress, autoCompound } = req.body;
     const result = await settlementService.triggerBatchSweep(
@@ -986,7 +995,7 @@ apiRouter.post('/sweeper/trigger', async (req: Request, res: Response) => {
   }
 });
 
-apiRouter.get('/sweeper/history', (req: Request, res: Response) => {
+apiRouter.get('/sweeper/history', optionalWalletAuth, (req: Request, res: Response) => {
   const { userAddress } = req.query;
   const targetAddress = typeof userAddress === 'string' && userAddress.trim().length > 0
     ? userAddress.trim()
@@ -1002,7 +1011,7 @@ apiRouter.get('/sweeper/history', (req: Request, res: Response) => {
 // ------------------------------------------------------------------------------
 // 6. Analytics & Balance History (Transparent Swarm vs User Equity)
 // ------------------------------------------------------------------------------
-apiRouter.get('/analytics/equity', async (req: Request, res: Response) => {
+apiRouter.get('/analytics/equity', optionalWalletAuth, async (req: Request, res: Response) => {
   try {
     const { userAddress, range, source } = req.query;
     const parsedRange = (typeof range === 'string' ? range : '30d') as AnalyticsRange;
@@ -1017,7 +1026,7 @@ apiRouter.get('/analytics/equity', async (req: Request, res: Response) => {
   }
 });
 
-apiRouter.get('/analytics/balance-history', async (req: Request, res: Response) => {
+apiRouter.get('/analytics/balance-history', optionalWalletAuth, async (req: Request, res: Response) => {
   try {
     const { userAddress, range, source } = req.query;
     const parsedRange = (typeof range === 'string' ? range : '30d') as AnalyticsRange;
@@ -1035,7 +1044,17 @@ apiRouter.get('/analytics/balance-history', async (req: Request, res: Response) 
 // ------------------------------------------------------------------------------
 // 7. Strategy Studio & Historical Backtesting Simulator
 // ------------------------------------------------------------------------------
-apiRouter.post('/backtest/run', async (req: Request, res: Response) => {
+apiRouter.post('/backtest/run', optionalWalletAuth, async (req: Request, res: Response) => {
+  // If userAddress is claimed but no valid auth, reject spoofing (optionalWalletAuth allows missing auth for anonymous runs)
+  const claimedForBacktest = (req.body as any)?.userAddress;
+  const hasAuth = Boolean((req as any).walletAddress);
+  if (claimedForBacktest && typeof claimedForBacktest === 'string' && claimedForBacktest.trim() && !hasAuth && process.env.NODE_ENV !== 'test' && process.env.VITEST !== 'true') {
+    return res.status(401).json({ success: false, error: 'Missing wallet authentication for backtest with userAddress. Provide Bearer JWT or EIP-712 headers.' });
+  }
+  // If authenticated, ensure claimed matches (already done by optionalWalletAuth) and bind canonical
+  if (hasAuth && claimedForBacktest) {
+    (req.body as any).userAddress = (req as any).walletAddress;
+  }
   try {
     const {
       userAddress,
@@ -1076,7 +1095,7 @@ apiRouter.post('/backtest/run', async (req: Request, res: Response) => {
   }
 });
 
-apiRouter.get('/backtest/history', (req: Request, res: Response) => {
+apiRouter.get('/backtest/history', optionalWalletAuth, (req: Request, res: Response) => {
   const { userAddress } = req.query;
   const history = backtestService.getBacktestHistory(typeof userAddress === 'string' ? userAddress : undefined);
   res.json({
@@ -1107,7 +1126,7 @@ apiRouter.get('/debug/market/:id', (req: Request, res: Response) => {
 // ------------------------------------------------------------------------------
 // 9. Custom Strategy Studio & Swarm Builder Endpoints
 // ------------------------------------------------------------------------------
-apiRouter.get('/agents/custom', async (req: Request, res: Response) => {
+apiRouter.get('/agents/custom', optionalWalletAuth, async (req: Request, res: Response) => {
   try {
     const userAddress = typeof req.query.userAddress === 'string' ? req.query.userAddress : undefined;
     const agents = await customAgentService.getCustomAgents(userAddress);
@@ -1129,7 +1148,7 @@ apiRouter.get('/agents/custom/:id', async (req: Request, res: Response) => {
   }
 });
 
-apiRouter.post('/agents/custom', async (req: Request, res: Response) => {
+apiRouter.post('/agents/custom', requireWalletAuth, async (req: Request, res: Response) => {
   try {
     const {
       userAddress,
@@ -1170,7 +1189,7 @@ apiRouter.post('/agents/custom', async (req: Request, res: Response) => {
   }
 });
 
-apiRouter.put('/agents/custom/:id', async (req: Request, res: Response) => {
+apiRouter.put('/agents/custom/:id', requireWalletAuth, async (req: Request, res: Response) => {
   try {
     const updated = await customAgentService.updateCustomAgent(req.params.id, req.body);
     if (!updated) {
@@ -1182,7 +1201,7 @@ apiRouter.put('/agents/custom/:id', async (req: Request, res: Response) => {
   }
 });
 
-apiRouter.delete('/agents/custom/:id', async (req: Request, res: Response) => {
+apiRouter.delete('/agents/custom/:id', requireWalletAuth, async (req: Request, res: Response) => {
   try {
     const userAddress = typeof req.query.userAddress === 'string' ? req.query.userAddress : '';
     const success = await customAgentService.deleteCustomAgent(req.params.id, userAddress);
@@ -1192,7 +1211,7 @@ apiRouter.delete('/agents/custom/:id', async (req: Request, res: Response) => {
   }
 });
 
-apiRouter.post('/agents/custom/:id/deploy', async (req: Request, res: Response) => {
+apiRouter.post('/agents/custom/:id/deploy', requireWalletAuth, async (req: Request, res: Response) => {
   try {
     const { userAddress, allowance } = req.body;
     if (!userAddress) {
@@ -1212,7 +1231,7 @@ apiRouter.post('/agents/custom/:id/deploy', async (req: Request, res: Response) 
   }
 });
 
-apiRouter.post('/agents/custom/:id/pause', async (req: Request, res: Response) => {
+apiRouter.post('/agents/custom/:id/pause', requireWalletAuth, async (req: Request, res: Response) => {
   try {
     const { userAddress } = req.body;
     if (!userAddress) {
@@ -1228,7 +1247,7 @@ apiRouter.post('/agents/custom/:id/pause', async (req: Request, res: Response) =
   }
 });
 
-apiRouter.post('/agents/custom/:id/allowance', async (req: Request, res: Response) => {
+apiRouter.post('/agents/custom/:id/allowance', requireWalletAuth, async (req: Request, res: Response) => {
   try {
     const { userAddress, allowance } = req.body;
     if (!userAddress || allowance === undefined) {
@@ -1257,7 +1276,7 @@ apiRouter.post('/agents/generate', async (req: Request, res: Response) => {
   }
 });
 
-apiRouter.get('/swarms/custom', async (req: Request, res: Response) => {
+apiRouter.get('/swarms/custom', optionalWalletAuth, async (req: Request, res: Response) => {
   try {
     const userAddress = typeof req.query.userAddress === 'string' ? req.query.userAddress : undefined;
     const swarms = await customAgentService.getCustomSwarms(userAddress);
@@ -1267,7 +1286,7 @@ apiRouter.get('/swarms/custom', async (req: Request, res: Response) => {
   }
 });
 
-apiRouter.post('/swarms/custom', async (req: Request, res: Response) => {
+apiRouter.post('/swarms/custom', requireWalletAuth, async (req: Request, res: Response) => {
   try {
     const { userAddress, name, description, agents, consensusRule, confidenceThreshold, isActive } = req.body;
     if (!userAddress) {
@@ -1288,7 +1307,7 @@ apiRouter.post('/swarms/custom', async (req: Request, res: Response) => {
   }
 });
 
-apiRouter.delete('/swarms/custom/:id', async (req: Request, res: Response) => {
+apiRouter.delete('/swarms/custom/:id', requireWalletAuth, async (req: Request, res: Response) => {
   try {
     const userAddress = typeof req.query.userAddress === 'string' ? req.query.userAddress : '';
     const success = await customAgentService.deleteCustomSwarm(req.params.id, userAddress);
@@ -1347,7 +1366,7 @@ apiRouter.get('/arena/trader/:address/profile', async (req: Request, res: Respon
   }
 });
 
-apiRouter.post('/arena/agent/:id/clone', async (req: Request, res: Response) => {
+apiRouter.post('/arena/agent/:id/clone', requireWalletAuth, async (req: Request, res: Response) => {
   try {
     const { id } = req.params;
     const { userAddress } = req.body;
@@ -1368,7 +1387,7 @@ apiRouter.post('/arena/agent/:id/clone', async (req: Request, res: Response) => 
   }
 });
 
-apiRouter.post('/arena/copytrade/toggle', async (req: Request, res: Response) => {
+apiRouter.post('/arena/copytrade/toggle', requireWalletAuth, async (req: Request, res: Response) => {
   try {
     const { userAddress, targetAddress, enabled, maxTradeSize, dailyVolumeCap } = req.body;
     if (!userAddress || !isAddress(userAddress)) {

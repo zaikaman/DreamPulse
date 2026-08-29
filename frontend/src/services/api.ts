@@ -27,14 +27,64 @@ const API_BASE_URL = rawApiUrl
     : `${rawApiUrl.replace(/\/+$/, '')}/api/v1`
   : '/api/v1';
 
+function getAuthHeadersForRequest(): Record<string, string> {
+  try {
+    // Lazy import to avoid circular deps — api-auth is standalone and has no deps on api.ts
+    // Use dynamic check via localStorage directly to keep fetchJson sync (no await)
+    const jwtKey = 'dreampulse_supabase_jwt';
+    const jwtExpKey = 'dreampulse_supabase_jwt_exp';
+    const apiAuthKey = 'dreampulse_api_auth';
+    if (typeof window !== 'undefined' && typeof localStorage !== 'undefined') {
+      const t = localStorage.getItem(jwtKey);
+      const e = localStorage.getItem(jwtExpKey);
+      if (t && e) {
+        const exp = Number(e);
+        if (Number.isFinite(exp) && exp > Math.floor(Date.now() / 1000) + 60 && t.length > 20) {
+          return { Authorization: `Bearer ${t}` };
+        }
+      }
+      const raw = localStorage.getItem(apiAuthKey);
+      if (raw) {
+        try {
+          const parsed = JSON.parse(raw) as { address: string; signature: string; nonce: string; issuedAt: number; expiresAt: number };
+          if (parsed.address && parsed.signature && parsed.nonce && parsed.issuedAt && parsed.expiresAt) {
+            const nowSec = Math.floor(Date.now() / 1000);
+            if (parsed.expiresAt > nowSec + 60 && Math.abs(nowSec - parsed.issuedAt) <= 240 && parsed.signature.length >= 132) {
+              return {
+                'x-user-address': parsed.address,
+                'x-auth-signature': parsed.signature,
+                'x-auth-nonce': parsed.nonce,
+                'x-auth-issued-at': String(parsed.issuedAt),
+                'x-auth-expires-at': String(parsed.expiresAt),
+              };
+            }
+          }
+        } catch {}
+      }
+    }
+  } catch {}
+  return {};
+}
+
 async function fetchJson<T>(endpoint: string, options?: RequestInit): Promise<T> {
   const url = `${API_BASE_URL}${endpoint}`;
+  const authHeaders = getAuthHeadersForRequest();
+  // Merge: explicit caller headers win over cached auth (allows override for wallet-verify which must NOT send stale auth)
+  const mergedHeaders: Record<string, string> = {
+    'Content-Type': 'application/json',
+    ...authHeaders,
+    ...(options?.headers as Record<string, string> | undefined),
+  };
+  // For /auth/wallet-verify we must not send stale Bearer that would be verified before mint — strip if present
+  const isAuthVerify = endpoint.includes('/auth/wallet-verify');
+  if (isAuthVerify) {
+    delete (mergedHeaders as any)['Authorization'];
+    delete (mergedHeaders as any)['authorization'];
+  }
+  const { headers: _ignoredHeaders, ...restOptions } = (options as Record<string, any>) || {};
   const response = await fetch(url, {
-    headers: {
-      'Content-Type': 'application/json',
-      ...options?.headers,
-    },
-    ...options,
+    ...restOptions,
+    headers: mergedHeaders,
   });
 
   if (!response.ok) {
