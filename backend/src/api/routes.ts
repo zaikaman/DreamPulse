@@ -120,6 +120,11 @@ apiRouter.get('/markets/:id/depth', (req: Request, res: Response) => {
 // Cache for /markets/pools/future (30s TTL)
 const futurePoolsCache = new Map<string, { data: { success: boolean; count: number; pools: Address[]; horizonHours: number; window: string }; expiresAt: number }>();
 
+// Cache for /allowance-status (15s TTL) — high-frequency polling, multicall-backed
+const allowanceStatusCache = new Map<string, { data: any; expiresAt: number }>();
+const ALLOWANCE_CACHE_TTL_MS = 15000;
+const MULTICALL3_ADDRESS = '0xcA11bde05977b3631167028862bE2a173976CA11' as Address;
+
 apiRouter.get('/markets/pools/future', async (req: Request, res: Response) => {
   try {
     const horizonHours = req.query.horizonHours ? parseInt(req.query.horizonHours as string, 10) : 24;
@@ -162,22 +167,50 @@ apiRouter.get('/markets/pools/future', async (req: Request, res: Response) => {
       if (m.poolAddress) poolSet.add(m.poolAddress.toLowerCase());
     }
 
-    // 3) Free pools via binaryModule (deployed but not yet bound to a market) — covers next windows pre-deployed
+    // 3) Free pools via binaryModule — batched via multicall aggregate3 (was 2 serial RPC)
     try {
       const freePoolsAbi = parseAbi(['function getFreePools(address creator, address collateral) view returns (address[])']);
       const creators: Address[] = [SOMNIA_ADDRESSES.marketCreator as Address, SOMNIA_ADDRESSES.marketCreatorFactory as Address];
-      for (const creator of creators) {
-        try {
-          const free = (await publicClient.readContract({
-            address: SOMNIA_ADDRESSES.binaryModule as Address,
-            abi: freePoolsAbi,
-            functionName: 'getFreePools',
-            args: [creator, SOMNIA_ADDRESSES.testUsdc as Address],
-          })) as Address[];
-          for (const p of free) {
-            if (p && p !== '0x0000000000000000000000000000000000000000') poolSet.add(p.toLowerCase());
+      let handled = false;
+      try {
+        const contracts = creators.map((creator) => ({
+          address: SOMNIA_ADDRESSES.binaryModule as Address,
+          abi: freePoolsAbi,
+          functionName: 'getFreePools',
+          args: [creator, SOMNIA_ADDRESSES.testUsdc as Address],
+        }));
+        const multi = await (publicClient as any)
+          .multicall({ contracts, allowFailure: true, multicallAddress: MULTICALL3_ADDRESS })
+          .catch(() => null);
+        if (multi && Array.isArray(multi)) {
+          for (const entry of multi) {
+            if (entry?.status === 'success' && Array.isArray(entry.result)) {
+              for (const p of entry.result as Address[]) {
+                if (p && p !== '0x0000000000000000000000000000000000000000000000000000000000000000') poolSet.add((p as string).toLowerCase());
+              }
+            }
           }
-        } catch {}
+          handled = true;
+        }
+      } catch {}
+      if (!handled) {
+        const results = await Promise.all(
+          creators.map((creator) =>
+            publicClient
+              .readContract({
+                address: SOMNIA_ADDRESSES.binaryModule as Address,
+                abi: freePoolsAbi,
+                functionName: 'getFreePools',
+                args: [creator, SOMNIA_ADDRESSES.testUsdc as Address],
+              })
+              .catch(() => [] as Address[]),
+          ),
+        );
+        for (const free of results) {
+          for (const p of free as Address[]) {
+            if (p && p !== '0x0000000000000000000000000000000000000000000000000000000000000000') poolSet.add((p as string).toLowerCase());
+          }
+        }
       }
     } catch {}
 
@@ -446,58 +479,51 @@ apiRouter.get('/sessions/:userAddress/allowance-status', optionalWalletAuth, asy
       return res.status(400).json({ success: false, error: 'Invalid userAddress' });
     }
     const normalized = getAddress(userAddress) as Address;
-    const session = await sessionService.getUserActiveSession(normalized).catch(() => null);
-    // Build pool set covering current Open + Listed + FreePools for 7D horizon (168h) — covers 5m…7d
-    const poolSet = new Set<string>();
-    for (const m of marketService.getActiveMarkets({ status: 'Open' }).slice(0, 20)) {
-      if (m.poolAddress) poolSet.add(m.poolAddress.toLowerCase());
+    const cacheKey = normalized.toLowerCase();
+    const nowMs = Date.now();
+    const cached = allowanceStatusCache.get(cacheKey);
+    if (cached && nowMs < cached.expiresAt) {
+      return res.json(cached.data);
     }
-    try {
-      const all = await somniaExchange.client.listBinaryMarkets({ limit: 200 } as any).catch(() => [] as any[]);
-      const nowSec = Math.floor(Date.now() / 1000);
-      const horizonSec = nowSec + 7 * 24 * 3600;
-      for (const m of all as any[]) {
-        const expiry = Number(m.expiry || 0);
-        const pool = m.poolAddress as string | undefined;
-        if (!pool || pool === SOMNIA_ADDRESSES.binaryModule) continue;
-        const status = String(m.status || '');
-        const isRelevant = (expiry > 0 && expiry >= nowSec - 3600 && expiry <= horizonSec + 3600) || status === 'Trading' || status === 'Listed' || status === '1' || status === '0';
-        if (isRelevant) poolSet.add(pool.toLowerCase());
-      }
-    } catch {}
-    try {
-      const freePoolsAbi = parseAbi(['function getFreePools(address creator, address collateral) view returns (address[])']);
-      for (const creator of [SOMNIA_ADDRESSES.marketCreator as Address, SOMNIA_ADDRESSES.marketCreatorFactory as Address]) {
-        try {
-          const free = (await publicClient.readContract({
-            address: SOMNIA_ADDRESSES.binaryModule as Address,
-            abi: freePoolsAbi,
-            functionName: 'getFreePools',
-            args: [creator, SOMNIA_ADDRESSES.testUsdc as Address],
-          })) as Address[];
-          for (const p of free) if (p && p !== '0x0000000000000000000000000000000000000000') poolSet.add(p.toLowerCase());
-        } catch {}
-      }
-    } catch {}
-    const pools = [...poolSet].slice(0, 60) as Address[];
-
+    const session = await sessionService.getUserActiveSession(normalized).catch(() => null);
     const erc20Abi = parseAbi(['function allowance(address owner, address spender) view returns (uint256)', 'function balanceOf(address account) view returns (uint256)']);
-    const registryAbi = parseAbi(['function isApprovedForPool(address pool, address owner, address operator, bytes4 selector) view returns (bool)', 'function isGloballyApproved(address owner, address operator, bytes4 selector) view returns (bool)']);
+    const registryAbi = parseAbi(['function isGloballyApproved(address owner, address operator, bytes4 selector) view returns (bool)']);
     const operatorAddr = (SOMNIA_ADDRESSES.operatorAccount || '0x93e300607c363E7D7a47e50f5c9fDf1723e859Cf') as Address;
     const selector = '0x80054449' as `0x${string}`;
 
-    const [allowanceOperator, balance, isGlobal] = await Promise.all([
-      publicClient.readContract({ address: SOMNIA_ADDRESSES.testUsdc, abi: erc20Abi, functionName: 'allowance', args: [normalized, operatorAddr] }).catch(() => 0n),
-      publicClient.readContract({ address: SOMNIA_ADDRESSES.testUsdc, abi: erc20Abi, functionName: 'balanceOf', args: [normalized] }).catch(() => 0n),
-      publicClient.readContract({ address: SOMNIA_ADDRESSES.operatorPermissionsRegistry, abi: registryAbi, functionName: 'isGloballyApproved', args: [normalized, operatorAddr, selector] }).catch(() => false),
-    ]);
+    let allowanceOperator: bigint = 0n;
+    let balance: bigint = 0n;
+    let isGlobal: boolean = false;
+    try {
+      const contracts = [
+        { address: SOMNIA_ADDRESSES.testUsdc as Address, abi: erc20Abi, functionName: 'allowance', args: [normalized, operatorAddr] },
+        { address: SOMNIA_ADDRESSES.testUsdc as Address, abi: erc20Abi, functionName: 'balanceOf', args: [normalized] },
+        { address: SOMNIA_ADDRESSES.operatorPermissionsRegistry as Address, abi: registryAbi, functionName: 'isGloballyApproved', args: [normalized, operatorAddr, selector] },
+      ] as const;
+      const multi = await (publicClient as any)
+        .multicall({ contracts, allowFailure: true, multicallAddress: MULTICALL3_ADDRESS })
+        .catch(() => null);
+      if (multi && Array.isArray(multi) && multi.length === 3) {
+        allowanceOperator = multi[0]?.status === 'success' ? (multi[0].result as bigint) : 0n;
+        balance = multi[1]?.status === 'success' ? (multi[1].result as bigint) : 0n;
+        isGlobal = multi[2]?.status === 'success' ? Boolean(multi[2].result) : false;
+      } else {
+        throw new Error('multicall unavailable');
+      }
+    } catch {
+      [allowanceOperator, balance, isGlobal] = await Promise.all([
+        publicClient.readContract({ address: SOMNIA_ADDRESSES.testUsdc, abi: erc20Abi, functionName: 'allowance', args: [normalized, operatorAddr] }).catch(() => 0n) as Promise<bigint>,
+        publicClient.readContract({ address: SOMNIA_ADDRESSES.testUsdc, abi: erc20Abi, functionName: 'balanceOf', args: [normalized] }).catch(() => 0n) as Promise<bigint>,
+        publicClient.readContract({ address: SOMNIA_ADDRESSES.operatorPermissionsRegistry, abi: registryAbi, functionName: 'isGloballyApproved', args: [normalized, operatorAddr, selector] }).catch(() => false) as Promise<boolean>,
+      ]) as [bigint, bigint, boolean];
+    }
 
     const allowanceOperatorHuman = Number(allowanceOperator) / 1_000_000;
     const balanceHuman = Number(balance) / 1_000_000;
     const hasOperatorAllowance = allowanceOperatorHuman >= 100;
     const allReady = hasOperatorAllowance && balanceHuman > 0;
 
-    return res.json({
+    const payload = {
       success: true,
       userAddress: normalized,
       hasActiveSession: !!session?.isActive,
@@ -512,7 +538,9 @@ apiRouter.get('/sessions/:userAddress/allowance-status', optionalWalletAuth, asy
         : balanceHuman <= 0
           ? 'Wallet TestUSDC balance is 0. Claim TestUSDC from the faucet to begin copy-trading.'
           : 'Ready — Operator authorization and TestUSDC allowance active across all binary prediction markets.',
-    });
+    };
+    allowanceStatusCache.set(cacheKey, { data: payload, expiresAt: Date.now() + ALLOWANCE_CACHE_TTL_MS });
+    return res.json(payload);
   } catch (err: any) {
     return res.status(500).json({ success: false, error: err.message || 'Failed to check allowance status' });
   }

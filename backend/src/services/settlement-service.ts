@@ -21,6 +21,21 @@ import { ERC20_ABI } from '../config/permissions-abi.js';
 import { env } from '../config/env.js';
 import type { SettlementSweep, OutcomeType } from '../types/index.js';
 
+const ERC6909_ABI = [
+  {
+    type: 'function',
+    name: 'balanceOf',
+    stateMutability: 'view',
+    inputs: [
+      { name: 'owner', type: 'address' },
+      { name: 'id', type: 'uint256' },
+    ],
+    outputs: [{ name: '', type: 'uint256' }],
+  },
+] as const;
+
+const MULTICALL3_ADDRESS = '0xcA11bde05977b3631167028862bE2a173976CA11' as Address;
+
 export interface UnclaimedPosition {
   marketId: string;
   symbol: string;
@@ -341,47 +356,164 @@ export class SettlementService {
       const ONCHAIN_SCAN_CAP = 50;
       const toCheck = onchainIds.slice(0, ONCHAIN_SCAN_CAP);
 
-      const readOnchainPosition = async (marketId: string): Promise<void> => {
-        const targetHex = marketId as Hex;
-        try {
-          let onchain = this.finalizedMarketStateCache.get(targetHex.toLowerCase());
-          if (!onchain) {
-            onchain = await fetchWithTimeout(
-              somniaExchange.client.getMarketOnchain(targetHex).catch(() => null),
-              null,
+      // ── Production batched scan: 1) fetch market onchain states concurrently, 2) single multicall for all outcome balances ──
+      // Previously: 3 RPC per market (getMarketOnchain + 2×balanceOf) × 50 = 150 RPC serialised at concurrency 10 → 15-20s on /sweeper/summary.
+      // Now: N getMarketOnchain (parallel, cached) + 1-2 multicall aggregate3 for 2N balanceOf → ~50 + 1 RPC → <2s.
+      const MARKET_FETCH_CONCURRENCY = 10;
+      const onchainResults = new Map<string, any>();
+
+      for (let i = 0; i < toCheck.length; i += MARKET_FETCH_CONCURRENCY) {
+        const batch = toCheck.slice(i, i + MARKET_FETCH_CONCURRENCY);
+        await Promise.all(
+          batch.map(async (marketId) => {
+            const targetHex = marketId as Hex;
+            const cached = this.finalizedMarketStateCache.get(targetHex.toLowerCase());
+            if (cached) {
+              onchainResults.set(marketId.toLowerCase(), cached);
+              return;
+            }
+            try {
+              const fetched = await fetchWithTimeout(
+                somniaExchange.client.getMarketOnchain(targetHex).catch(() => null),
+                null,
+              );
+              if (fetched && (fetched.finalized || fetched.isVoided)) {
+                this.finalizedMarketStateCache.set(targetHex.toLowerCase(), fetched);
+              }
+              onchainResults.set(marketId.toLowerCase(), fetched ?? null);
+            } catch {
+              onchainResults.set(marketId.toLowerCase(), null);
+            }
+          }),
+        );
+      }
+
+      const pendingBalanceChecks: Array<{ marketId: string; targetHex: Hex; onchain: any }> = [];
+      for (const marketId of toCheck) {
+        const onchain = onchainResults.get(marketId.toLowerCase());
+        if (!onchain || (!onchain.isResolved && !onchain.isVoided && !onchain.finalized)) continue;
+        pendingBalanceChecks.push({ marketId, targetHex: marketId as Hex, onchain });
+      }
+
+      const balanceMap = new Map<string, { yesBal: bigint; noBal: bigint }>();
+      if (pendingBalanceChecks.length > 0) {
+        const tryMulticall = async (): Promise<Map<string, { yesBal: bigint; noBal: bigint }> | null> => {
+          const contracts: any[] = [];
+          for (const { onchain } of pendingBalanceChecks) {
+            contracts.push({
+              address: onchain.outcomeToken as Address,
+              abi: ERC6909_ABI,
+              functionName: 'balanceOf',
+              args: [normalizedUser, BigInt(onchain.yesId)],
+            });
+            contracts.push({
+              address: onchain.outcomeToken as Address,
+              abi: ERC6909_ABI,
+              functionName: 'balanceOf',
+              args: [normalizedUser, BigInt(onchain.noId)],
+            });
+          }
+          const CHUNK = 80; // 80 contracts per multicall chunk (≈40 markets)
+          const multicallTimeoutMs = isTest ? 350 : 3000;
+          try {
+            const chunks: any[][] = [];
+            for (let i = 0; i < contracts.length; i += CHUNK) chunks.push(contracts.slice(i, i + CHUNK));
+            const chunkPromises = chunks.map((chunk) =>
+              fetchWithTimeout(
+                (publicClient as any)
+                  .multicall({
+                    contracts: chunk,
+                    allowFailure: true,
+                    multicallAddress: MULTICALL3_ADDRESS,
+                  })
+                  .catch(() => null),
+                null,
+                multicallTimeoutMs,
+              ),
             );
-            if (onchain && (onchain.finalized || onchain.isVoided)) {
-              this.finalizedMarketStateCache.set(targetHex.toLowerCase(), onchain);
+            const chunkResults = await Promise.all(chunkPromises);
+            if (chunkResults.some((r) => r === null)) return null;
+            const flat: any[] = (chunkResults as any[]).flat();
+            if (flat.length !== contracts.length) return null;
+            const mapped = new Map<string, { yesBal: bigint; noBal: bigint }>();
+            for (let i = 0; i < pendingBalanceChecks.length; i++) {
+              const yesRes = flat[i * 2];
+              const noRes = flat[i * 2 + 1];
+              const yesBal = yesRes?.status === 'success' && typeof yesRes.result === 'bigint' ? (yesRes.result as bigint) : 0n;
+              const noBal = noRes?.status === 'success' && typeof noRes.result === 'bigint' ? (noRes.result as bigint) : 0n;
+              mapped.set(pendingBalanceChecks[i].marketId.toLowerCase(), { yesBal, noBal });
+            }
+            return mapped;
+          } catch {
+            return null;
+          }
+        };
+
+        let multicallMap: Map<string, { yesBal: bigint; noBal: bigint }> | null = null;
+        // In test, multicall RPC is not mocked and would timeout; still try with short timeout so mocked fallback is exercised.
+        multicallMap = await tryMulticall();
+        if (multicallMap) {
+          for (const [k, v] of multicallMap) balanceMap.set(k, v);
+          if (process.env.NODE_ENV !== 'test') {
+            console.log(`[SettlementService] Batched ${pendingBalanceChecks.length}×2 balanceOf via multicall aggregate3 (${Math.ceil((pendingBalanceChecks.length * 2) / 80)} chunk(s))`);
+          }
+        } else {
+          // Fallback: individual SDK calls (preserves existing test mocks and handles multicall-unavailable chains)
+          const FALLBACK_CONCURRENCY = 20;
+          for (let i = 0; i < pendingBalanceChecks.length; i += FALLBACK_CONCURRENCY) {
+            const batch = pendingBalanceChecks.slice(i, i + FALLBACK_CONCURRENCY);
+            await Promise.all(
+              batch.map(async ({ marketId, onchain }) => {
+                const key = marketId.toLowerCase();
+                try {
+                  const [yesBal, noBal] = await Promise.all([
+                    fetchWithTimeout(
+                      somniaExchange.client
+                        .getOutcomeBalance({
+                          outcomeToken: onchain.outcomeToken,
+                          account: normalizedUser,
+                          id: BigInt(onchain.yesId),
+                        })
+                        .catch(() => 0n),
+                      0n,
+                    ),
+                    fetchWithTimeout(
+                      somniaExchange.client
+                        .getOutcomeBalance({
+                          outcomeToken: onchain.outcomeToken,
+                          account: normalizedUser,
+                          id: BigInt(onchain.noId),
+                        })
+                        .catch(() => 0n),
+                      0n,
+                    ),
+                  ]);
+                  balanceMap.set(key, { yesBal, noBal });
+                } catch {
+                  balanceMap.set(key, { yesBal: 0n, noBal: 0n });
+                }
+              }),
+            );
+          }
+        }
+
+        if (isOperator) {
+          for (const { marketId, onchain } of pendingBalanceChecks) {
+            const bal = balanceMap.get(marketId.toLowerCase());
+            if (bal && bal.yesBal === 0n && bal.noBal === 0n && (onchain.finalized || onchain.isVoided)) {
+              this.knownFinalizedZeroBalances.add(`${cacheKey}:${marketId.toLowerCase()}`);
             }
           }
+        }
+      }
 
-          if (!onchain || (!onchain.isResolved && !onchain.isVoided && !onchain.finalized)) {
-            return;
-          }
-
-          const [yesBal, noBal] = await Promise.all([
-            fetchWithTimeout(
-              somniaExchange.client.getOutcomeBalance({
-                outcomeToken: onchain.outcomeToken,
-                account: normalizedUser,
-                id: onchain.yesId,
-              }),
-              0n,
-            ),
-            fetchWithTimeout(
-              somniaExchange.client.getOutcomeBalance({
-                outcomeToken: onchain.outcomeToken,
-                account: normalizedUser,
-                id: onchain.noId,
-              }),
-              0n,
-            ),
-          ]);
-
-          // Cache zero-balance on finalized contract for operator so we never query again
-          if (isOperator && yesBal === 0n && noBal === 0n && (onchain.finalized || onchain.isVoided)) {
-            this.knownFinalizedZeroBalances.add(`${cacheKey}:${marketId.toLowerCase()}`);
-          }
+      // Process positions from batched balances
+      for (const { marketId, targetHex, onchain } of pendingBalanceChecks) {
+        try {
+          const bal = balanceMap.get(marketId.toLowerCase());
+          if (!bal) continue;
+          const yesBal = bal.yesBal;
+          const noBal = bal.noBal;
 
           const known = marketService.getMarketById(marketId);
           const symbol = known?.symbol || 'BTC/USD';
@@ -417,7 +549,7 @@ export class SettlementService {
                 status: 'Voided',
               });
             }
-            return;
+            continue;
           }
 
           const winningIdx: 0 | 1 = onchain.winningOutcome === 0 ? 0 : 1;
@@ -442,7 +574,6 @@ export class SettlementService {
               });
             }
           } else if (!isOperator) {
-            // For copy-trading users whose positions were executed via operator relay, aggregate all winning orders
             const matchedOrders = orderService.getOrders({ userAddress: normalizedUser }).filter(
               (o) => o.marketId.toLowerCase() === marketId.toLowerCase() && (o.status === 'FILLED' || o.status === 'PENDING'),
             );
@@ -457,13 +588,11 @@ export class SettlementService {
                 }
               }
             }
-
             if (totalWinningLots > 0) {
               const totalExpectedPayout = onchain.isVoided ? 0.5 * totalWinningLots : totalWinningLots * 1.0;
               const totalSweptForMarket = this.sweeps
                 .filter((s) => s.userAddress.toLowerCase() === cacheKey && s.marketId.toLowerCase() === marketId.toLowerCase())
                 .reduce((sum, s) => sum + (s.claimableAmount || 0), 0);
-
               const remainingClaimable = totalExpectedPayout - totalSweptForMarket;
               if (remainingClaimable > 0.0001) {
                 const rawAmount = BigInt(Math.floor(remainingClaimable * Number(one)));
@@ -487,11 +616,6 @@ export class SettlementService {
         } catch (err: any) {
           console.warn(`[SettlementService] Scan error for market ${marketId}:`, err.message);
         }
-      };
-
-      const CONCURRENCY = 10;
-      for (let i = 0; i < toCheck.length; i += CONCURRENCY) {
-        await Promise.all(toCheck.slice(i, i + CONCURRENCY).map(readOnchainPosition));
       }
 
       // 4. Scan settled winning orders from orderService (covers Trade Terminal, Personal Swarm, and CLOB rolling markets)
