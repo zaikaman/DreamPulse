@@ -230,9 +230,40 @@ class TelemetryClient {
     }
   }
 
+  // SECURITY: prototype pollution guard — JSON.parse with __proto__ can pollute Object.prototype (P4)
+  private static safeParse(raw: string): any | null {
+    try {
+      // Use reviver to strip dangerous keys before they are assigned
+      const parsed = JSON.parse(raw, (key, value) => {
+        if (key === '__proto__' || key === 'constructor' || key === 'prototype') return undefined;
+        return value;
+      });
+      // Additional shallow guard: ensure parsed is plain object and does not contain polluted keys at top level
+      if (parsed && typeof parsed === 'object') {
+        if ('__proto__' in parsed || 'constructor' in parsed) return null;
+      }
+      return parsed;
+    } catch {
+      return null;
+    }
+  }
+
+  // Lightweight tick validator — replaces full zod for bundle size, but guards malformed tick injection
+  private static isValidTick(tick: any): boolean {
+    if (!tick || typeof tick !== 'object' || Array.isArray(tick)) return false;
+    if (typeof tick.marketId !== 'string' || tick.marketId.length === 0 || tick.marketId.length > 200) return false;
+    if (typeof tick.symbol !== 'string') return false;
+    if (tick.spotPrice !== undefined && typeof tick.spotPrice !== 'number') return false;
+    if (tick.impliedProb !== undefined && typeof tick.impliedProb !== 'number') return false;
+    // Reject objects that still contain __proto__ after reviver
+    if ('__proto__' in tick || 'constructor' in tick) return false;
+    return true;
+  }
+
   private handleMessage(rawData: string): void {
     try {
-      const payload = JSON.parse(rawData);
+      const payload = TelemetryClient.safeParse(rawData);
+      if (!payload || typeof payload !== 'object') return;
       const now = Date.now();
 
       switch (payload.event) {
@@ -243,18 +274,37 @@ class TelemetryClient {
 
         case 'market_ticks':
           if (Array.isArray(payload.data)) {
-            this.emit('market_ticks', payload.data);
-            for (const tick of payload.data) {
-              this.emit('market_tick', tick);
+            const validTicks = (payload.data as any[]).filter(TelemetryClient.isValidTick);
+            if (validTicks.length > 0) {
+              this.emit('market_ticks', validTicks);
+              for (const tick of validTicks) {
+                this.emit('market_tick', tick);
+              }
             }
           }
           break;
 
         case 'market_tick':
-          if (payload.data?.marketId) {
+          if (payload.data?.marketId && TelemetryClient.isValidTick(payload.data)) {
             const tick: MarketTickData = {
-              ...payload.data,
-              timestamp: payload.timestamp || now,
+              marketId: String(payload.data.marketId),
+              symbol: String(payload.data.symbol || ''),
+              spotPrice: Number(payload.data.spotPrice) || 0,
+              strikePrice: Number(payload.data.strikePrice) || 0,
+              timeLeftSeconds: Number(payload.data.timeLeftSeconds) || 0,
+              impliedProb: Number(payload.data.impliedProb) || 0,
+              fairValue: Number(payload.data.fairValue) || 0,
+              edge: Number(payload.data.edge) || 0,
+              hasAnomaly: Boolean(payload.data.hasAnomaly),
+              timestamp: Number(payload.timestamp) || now,
+              convictionState: payload.data.convictionState,
+              recommendedAction: payload.data.recommendedAction,
+              recommendedOutcome: payload.data.recommendedOutcome,
+              winProbability: payload.data.winProbability !== undefined ? Number(payload.data.winProbability) : undefined,
+              confidenceScore: payload.data.confidenceScore !== undefined ? Number(payload.data.confidenceScore) : undefined,
+              priceActionTrend: payload.data.priceActionTrend,
+              priceActionScore: payload.data.priceActionScore !== undefined ? Number(payload.data.priceActionScore) : undefined,
+              confluenceRationale: typeof payload.data.confluenceRationale === 'string' ? payload.data.confluenceRationale.slice(0, 500) : undefined,
             };
             this.emit('market_tick', tick);
             this.emit('market_ticks', [tick]);

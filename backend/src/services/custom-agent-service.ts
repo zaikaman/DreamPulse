@@ -298,6 +298,51 @@ export class CustomAgentService {
   }
 
   /**
+   * Retrieves top custom agents ordered by PnL for leaderboard — DB-side ORDER BY pnl DESC LIMIT 50 (P4).
+   * Avoids loading 500+ agents + orders into RAM; uses DB ordering where possible.
+   */
+  public async getTopCustomAgents(limit: number = 50): Promise<CustomAgentDefinition[]> {
+    const result: CustomAgentDefinition[] = [];
+    const seenIds = new Set<string>();
+    try {
+      const { data, error } = await supabase
+        .from('custom_agents')
+        .select('*')
+        .neq('user_address', '0x0000000000000000000000000000000000000000')
+        .order('pnl', { ascending: false })
+        .limit(limit);
+      if (!error && Array.isArray(data)) {
+        for (const row of data) {
+          const mapped = this.mapDbRowToAgent(row);
+          result.push(mapped);
+          seenIds.add(mapped.id);
+          this.inMemoryAgents.set(mapped.id, mapped);
+        }
+      } else if (error) {
+        // Fallback to created_at ordering if pnl index missing
+        const fallback = await supabase.from('custom_agents').select('*').neq('user_address', '0x0000000000000000000000000000000000000000').order('created_at', { ascending: false }).limit(limit);
+        if (!fallback.error && Array.isArray(fallback.data)) {
+          for (const row of fallback.data) {
+            const mapped = this.mapDbRowToAgent(row);
+            if (!seenIds.has(mapped.id)) { result.push(mapped); seenIds.add(mapped.id); this.inMemoryAgents.set(mapped.id, mapped); }
+          }
+        }
+      }
+    } catch (err: any) {
+      console.warn('[CustomAgentService] Error loading top custom agents:', err.message);
+    }
+    // Merge in-memory agents that may have higher PnL but not yet persisted — keep top by pnl
+    for (const [id, agent] of this.inMemoryAgents.entries()) {
+      if (agent.userAddress.toLowerCase() !== '0x0000000000000000000000000000000000000000' && !seenIds.has(id)) {
+        result.push(agent);
+      }
+    }
+    // Return sorted by pnl desc and capped
+    result.sort((a, b) => (b.pnl ?? 0) - (a.pnl ?? 0));
+    return result.slice(0, limit);
+  }
+
+  /**
    * Retrieves ALL custom agents across all users (for global arena leaderboard).
    * Includes every user-created agent plus pristine starter templates (zero-trade templates will be filtered upstream).
    */
@@ -508,25 +553,41 @@ export class CustomAgentService {
 
   public async updateCustomAgent(
     id: string,
-    updates: Partial<CustomAgentDefinition>
+    updates: Partial<CustomAgentDefinition>,
+    requesterAddress?: string,
   ): Promise<CustomAgentDefinition | null> {
     const existing = await this.getCustomAgentById(id);
     if (!existing) return null;
 
+    // SECURITY: cross-wallet overwrite guard (P4) — only owner may mutate
+    if (requesterAddress) {
+      const expected = existing.userAddress.toLowerCase();
+      const actual = requesterAddress.toLowerCase();
+      if (expected !== actual && expected !== '0x0000000000000000000000000000000000000000') {
+        throw new Error('Forbidden: agent does not belong to authenticated wallet');
+      }
+      // Prevent user_address hijack via updates payload
+      if ((updates as any).userAddress && (updates as any).userAddress.toLowerCase() !== expected && expected !== '0x0000000000000000000000000000000000000000') {
+        throw new Error('Forbidden: cannot transfer agent ownership');
+      }
+    }
+
     const updated: CustomAgentDefinition = {
       ...existing,
       ...updates,
+      // Never allow ownership transfer via updates unless it's a starter clone handled by deployAgent
+      userAddress: existing.userAddress,
       updatedAt: new Date().toISOString(),
     };
 
     this.inMemoryAgents.set(id, updated);
 
     try {
-      const { error } = await supabase
+      // Use UPDATE with ownership filter instead of blind upsert — prevents cross-wallet overwrite
+      const { error, count } = await supabase
         .from('custom_agents')
-        .upsert({
-          id: updated.id,
-          user_address: updated.userAddress,
+        .update({
+          user_address: updated.userAddress.toLowerCase(),
           name: updated.name,
           description: updated.description,
           symbol: updated.symbol,
@@ -543,9 +604,38 @@ export class CustomAgentService {
           win_rate: updated.winRate ?? 0,
           trades_count: updated.tradesCount ?? 0,
           updated_at: updated.updatedAt,
-        });
+        })
+        .eq('id', id)
+        .eq('user_address', existing.userAddress.toLowerCase());
+
       if (error) {
-        console.error('[CustomAgentService] DB upsert error:', error);
+        console.error('[CustomAgentService] DB update error:', error);
+        // Fallback to upsert only for legacy rows that may not yet have strict owner match (starter templates)
+        if (STARTER_TEMPLATE_IDS.includes(id)) {
+          await supabase.from('custom_agents').upsert({
+            id: updated.id,
+            user_address: updated.userAddress.toLowerCase(),
+            name: updated.name,
+            description: updated.description,
+            symbol: updated.symbol,
+            timeframe: updated.timeframe,
+            strategy_type: updated.strategyType,
+            rules: updated.rules,
+            color: updated.color,
+            icon: updated.icon,
+            is_active: updated.isActive,
+            is_deployed: updated.isDeployed,
+            allocated_allowance: updated.allocatedAllowance,
+            spent_allowance: updated.spentAllowance,
+            pnl: updated.pnl ?? 0,
+            win_rate: updated.winRate ?? 0,
+            trades_count: updated.tradesCount ?? 0,
+            updated_at: updated.updatedAt,
+          });
+        }
+      }
+      if (count === 0 && !STARTER_TEMPLATE_IDS.includes(id)) {
+        console.warn('[CustomAgentService] Update affected 0 rows — possible ownership mismatch for', id);
       }
     } catch (err: any) {
       console.warn('[CustomAgentService] Could not update agent in DB:', err.message);
@@ -578,7 +668,7 @@ export class CustomAgentService {
           isDeployed: true,
           isActive: true,
           ...(allowance !== undefined ? { allocatedAllowance: Math.max(0, allowance) } : {}),
-        });
+        }, cleanUser);
       }
 
       // Clone a dedicated custom agent instance for this user so the starter template remains pristine
@@ -607,7 +697,7 @@ export class CustomAgentService {
         : {}),
       ...(allowance !== undefined ? { allocatedAllowance: Math.max(0, allowance) } : {}),
     };
-    return this.updateCustomAgent(id, updates);
+    return this.updateCustomAgent(id, updates, cleanUser);
   }
 
   public async recordTradeFill(agentId: string, tradeCost: number): Promise<void> {
@@ -627,7 +717,7 @@ export class CustomAgentService {
         spent_allowance: newSpent,
         trades_count: newTradesCount,
         updated_at: agent.updatedAt,
-      }).eq('id', agentId);
+      }).eq('id', agentId).eq('user_address', agent.userAddress.toLowerCase());
     } catch (err: any) {
       console.warn(`[CustomAgentService] Failed to persist trade fill for agent ${agentId}:`, err.message);
     }
@@ -653,7 +743,7 @@ export class CustomAgentService {
         pnl: newPnl,
         win_rate: newWinRate,
         updated_at: agent.updatedAt,
-      }).eq('id', agentId);
+      }).eq('id', agentId).eq('user_address', agent.userAddress.toLowerCase());
     } catch (err: any) {
       console.warn(`[CustomAgentService] Failed to persist trade settlement for agent ${agentId}:`, err.message);
     }
@@ -678,7 +768,7 @@ export class CustomAgentService {
     const updates: Partial<CustomAgentDefinition> = {
       isDeployed: false,
     };
-    return this.updateCustomAgent(id, updates);
+    return this.updateCustomAgent(id, updates, _userAddress);
   }
 
   public async setAgentAllowance(
@@ -692,16 +782,22 @@ export class CustomAgentService {
     const updates: Partial<CustomAgentDefinition> = {
       allocatedAllowance: Math.max(0, allowance),
     };
-    return this.updateCustomAgent(id, updates);
+    return this.updateCustomAgent(id, updates, _userAddress);
   }
 
   public async deleteCustomAgent(id: string, userAddress: string): Promise<boolean> {
+    // In-memory guard first
+    const existing = this.inMemoryAgents.get(id);
+    if (existing && existing.userAddress.toLowerCase() !== userAddress.toLowerCase() && existing.userAddress !== '0x0000000000000000000000000000000000000000') {
+      throw new Error('Forbidden: agent does not belong to authenticated wallet');
+    }
     this.inMemoryAgents.delete(id);
     try {
       const { error } = await supabase
         .from('custom_agents')
         .delete()
-        .eq('id', id);
+        .eq('id', id)
+        .eq('user_address', userAddress.toLowerCase());
       if (error) {
         console.error('[CustomAgentService] DB delete error:', error);
       }

@@ -6,6 +6,7 @@ import {
 } from '@heroicons/react/24/outline';
 import { apiClient } from '../../services/api.js';
 import { cn } from '../../lib/utils.js';
+import { shouldPoll, STALE_TIMES } from '../../lib/polling.js';
 
 interface RecentlySettledRoundsProps {
   currentSymbol?: string;
@@ -88,8 +89,18 @@ export const RecentlySettledRounds: React.FC<RecentlySettledRoundsProps> = ({
 
   useEffect(() => {
     fetchSettledRounds();
-    const interval = setInterval(fetchSettledRounds, 15000);
-    return () => clearInterval(interval);
+    const interval = window.setInterval(() => {
+      if (!shouldPoll()) return;
+      fetchSettledRounds();
+    }, STALE_TIMES.settled);
+    const onVisible = () => {
+      if (document.visibilityState === 'visible') fetchSettledRounds();
+    };
+    document.addEventListener('visibilitychange', onVisible);
+    return () => {
+      window.clearInterval(interval);
+      document.removeEventListener('visibilitychange', onVisible);
+    };
   }, [currentSymbol]);
 
   return (

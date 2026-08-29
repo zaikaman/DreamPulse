@@ -8,6 +8,7 @@ import {
   type SweepCompleteData,
   type PnlUpdateData,
 } from '../services/telemetry-client.js';
+import { shouldPoll, STALE_TIMES } from '../lib/polling.js';
 
 export interface AgentDetail {
   agentType: AgentType;
@@ -164,10 +165,16 @@ export const useAgentSwarm = (operatorAddress?: string): UseAgentSwarmReturn => 
   useEffect(() => {
     fetchSwarmStatus();
 
-    // Relaxed polling interval (30s heartbeat fallback)
-    const interval = setInterval(() => {
+    // Relaxed polling interval (30s heartbeat fallback) — paused when hidden
+    const interval = window.setInterval(() => {
+      if (!shouldPoll()) return;
       fetchSwarmStatus();
-    }, 30000);
+    }, STALE_TIMES.swarm);
+
+    const onVisible = () => {
+      if (document.visibilityState === 'visible') fetchSwarmStatus();
+    };
+    document.addEventListener('visibilitychange', onVisible);
 
     // 1. Direct 0ms Real-Time PnL Stream Update via shared telemetry client
     const unsubSwarmPnl = telemetryClient.on('swarm_pnl_tick', (payload: SwarmPnlTickData) => {
@@ -263,7 +270,8 @@ export const useAgentSwarm = (operatorAddress?: string): UseAgentSwarmReturn => 
     });
 
     return () => {
-      clearInterval(interval);
+      window.clearInterval(interval);
+      document.removeEventListener('visibilitychange', onVisible);
       if (wsDebounceRef.current) window.clearTimeout(wsDebounceRef.current);
       unsubSwarmPnl();
       unsubOrder();

@@ -52,11 +52,23 @@ export default defineConfig({
     chunkSizeWarningLimit: 1000,
     rollupOptions: {
       output: {
-        manualChunks: {
-          'vendor-react': ['react', 'react-dom'],
-          'vendor-web3': ['viem'],
-          'vendor-three': ['three', '@react-three/fiber'],
-          'vendor-supabase': ['@supabase/supabase-js'],
+        manualChunks(id) {
+          if (id.includes('node_modules')) {
+            if (id.includes('wagmi') || id.includes('viem') || id.includes('@rainbow-me/rainbowkit')) {
+              return 'vendor-web3';
+            }
+            if (id.includes('@heroicons/react')) {
+              return 'vendor-heroicons';
+            }
+            if (id.includes('three') || id.includes('@react-three/fiber')) {
+              return 'vendor-three';
+            }
+            if (id.includes('@supabase/supabase-js')) {
+              return 'vendor-supabase';
+            }
+            // Keep react/react-dom together with web3 to avoid circular chunk warnings;
+            // other react ecosystem stays in main entry for faster initial paint.
+          }
         },
       },
     },

@@ -3,6 +3,7 @@ import type { Market, MarketStatus } from '../types/index.js';
 import { apiClient } from '../services/api.js';
 import { subscribeToTable } from '../services/supabase.js';
 import { telemetryClient, type MarketTickData } from '../services/telemetry-client.js';
+import { shouldPoll, STALE_TIMES } from '../lib/polling.js';
 
 export interface UseMarketsOptions {
   symbol?: string;
@@ -92,16 +93,35 @@ export function useMarkets(options?: UseMarketsOptions) {
     }
   }, [options?.symbol, options?.window, options?.status]);
 
-  // Initial fetch and periodic polling fallback (heartbeat)
+  // Initial fetch and periodic polling fallback (heartbeat) — visibility-aware
+  // Polling is paused when document.hidden; WebSocket + Realtime subscriptions keep data live while visible.
+  // Heartbeat respects staleTime-like throttling: if data is fresh via WS, interval is the fallback only.
   useEffect(() => {
     isMountedRef.current = true;
     fetchMarkets();
 
-    const interval = setInterval(fetchMarkets, options?.pollIntervalMs || 5000);
+    const pollMs = options?.pollIntervalMs || STALE_TIMES.markets;
+    const interval = window.setInterval(() => {
+      if (!shouldPoll()) return;
+      fetchMarkets();
+    }, pollMs);
+
+    const onVisible = () => {
+      if (document.visibilityState === 'visible') {
+        fetchMarkets();
+      }
+    };
+    const onFocus = () => {
+      if (shouldPoll()) fetchMarkets();
+    };
+    document.addEventListener('visibilitychange', onVisible);
+    window.addEventListener('focus', onFocus);
 
     return () => {
       isMountedRef.current = false;
-      clearInterval(interval);
+      window.clearInterval(interval);
+      document.removeEventListener('visibilitychange', onVisible);
+      window.removeEventListener('focus', onFocus);
     };
   }, [fetchMarkets, options?.pollIntervalMs]);
 

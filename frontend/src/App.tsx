@@ -14,7 +14,6 @@ import { CommandDialog } from './components/common/CommandDialog.js';
 import { OverviewView } from './components/dashboard/OverviewView.js';
 import { EdgeRadarView } from './components/dashboard/EdgeRadarView.js';
 import { MarketsExplorerView } from './components/dashboard/MarketsExplorerView.js';
-import { TradeTerminalView } from './components/dashboard/TradeTerminalView.js';
 import { SwarmFeedView } from './components/dashboard/SwarmFeedView.js';
 import { useKeyboardShortcuts } from './hooks/useKeyboardShortcuts.js';
 import { soundEngine } from './services/audio.js';
@@ -25,6 +24,8 @@ import { useOnboarding } from './hooks/useOnboarding.js';
 import { getViewForHash, navigateToView, getProfileAddressFromHash } from './lib/navigation.js';
 
 // Lazy load heavy modules to minimize initial bundle size and accelerate TTI
+// TradeTerminalView (~180kB with OrderBookDepth + chart) and AnalyticsView are the heaviest dashboard modules — lazy to avoid shipping 600kB gz on initial load.
+const TradeTerminalView = React.lazy(() => import('./components/dashboard/TradeTerminalView.js').then((m) => ({ default: m.TradeTerminalView })));
 const SwarmCockpitView = React.lazy(() => import('./components/dashboard/SwarmCockpitView.js').then((m) => ({ default: m.SwarmCockpitView })));
 const StrategyStudioView = React.lazy(() => import('./components/StrategyStudioView.js').then((m) => ({ default: m.StrategyStudioView })));
 const Backtester = React.lazy(() => import('./components/StrategyStudio.js').then((m) => ({ default: m.Backtester })));
@@ -300,22 +301,24 @@ export const App: React.FC = () => {
             isLoading={isMarketsLoading}
           />
         ) : activeNav === 'Trade Terminal' ? (
-          <TradeTerminalView
-            markets={markets}
-            selectedMarket={selectedMarket}
-            selectedMarketId={selectedMarketId}
-            onSelectMarket={setSelectedMarketId}
-            onRefreshMarkets={refreshMarkets}
-            liveTicks={liveTicks}
-            depthMap={depthMap}
-            currentSpotPrices={currentSpotPrices}
-            isLoading={isMarketsLoading}
-            wallet={wallet}
-            activeSession={activeSession}
-            agentThoughts={agentThoughts}
-            onOpenSessionModal={handleOpenSessionModal}
-            onConnectWallet={connectWallet}
-          />
+          <React.Suspense fallback={<div className="glass-card" style={{ minHeight: '340px', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: '12px' }}><Spinner size="lg" /><span style={{ fontSize: '13px', color: 'var(--muted-foreground)' }}>Loading Trade Terminal...</span></div>}>
+            <TradeTerminalView
+              markets={markets}
+              selectedMarket={selectedMarket}
+              selectedMarketId={selectedMarketId}
+              onSelectMarket={setSelectedMarketId}
+              onRefreshMarkets={refreshMarkets}
+              liveTicks={liveTicks}
+              depthMap={depthMap}
+              currentSpotPrices={currentSpotPrices}
+              isLoading={isMarketsLoading}
+              wallet={wallet}
+              activeSession={activeSession}
+              agentThoughts={agentThoughts}
+              onOpenSessionModal={handleOpenSessionModal}
+              onConnectWallet={connectWallet}
+            />
+          </React.Suspense>
         ) : activeNav === 'AI Swarm Feed' ? (
           <SwarmFeedView
             agentThoughts={agentThoughts}

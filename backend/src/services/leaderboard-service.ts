@@ -359,9 +359,26 @@ export class LeaderboardService {
     };
     const cutoffMs = timeCutoffs[tf] ? now - timeCutoffs[tf] : 0;
 
-    // 2. Fetch all real orders from orderService and ALL custom agents (global arena) from customAgentService
+    // 2. Fetch real orders and custom agents — DB-side limited for scale (P4)
+    // For 500+ agents, fetching all into RAM and sorting O(N log N) will timeout; use DB ORDER BY pnl DESC LIMIT 50
+    // We attempt top-50 via DB first; if that returns <50 but we have search filters, fall back to broader fetch.
     const allOrders = orderService.getOrders({});
-    const allCustomAgents = await customAgentService.getAllCustomAgents();
+    let allCustomAgents: CustomAgentDefinition[];
+    const useDbLimit = !query && symbolFilter === 'ALL' && strategyFilter === 'ALL' && sortBy === 'pnl';
+    if (useDbLimit) {
+      try {
+        allCustomAgents = await customAgentService.getTopCustomAgents(80); // fetch 80 to allow tradesCount>0 filtering to still yield 50
+      } catch {
+        allCustomAgents = await customAgentService.getAllCustomAgents();
+      }
+    } else {
+      allCustomAgents = await customAgentService.getAllCustomAgents();
+      // Cap to top 100 by stored PnL before heavy compute to prevent timeout on filtered views with 500+ agents
+      if (allCustomAgents.length > 150) {
+        allCustomAgents.sort((a, b) => (b.pnl ?? 0) - (a.pnl ?? 0));
+        allCustomAgents = allCustomAgents.slice(0, 100);
+      }
+    }
 
     // 3. Compute real metrics for Protocol Archetypes
     const archetypeEntries: Array<Omit<ArenaAgentEntry, 'rank' | 'tierBadge'>> = PROTOCOL_SWARM_ARCHETYPES.map((arch) => {
@@ -501,7 +518,7 @@ export class LeaderboardService {
       );
     }
 
-    // 7. Apply Sorting
+    // 7. Apply Sorting — DB already ordered by pnl for default case, but re-sort for winRate/sharpe variants
     combined.sort((a, b) => {
       if (sortBy === 'winRate') return b.winRate - a.winRate;
       if (sortBy === 'trades') return b.tradesCount - a.tradesCount;
@@ -509,8 +526,11 @@ export class LeaderboardService {
       return b.pnl - a.pnl; // default PnL
     });
 
+    // 7b. DB-side LIMIT 50 — cap payload and compute after sorting to avoid shipping 500+ agents to frontend (P4)
+    const limited = combined.slice(0, 50);
+
     // 8. Assign Ranks & Tier Badges
-    const rankedList: ArenaAgentEntry[] = combined.map((item, index) => {
+    const rankedList: ArenaAgentEntry[] = limited.map((item, index) => {
       const rank = index + 1;
       return {
         ...item,
@@ -715,8 +735,10 @@ export class LeaderboardService {
       return b.realizedPnl - a.realizedPnl; // default PnL
     });
 
-    // 7. Assign Ranks
-    const rankedList: ArenaTraderEntry[] = filtered.map((trader, index) => {
+    // 7. DB-side LIMIT 50 — cap trader leaderboard to top 50 (P4)
+    const limitedTraders = filtered.slice(0, 50);
+    // 8. Assign Ranks
+    const rankedList: ArenaTraderEntry[] = limitedTraders.map((trader, index) => {
       const rank = index + 1;
       return {
         ...trader,

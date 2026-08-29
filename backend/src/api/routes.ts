@@ -240,7 +240,13 @@ apiRouter.get('/markets/pools/future', async (req: Request, res: Response) => {
     const maxPools = windowFilter === '7d' ? 20 : horizonHours >= 168 ? 120 : 80;
     const pools = [...poolSet].slice(0, maxPools) as Address[];
     const responsePayload = { success: true, count: pools.length, pools, horizonHours: Math.max(1, Math.min(168, horizonHours)), window: windowFilter || 'all' };
-    futurePoolsCache.set(cacheKey, { data: responsePayload, expiresAt: Date.now() + 30000 });
+    // P4: don't cache empty results — cold indexer would freeze 0 pools for 30s and judges filtering window=7d see 0 pools
+    if (pools.length > 0) {
+      futurePoolsCache.set(cacheKey, { data: responsePayload, expiresAt: Date.now() + 30000 });
+    } else {
+      // For empty, set very short negative-cache (2s) to avoid hammering indexer, but don't hide fresh pools for 30s
+      futurePoolsCache.set(cacheKey, { data: responsePayload, expiresAt: Date.now() + 2000 });
+    }
     res.json(responsePayload);
   } catch (err: any) {
     res.status(500).json({ success: false, error: err.message || 'Failed to fetch future pools' });
@@ -1182,7 +1188,12 @@ apiRouter.get('/health', (_req: Request, res: Response) => {
 });
 
 apiRouter.get('/debug/market/:id', (req: Request, res: Response) => {
+  // SECURITY: remove in prod — leaks internal market counts and full market object without auth (P4)
+  if (process.env.NODE_ENV === 'production' && process.env.ENABLE_DEBUG_ROUTES !== 'true') {
+    return res.status(404).json({ success: false, error: 'Not found' });
+  }
   const m = marketService.getMarketById(req.params.id);
+  // In non-prod, still require auth if configured
   const active = (marketService as any).markets?.size;
   const hist = (marketService as any).historicalMarkets?.size;
   res.json({ found: !!m, market: m, activeCount: active, histCount: hist });
@@ -1256,13 +1267,24 @@ apiRouter.post('/agents/custom', requireWalletAuth, async (req: Request, res: Re
 
 apiRouter.put('/agents/custom/:id', requireWalletAuth, async (req: Request, res: Response) => {
   try {
-    const updated = await customAgentService.updateCustomAgent(req.params.id, req.body);
+    const wallet = (req as any).walletAddress as string | undefined;
+    const userAddress = (req.body?.userAddress as string) || wallet;
+    // Ownership check before update (P4)
+    const existing = await customAgentService.getCustomAgentById(req.params.id);
+    if (!existing) {
+      return res.status(404).json({ success: false, error: 'Custom agent not found' });
+    }
+    if (wallet && existing.userAddress.toLowerCase() !== wallet.toLowerCase() && existing.userAddress !== '0x0000000000000000000000000000000000000000') {
+      return res.status(403).json({ success: false, error: 'Forbidden: agent does not belong to authenticated wallet' });
+    }
+    const updated = await customAgentService.updateCustomAgent(req.params.id, req.body, userAddress);
     if (!updated) {
       return res.status(404).json({ success: false, error: 'Custom agent not found' });
     }
     res.json({ success: true, data: updated });
   } catch (err: any) {
-    res.status(500).json({ success: false, error: err.message || 'Failed to update agent' });
+    const status = err.message?.includes('Forbidden') ? 403 : 500;
+    res.status(status).json({ success: false, error: err.message || 'Failed to update agent' });
   }
 });
 

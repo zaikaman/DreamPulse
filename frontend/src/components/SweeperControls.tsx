@@ -18,6 +18,7 @@ import { apiClient } from '../services/api.js';
 import { SOMNIA_ADDRESSES } from '../services/web3.js';
 import type { SettlementSweep } from '../types/index.js';
 import { telemetryClient, type SweepCompleteData, type PnlUpdateData } from '../services/telemetry-client.js';
+import { shouldPoll, STALE_TIMES } from '../lib/polling.js';
 import { ClaimCelebration } from './ClaimCelebration.js';
 import { Spinner } from './ui/Spinner.js';
 import { Pagination } from './ui/Pagination.js';
@@ -178,10 +179,18 @@ export const SweeperControls: React.FC<SweeperControlsProps> = ({
       if (!sweep.userAddress || sweep.userAddress.toLowerCase() === activeAddress.toLowerCase()) scheduleRefresh(150);
     });
     const unsubPnl = telemetryClient.on('pnl_update', (_pnl: PnlUpdateData) => scheduleRefresh(300));
-    const interval = setInterval(() => fetchSweeperData(), 25000);
+    const interval = window.setInterval(() => {
+      if (!shouldPoll()) return;
+      fetchSweeperData();
+    }, STALE_TIMES.sweeper);
+    const onVisible = () => {
+      if (document.visibilityState === 'visible') fetchSweeperData();
+    };
+    document.addEventListener('visibilitychange', onVisible);
     return () => {
       if (debounceTimer) window.clearTimeout(debounceTimer);
-      clearInterval(interval);
+      window.clearInterval(interval);
+      document.removeEventListener('visibilitychange', onVisible);
       unsubSweep();
       unsubPnl();
     };

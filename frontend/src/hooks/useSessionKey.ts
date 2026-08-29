@@ -10,6 +10,7 @@ import { parseWeb3Error } from '../lib/errorUtils.js';
 import { subscribeToPrivateTable } from '../services/supabase.js';
 import { ensureSupabaseAuthForWallet, restoreSupabaseAuthIfCached, clearSupabaseAuthForLogout } from '../services/supabase-auth.js';
 import type { RealtimeChannel } from '@supabase/supabase-js';
+import { shouldPoll, STALE_TIMES } from '../lib/polling.js';
 
 
 export interface WalletState {
@@ -791,19 +792,25 @@ export function useSessionKey(): UseSessionKeyReturn {
   // Polling fallback while JWT not yet minted or backend not configured — keeps
   // cross-tab sync without Supabase. With JWT + filtered channel this is just a safety net.
   // Also re-validates on every mount, focus, and visibility change (production requirement).
+  // Visibility-aware: paused when document.hidden (saves ~3 polls/min per tab).
   useEffect(() => {
     if (!wallet.address) return;
     const targetAddr = wallet.address;
     // Immediate re-validation on mount (covers remount, tab restore, and XSS-forged localStorage)
     void fetchActiveSession(targetAddr).catch(() => {});
-    const poll = () => fetchActiveSession(targetAddr).catch(() => {});
-    const interval = setInterval(poll, 20000);
-    const onFocus = () => poll();
+    const poll = () => {
+      if (!shouldPoll()) return;
+      void fetchActiveSession(targetAddr).catch(() => {});
+    };
+    const interval = window.setInterval(poll, STALE_TIMES.session);
+    const onFocus = () => {
+      if (shouldPoll()) poll();
+    };
     const onVis = () => { if (document.visibilityState === 'visible') poll(); };
     window.addEventListener('focus', onFocus);
     document.addEventListener('visibilitychange', onVis);
     return () => {
-      clearInterval(interval);
+      window.clearInterval(interval);
       window.removeEventListener('focus', onFocus);
       document.removeEventListener('visibilitychange', onVis);
     };
@@ -847,10 +854,11 @@ export function useSessionKey(): UseSessionKeyReturn {
       scheduleRefresh(500);
     });
 
-    // 2. Periodic 15-second background sync
-    const interval = setInterval(() => {
+    // 2. Periodic background sync — paused when hidden, driven primarily by WS events
+    const interval = window.setInterval(() => {
+      if (!shouldPoll()) return;
       refreshBalances(targetAddr).catch(() => {});
-    }, 15000);
+    }, STALE_TIMES.markets * 3); // 15s equivalent via STALE_TIMES.markets*3; background only
 
     return () => {
       if (debounceTimer) window.clearTimeout(debounceTimer);
@@ -862,12 +870,22 @@ export function useSessionKey(): UseSessionKeyReturn {
     };
   }, [wallet.isConnected, wallet.address, refreshBalances, fetchActiveSession]);
 
-  // Keep allowance status fresh while wallet is connected
+  // Keep allowance status fresh while wallet is connected — visibility-aware
   useEffect(() => {
     if (!wallet.isConnected || !wallet.address || !wallet.isCorrectNetwork) return;
     refreshAllowanceStatus().catch(() => {});
-    const id = setInterval(() => refreshAllowanceStatus().catch(() => {}), 30000);
-    return () => clearInterval(id);
+    const id = window.setInterval(() => {
+      if (!shouldPoll()) return;
+      refreshAllowanceStatus().catch(() => {});
+    }, STALE_TIMES.allowance);
+    const onVis = () => {
+      if (document.visibilityState === 'visible') refreshAllowanceStatus().catch(() => {});
+    };
+    document.addEventListener('visibilitychange', onVis);
+    return () => {
+      window.clearInterval(id);
+      document.removeEventListener('visibilitychange', onVis);
+    };
   }, [wallet.isConnected, wallet.address, wallet.isCorrectNetwork, refreshAllowanceStatus]);
 
   return {

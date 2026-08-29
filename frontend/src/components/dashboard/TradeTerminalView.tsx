@@ -13,9 +13,9 @@ import { useMarketCountdown } from '../../hooks/useMarketCountdown.js';
 import { useCustomAgents } from '../../hooks/useCustomAgents.js';
 import { evaluateTradeConfluence } from '../../lib/confluence.js';
 import { EventContractChart } from './EventContractChart.js';
-import { OrderBookDepth } from '../OrderBookDepth.js';
 import { TraderCockpitTicket, type LadderPrefillData } from './TraderCockpitTicket.js';
 import { RecentlySettledRounds } from './RecentlySettledRounds.js';
+const OrderBookDepth = React.lazy(() => import('../OrderBookDepth.js').then((m) => ({ default: m.OrderBookDepth })) );
 import { ActivePositionsDrawer } from './ActivePositionsDrawer.js';
 import { cn } from '../../lib/utils.js';
 
@@ -240,19 +240,21 @@ export const TradeTerminalView: React.FC<TradeTerminalViewProps> = ({
           {/* Main Visual Arena */}
           <div className="flex-1 min-h-[320px] lg:min-h-0 overflow-hidden">
             {isBookVisible ? (
-              <OrderBookDepth
-                selectedMarket={market}
-                liveDepth={depth}
-                liveTick={tick}
-                isLoading={isLoading}
-                wallet={wallet}
-                activeSession={activeSession}
-                agentThoughts={agentThoughts}
-                onOpenSessionModal={onOpenSessionModal}
-                onConnectWallet={onConnectWallet}
-                hideEmbeddedTicket={true}
-                onPrefillOrder={(data) => setPrefillData(data)}
-              />
+              <React.Suspense fallback={<div className="h-full grid place-items-center text-xs text-muted-foreground">Loading order book…</div>}>
+                <OrderBookDepth
+                  selectedMarket={market}
+                  liveDepth={depth}
+                  liveTick={tick}
+                  isLoading={isLoading}
+                  wallet={wallet}
+                  activeSession={activeSession}
+                  agentThoughts={agentThoughts}
+                  onOpenSessionModal={onOpenSessionModal}
+                  onConnectWallet={onConnectWallet}
+                  hideEmbeddedTicket={true}
+                  onPrefillOrder={(data) => setPrefillData(data)}
+                />
+              </React.Suspense>
             ) : market ? (
               <EventContractChart
                 market={market}
