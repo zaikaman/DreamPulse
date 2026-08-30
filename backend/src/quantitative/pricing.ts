@@ -589,24 +589,15 @@ export function evaluateMultiFactorConfluence(
     const edgeLabel = `+${(Math.abs(stabilizedEdge) * 100).toFixed(1)}% NO Alpha`;
 
     rationale = `High Conviction DOWN: Spot is ${spotDiffStr} with ${pa.trend.replace('_', ' ')} price action (${(pa.change1m * 100).toFixed(2)}% 1m). Confluence fair ${(smoothedProb * 100).toFixed(1)}% vs CLOB ${(midYes * 100).toFixed(1)}% gives ${edgeLabel} with ${winProbability}% estimated win probability.`;
-  } else if (isYesEdge && smoothedProb < 0.50) {
-    // Speculative OTM YES Mispricing Dislocation
-    convictionState = 'MODERATE';
-    recommendedAction = 'BUY_UP';
-    recommendedOutcome = 'YES';
-    confidenceScore = Math.min(90, Math.round(60 + Math.abs(stabilizedEdge) * 100));
-    winProbability = Math.round(smoothedProb * 100);
-    const edgeLabel = `+${(stabilizedEdge * 100).toFixed(1)}% YES Alpha`;
-    rationale = `Moderate Value UP: Spot is ${spotDiffStr}. Asymmetric mispricing yields ${edgeLabel} (Fair ${(smoothedProb * 100).toFixed(1)}% vs CLOB ${(midYes * 100).toFixed(1)}%) with ${winProbability}% estimated win probability.`;
-  } else if (isNoEdge && smoothedProb > 0.50) {
-    // Speculative OTM NO Mispricing Dislocation
-    convictionState = 'MODERATE';
-    recommendedAction = 'BUY_DOWN';
-    recommendedOutcome = 'NO';
-    confidenceScore = Math.min(90, Math.round(60 + Math.abs(stabilizedEdge) * 100));
-    winProbability = Math.round((1 - smoothedProb) * 100);
-    const edgeLabel = `+${(Math.abs(stabilizedEdge) * 100).toFixed(1)}% NO Alpha`;
-    rationale = `Moderate Value DOWN: Spot is ${spotDiffStr}. Asymmetric mispricing yields ${edgeLabel} (Fair ${(smoothedProb * 100).toFixed(1)}% vs CLOB ${(midYes * 100).toFixed(1)}%) with ${winProbability}% estimated win probability.`;
+  } else if ((isYesEdge && smoothedProb < 0.50) || (isNoEdge && smoothedProb > 0.50)) {
+    // Out-of-the-Money Dislocation: Suppress low-probability speculative execution to protect capital
+    convictionState = 'NEUTRAL';
+    recommendedAction = 'WAIT';
+    recommendedOutcome = 'NONE';
+    confidenceScore = 50;
+    winProbability = Math.round(Math.max(smoothedProb, 1 - smoothedProb) * 100);
+    const edgeLabel = `${stabilizedEdge >= 0 ? '+' : ''}${(stabilizedEdge * 100).toFixed(1)}%`;
+    rationale = `Observing: OTM mathematical dislocation detected (${edgeLabel} Alpha vs CLOB, Fair ${(smoothedProb * 100).toFixed(1)}%), but spot is ${spotDiffStr}. Swarm suppresses low-probability OTM speculation to preserve capital.`;
   } else {
     // Neutral / Fairly Priced / Ranging
     convictionState = 'NEUTRAL';

@@ -83,6 +83,18 @@ export class OracleArbAgent extends BaseAgent {
       };
     }
 
+    // Strike Pin-Risk Noise Boundary: In the final 120s, if spot is within 0.04% of strike, hold to avoid noise chop
+    const spotDistancePct = Math.abs(spotTicker.price - market.strikePrice) / market.strikePrice;
+    if (timeLeftSeconds < 120 && spotDistancePct < 0.0004) {
+      return {
+        agentType: 'Oracle',
+        action: 'HOLD',
+        targetMarketId: market.id,
+        confidence: 0.5,
+        rationale: `Spot is within micro-noise band (${(spotDistancePct * 100).toFixed(3)}% of strike with ${timeLeftSeconds}s remaining). Holding to avoid gamma pin-risk whipsaw.`,
+      };
+    }
+
     // Dynamic theta edge scaling: demand higher margin of safety as expiry nears (high gamma regime)
     const timeDecayFactor = timeLeftSeconds < 300
       ? 1.0 + ((300 - timeLeftSeconds) / 300) * 0.40 // Up to +40% edge required in final 5m
@@ -119,7 +131,7 @@ export class OracleArbAgent extends BaseAgent {
 
     const topAskYes = rawAsksYes[0]?.price ?? 0;
 
-    if (topAskYes > 0 && topAskYes <= 0.99) {
+    if (topAskYes > 0 && topAskYes <= 0.99 && fair.fairValueYes >= 0.45) {
       const targetRiskUsd = Math.min(2.5, this.oracleConfig.maxTradeSize > 0 ? this.oracleConfig.maxTradeSize : 2.5);
       const estimatedLots = Math.max(1, Math.min(this.oracleConfig.lotSize, Math.floor(targetRiskUsd / topAskYes)));
       
@@ -215,7 +227,7 @@ export class OracleArbAgent extends BaseAgent {
 
     const topAskNo = rawAsksNo[0]?.price ?? 0;
 
-    if (topAskNo > 0 && topAskNo <= 0.99) {
+    if (topAskNo > 0 && topAskNo <= 0.99 && fair.fairValueNo >= 0.45) {
       const targetRiskUsd = Math.min(2.5, this.oracleConfig.maxTradeSize > 0 ? this.oracleConfig.maxTradeSize : 2.5);
       const estimatedLots = Math.max(1, Math.min(this.oracleConfig.lotSize, Math.floor(targetRiskUsd / topAskNo)));
 

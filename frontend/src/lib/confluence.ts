@@ -220,9 +220,9 @@ export function evaluateTradeConfluence(
   let convictionState: 'HIGH_CONVICTION' | 'MODERATE' | 'CAUTION_COUNTER_TREND' | 'NEUTRAL';
   let recommendedAction: 'BUY_UP' | 'BUY_DOWN' | 'WAIT';
   let recommendedOutcome: 'YES' | 'NO' | 'NONE';
-  let winProbability: number;
-  let confidenceScore: number;
-  let rationale: string;
+  let winProbability = 50;
+  let confidenceScore = 50;
+  let rationale = '';
 
   if (isSyntheticOrSeed) {
     convictionState = 'NEUTRAL';
@@ -262,24 +262,15 @@ export function evaluateTradeConfluence(
     winProbability = Math.min(96, Math.max(50, Math.round((1 - fairValueYes) * 100)));
     const edgeLabel = `+${(Math.abs(edge) * 100).toFixed(1)}% NO Alpha`;
     rationale = `High Conviction DOWN: Spot is ${diffText} with ${trend.replace('_', ' ')} price action (${(change1m * 100).toFixed(2)}% 1m). Confluence fair ${(fairValueYes * 100).toFixed(1)}% vs CLOB ${(impliedProbYes * 100).toFixed(1)}% yields ${edgeLabel} with ${winProbability}% estimated win probability.`;
-  } else if (isYesEdge && fairValueYes < 0.50) {
-    // Speculative OTM YES Mispricing Dislocation
-    convictionState = 'MODERATE';
-    recommendedAction = 'BUY_UP';
-    recommendedOutcome = 'YES';
-    confidenceScore = Math.min(90, Math.round(60 + Math.abs(edge) * 100));
-    winProbability = Math.round(fairValueYes * 100);
-    const edgeLabel = `+${(edge * 100).toFixed(1)}% YES Alpha`;
-    rationale = `Moderate Value UP: Spot is ${diffText}. Asymmetric mispricing yields ${edgeLabel} (Fair ${(fairValueYes * 100).toFixed(1)}% vs CLOB ${(impliedProbYes * 100).toFixed(1)}%) with ${winProbability}% estimated win probability.`;
-  } else if (isNoEdge && fairValueYes > 0.50) {
-    // Speculative OTM NO Mispricing Dislocation
-    convictionState = 'MODERATE';
-    recommendedAction = 'BUY_DOWN';
-    recommendedOutcome = 'NO';
-    confidenceScore = Math.min(90, Math.round(60 + Math.abs(edge) * 100));
-    winProbability = Math.round((1 - fairValueYes) * 100);
-    const edgeLabel = `+${(Math.abs(edge) * 100).toFixed(1)}% NO Alpha`;
-    rationale = `Moderate Value DOWN: Spot is ${diffText}. Asymmetric mispricing yields ${edgeLabel} (Fair ${(fairValueYes * 100).toFixed(1)}% vs CLOB ${(impliedProbYes * 100).toFixed(1)}%) with ${winProbability}% estimated win probability.`;
+  } else if ((isYesEdge && fairValueYes < 0.50) || (isNoEdge && fairValueYes > 0.50)) {
+    // Out-of-the-Money Dislocation: Suppress low-probability speculative execution to protect capital
+    convictionState = 'NEUTRAL';
+    recommendedAction = 'WAIT';
+    recommendedOutcome = 'NONE';
+    confidenceScore = 50;
+    winProbability = Math.round(Math.max(fairValueYes, 1 - fairValueYes) * 100);
+    const edgeLabel = `${edge >= 0 ? '+' : ''}${(edge * 100).toFixed(1)}%`;
+    rationale = `Observing: OTM mathematical dislocation detected (${edgeLabel} Alpha vs CLOB, Fair ${(fairValueYes * 100).toFixed(1)}%), but spot is ${diffText}. AI Copilot suppresses low-probability OTM speculation to preserve capital.`;
   } else {
     // Neutral / Fairly Priced / Ranging
     convictionState = 'NEUTRAL';

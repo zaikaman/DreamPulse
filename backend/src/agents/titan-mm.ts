@@ -187,26 +187,37 @@ export class TitanMMAgent extends BaseAgent {
     const lotSize = quantizeLotSize(this.titanConfig.lotSize);
     const confidence = 0.88;
 
-    // 4. Asymmetric Quote Side Selection based on inventory & time-to-expiry
+    // 4. Asymmetric Two-Sided Quote Side Selection based on inventory & time-to-expiry
     let quotePrice = snappedBid;
     let quoteSide: 'YES' | 'NO' = 'YES';
 
     if (timeLeftSeconds < 90) {
       if (netInventory > 1.0) {
-        // Heavy long YES -> Quote Ask to liquidate before expiry
-        quotePrice = snappedAsk;
+        // Heavy long YES -> Quote complementary NO at (1 - Ask) to balance net delta before expiry
+        quoteSide = 'NO';
+        quotePrice = quantizePrice(Math.max(0.05, Math.min(0.95, 1.0 - snappedAsk)));
       } else if (netInventory < -1.0) {
-        // Heavy short YES -> Quote Bid to cover
+        // Heavy short YES -> Quote Bid on YES to cover delta
+        quoteSide = 'YES';
         quotePrice = snappedBid;
       } else {
-        quotePrice = netInventory > 0 ? snappedAsk : snappedBid;
+        quoteSide = netInventory > 0 ? 'NO' : 'YES';
+        quotePrice = netInventory > 0
+          ? quantizePrice(Math.max(0.05, Math.min(0.95, 1.0 - snappedAsk)))
+          : snappedBid;
       }
     } else {
-      // General regime: quote the side that reduces net inventory skew
-      quotePrice = netInventory >= 1.0 ? snappedAsk : snappedBid;
+      // General regime: quote the side that reduces net inventory skew towards delta-neutral
+      if (netInventory >= 1.0) {
+        quoteSide = 'NO';
+        quotePrice = quantizePrice(Math.max(0.05, Math.min(0.95, 1.0 - snappedAsk)));
+      } else {
+        quoteSide = 'YES';
+        quotePrice = snappedBid;
+      }
     }
 
-    const rationale = `[MM QUOTE] Providing liquidity around Φ(z) = ${(fairValueYes * 100).toFixed(1)}% (Spread: ${(effectiveSpread * 100).toFixed(1)}%, EWMA σ=${(realizedVol * 100).toFixed(1)}%). Quoting Bid: ${snappedBid.toFixed(2)} / Ask: ${snappedAsk.toFixed(2)} with net inventory skew (${netInventory >= 0 ? '+' : ''}${netInventory.toFixed(1)} lots).`;
+    const rationale = `[MM QUOTE] Providing liquidity around Φ(z) = ${(fairValueYes * 100).toFixed(1)}% (Spread: ${(effectiveSpread * 100).toFixed(1)}%, EWMA σ=${(realizedVol * 100).toFixed(1)}%). Quoting ${quoteSide}: ${quotePrice.toFixed(2)} (Bid: ${snappedBid.toFixed(2)} / Ask: ${snappedAsk.toFixed(2)}) with net inventory (${netInventory >= 0 ? '+' : ''}${netInventory.toFixed(1)} lots).`;
 
     const decision: IAgentDecision = {
       agentType: 'Titan',
@@ -234,7 +245,7 @@ export class TitanMMAgent extends BaseAgent {
         marketId: market.id,
         triggerEvent: 'CONTINUOUS_MARKET_MAKING',
         confidence,
-        actionTaken: 'LIMIT_QUOTE_YES',
+        actionTaken: quoteSide === 'YES' ? 'LIMIT_QUOTE_YES' : 'LIMIT_QUOTE_NO',
         reasoningText: rationale,
         metadata: {
           spot: spotTicker.price,
@@ -245,6 +256,8 @@ export class TitanMMAgent extends BaseAgent {
           effectiveSpread,
           realizedVol,
           netInventory,
+          quoteSide,
+          quotePrice,
         },
         createdAt: new Date().toISOString(),
       });

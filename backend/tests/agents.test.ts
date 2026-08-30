@@ -293,7 +293,7 @@ describe('Phase 5 Swarm Strategy & Agent Unit Tests', () => {
       expect(decision.rationale).toContain('MM QUOTE');
     });
 
-    it('skews quotes downwards when long YES inventory to discourage further YES buys', async () => {
+    it('skews quotes and targets NO when long YES inventory to balance delta-neutral inventory', async () => {
       titan.setInventory(baseMarket.id, 10.0); // +10 lots YES
 
       const context: IAgentContext = {
@@ -309,10 +309,14 @@ describe('Phase 5 Swarm Strategy & Agent Unit Tests', () => {
         activeSessions: [validSession],
       };
 
+      const quotes = titan.calculateReservationQuotes(context);
+      // Reservation Bid for YES is skewed downwards to discourage buying more YES
+      expect(quotes.snappedBid).toBeLessThan(0.48);
+
       const decision = await titan.evaluate(context);
       expect(decision.action).toBe('LIMIT_QUOTE');
-      // With +10 inventory * 0.015 = 0.15 skew downwards
-      expect(decision.price).toBeLessThan(0.48);
+      // When long YES (+10 lots), decision quotes complementary NO to balance inventory
+      expect(decision.targetOutcome).toBe('NO');
       expect(decision.rationale).toContain('+10.0 lots');
     });
 

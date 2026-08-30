@@ -68,6 +68,18 @@ export class VoltSniperAgent extends BaseAgent {
       };
     }
 
+    // Strike Pin-Risk Noise Boundary: In the final 120s, if spot is within 0.04% of strike, hold to avoid noise chop
+    const spotDistancePct = Math.abs(spotTicker.price - market.strikePrice) / market.strikePrice;
+    if (timeLeftSeconds < 120 && spotDistancePct < 0.0004) {
+      return {
+        agentType: 'Volt',
+        action: 'HOLD',
+        targetMarketId: market.id,
+        confidence: 0.5,
+        rationale: `Spot is within micro-noise band (${(spotDistancePct * 100).toFixed(3)}% of strike with ${timeLeftSeconds}s remaining). Holding to avoid gamma pin-risk whipsaw.`,
+      };
+    }
+
     // Calculate theoretical Black-Scholes fair value with latest drifted spot price & dynamic EWMA volatility
     const fair = calculateFairValue(spotTicker.price, market.strikePrice, timeLeftSeconds, market.symbol, undefined, spotTicker.priceHistory);
 
@@ -114,7 +126,7 @@ export class VoltSniperAgent extends BaseAgent {
 
       const topAskYes = rawAsks[0]?.price ?? 0;
 
-      if (topAskYes > 0 && topAskYes <= 0.99) {
+      if (topAskYes > 0 && topAskYes <= 0.99 && fair.fairValueYes >= 0.45) {
         // Preliminary sizing estimate
         const targetRiskUsd = Math.min(2.5, this.voltConfig.maxTradeSize > 0 ? this.voltConfig.maxTradeSize : 2.5);
         const estimatedLots = Math.max(1, Math.min(this.voltConfig.lotSize, Math.floor(targetRiskUsd / topAskYes)));
@@ -223,7 +235,7 @@ export class VoltSniperAgent extends BaseAgent {
 
       const topAskNo = rawNoAsks[0]?.price ?? 0;
 
-      if (topAskNo > 0 && topAskNo <= 0.99) {
+      if (topAskNo > 0 && topAskNo <= 0.99 && fair.fairValueNo >= 0.45) {
         // Preliminary sizing estimate
         const targetRiskUsd = Math.min(2.5, this.voltConfig.maxTradeSize > 0 ? this.voltConfig.maxTradeSize : 2.5);
         const estimatedLots = Math.max(1, Math.min(this.voltConfig.lotSize, Math.floor(targetRiskUsd / topAskNo)));

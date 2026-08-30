@@ -489,17 +489,26 @@ export class OrderService {
       isAsk: boolean,
     ): OrderBookLevel[] => {
       if (!levels || levels.length === 0) return [];
-      const matchingQuotes = activeQuotes.filter(
-        (q) => q.outcome === outcome && (isAsk ? q.direction === 'SELL' : q.direction === 'BUY'),
-      );
-      if (matchingQuotes.length === 0) return [...levels];
 
       const sanitized: OrderBookLevel[] = [];
       for (const lvl of levels) {
-        // Find total swarm-owned resting lot size at this tick
-        const ownQty = matchingQuotes
-          .filter((q) => Math.abs(q.price - lvl.price) < 0.005)
-          .reduce((sum, q) => sum + q.lotSize, 0);
+        // Find total swarm-owned resting lot size at this tick across direct and complementary quotes
+        let ownQty = 0;
+        for (const q of activeQuotes) {
+          if (!isAsk) {
+            // Direct Bid: matching outcome and BUY direction
+            if (q.outcome === outcome && q.direction === 'BUY' && Math.abs(q.price - lvl.price) < 0.005) {
+              ownQty += q.lotSize;
+            }
+          } else {
+            // Ask side: either direct SELL on this outcome OR complementary BUY on the opposite outcome at (1 - p)
+            const isDirectSell = q.outcome === outcome && q.direction === 'SELL' && Math.abs(q.price - lvl.price) < 0.005;
+            const isComplementaryBuy = q.outcome !== outcome && q.direction === 'BUY' && Math.abs((1.0 - q.price) - lvl.price) < 0.005;
+            if (isDirectSell || isComplementaryBuy) {
+              ownQty += q.lotSize;
+            }
+          }
+        }
 
         const externalQty = Math.max(0, Number((lvl.quantity - ownQty).toFixed(4)));
         if (externalQty > 0.0001) {
