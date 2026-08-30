@@ -32,8 +32,68 @@ export interface ConfluenceEvaluation {
   };
 }
 
+const SQRT_2 = Math.SQRT2;
+const SECONDS_PER_YEAR = 365.25 * 24 * 3600;
+
+export const DEFAULT_VOLATILITY: Record<string, number> = {
+  'BTC/USD': 0.52,
+  'ETH/USD': 0.68,
+  DEFAULT: 0.60,
+};
+
 /**
- * Calculates continuous regularized sigmoid probability centered on strike.
+ * High-precision Error Function erf(x) using Abramowitz & Stegun rational approximation (formula 7.1.26).
+ */
+export function erf(x: number): number {
+  const sign = x < 0 ? -1 : 1;
+  const absX = Math.abs(x);
+  const p = 0.3275911;
+  const a1 = 0.254829592;
+  const a2 = -0.284496736;
+  const a3 = 1.421413741;
+  const a4 = -1.453152027;
+  const a5 = 1.061405429;
+  const t = 1.0 / (1.0 + p * absX);
+  const poly = ((((a5 * t + a4) * t + a3) * t + a2) * t + a1) * t;
+  const y = 1.0 - poly * Math.exp(-absX * absX);
+  return sign * y;
+}
+
+/**
+ * Standard Normal Cumulative Distribution Function Φ(z).
+ */
+export function normalCdf(z: number): number {
+  if (z <= -8) return 0.00000001;
+  if (z >= 8) return 0.99999999;
+  return 0.5 * (1.0 + erf(z / SQRT_2));
+}
+
+/**
+ * Computes fair theoretical Black-Scholes probability for binary YES contract outcome.
+ */
+export function calculateBinaryYesProbability(
+  spot: number,
+  strike: number,
+  annualVolatility: number,
+  timeToExpiryYears: number,
+  riskFreeRate: number = 0.0,
+): number {
+  if (spot <= 0 || strike <= 0) return 0.50;
+  if (timeToExpiryYears <= 0) return spot >= strike ? 0.9999 : 0.0001;
+
+  // Short-horizon diffusion regularizer (45s floor) to prevent cliff degeneration
+  const minHorizonYears = 45 / (365.25 * 86400);
+  const effectiveTimeYears = Math.max(timeToExpiryYears, minHorizonYears);
+
+  const volSqrtT = annualVolatility * Math.sqrt(effectiveTimeYears);
+  const drift = (riskFreeRate - 0.5 * annualVolatility * annualVolatility) * effectiveTimeYears;
+  const z = (Math.log(spot / strike) + drift) / volSqrtT;
+
+  return Number(normalCdf(z).toFixed(4));
+}
+
+/**
+ * Continuous regularized sigmoid probability centered on strike.
  */
 export function getSigmoidFallbackProb(spot: number, strike: number): number {
   if (!strike || strike <= 0) return 0.50;
@@ -58,11 +118,12 @@ export function evaluateTradeConfluence(
 
   const spotDiff = spot - strike;
   const spotDiffPct = strike > 0 ? (spotDiff / strike) * 100 : 0;
+  const pctDiffFormatted = Math.abs(spotDiffPct).toFixed(2);
   const diffText = spotDiff >= 0
-    ? `+$${spotDiff < 1 ? spotDiff.toFixed(4) : spotDiff.toFixed(2)} (+${spotDiffPct.toFixed(2)}%) above strike`
-    : `-$${Math.abs(spotDiff) < 1 ? Math.abs(spotDiff).toFixed(4) : Math.abs(spotDiff).toFixed(2)} (${Math.abs(spotDiffPct).toFixed(2)}%) below strike`;
+    ? `+$${spotDiff < 1 ? spotDiff.toFixed(4) : spotDiff.toFixed(2)} (+${pctDiffFormatted}%) above strike`
+    : `-$${Math.abs(spotDiff) < 1 ? Math.abs(spotDiff).toFixed(4) : Math.abs(spotDiff).toFixed(2)} (-${pctDiffFormatted}%) below strike`;
 
-  // 1. Resolve or compute Price Action
+  // 1. Resolve or compute Price Action Metrics
   let trend: 'BULLISH_EXPANSION' | 'BULLISH' | 'RANGE_BOUND' | 'BEARISH' | 'BEARISH_BREAKDOWN' = 'RANGE_BOUND';
   let trendScore = 0;
   let change1m = 0;
@@ -99,27 +160,63 @@ export function evaluateTradeConfluence(
   } else if (liveTick?.priceActionTrend) {
     trend = liveTick.priceActionTrend as any;
     trendScore = liveTick.priceActionScore ?? 0;
+    change1m = trendScore * 0.001;
+    isPlunging = trend === 'BEARISH_BREAKDOWN' || trendScore < -0.50;
+    isSurging = trend === 'BULLISH_EXPANSION' || trendScore > 0.50;
+  } else {
+    // Derive baseline price action from spot distance relative to strike
+    if (spotDiffPct > 0.08) {
+      trend = 'BULLISH';
+      trendScore = Math.min(1, spotDiffPct * 3);
+      change1m = (spotDiffPct / 100) * 0.5;
+    } else if (spotDiffPct < -0.08) {
+      trend = 'BEARISH';
+      trendScore = Math.max(-1, spotDiffPct * 3);
+      change1m = (spotDiffPct / 100) * 0.5;
+      isPlunging = spotDiffPct < -0.15;
+    }
   }
 
-  // 2. Resolve Probabilities & Edge
-  const smoothFallback = getSigmoidFallbackProb(spot, strike);
-  const impliedProbYes = isSyntheticOrSeed ? 0.50 : (liveTick?.impliedProb ?? market.impliedProbYes ?? (market.bestAskYes > 0 ? market.bestAskYes : smoothFallback));
-  const fairValueYes = liveTick?.fairValue ?? market.fairValueYes ?? smoothFallback;
-  const rawEdge = isSyntheticOrSeed ? 0 : (liveTick?.edge ?? (fairValueYes - impliedProbYes));
-  // Small deadband to stabilize edge
+  // 2. Resolve Time Remaining and Volatility
+  const now = Date.now();
+  const closeTimeMs = market.closeTimestamp ? new Date(market.closeTimestamp).getTime() : (now + 300000);
+  const timeLeftSeconds = liveTick?.timeLeftSeconds ?? Math.max(1, Math.floor((closeTimeMs - now) / 1000));
+  const timeToExpiryYears = timeLeftSeconds / SECONDS_PER_YEAR;
+  const vol = DEFAULT_VOLATILITY[market.symbol] ?? DEFAULT_VOLATILITY.DEFAULT;
+
+  // 3. Compute Theoretical Dynamic Fair Value
+  const bsmFairProb = calculateBinaryYesProbability(spot, strike, vol, timeToExpiryYears);
+  const fairValueYes = isSyntheticOrSeed ? 0.50 : (liveTick?.fairValue && Math.abs(liveTick.spotPrice - spot) < 5 ? liveTick.fairValue : bsmFairProb);
+
+  // 4. Resolve Order Book Implied Probability & Mathematical Edge
+  let midYes = 0.50;
+  if (market.bestBidYes > 0 && market.bestAskYes > 0) {
+    midYes = Number(((market.bestBidYes + market.bestAskYes) / 2).toFixed(4));
+  } else if (market.bestAskYes > 0) {
+    midYes = market.bestAskYes;
+  } else if (market.bestBidYes > 0) {
+    midYes = market.bestBidYes;
+  } else if (liveTick?.impliedProb !== undefined && liveTick.impliedProb > 0) {
+    midYes = liveTick.impliedProb;
+  } else {
+    midYes = bsmFairProb;
+  }
+
+  const impliedProbYes = isSyntheticOrSeed ? 0.50 : midYes;
+  const rawEdge = isSyntheticOrSeed ? 0 : Number((fairValueYes - impliedProbYes).toFixed(4));
   const edge = Math.abs(rawEdge) < 0.004 ? 0 : rawEdge;
 
   const isYesEdge = edge >= 0.015;
   const isNoEdge = edge <= -0.015;
 
-  // 3. Counter-trend conflict detection
-  // Conflict A: YES edge / BSM UP, but price is actively dumping towards or through strike
+  // 5. Counter-trend conflict detection
+  // Conflict A: YES edge, but price is actively dumping towards or through strike
   const isBullishEdgeConflict = (isYesEdge || fairValueYes >= 0.55) && (isPlunging || trendScore <= -0.25);
-  // Conflict B: NO edge / BSM DOWN, but price is surging upwards with breakout momentum
+  // Conflict B: NO edge, but price is surging upwards with breakout momentum
   const isBearishEdgeConflict = (isNoEdge || fairValueYes <= 0.45) && (isSurging || trendScore >= 0.25);
   const isCounterTrendConflict = isBullishEdgeConflict || isBearishEdgeConflict;
 
-  // 4. Resolve Conviction & Recommendation
+  // 6. Resolve Conviction & Recommendation
   let convictionState: 'HIGH_CONVICTION' | 'MODERATE' | 'CAUTION_COUNTER_TREND' | 'NEUTRAL';
   let recommendedAction: 'BUY_UP' | 'BUY_DOWN' | 'WAIT';
   let recommendedOutcome: 'YES' | 'NO' | 'NONE';
@@ -145,30 +242,51 @@ export function evaluateTradeConfluence(
     } else {
       rationale = `Caution: Counter-trend divergence. Spot is ${diffText}, but aggressive upward momentum (+${(change1m * 100).toFixed(2)}% 1m, ${trend.replace('_', ' ')}) is breaking out. AI Copilot advises WAITING for price stabilization before buying DOWN.`;
     }
-  } else if (isYesEdge && trendScore >= -0.05) {
-    const isHigh = Math.abs(edge) >= 0.025 && (trendScore >= 0.15 || spotDiff > 0);
+  } else if (isYesEdge && fairValueYes >= 0.50 && trendScore >= -0.05) {
+    // Aligned Bullish High Conviction Trade
+    const isHigh = Math.abs(edge) >= 0.020 && (trendScore >= 0.15 || spotDiff > 0);
     convictionState = isHigh ? 'HIGH_CONVICTION' : 'MODERATE';
     recommendedAction = 'BUY_UP';
     recommendedOutcome = 'YES';
     confidenceScore = Math.min(96, Math.round(65 + Math.abs(edge) * 120 + Math.max(0, trendScore) * 15));
-    winProbability = Math.min(94, Math.max(62, Math.round(fairValueYes * 100)));
+    winProbability = Math.min(96, Math.max(50, Math.round(fairValueYes * 100)));
     const edgeLabel = `+${(edge * 100).toFixed(1)}% YES Alpha`;
     rationale = `High Conviction UP: Spot is ${diffText} with ${trend.replace('_', ' ')} price action (${change1m >= 0 ? '+' : ''}${(change1m * 100).toFixed(2)}% 1m). Confluence fair ${(fairValueYes * 100).toFixed(1)}% vs CLOB ${(impliedProbYes * 100).toFixed(1)}% yields ${edgeLabel} with ${winProbability}% estimated win probability.`;
-  } else if (isNoEdge && trendScore <= 0.05) {
-    const isHigh = Math.abs(edge) >= 0.025 && (trendScore <= -0.15 || spotDiff < 0);
+  } else if (isNoEdge && fairValueYes <= 0.50 && trendScore <= 0.05) {
+    // Aligned Bearish High Conviction Trade
+    const isHigh = Math.abs(edge) >= 0.020 && (trendScore <= -0.15 || spotDiff < 0);
     convictionState = isHigh ? 'HIGH_CONVICTION' : 'MODERATE';
     recommendedAction = 'BUY_DOWN';
     recommendedOutcome = 'NO';
     confidenceScore = Math.min(96, Math.round(65 + Math.abs(edge) * 120 + Math.abs(Math.min(0, trendScore)) * 15));
-    winProbability = Math.min(94, Math.max(62, Math.round((1 - fairValueYes) * 100)));
+    winProbability = Math.min(96, Math.max(50, Math.round((1 - fairValueYes) * 100)));
     const edgeLabel = `+${(Math.abs(edge) * 100).toFixed(1)}% NO Alpha`;
     rationale = `High Conviction DOWN: Spot is ${diffText} with ${trend.replace('_', ' ')} price action (${(change1m * 100).toFixed(2)}% 1m). Confluence fair ${(fairValueYes * 100).toFixed(1)}% vs CLOB ${(impliedProbYes * 100).toFixed(1)}% yields ${edgeLabel} with ${winProbability}% estimated win probability.`;
+  } else if (isYesEdge && fairValueYes < 0.50) {
+    // Speculative OTM YES Mispricing Dislocation
+    convictionState = 'MODERATE';
+    recommendedAction = 'BUY_UP';
+    recommendedOutcome = 'YES';
+    confidenceScore = Math.min(90, Math.round(60 + Math.abs(edge) * 100));
+    winProbability = Math.round(fairValueYes * 100);
+    const edgeLabel = `+${(edge * 100).toFixed(1)}% YES Alpha`;
+    rationale = `Moderate Value UP: Spot is ${diffText}. Asymmetric mispricing yields ${edgeLabel} (Fair ${(fairValueYes * 100).toFixed(1)}% vs CLOB ${(impliedProbYes * 100).toFixed(1)}%) with ${winProbability}% estimated win probability.`;
+  } else if (isNoEdge && fairValueYes > 0.50) {
+    // Speculative OTM NO Mispricing Dislocation
+    convictionState = 'MODERATE';
+    recommendedAction = 'BUY_DOWN';
+    recommendedOutcome = 'NO';
+    confidenceScore = Math.min(90, Math.round(60 + Math.abs(edge) * 100));
+    winProbability = Math.round((1 - fairValueYes) * 100);
+    const edgeLabel = `+${(Math.abs(edge) * 100).toFixed(1)}% NO Alpha`;
+    rationale = `Moderate Value DOWN: Spot is ${diffText}. Asymmetric mispricing yields ${edgeLabel} (Fair ${(fairValueYes * 100).toFixed(1)}% vs CLOB ${(impliedProbYes * 100).toFixed(1)}%) with ${winProbability}% estimated win probability.`;
   } else {
+    // Neutral / Fairly Priced / Ranging
     convictionState = 'NEUTRAL';
     recommendedAction = 'WAIT';
     recommendedOutcome = 'NONE';
     confidenceScore = 50;
-    winProbability = Math.round(fairValueYes * 100);
+    winProbability = Math.round(Math.max(fairValueYes, 1 - fairValueYes) * 100);
     const signedEdge = `${edge >= 0 ? '+' : ''}${(edge * 100).toFixed(1)}%`;
     rationale = `Observing: Market is balanced near strike (${diffText}). Price action is ${trend.replace('_', ' ')} with minimal edge (${signedEdge} Alpha vs CLOB). Waiting for high-conviction breakout or mispricing setup.`;
   }
@@ -178,7 +296,7 @@ export function evaluateTradeConfluence(
     rationale = agentReasoningOverride;
   }
 
-  // 5. Build Stylized Badge Presentation
+  // 7. Build Stylized Badge Presentation
   let badgeStyle = {
     bg: 'bg-secondary/40',
     border: 'border-border/40',

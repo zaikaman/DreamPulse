@@ -22,6 +22,7 @@ interface OrderBookDepthProps {
   selectedMarket: Market | null;
   liveDepth: DepthUpdateData | undefined;
   liveTick: MarketTickData | undefined;
+  currentSpotPrice?: number;
   isLoading?: boolean;
   wallet?: WalletState;
   activeSession?: SessionGrant | null;
@@ -36,6 +37,7 @@ export const OrderBookDepth: React.FC<OrderBookDepthProps> = ({
   selectedMarket,
   liveDepth,
   liveTick,
+  currentSpotPrice,
   isLoading = false,
   wallet,
   activeSession = null,
@@ -92,7 +94,7 @@ export const OrderBookDepth: React.FC<OrderBookDepthProps> = ({
 
   // Spot price & market computations — synthetic/seed markets are forced to 0 edge (no alpha)
   const isSyntheticOrSeedDepth = Boolean(selectedMarket.isSynthetic || selectedMarket.isSeedDepth);
-  const spot = liveTick?.spotPrice ?? selectedMarket.strikePrice;
+  const spot = currentSpotPrice || liveTick?.spotPrice || selectedMarket.strikePrice || 79664.46;
   const isITM = spot >= selectedMarket.strikePrice;
   const strikeDelta = spot - selectedMarket.strikePrice;
   const fairValue = liveTick?.fairValue ?? selectedMarket.fairValueYes;
@@ -470,6 +472,7 @@ export const OrderBookDepth: React.FC<OrderBookDepthProps> = ({
             <TraderCockpitTicket
               market={selectedMarket}
               liveTick={liveTick}
+              currentSpotPrice={currentSpotPrice}
               prefillData={prefillData}
               wallet={activeWallet}
               activeSession={activeSession}

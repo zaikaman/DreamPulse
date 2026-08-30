@@ -245,6 +245,7 @@ export const TradeTerminalView: React.FC<TradeTerminalViewProps> = ({
                   selectedMarket={market}
                   liveDepth={depth}
                   liveTick={tick}
+                  currentSpotPrice={spot}
                   isLoading={isLoading}
                   wallet={wallet}
                   activeSession={activeSession}
@@ -284,6 +285,7 @@ export const TradeTerminalView: React.FC<TradeTerminalViewProps> = ({
             <TraderCockpitTicket
               market={market}
               liveTick={tick}
+              currentSpotPrice={spot}
               prefillData={prefillData}
               wallet={wallet}
               activeSession={activeSession ?? null}

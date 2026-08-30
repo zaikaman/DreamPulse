@@ -151,6 +151,7 @@ const MarketsDepthViewComponent: React.FC<MarketsDepthViewProps> = ({
             selectedMarket={selectedMarket}
             liveDepth={selectedMarketId ? depthMap.get(selectedMarketId) : undefined}
             liveTick={selectedMarketId ? liveTicks.get(selectedMarketId) : undefined}
+            currentSpotPrice={selectedMarket ? currentSpotPrices[selectedMarket.symbol] : undefined}
             wallet={wallet}
             activeSession={activeSession}
             agentThoughts={agentThoughts}

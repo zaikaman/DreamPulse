@@ -35,6 +35,8 @@ export interface LadderPrefillData {
 interface TraderCockpitTicketProps {
   market: Market;
   liveTick: MarketTickData | undefined;
+  currentSpotPrice?: number;
+  priceHistory?: Array<{ time: number; price: number }>;
   prefillData?: LadderPrefillData | null;
   wallet: WalletState;
   activeSession: SessionGrant | null;
@@ -50,6 +52,8 @@ interface TraderCockpitTicketProps {
 export const TraderCockpitTicket: React.FC<TraderCockpitTicketProps> = ({
   market,
   liveTick,
+  currentSpotPrice,
+  priceHistory,
   prefillData,
   wallet,
   activeSession,
@@ -88,7 +92,7 @@ export const TraderCockpitTicket: React.FC<TraderCockpitTicketProps> = ({
   // Derive active live prices
   const currentBestBid = bestBidYes ?? market.bestBidYes ?? 0.84;
   const currentBestAsk = bestAskYes ?? market.bestAskYes ?? 0.85;
-  const spotPrice = liveTick?.spotPrice ?? market.strikePrice;
+  const spotPrice = currentSpotPrice || liveTick?.spotPrice || market.strikePrice || 79664.46;
   const strike = market.strikePrice || 79613.4;
 
   // Continuous regularized sigmoid probability centered on strike (prevents pin-risk step collapse)
@@ -169,8 +173,8 @@ export const TraderCockpitTicket: React.FC<TraderCockpitTicketProps> = ({
     const recentThought = agentThoughts.find(
       (t) => t.marketId === market.id || t.marketId?.toLowerCase() === market.id.toLowerCase()
     );
-    return evaluateTradeConfluence(market, liveTick, spotPrice, undefined, recentThought?.reasoningText);
-  }, [market, liveTick, spotPrice, agentThoughts]);
+    return evaluateTradeConfluence(market, liveTick, spotPrice, priceHistory, recentThought?.reasoningText);
+  }, [market, liveTick, spotPrice, priceHistory, agentThoughts]);
 
   // 1-Click Auto Align with AI recommendation
   const handleAutoAlignAI = () => {
@@ -589,8 +593,13 @@ export const TraderCockpitTicket: React.FC<TraderCockpitTicketProps> = ({
           {/* Factor 3: Strike Proximity */}
           <div className="p-1.5 rounded-lg bg-background/50 border border-border/30 flex flex-col justify-between">
             <span className="text-[9px] text-muted-foreground">Strike Runway</span>
-            <span className="font-bold text-foreground mt-0.5 truncate">
-              {confluence.spotDiff >= 0 ? `+${confluence.spotDiff.toFixed(2)} ITM` : `-${Math.abs(confluence.spotDiff).toFixed(2)} OTM`}
+            <span className={cn(
+              "font-bold mt-0.5 truncate",
+              confluence.spotDiff >= 0 ? "text-[#00e676]" : "text-[#ff3366]"
+            )}>
+              {confluence.spotDiff >= 0
+                ? `+${confluence.spotDiff < 1 ? confluence.spotDiff.toFixed(4) : confluence.spotDiff.toFixed(2)} ITM`
+                : `-${Math.abs(confluence.spotDiff) < 1 ? Math.abs(confluence.spotDiff).toFixed(4) : Math.abs(confluence.spotDiff).toFixed(2)} OTM`}
             </span>
           </div>
 

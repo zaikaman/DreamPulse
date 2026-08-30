@@ -7,6 +7,21 @@ import type { IAgentContext } from '../src/agents/base-agent.js';
 describe('Custom Deployed Agents & Evaluation Engine', () => {
   const testUser = '0x327e766eb317e5a3fa6db30c0a5b9735ad1aedae';
 
+  beforeEach(async () => {
+    const existing = await customAgentService.getCustomAgents(testUser);
+    if (!existing.some((a) => a.name === 'Fast EMA Momentum Rider' && a.isDeployed)) {
+      const template = STARTER_TEMPLATES.find((t) => t.name === 'Fast EMA Momentum Rider');
+      if (template) {
+        await customAgentService.createCustomAgent({
+          ...template,
+          userAddress: testUser,
+          isDeployed: true,
+          allocatedAllowance: 200,
+        });
+      }
+    }
+  });
+
   it('preserves pristine starter templates while loading deployed agents', async () => {
     // Other clean user
     const otherUser = '0x9999999999999999999999999999999999999999';

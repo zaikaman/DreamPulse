@@ -567,35 +567,53 @@ export function evaluateMultiFactorConfluence(
     } else {
       rationale = `Caution: Counter-trend divergence. Spot is ${spotDiffStr}, but aggressive upward momentum (+${(pa.change1m * 100).toFixed(2)}% 1m, ${pa.trend.replace('_', ' ')}) is breaking out. AI Copilot advises WAITING for price stabilization before buying DOWN.`;
     }
-  } else if (isYesEdge && pa.trendScore >= -0.05) {
+  } else if (isYesEdge && smoothedProb >= 0.50 && pa.trendScore >= -0.05) {
     // Aligned Bullish Setup
-    const isHighConviction = stabilizedEdge >= 0.025 && (pa.trendScore >= 0.20 || spotDiff > 0);
+    const isHighConviction = stabilizedEdge >= 0.020 && (pa.trendScore >= 0.15 || spotDiff > 0);
     convictionState = isHighConviction ? 'HIGH_CONVICTION' : 'MODERATE';
     recommendedAction = 'BUY_UP';
     recommendedOutcome = 'YES';
     confidenceScore = Math.min(96, Math.round(65 + Math.abs(stabilizedEdge) * 120 + Math.max(0, pa.trendScore) * 15));
-    winProbability = Math.min(94, Math.max(62, Math.round(smoothedProb * 100)));
+    winProbability = Math.min(96, Math.max(50, Math.round(smoothedProb * 100)));
     const edgeLabel = `+${(stabilizedEdge * 100).toFixed(1)}% YES Alpha`;
 
     rationale = `High Conviction UP: Spot is ${spotDiffStr} with ${pa.trend.replace('_', ' ')} price action (${pa.change1m >= 0 ? '+' : ''}${(pa.change1m * 100).toFixed(2)}% 1m). Confluence fair ${(smoothedProb * 100).toFixed(1)}% vs CLOB ${(midYes * 100).toFixed(1)}% gives ${edgeLabel} with ${winProbability}% estimated win probability.`;
-  } else if (isNoEdge && pa.trendScore <= 0.05) {
+  } else if (isNoEdge && smoothedProb <= 0.50 && pa.trendScore <= 0.05) {
     // Aligned Bearish Setup
-    const isHighConviction = stabilizedEdge <= -0.025 && (pa.trendScore <= -0.20 || spotDiff < 0);
+    const isHighConviction = stabilizedEdge <= -0.020 && (pa.trendScore <= -0.15 || spotDiff < 0);
     convictionState = isHighConviction ? 'HIGH_CONVICTION' : 'MODERATE';
     recommendedAction = 'BUY_DOWN';
     recommendedOutcome = 'NO';
     confidenceScore = Math.min(96, Math.round(65 + Math.abs(stabilizedEdge) * 120 + Math.abs(Math.min(0, pa.trendScore)) * 15));
-    winProbability = Math.min(94, Math.max(62, Math.round((1 - smoothedProb) * 100)));
+    winProbability = Math.min(96, Math.max(50, Math.round((1 - smoothedProb) * 100)));
     const edgeLabel = `+${(Math.abs(stabilizedEdge) * 100).toFixed(1)}% NO Alpha`;
 
     rationale = `High Conviction DOWN: Spot is ${spotDiffStr} with ${pa.trend.replace('_', ' ')} price action (${(pa.change1m * 100).toFixed(2)}% 1m). Confluence fair ${(smoothedProb * 100).toFixed(1)}% vs CLOB ${(midYes * 100).toFixed(1)}% gives ${edgeLabel} with ${winProbability}% estimated win probability.`;
+  } else if (isYesEdge && smoothedProb < 0.50) {
+    // Speculative OTM YES Mispricing Dislocation
+    convictionState = 'MODERATE';
+    recommendedAction = 'BUY_UP';
+    recommendedOutcome = 'YES';
+    confidenceScore = Math.min(90, Math.round(60 + Math.abs(stabilizedEdge) * 100));
+    winProbability = Math.round(smoothedProb * 100);
+    const edgeLabel = `+${(stabilizedEdge * 100).toFixed(1)}% YES Alpha`;
+    rationale = `Moderate Value UP: Spot is ${spotDiffStr}. Asymmetric mispricing yields ${edgeLabel} (Fair ${(smoothedProb * 100).toFixed(1)}% vs CLOB ${(midYes * 100).toFixed(1)}%) with ${winProbability}% estimated win probability.`;
+  } else if (isNoEdge && smoothedProb > 0.50) {
+    // Speculative OTM NO Mispricing Dislocation
+    convictionState = 'MODERATE';
+    recommendedAction = 'BUY_DOWN';
+    recommendedOutcome = 'NO';
+    confidenceScore = Math.min(90, Math.round(60 + Math.abs(stabilizedEdge) * 100));
+    winProbability = Math.round((1 - smoothedProb) * 100);
+    const edgeLabel = `+${(Math.abs(stabilizedEdge) * 100).toFixed(1)}% NO Alpha`;
+    rationale = `Moderate Value DOWN: Spot is ${spotDiffStr}. Asymmetric mispricing yields ${edgeLabel} (Fair ${(smoothedProb * 100).toFixed(1)}% vs CLOB ${(midYes * 100).toFixed(1)}%) with ${winProbability}% estimated win probability.`;
   } else {
     // Neutral / Fairly Priced / Ranging
     convictionState = 'NEUTRAL';
     recommendedAction = 'WAIT';
     recommendedOutcome = 'NONE';
     confidenceScore = 50;
-    winProbability = Math.round(smoothedProb * 100);
+    winProbability = Math.round(Math.max(smoothedProb, 1 - smoothedProb) * 100);
     const signedEdge = `${stabilizedEdge >= 0 ? '+' : ''}${(stabilizedEdge * 100).toFixed(1)}%`;
 
     rationale = `Observing: Market is balanced near strike (${spotDiffStr}). Price action is ${pa.trend.replace('_', ' ')} with minimal edge (${signedEdge} Alpha vs CLOB). Waiting for a high-conviction breakout or mispricing setup.`;
