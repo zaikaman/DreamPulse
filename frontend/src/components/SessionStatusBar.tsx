@@ -361,7 +361,7 @@ export const SessionStatusBar: React.FC<SessionStatusBarProps> = ({
         </div>
         <div className="session-banner-text">
           <span className="session-banner-title">
-            No Active Session Delegation {isCollateralZero && <span style={{ color: 'var(--color-anomaly)', fontSize: '11px', marginLeft: '6px' }}>(0.00 tUSDC Collateral)</span>}
+            No Active Session Delegation {isCollateralZero && <span style={{ color: 'var(--trade-anomaly)', fontSize: '11px', marginLeft: '6px', fontFamily: 'var(--font-mono)', fontWeight: 600 }}>(0.00 tUSDC Collateral)</span>}
           </span>
           <span className="session-banner-desc">
             Authorize autonomous agents with 1-click EIP-712 signing & zero-withdrawal risk ceilings.
