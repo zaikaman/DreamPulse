@@ -49,11 +49,11 @@ export const TraderProfileDrawer: React.FC<TraderProfileDrawerProps> = ({
       subtitle: `Trader Wallet ${summary.userAddress.slice(0, 6)}...${summary.userAddress.slice(-4)} • Rank #${summary.rank}`,
       badge: `${summary.tierBadge} FORECASTER`,
       primaryMetricLabel: 'Realized Net PnL',
-      primaryMetricValue: `+${summary.realizedPnl.toFixed(2)} USDC`,
+      primaryMetricValue: summary.realizedPnl >= 0 ? `+${summary.realizedPnl.toFixed(2)} USDC` : `${summary.realizedPnl.toFixed(2)} USDC`,
       primaryMetricPositive: summary.realizedPnl >= 0,
       secondaryMetricLabel: 'Prediction Win Rate',
       secondaryMetricValue: `${summary.winRate}% (${summary.winsCount}W / ${summary.lossesCount}L)`,
-      accentColor: '#00ffcc',
+      accentColor: summary.realizedPnl >= 0 ? '#00ffcc' : '#ff3366',
       walletOrAgentId: summary.userAddress,
       verifiedNetwork: 'Somnia Shannon Testnet',
       sparkline: summary.sparkline,
@@ -216,7 +216,12 @@ export const TraderProfileDrawer: React.FC<TraderProfileDrawerProps> = ({
                 <div className="p-3.5 rounded-lg bg-card/60 border border-border/50">
                   <div className="flex items-center justify-between mb-2">
                     <span className="text-xs font-semibold text-foreground">Cumulative Alpha Curve</span>
-                    <span className="text-[10px] text-[#00e676] font-mono font-medium">+{summary.realizedPnl.toFixed(2)} USDC</span>
+                    <span className={cn(
+                      "text-[10px] font-mono font-medium",
+                      summary.realizedPnl >= 0 ? "text-[#00e676]" : "text-[#ff3366]"
+                    )}>
+                      {summary.realizedPnl >= 0 ? `+${summary.realizedPnl.toFixed(2)}` : summary.realizedPnl.toFixed(2)} USDC
+                    </span>
                   </div>
                   <div className="h-16 flex items-end gap-1 pt-2">
                     {profile.equityCurve.map((point, idx) => {
