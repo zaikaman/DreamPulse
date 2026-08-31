@@ -105,6 +105,7 @@ function parseSymbolFromRaw(raw: string): string {
  * Concurrent callers await the same faucet promise instead of silently skipping.
  */
 export async function ensureOperatorCollateral(minCollateral: bigint = 5_000n * 1_000_000n): Promise<void> {
+  if (process.env.NODE_ENV === 'test') return;
   if (faucetingPromise) return faucetingPromise;
   // Circuit breaker: if we recently hit many reverts, pause faucet attempts briefly to avoid gas burn
   if (Date.now() < circuitBreakerUntil) return;
@@ -134,8 +135,10 @@ export async function ensureOperatorCollateral(minCollateral: bigint = 5_000n * 
           functionName: 'faucet',
           args: [faucetAmount],
         });
-        await publicClient.waitForTransactionReceipt({ hash });
-        console.log(`[OrderService] Successfully funded operator wallet (${operatorAddress}) with 10,000 TestUSDC (tx: ${hash})`);
+        if (hash) {
+          await publicClient.waitForTransactionReceipt({ hash, timeout: 10_000 }).catch(() => {});
+          console.log(`[OrderService] Successfully funded operator wallet (${operatorAddress}) with 10,000 TestUSDC (tx: ${hash})`);
+        }
         // Reset revert counter on successful funding
         consecutiveOnChainReverts = 0;
       }

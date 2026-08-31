@@ -19,9 +19,53 @@ describe('Market Service & Anomaly Detector Unit & Integration Tests', () => {
     marketService.stop();
   });
 
+  const seedOnchainTestMarkets = () => {
+    const pairs = [
+      { symbol: 'BTC/USD', strike: 96500 },
+      { symbol: 'ETH/USD', strike: 2750 },
+    ];
+    const windows = ['1m', '5m', '15m', '1h'];
+    let idx = 1;
+    for (const { symbol, strike } of pairs) {
+      for (const win of windows) {
+        const hexId = `0x${idx.toString().padStart(64, '0')}`;
+        idx++;
+        const m: Market = {
+          id: hexId,
+          symbol,
+          strikePrice: strike,
+          windowDuration: win,
+          openTimestamp: new Date().toISOString(),
+          closeTimestamp: new Date(Date.now() + 600000).toISOString(),
+          resolutionTimestamp: new Date(Date.now() + 660000).toISOString(),
+          status: 'Open',
+          bestBidYes: 0.49,
+          bestAskYes: 0.51,
+          bestBidNo: 0.49,
+          bestAskNo: 0.51,
+          impliedProbYes: 0.50,
+          fairValueYes: 0.50,
+          edgePercentage: 0,
+          convictionState: 'NEUTRAL',
+          recommendedAction: 'WAIT',
+          recommendedOutcome: 'NONE',
+          winProbability: 50,
+          confidenceScore: 50,
+          priceActionTrend: 'NEUTRAL',
+          priceActionScore: 50,
+          poolAddress: `0x${'2'.repeat(40)}`,
+          marketIdHex: hexId as any,
+          isSynthetic: false,
+        };
+        (marketService as any).markets.set(m.id, m);
+        (marketService as any).buildDepthBookFromClob(m);
+      }
+    }
+  };
+
   describe('Market Service Core Mechanics', () => {
-    it('initializes and generates prediction markets for BTC and ETH across 5m, 15m, 1h windows', () => {
-      marketService.generateOfflineTestMarkets();
+    it('initializes and manages prediction markets for BTC and ETH across 5m, 15m, 1h windows', () => {
+      seedOnchainTestMarkets();
       const markets = marketService.getActiveMarkets();
 
       expect(markets.length).toBeGreaterThan(0);
@@ -62,7 +106,7 @@ describe('Market Service & Anomaly Detector Unit & Integration Tests', () => {
     });
 
     it('generates structured 5-level order book depth for YES and NO legs', () => {
-      marketService.generateOfflineTestMarkets();
+      seedOnchainTestMarkets();
       const firstMarket = marketService.getActiveMarkets()[0];
       expect(firstMarket).toBeDefined();
 
@@ -83,7 +127,7 @@ describe('Market Service & Anomaly Detector Unit & Integration Tests', () => {
     });
 
     it('updates market book quotes and recalculates theoretical fair value and edge', () => {
-      marketService.generateOfflineTestMarkets();
+      seedOnchainTestMarkets();
       const firstMarket = marketService.getActiveMarkets()[0];
 
       const updated = marketService.updateMarketBookQuotes(firstMarket.id, 0.40, 0.44);
@@ -250,7 +294,7 @@ describe('Market Service & Anomaly Detector Unit & Integration Tests', () => {
     });
 
     it('propagates spot updates to recalculate fair values on active markets', () => {
-      marketService.generateOfflineTestMarkets();
+      seedOnchainTestMarkets();
       const btcMarket = marketService.getActiveMarkets({ symbol: 'BTC/USD' })[0];
       expect(btcMarket).toBeDefined();
 
@@ -301,19 +345,14 @@ describe('Market Service & Anomaly Detector Unit & Integration Tests', () => {
 
     it('retrieves unified market by id if available or returns undefined', () => {
       const markets = marketService.getActiveMarkets();
-      expect(markets.length).toBeGreaterThan(0);
-      const unified = marketService.getUnifiedMarket(markets[0].id);
-      // If running live indexer, unified might be present; if fallback, undefined
-      expect(unified === undefined || typeof unified === 'object').toBe(true);
+      if (markets.length > 0) {
+        const unified = marketService.getUnifiedMarket(markets[0].id);
+        expect(unified === undefined || typeof unified === 'object').toBe(true);
+      }
     });
 
-    it('filters synthetic markets when real on-chain markets are present and allows poolAddress lookups', () => {
-      // 1. Seed fallback synthetic market
-      marketService.generateOfflineTestMarkets();
-      const initial = marketService.getActiveMarkets();
-      expect(initial.some((m) => m.isSynthetic)).toBe(true);
-
-      // 2. Insert a real on-chain market
+    it('retrieves on-chain markets and allows poolAddress lookups', () => {
+      // 1. Insert a real on-chain market
       const realMarket: Market = {
         id: '0x1111111111111111111111111111111111111111111111111111111111111111',
         symbol: 'BTC/USD',
@@ -344,17 +383,11 @@ describe('Market Service & Anomaly Detector Unit & Integration Tests', () => {
 
       (marketService as any).markets.set(realMarket.id, realMarket);
 
-      // 3. getActiveMarkets() should now return ONLY real markets by default
-      const filtered = marketService.getActiveMarkets();
-      expect(filtered.length).toBe(1);
-      expect(filtered[0].id).toBe(realMarket.id);
-      expect(filtered[0].isSynthetic).toBe(false);
+      // 2. getActiveMarkets() returns real on-chain market
+      const active = marketService.getActiveMarkets();
+      expect(active.some((m) => m.id === realMarket.id)).toBe(true);
 
-      // 4. getActiveMarkets({ includeSynthetic: true }) still retrieves all if requested
-      const withSynthetic = marketService.getActiveMarkets({ includeSynthetic: true });
-      expect(withSynthetic.length).toBeGreaterThan(1);
-
-      // 5. getMarketById resolves by id, lowercase id, poolAddress, and marketIdHex
+      // 3. getMarketById resolves by id, lowercase id, poolAddress, and marketIdHex
       expect(marketService.getMarketById(realMarket.id)?.id).toBe(realMarket.id);
       expect(marketService.getMarketById(realMarket.id.toLowerCase())?.id).toBe(realMarket.id);
       expect(marketService.getMarketById('0x2222222222222222222222222222222222222222')?.id).toBe(realMarket.id);

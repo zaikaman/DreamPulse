@@ -444,14 +444,12 @@ export class MultiAgentSwarmRunner {
         try {
           const startEvalTime = performance.now();
           const candidateTargets = settlementService.getCandidateSweeperTargets();
-          const uniqueTargets = Array.from(new Set(candidateTargets.map((a) => a.toLowerCase())));
+          const uniqueTargets = Array.from(new Set(candidateTargets.map((a) => a.toLowerCase()))).slice(0, 6);
 
           let totalClaimedAcrossUsers = 0;
           let totalMarketsClaimedAcrossUsers = 0;
 
-          // Concurrent batched sweeper — was sequential N+1 scan (N targets × 50 markets × 3 RPC = 150N RPC serial)
-          // Now: batched multicall per scan + concurrent target batches (5 at a time) → ~N/5 sweeper latency, preserves 5s scanCache deduplication.
-          const SWEEPER_CONCURRENCY = 5;
+          const SWEEPER_CONCURRENCY = 2;
           for (let i = 0; i < uniqueTargets.length; i += SWEEPER_CONCURRENCY) {
             const batch = uniqueTargets.slice(i, i + SWEEPER_CONCURRENCY);
             const batchResults = await Promise.allSettled(

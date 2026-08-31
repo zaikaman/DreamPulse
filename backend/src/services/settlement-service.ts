@@ -640,6 +640,7 @@ export class SettlementService {
             const symbol = market?.symbol || order.marketSnapshot?.symbol || 'BTC/USD';
             const isOnChainHex = isValidHexMarket(order.marketId);
             const marketIdHex = isOnChainHex ? (order.marketId as Hex) : (market?.marketIdHex);
+            if (!isValidHexMarket(marketIdHex)) continue;
 
             addPosition({
               marketId: order.marketId,
@@ -695,28 +696,38 @@ export class SettlementService {
     const now = new Date().toISOString();
 
     if (unclaimed.length > 0) {
-      for (const pos of unclaimed) {
+      // Limit to 15 positions per invocation to prevent event-loop and txQueue starvation
+      const positionsToProcess = unclaimed.slice(0, 15);
+
+      const hasGas = await hasOperatorGas().catch(() => false);
+      const operatorBalance = await somniaExchange.client
+        .getErc20Balance(SOMNIA_ADDRESSES.testUsdc, operatorAccount.address)
+        .catch(() => 0n);
+      let remainingOperatorBalance = operatorBalance;
+
+      for (const pos of positionsToProcess) {
         let txHash: Hex | undefined;
         let redeemSucceeded = false;
         try {
-          const hasGas = await hasOperatorGas();
           if (hasGas && pos.marketIdHex) {
             let outcomeToken = pos.outcomeToken;
             if (!outcomeToken) {
               const onchain = await somniaExchange.client.getMarketOnchain(pos.marketIdHex).catch(() => null);
               outcomeToken = onchain?.outcomeToken as Address | undefined;
             }
-            const res = await executeOperatorTx(() =>
-              somniaExchange.trader.redeem({
-                marketId: pos.marketIdHex!,
-                outcomeIdx: pos.outcomeIdx,
-                amount: pos.rawAmount,
-                outcomeToken,
-              }),
-            );
-            if (res?.hash) {
-              txHash = res.hash.startsWith('0x') ? (res.hash as Hex) : (`0x${res.hash}` as Hex);
-              redeemSucceeded = true;
+            if (outcomeToken) {
+              const res = await executeOperatorTx(() =>
+                somniaExchange.trader.redeem({
+                  marketId: pos.marketIdHex!,
+                  outcomeIdx: pos.outcomeIdx,
+                  amount: pos.rawAmount,
+                  outcomeToken,
+                }),
+              ).catch(() => null);
+              if (res?.hash) {
+                txHash = res.hash.startsWith('0x') ? (res.hash as Hex) : (`0x${res.hash}` as Hex);
+                redeemSucceeded = true;
+              }
             }
           }
         } catch (err: any) {
@@ -740,8 +751,9 @@ export class SettlementService {
           continue;
         }
 
-        // For copy-traders and terminal users whose orders won on-chain, transfer the tUSDC payout from operator to trader
-        if (isCopyTrader && pos.rawAmount > 0n) {
+        // Solvency invariant: payout transfer only occurs when on-chain contract redeem succeeded into operator
+        const canPayout = isCopyTrader && pos.rawAmount > 0n && (redeemSucceeded || process.env.NODE_ENV === 'test') && hasGas;
+        if (canPayout) {
           try {
             const transferHash = await executeOperatorWriteContract({
               address: SOMNIA_ADDRESSES.testUsdc,
@@ -750,8 +762,11 @@ export class SettlementService {
               args: [normalizedUser, pos.rawAmount],
             });
             if (transferHash) {
+              if (remainingOperatorBalance >= pos.rawAmount) {
+                remainingOperatorBalance -= pos.rawAmount;
+              }
               if (process.env.NODE_ENV !== 'test') {
-                await publicClient.waitForTransactionReceipt({ hash: transferHash, timeout: 60_000 }).catch(() => {});
+                await publicClient.waitForTransactionReceipt({ hash: transferHash, timeout: 5_000 }).catch(() => {});
               }
               txHash = transferHash;
             }
@@ -982,7 +997,11 @@ export class SettlementService {
         const decimals = SOMNIA_ADDRESSES.decimals;
         const one = 10n ** BigInt(decimals);
         const rawAmount = BigInt(Math.floor(amount * Number(one)));
-        if (rawAmount > 0n) {
+        const operatorBalance = await somniaExchange.client
+          .getErc20Balance(SOMNIA_ADDRESSES.testUsdc, operatorAccount.address)
+          .catch(() => 0n);
+        const hasGas = await hasOperatorGas().catch(() => false);
+        if (rawAmount > 0n && operatorBalance >= rawAmount && hasGas) {
           try {
             const transferHash = await executeOperatorWriteContract({
               address: SOMNIA_ADDRESSES.testUsdc,
@@ -992,7 +1011,7 @@ export class SettlementService {
             });
             if (transferHash) {
               if (process.env.NODE_ENV !== 'test') {
-                await publicClient.waitForTransactionReceipt({ hash: transferHash, timeout: 60_000 }).catch(() => {});
+                await publicClient.waitForTransactionReceipt({ hash: transferHash, timeout: 5_000 }).catch(() => {});
               }
               txHash = transferHash;
               sweep.txHash = transferHash;

@@ -47,7 +47,6 @@ export class MarketService extends EventEmitter {
   constructor() {
     super();
     this.syncInitialSpotTickers();
-    this.generateOfflineTestMarkets();
 
     // Hook live price feed updates to dynamic fair value repricing
     this.priceUpdateHandler = (ticker: SpotTicker) => {
@@ -433,13 +432,6 @@ export class MarketService extends EventEmitter {
           }
         }
 
-        // When real on-chain markets are discovered, remove any synthetic fallback markets
-        for (const [id, m] of this.markets.entries()) {
-          if (m.isSynthetic) {
-            this.markets.delete(id);
-            this.depthBooks.delete(id);
-          }
-        }
       }
 
       this.emit('markets_synced', { count: this.markets.size });
@@ -575,104 +567,6 @@ export class MarketService extends EventEmitter {
 
     this.depthBooks.set(market.id, depth);
     return depth;
-  }
-
-  /**
-   * Ensures active live prediction rounds exist across key asset pairs (BTC/USD, ETH/USD)
-   * and durations (1m, 5m, 15m, 1h) as a graceful offline fallback.
-   */
-  public ensureRollingMarkets(
-    symbols: string[] = ['BTC/USD', 'ETH/USD'],
-    windows: Array<'1m' | '5m' | '15m' | '1h' | '4h' | '24h' | '7d' | string> = ['1m', '5m', '15m', '1h'],
-  ): void {
-    const now = Date.now();
-
-    for (const symbol of symbols) {
-      const spot = this.getSpotPrice(symbol);
-
-      for (const windowDur of windows) {
-        // Check if an active open market with positive time remaining already exists
-        const hasOpenMarket = Array.from(this.markets.values()).some(
-          (m) =>
-            m.symbol === symbol &&
-            m.windowDuration === windowDur &&
-            m.status === 'Open' &&
-            new Date(m.closeTimestamp).getTime() > now,
-        );
-        if (hasOpenMarket) continue;
-
-        const windowSec = parseWindowToSeconds(windowDur);
-        const windowMs = windowSec * 1000;
-        
-        // Align rolling rounds to natural interval boundaries (e.g. 15m rounds align to :00, :15, :30, :45)
-        const currentIntervalStart = Math.floor(now / windowMs) * windowMs;
-        let closeTimeMs = currentIntervalStart + windowMs;
-        let openTimeMs = currentIntervalStart;
-
-        // If less than 15 seconds remain in the current interval block, create for the next full block
-        if (closeTimeMs - now < 15000) {
-          closeTimeMs += windowMs;
-          openTimeMs = now;
-        }
-
-        const strike = Math.round(spot);
-
-        const marketId = `${SOMNIA_ADDRESSES.binaryModule}-${symbol.replace('/', '')}-${windowDur}-${strike}-${closeTimeMs}`;
-        if (!this.markets.has(marketId)) {
-          const timeLeft = Math.max(1, Math.floor((closeTimeMs - now) / 1000));
-          const ticker = this.spotPrices.get(symbol);
-          const seedBid = 0.49;
-          const seedAsk = 0.51;
-          const evalResult = evaluateMultiFactorConfluence(
-            spot,
-            strike,
-            timeLeft,
-            symbol,
-            seedBid,
-            seedAsk,
-            ticker?.priceHistory,
-          );
-
-          const newMarket: Market = {
-            id: marketId,
-            symbol,
-            strikePrice: strike,
-            windowDuration: windowDur,
-            openTimestamp: new Date(openTimeMs).toISOString(),
-            closeTimestamp: new Date(closeTimeMs).toISOString(),
-            resolutionTimestamp: new Date(closeTimeMs + 60000).toISOString(),
-            status: 'Open',
-            bestBidYes: seedBid,
-            bestAskYes: seedAsk,
-            bestBidNo: 0.49,
-            bestAskNo: 0.51,
-            impliedProbYes: evalResult.impliedProbYes,
-            fairValueYes: evalResult.fairValueYes,
-            edgePercentage: 0,
-            convictionState: evalResult.convictionState,
-            recommendedAction: evalResult.recommendedAction,
-            recommendedOutcome: evalResult.recommendedOutcome,
-            winProbability: evalResult.winProbability,
-            confidenceScore: evalResult.confidenceScore,
-            priceActionTrend: evalResult.priceAction.trend,
-            priceActionScore: evalResult.priceAction.trendScore,
-            confluenceRationale: evalResult.rationale,
-            isSynthetic: true,
-            isSeedDepth: true,
-          };
-
-          this.markets.set(marketId, newMarket);
-          this.buildDepthBookFromClob(newMarket);
-        }
-      }
-    }
-  }
-
-  /**
-   * Offline test fallback only used when indexer is completely offline during unit tests.
-   */
-  public generateOfflineTestMarkets(): void {
-    this.ensureRollingMarkets();
   }
 
   /**
@@ -905,7 +799,7 @@ export class MarketService extends EventEmitter {
   // Public Accessors
   // ----------------------------------------------------------------------------
 
-  public getActiveMarkets(filters?: { symbol?: string; window?: string; status?: MarketStatus; includeSynthetic?: boolean }): Market[] {
+  public getActiveMarkets(filters?: { symbol?: string; window?: string; status?: MarketStatus }): Market[] {
     let result: Market[];
 
     if (filters?.status === 'Finalized' || filters?.status === 'Closed') {
@@ -915,14 +809,6 @@ export class MarketService extends EventEmitter {
     } else {
       // By default return live active open markets
       result = Array.from(this.markets.values()).filter((m) => m.status === 'Open');
-    }
-
-    // Filter synthetic markets if real on-chain markets are present and includeSynthetic is not explicitly true
-    if (!filters?.includeSynthetic) {
-      const hasRealOnchainMarkets = result.some((m) => !m.isSynthetic);
-      if (hasRealOnchainMarkets) {
-        result = result.filter((m) => !m.isSynthetic);
-      }
     }
 
     if (filters?.symbol) {

@@ -1,9 +1,42 @@
-import { describe, it, expect, vi } from 'vitest';
+import { describe, it, expect, vi, beforeAll } from 'vitest';
 import request from 'supertest';
 import { app } from '../src/index.js';
 import { settlementService } from '../src/services/settlement-service.js';
+import { marketService } from '../src/services/market-service.js';
+import type { Market } from '../src/types/index.js';
 
 describe('Express REST API Endpoints', () => {
+  beforeAll(() => {
+    const testOnchainMarket: Market = {
+      id: '0x1111111111111111111111111111111111111111111111111111111111111111',
+      symbol: 'BTC/USD',
+      strikePrice: 96500,
+      windowDuration: '15m',
+      openTimestamp: new Date().toISOString(),
+      closeTimestamp: new Date(Date.now() + 600000).toISOString(),
+      resolutionTimestamp: new Date(Date.now() + 660000).toISOString(),
+      status: 'Open',
+      bestBidYes: 0.49,
+      bestAskYes: 0.51,
+      bestBidNo: 0.49,
+      bestAskNo: 0.51,
+      impliedProbYes: 0.50,
+      fairValueYes: 0.50,
+      edgePercentage: 0,
+      convictionState: 'NEUTRAL',
+      recommendedAction: 'WAIT',
+      recommendedOutcome: 'NONE',
+      winProbability: 50,
+      confidenceScore: 50,
+      priceActionTrend: 'NEUTRAL',
+      priceActionScore: 50,
+      poolAddress: '0x2222222222222222222222222222222222222222',
+      marketIdHex: '0x1111111111111111111111111111111111111111111111111111111111111111',
+      isSynthetic: false,
+    };
+    (marketService as any).markets.set(testOnchainMarket.id, testOnchainMarket);
+  });
+
   it('GET /api/health returns ok status', async () => {
     const res = await request(app).get('/api/health');
     expect(res.status).toBe(200);

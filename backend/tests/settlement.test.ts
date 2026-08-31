@@ -337,14 +337,15 @@ describe('Phase 6 Settlement Sweeper & Collateral Compounder Tests', () => {
       expect(history[0].claimableAmount).toBe(11.0);
     });
 
-    it('scans and sweeps winning manual trades placed through Trade Terminal on rolling CLOB markets', async () => {
+    it('scans and sweeps winning manual trades placed through Trade Terminal on on-chain CLOB markets', async () => {
       const settlementService = new SettlementService();
       const terminalUserAddress = '0x1111222233334444555566667777888899990000';
-      const rollingMarketId = '0x6bfa-BTCUSD-5m-96500-1740000000000';
+      const onchainMarketId = '0x6bfa111111111111111111111111111111111111111111111111111111111111';
 
       const { marketService } = await import('../src/services/market-service.js');
       vi.spyOn(marketService, 'getMarketById').mockReturnValue({
-        id: rollingMarketId,
+        id: onchainMarketId,
+        marketIdHex: onchainMarketId as Hex,
         symbol: 'BTC/USD',
         strikePrice: 96500,
         windowDuration: '5m',
@@ -367,7 +368,7 @@ describe('Phase 6 Settlement Sweeper & Collateral Compounder Tests', () => {
         {
           id: 'terminal-order-1',
           userAddress: terminalUserAddress,
-          marketId: rollingMarketId,
+          marketId: onchainMarketId,
           agentType: 'Manual',
           source: 'TERMINAL',
           outcome: 'YES',
@@ -389,7 +390,7 @@ describe('Phase 6 Settlement Sweeper & Collateral Compounder Tests', () => {
 
       const unclaimed = await settlementService.scanUnclaimedSettlements(terminalUserAddress, true);
       expect(unclaimed.length).toBe(1);
-      expect(unclaimed[0].marketId).toBe(rollingMarketId);
+      expect(unclaimed[0].marketId).toBe(onchainMarketId);
       expect(unclaimed[0].winningOutcome).toBe('YES');
       expect(unclaimed[0].claimableAmount).toBe(20.0); // Full $20 payout
 
