@@ -151,6 +151,70 @@ describe('Swarm Arena & Strategy Leaderboard Tests', () => {
       await customAgentService.deleteCustomAgent(zeroTradeAgent.id, zeroTradeAgent.userAddress);
     });
 
+    it('accurately isolates performance across multiple custom agents created by same user', async () => {
+      const user = '0x2222222222222222222222222222222222222222';
+      const agent1m = await customAgentService.createCustomAgent({
+        userAddress: user,
+        name: 'Fast EMA Momentum Rider ETH 1m Test',
+        symbol: 'ETH/USD',
+        timeframe: '1m',
+        strategyType: 'MOMENTUM',
+        rules: {
+          operator: 'AND',
+          conditions: [{ id: 'c-1', indicator: 'EMA', period: 9, secondaryPeriod: 21, operator: 'CROSS_ABOVE', value: 0 }],
+          action: { direction: 'CALL', durationSec: 60, stakeType: 'FIXED', stakeAmount: 20 },
+        },
+        isActive: true,
+        isDeployed: true,
+        allocatedAllowance: 500000,
+        spentAllowance: 1182.07,
+      });
+
+      const agent5m = await customAgentService.createCustomAgent({
+        userAddress: user,
+        name: 'Fast EMA Momentum Rider ETH 5m Test',
+        symbol: 'ETH/USD',
+        timeframe: '5m',
+        strategyType: 'MOMENTUM',
+        rules: {
+          operator: 'AND',
+          conditions: [{ id: 'c-1', indicator: 'EMA', period: 9, secondaryPeriod: 21, operator: 'CROSS_ABOVE', value: 0 }],
+          action: { direction: 'CALL', durationSec: 300, stakeType: 'FIXED', stakeAmount: 20 },
+        },
+        isActive: true,
+        isDeployed: true,
+        allocatedAllowance: 99999,
+        spentAllowance: 1178.68,
+      });
+
+      // Update individual agent stats directly to simulate realistic distinct performance
+      await customAgentService.updateCustomAgent(agent1m.id, { pnl: 370.15, winRate: 62.0, tradesCount: 60 }, user);
+      await customAgentService.updateCustomAgent(agent5m.id, { pnl: 102.85, winRate: 71.0, tradesCount: 60 }, user);
+
+      const allAgents = await leaderboardService.getAgentLeaderboard({ timeframe: 'ALL' });
+      const entry1m = allAgents.data.find((a) => a.id === agent1m.id);
+      const entry5m = allAgents.data.find((a) => a.id === agent5m.id);
+
+      expect(entry1m).toBeDefined();
+      expect(entry5m).toBeDefined();
+
+      // Ensure metrics are isolated and not duplicate/cross-contaminated
+      expect(entry1m!.pnl).toBe(370.15);
+      expect(entry1m!.winRate).toBe(62.0);
+      expect(entry1m!.timeframe).toBe('1m');
+
+      expect(entry5m!.pnl).toBe(102.85);
+      expect(entry5m!.winRate).toBe(71.0);
+      expect(entry5m!.timeframe).toBe('5m');
+
+      expect(entry1m!.pnl).not.toBe(entry5m!.pnl);
+      expect(entry1m!.winRate).not.toBe(entry5m!.winRate);
+
+      // Cleanup
+      await customAgentService.deleteCustomAgent(agent1m.id, user);
+      await customAgentService.deleteCustomAgent(agent5m.id, user);
+    });
+
     it('ranks human traders and computes win streaks and Copilot synergy', async () => {
       const result = await leaderboardService.getTraderLeaderboard({
         range: '7d',

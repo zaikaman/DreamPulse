@@ -1010,6 +1010,7 @@ export class OrderService {
       id: orderId,
       userAddress: session.userAddress,
       sessionId: session.id,
+      customAgentId: decision.customAgentId,
       marketId: decision.targetMarketId,
       agentType: effectiveAgentType,
       source,
@@ -2221,23 +2222,27 @@ export class OrderService {
               await supabase.from('orders').update({ pnl: order.pnl, status: order.status }).eq('id', order.id);
             }
           } catch {}
+          // Synchronize realized PnL and win rate to matching deployed custom agent
+          if (order.agentType === 'CUSTOM' && order.userAddress) {
+            const isWin = (order.pnl || 0) > 0;
+            void (async () => {
+              try {
+                const { customAgentService } = await import('./custom-agent-service.js');
+                let targetAgentId = order.customAgentId;
+                if (!targetAgentId) {
+                  const market = marketService.getMarketById(order.marketId);
+                  const symbol = market?.symbol || order.marketSnapshot?.symbol || '';
+                  const window = market?.windowDuration || order.marketSnapshot?.windowDuration || '';
+                  const agent = await customAgentService.findAgentForUserAndSymbol(order.userAddress, symbol, window);
+                  targetAgentId = agent?.id;
+                }
+                if (targetAgentId) {
+                  await customAgentService.recordTradeSettlement(targetAgentId, order.pnl || 0, isWin);
+                }
+              } catch {}
+            })();
+          }
         })();
-
-        // Synchronize realized PnL and win rate to matching deployed custom agent
-        if (order.agentType === 'CUSTOM' && order.userAddress) {
-          const isWin = (order.pnl || 0) > 0;
-          const market = marketService.getMarketById(order.marketId);
-          const symbol = market?.symbol || order.marketSnapshot?.symbol || '';
-          void (async () => {
-            try {
-              const { customAgentService } = await import('./custom-agent-service.js');
-              const agent = await customAgentService.findAgentForUserAndSymbol(order.userAddress, symbol);
-              if (agent) {
-                await customAgentService.recordTradeSettlement(agent.id, order.pnl || 0, isWin);
-              }
-            } catch {}
-          })();
-        }
       }
 
       if (updatedOrderPnlEvents.length > 0) {

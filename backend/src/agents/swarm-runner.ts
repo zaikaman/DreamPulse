@@ -712,10 +712,22 @@ export class MultiAgentSwarmRunner {
       const spent = agent.spentAllowance ?? 0;
       if (allocated - spent < 1.0) continue;
 
-      // Filter markets matching agent symbol (e.g. BTC/USD or ETH/USD)
-      const matchingMarkets = openMarkets.filter(
-        (m) => m.symbol.toUpperCase() === agent.symbol.toUpperCase()
-      );
+      // Filter markets matching agent symbol and timeframe window
+      const agentTf = (agent.timeframe || '').toLowerCase();
+      let matchingMarkets = openMarkets.filter((m) => {
+        const symbolMatch = m.symbol.toUpperCase() === agent.symbol.toUpperCase();
+        if (!symbolMatch) return false;
+        if (agentTf && agentTf !== 'all' && m.windowDuration) {
+          return m.windowDuration.toLowerCase() === agentTf;
+        }
+        return true;
+      });
+      // Fallback to symbol match if no exact timeframe match is currently active
+      if (matchingMarkets.length === 0) {
+        matchingMarkets = openMarkets.filter(
+          (m) => m.symbol.toUpperCase() === agent.symbol.toUpperCase()
+        );
+      }
       if (matchingMarkets.length === 0) continue;
 
       const sessionGrant: SessionGrant = {

@@ -391,6 +391,7 @@ export class CustomAgentEvaluator {
 
     return {
       agentType: 'CUSTOM',
+      customAgentId: agent.id,
       action: 'TAKER_BUY',
       targetMarketId: market.id,
       targetOutcome: targetOutcome === 'YES' ? 'YES' : 'NO',

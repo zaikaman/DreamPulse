@@ -30,6 +30,7 @@ export interface IAgentContext {
 
 export interface IAgentDecision {
   agentType: AgentType;
+  customAgentId?: string;
   action: 'TAKER_BUY' | 'TAKER_SELL' | 'LIMIT_QUOTE' | 'CANCEL_QUOTE' | 'BATCH_SWEEP' | 'HOLD';
   targetMarketId: string;
   targetOutcome?: 'YES' | 'NO';

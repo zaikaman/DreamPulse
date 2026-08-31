@@ -91,6 +91,7 @@ export interface OrderExecution {
   id: string;
   userAddress: `0x${string}`;
   sessionId?: string;
+  customAgentId?: string;
   marketId: string;
   agentType: AgentType;
   source?: OrderSource;

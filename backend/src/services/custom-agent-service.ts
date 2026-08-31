@@ -749,9 +749,19 @@ export class CustomAgentService {
     }
   }
 
-  public async findAgentForUserAndSymbol(userAddress: string, symbol: string): Promise<CustomAgentDefinition | null> {
+  public async findAgentForUserAndSymbol(userAddress: string, symbol: string, timeframe?: string): Promise<CustomAgentDefinition | null> {
     const cleanUser = userAddress.toLowerCase();
     const deployed = await this.getActiveDeployedAgents();
+    const cleanTf = timeframe?.toLowerCase();
+    if (cleanTf) {
+      const matchWithTf = deployed.find(
+        (a) =>
+          a.userAddress.toLowerCase() === cleanUser &&
+          a.symbol.toUpperCase() === symbol.toUpperCase() &&
+          (a.timeframe || '').toLowerCase() === cleanTf
+      );
+      if (matchWithTf) return matchWithTf;
+    }
     const match = deployed.find(
       (a) => a.userAddress.toLowerCase() === cleanUser && a.symbol.toUpperCase() === symbol.toUpperCase()
     );
