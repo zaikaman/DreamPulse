@@ -1,5 +1,5 @@
 import { isAddress, getAddress, type Address, type Hex } from 'viem';
-import { supabase } from '../config/supabase.js';
+import { supabase, isPersistenceEnabled } from '../config/supabase.js';
 import { SOMNIA_ADDRESSES, operatorAccount } from '../config/somnia.js';
 import { userSwarmService } from './user-swarm-service.js';
 import {
@@ -10,13 +10,8 @@ import {
   OPERATOR_SELECTORS,
 } from '../config/permissions-abi.js';
 
-
 function isSessionPersistenceEnabled(): boolean {
-  if (process.env.VITEST === 'true' || process.env.NODE_ENV === 'test') {
-    return false;
-  }
-  const url = process.env.SUPABASE_URL || '';
-  return url.length > 0 && !url.includes('mock-project');
+  return isPersistenceEnabled();
 }
 
 export const UNLIMITED_AMOUNT = 1_000_000_000;

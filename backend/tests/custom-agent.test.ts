@@ -1,11 +1,11 @@
-import { describe, it, expect, beforeEach } from 'vitest';
+import { describe, it, expect, beforeEach, afterAll } from 'vitest';
 import { customAgentService, STARTER_TEMPLATES } from '../src/services/custom-agent-service.js';
 import { customAgentEvaluator } from '../src/agents/custom-agent-evaluator.js';
 import type { CustomAgentDefinition, Market, SessionGrant } from '../src/types/index.js';
 import type { IAgentContext } from '../src/agents/base-agent.js';
 
 describe('Custom Deployed Agents & Evaluation Engine', () => {
-  const testUser = '0x327e766eb317e5a3fa6db30c0a5b9735ad1aedae';
+  const testUser = '0x000000000000000000000000000000000000dead';
 
   beforeEach(async () => {
     const existing = await customAgentService.getCustomAgents(testUser);
@@ -18,6 +18,19 @@ describe('Custom Deployed Agents & Evaluation Engine', () => {
           isDeployed: true,
           allocatedAllowance: 200,
         });
+      }
+    }
+  });
+
+  afterAll(async () => {
+    const agents = await customAgentService.getCustomAgents(testUser);
+    for (const a of agents) {
+      if (a.userAddress.toLowerCase() === testUser.toLowerCase()) {
+        try {
+          await customAgentService.deleteCustomAgent(a.id, testUser);
+        } catch {
+          // ignore cleanup errors
+        }
       }
     }
   });

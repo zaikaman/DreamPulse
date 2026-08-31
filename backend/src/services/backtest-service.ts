@@ -1,5 +1,5 @@
 import { type Address, getAddress, isAddress } from 'viem';
-import { supabase } from '../config/supabase.js';
+import { supabase, isPersistenceEnabled } from '../config/supabase.js';
 import type { BacktestResult, AgentType, CustomAgentRules } from '../types/index.js';
 import {
   calculateFairValue,
@@ -946,7 +946,7 @@ export class BacktestService {
     }
 
     // Persist to Supabase asynchronously (only real user addresses, skip test runs)
-    if (userAddr && process.env.NODE_ENV !== 'test') {
+    if (userAddr && isPersistenceEnabled()) {
       (async () => {
         try {
           await supabase.from('backtests').insert({

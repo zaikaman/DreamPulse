@@ -43,3 +43,14 @@ export function getAnonSupabase(): SupabaseClient {
 
 /** Default backend client = service_role (bypasses hardened RLS). */
 export const supabase = getServiceSupabase();
+
+/**
+ * Returns true if Supabase persistence is enabled and we are not in a test runner (Vitest/test).
+ */
+export function isPersistenceEnabled(): boolean {
+  if (process.env.VITEST === 'true' || process.env.NODE_ENV === 'test') {
+    return false;
+  }
+  const url = process.env.SUPABASE_URL || env.SUPABASE_URL || '';
+  return url.length > 0 && !url.includes('mock-project');
+}

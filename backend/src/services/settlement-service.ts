@@ -1,5 +1,5 @@
 import { type Hex, type Address, getAddress, isAddress } from 'viem';
-import { supabase } from '../config/supabase.js';
+import { supabase, isPersistenceEnabled } from '../config/supabase.js';
 import { compounderService } from './compounder-service.js';
 import { telemetryWsGateway } from '../websocket/server.js';
 import { marketService } from './market-service.js';
@@ -801,7 +801,7 @@ export class SettlementService {
 
         // Persist to Supabase asynchronously
         if (
-          process.env.NODE_ENV !== 'test' &&
+          isPersistenceEnabled() &&
           txHash &&
           !txHash.startsWith('0x0000000000000000000000000000000000000000000000000000000000000000') &&
           txHash !== '0x1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef' &&
@@ -1010,7 +1010,7 @@ export class SettlementService {
 
       // Persist to Supabase asynchronously
       if (
-        process.env.NODE_ENV !== 'test' &&
+        isPersistenceEnabled() &&
         txHash &&
         !txHash.startsWith('0x0000000000000000000000000000000000000000000000000000000000000000') &&
         txHash !== '0x1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef' &&

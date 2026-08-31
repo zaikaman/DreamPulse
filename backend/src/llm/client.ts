@@ -1,6 +1,6 @@
 import OpenAI from 'openai';
 import { env } from '../config/env.js';
-import { supabase } from '../config/supabase.js';
+import { supabase, isPersistenceEnabled } from '../config/supabase.js';
 
 export interface StructuredReasoningRequest {
   systemPrompt: string;
@@ -42,6 +42,10 @@ function getGroqClient(apiKey: string): OpenAI {
  */
 export async function initPersistentKeyIndex(): Promise<number> {
   if (isInitialized) return currentGroqKeyIndex;
+  if (!isPersistenceEnabled()) {
+    isInitialized = true;
+    return currentGroqKeyIndex;
+  }
   try {
     const { data, error } = await supabase
       .from('system_state')
@@ -66,6 +70,7 @@ export async function initPersistentKeyIndex(): Promise<number> {
  */
 let persistTimeout: NodeJS.Timeout | null = null;
 export function schedulePersistKeyIndex(index: number): void {
+  if (!isPersistenceEnabled()) return;
   if (persistTimeout) clearTimeout(persistTimeout);
   persistTimeout = setTimeout(async () => {
     try {

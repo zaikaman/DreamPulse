@@ -3,7 +3,7 @@ import type { Market, MarketStatus, OutcomeType } from '../types/index.js';
 import { calculateFairValue, calculateEdge, calculateConfluenceProbability, evaluateMultiFactorConfluence, parseWindowToSeconds } from '../quantitative/pricing.js';
 import { SOMNIA_ADDRESSES, somniaExchange, MARKET_STATUS } from '../config/somnia.js';
 import { env } from '../config/env.js';
-import { getServiceSupabase, supabase } from '../config/supabase.js';
+import { getServiceSupabase, supabase, isPersistenceEnabled } from '../config/supabase.js';
 import { priceFeedService, type SpotTicker } from './price-feed-service.js';
 import type { UnifiedMarket, UnifiedOrderBook, BinaryMarket, BinaryOrderBook } from '@somnia-chain/markets-sdk';
 import type { Address, Hex } from 'viem';
@@ -656,6 +656,7 @@ export class MarketService extends EventEmitter {
    * Persists a finalized market with its authoritative settlement price to Supabase.
    */
   public async persistFinalizedMarket(market: Market): Promise<void> {
+    if (!isPersistenceEnabled()) return;
     try {
       const supabase = getServiceSupabase();
       await supabase.from('markets').upsert({
@@ -709,6 +710,7 @@ export class MarketService extends EventEmitter {
    * quantized hash changed by > epsilon or when forced interval elapsed.
    */
   public async syncActiveMarketsToDatabase(): Promise<void> {
+    if (!isPersistenceEnabled()) return;
     try {
       const supabase = getServiceSupabase();
       const now = Date.now();
@@ -765,7 +767,7 @@ export class MarketService extends EventEmitter {
    * Ensures an arbitrary on-chain or rolling market ID exists in Supabase so orders and sweeps foreign keys never fail.
    */
   public async ensureMarketPersisted(marketId: string, symbol: string = 'BTC/USD'): Promise<void> {
-    if (!marketId) return;
+    if (!marketId || !isPersistenceEnabled()) return;
     try {
       const db = getServiceSupabase();
       const existing = this.markets.get(marketId);

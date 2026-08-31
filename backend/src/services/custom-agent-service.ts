@@ -1,5 +1,5 @@
 import crypto from 'crypto';
-import { supabase } from '../config/supabase.js';
+import { supabase, isPersistenceEnabled } from '../config/supabase.js';
 import { generateStrategyWithGemini } from '../llm/client.js';
 import type {
   CustomAgentDefinition,
@@ -172,10 +172,13 @@ export class CustomAgentService {
     for (const t of STARTER_TEMPLATES) {
       this.inMemoryAgents.set(t.id, JSON.parse(JSON.stringify(t)));
     }
-    void this.seedStarterTemplates();
+    if (isPersistenceEnabled()) {
+      void this.seedStarterTemplates();
+    }
   }
 
   private async seedStarterTemplates(): Promise<void> {
+    if (!isPersistenceEnabled()) return;
     try {
       for (const t of STARTER_TEMPLATES) {
         await supabase.from('custom_agents').upsert(
@@ -258,23 +261,25 @@ export class CustomAgentService {
 
     // 1. Fetch user-owned custom agents from DB
     if (cleanAddr) {
-      try {
-        const { data, error } = await supabase
-          .from('custom_agents')
-          .select('*')
-          .eq('user_address', cleanAddr)
-          .order('created_at', { ascending: false });
+      if (isPersistenceEnabled()) {
+        try {
+          const { data, error } = await supabase
+            .from('custom_agents')
+            .select('*')
+            .eq('user_address', cleanAddr)
+            .order('created_at', { ascending: false });
 
-        if (!error && Array.isArray(data)) {
-          for (const row of data) {
-            const mapped = this.mapDbRowToAgent(row);
-            result.push(mapped);
-            seenIds.add(mapped.id);
-            this.inMemoryAgents.set(mapped.id, mapped);
+          if (!error && Array.isArray(data)) {
+            for (const row of data) {
+              const mapped = this.mapDbRowToAgent(row);
+              result.push(mapped);
+              seenIds.add(mapped.id);
+              this.inMemoryAgents.set(mapped.id, mapped);
+            }
           }
+        } catch (_err) {
+          // Fall back to memory
         }
-      } catch (_err) {
-        // Fall back to memory
       }
 
       // Check memory for user-owned agents
@@ -304,32 +309,34 @@ export class CustomAgentService {
   public async getTopCustomAgents(limit: number = 50): Promise<CustomAgentDefinition[]> {
     const result: CustomAgentDefinition[] = [];
     const seenIds = new Set<string>();
-    try {
-      const { data, error } = await supabase
-        .from('custom_agents')
-        .select('*')
-        .neq('user_address', '0x0000000000000000000000000000000000000000')
-        .order('pnl', { ascending: false })
-        .limit(limit);
-      if (!error && Array.isArray(data)) {
-        for (const row of data) {
-          const mapped = this.mapDbRowToAgent(row);
-          result.push(mapped);
-          seenIds.add(mapped.id);
-          this.inMemoryAgents.set(mapped.id, mapped);
-        }
-      } else if (error) {
-        // Fallback to created_at ordering if pnl index missing
-        const fallback = await supabase.from('custom_agents').select('*').neq('user_address', '0x0000000000000000000000000000000000000000').order('created_at', { ascending: false }).limit(limit);
-        if (!fallback.error && Array.isArray(fallback.data)) {
-          for (const row of fallback.data) {
+    if (isPersistenceEnabled()) {
+      try {
+        const { data, error } = await supabase
+          .from('custom_agents')
+          .select('*')
+          .neq('user_address', '0x0000000000000000000000000000000000000000')
+          .order('pnl', { ascending: false })
+          .limit(limit);
+        if (!error && Array.isArray(data)) {
+          for (const row of data) {
             const mapped = this.mapDbRowToAgent(row);
-            if (!seenIds.has(mapped.id)) { result.push(mapped); seenIds.add(mapped.id); this.inMemoryAgents.set(mapped.id, mapped); }
+            result.push(mapped);
+            seenIds.add(mapped.id);
+            this.inMemoryAgents.set(mapped.id, mapped);
+          }
+        } else if (error) {
+          // Fallback to created_at ordering if pnl index missing
+          const fallback = await supabase.from('custom_agents').select('*').neq('user_address', '0x0000000000000000000000000000000000000000').order('created_at', { ascending: false }).limit(limit);
+          if (!fallback.error && Array.isArray(fallback.data)) {
+            for (const row of fallback.data) {
+              const mapped = this.mapDbRowToAgent(row);
+              if (!seenIds.has(mapped.id)) { result.push(mapped); seenIds.add(mapped.id); this.inMemoryAgents.set(mapped.id, mapped); }
+            }
           }
         }
+      } catch (err: any) {
+        console.warn('[CustomAgentService] Error loading top custom agents:', err.message);
       }
-    } catch (err: any) {
-      console.warn('[CustomAgentService] Error loading top custom agents:', err.message);
     }
     // Merge in-memory agents that may have higher PnL but not yet persisted — keep top by pnl
     for (const [id, agent] of this.inMemoryAgents.entries()) {
@@ -351,23 +358,25 @@ export class CustomAgentService {
     const seenIds = new Set<string>();
 
     // 1. Fetch every user-owned agent from DB (exclude pure template owner)
-    try {
-      const { data, error } = await supabase
-        .from('custom_agents')
-        .select('*')
-        .neq('user_address', '0x0000000000000000000000000000000000000000')
-        .order('created_at', { ascending: false });
+    if (isPersistenceEnabled()) {
+      try {
+        const { data, error } = await supabase
+          .from('custom_agents')
+          .select('*')
+          .neq('user_address', '0x0000000000000000000000000000000000000000')
+          .order('created_at', { ascending: false });
 
-      if (!error && Array.isArray(data)) {
-        for (const row of data) {
-          const mapped = this.mapDbRowToAgent(row);
-          result.push(mapped);
-          seenIds.add(mapped.id);
-          this.inMemoryAgents.set(mapped.id, mapped);
+        if (!error && Array.isArray(data)) {
+          for (const row of data) {
+            const mapped = this.mapDbRowToAgent(row);
+            result.push(mapped);
+            seenIds.add(mapped.id);
+            this.inMemoryAgents.set(mapped.id, mapped);
+          }
         }
+      } catch (err: any) {
+        console.warn('[CustomAgentService] Error loading all custom agents:', err.message);
       }
-    } catch (err: any) {
-      console.warn('[CustomAgentService] Error loading all custom agents:', err.message);
     }
 
     // 2. Merge any in-memory user agents not yet persisted / not returned from DB
@@ -396,24 +405,26 @@ export class CustomAgentService {
     const deployed: CustomAgentDefinition[] = [];
     const seenIds = new Set<string>();
 
-    try {
-      const { data, error } = await supabase
-        .from('custom_agents')
-        .select('*')
-        .eq('is_deployed', true)
-        .eq('is_active', true);
+    if (isPersistenceEnabled()) {
+      try {
+        const { data, error } = await supabase
+          .from('custom_agents')
+          .select('*')
+          .eq('is_deployed', true)
+          .eq('is_active', true);
 
-      if (!error && Array.isArray(data)) {
-        for (const row of data) {
-          if (row.user_address === '0x0000000000000000000000000000000000000000') continue;
-          const mapped = this.mapDbRowToAgent(row);
-          deployed.push(mapped);
-          seenIds.add(mapped.id);
-          this.inMemoryAgents.set(mapped.id, mapped);
+        if (!error && Array.isArray(data)) {
+          for (const row of data) {
+            if (row.user_address === '0x0000000000000000000000000000000000000000') continue;
+            const mapped = this.mapDbRowToAgent(row);
+            deployed.push(mapped);
+            seenIds.add(mapped.id);
+            this.inMemoryAgents.set(mapped.id, mapped);
+          }
         }
+      } catch (err: any) {
+        console.warn('[CustomAgentService] Error loading active deployed agents:', err.message);
       }
-    } catch (err: any) {
-      console.warn('[CustomAgentService] Error loading active deployed agents:', err.message);
     }
 
     for (const agent of this.inMemoryAgents.values()) {
@@ -433,54 +444,56 @@ export class CustomAgentService {
 
   public async getCustomAgentById(id: string): Promise<CustomAgentDefinition | null> {
     // Check DB first for freshest persisted state
-    try {
-      const { data, error } = await supabase.from('custom_agents').select('*').eq('id', id).single();
-      if (!error && data) {
-        const mapped: CustomAgentDefinition = {
-          id: data.id,
-          userAddress: data.user_address,
-          name: data.name,
-          description: data.description || '',
-          symbol: data.symbol,
-          timeframe: data.timeframe,
-          strategyType: data.strategy_type,
-          rules: data.rules,
-          color: data.color,
-          icon: data.icon,
-          isActive: data.is_active !== false,
-          isDeployed: Boolean(data.is_deployed),
-          allocatedAllowance:
-            data.allocated_allowance !== undefined && data.allocated_allowance !== null
-              ? Number(data.allocated_allowance)
-              : 100,
-          spentAllowance:
-            data.spent_allowance !== undefined && data.spent_allowance !== null
-              ? Number(data.spent_allowance)
-              : 0,
-          pnl:
-            data.pnl !== undefined && data.pnl !== null
-              ? Number(data.pnl)
-              : (this.inMemoryAgents.get(data.id)?.pnl ?? 0),
-          winRate:
-            data.win_rate !== undefined && data.win_rate !== null
-              ? Number(data.win_rate)
-              : (this.inMemoryAgents.get(data.id)?.winRate ?? 0),
-          tradesCount:
-            data.trades_count !== undefined && data.trades_count !== null
-              ? Number(data.trades_count)
-              : (this.inMemoryAgents.get(data.id)?.tradesCount ?? 0),
-          createdAt: data.created_at,
-          updatedAt: data.updated_at,
-        };
-        this.inMemoryAgents.set(id, mapped);
-        return mapped;
+    if (isPersistenceEnabled()) {
+      try {
+        const { data, error } = await supabase.from('custom_agents').select('*').eq('id', id).single();
+        if (!error && data) {
+          const mapped: CustomAgentDefinition = {
+            id: data.id,
+            userAddress: data.user_address,
+            name: data.name,
+            description: data.description || '',
+            symbol: data.symbol,
+            timeframe: data.timeframe,
+            strategyType: data.strategy_type,
+            rules: data.rules,
+            color: data.color,
+            icon: data.icon,
+            isActive: data.is_active !== false,
+            isDeployed: Boolean(data.is_deployed),
+            allocatedAllowance:
+              data.allocated_allowance !== undefined && data.allocated_allowance !== null
+                ? Number(data.allocated_allowance)
+                : 100,
+            spentAllowance:
+              data.spent_allowance !== undefined && data.spent_allowance !== null
+                ? Number(data.spent_allowance)
+                : 0,
+            pnl:
+              data.pnl !== undefined && data.pnl !== null
+                ? Number(data.pnl)
+                : (this.inMemoryAgents.get(data.id)?.pnl ?? 0),
+            winRate:
+              data.win_rate !== undefined && data.win_rate !== null
+                ? Number(data.win_rate)
+                : (this.inMemoryAgents.get(data.id)?.winRate ?? 0),
+            tradesCount:
+              data.trades_count !== undefined && data.trades_count !== null
+                ? Number(data.trades_count)
+                : (this.inMemoryAgents.get(data.id)?.tradesCount ?? 0),
+            createdAt: data.created_at,
+            updatedAt: data.updated_at,
+          };
+          this.inMemoryAgents.set(id, mapped);
+          return mapped;
+        }
+      } catch {
+        // fallback
       }
-    } catch {
-      // fallback
     }
 
     const inMem = this.inMemoryAgents.get(id);
-    if (inMem) return inMem;
+    if (inMem) return { ...inMem };
 
     const tpl = STARTER_TEMPLATES.find((t) => t.id === id);
     if (tpl) return { ...tpl };
@@ -519,33 +532,35 @@ export class CustomAgentService {
     this.inMemoryAgents.set(id, agent);
 
     // Persist to Supabase
-    try {
-      const { error } = await supabase.from('custom_agents').insert({
-        id: agent.id,
-        user_address: agent.userAddress,
-        name: agent.name,
-        description: agent.description,
-        symbol: agent.symbol,
-        timeframe: agent.timeframe,
-        strategy_type: agent.strategyType,
-        rules: agent.rules,
-        color: agent.color,
-        icon: agent.icon,
-        is_active: agent.isActive,
-        is_deployed: agent.isDeployed,
-        allocated_allowance: agent.allocatedAllowance,
-        spent_allowance: agent.spentAllowance,
-        pnl: agent.pnl,
-        win_rate: agent.winRate,
-        trades_count: agent.tradesCount,
-        created_at: agent.createdAt,
-        updated_at: agent.updatedAt,
-      });
-      if (error) {
-        console.error('[CustomAgentService] DB insert error:', error);
+    if (isPersistenceEnabled()) {
+      try {
+        const { error } = await supabase.from('custom_agents').insert({
+          id: agent.id,
+          user_address: agent.userAddress,
+          name: agent.name,
+          description: agent.description,
+          symbol: agent.symbol,
+          timeframe: agent.timeframe,
+          strategy_type: agent.strategyType,
+          rules: agent.rules,
+          color: agent.color,
+          icon: agent.icon,
+          is_active: agent.isActive,
+          is_deployed: agent.isDeployed,
+          allocated_allowance: agent.allocatedAllowance,
+          spent_allowance: agent.spentAllowance,
+          pnl: agent.pnl,
+          win_rate: agent.winRate,
+          trades_count: agent.tradesCount,
+          created_at: agent.createdAt,
+          updated_at: agent.updatedAt,
+        });
+        if (error) {
+          console.error('[CustomAgentService] DB insert error:', error);
+        }
+      } catch (err: any) {
+        console.warn('[CustomAgentService] Could not persist agent to DB:', err.message);
       }
-    } catch (err: any) {
-      console.warn('[CustomAgentService] Could not persist agent to DB:', err.message);
     }
 
     return agent;
@@ -582,38 +597,12 @@ export class CustomAgentService {
 
     this.inMemoryAgents.set(id, updated);
 
-    try {
-      // Use UPDATE with ownership filter instead of blind upsert — prevents cross-wallet overwrite
-      const { error, count } = await supabase
-        .from('custom_agents')
-        .update({
-          user_address: updated.userAddress.toLowerCase(),
-          name: updated.name,
-          description: updated.description,
-          symbol: updated.symbol,
-          timeframe: updated.timeframe,
-          strategy_type: updated.strategyType,
-          rules: updated.rules,
-          color: updated.color,
-          icon: updated.icon,
-          is_active: updated.isActive,
-          is_deployed: updated.isDeployed,
-          allocated_allowance: updated.allocatedAllowance,
-          spent_allowance: updated.spentAllowance,
-          pnl: updated.pnl ?? 0,
-          win_rate: updated.winRate ?? 0,
-          trades_count: updated.tradesCount ?? 0,
-          updated_at: updated.updatedAt,
-        })
-        .eq('id', id)
-        .eq('user_address', existing.userAddress.toLowerCase());
-
-      if (error) {
-        console.error('[CustomAgentService] DB update error:', error);
-        // Fallback to upsert only for legacy rows that may not yet have strict owner match (starter templates)
-        if (STARTER_TEMPLATE_IDS.includes(id)) {
-          await supabase.from('custom_agents').upsert({
-            id: updated.id,
+    if (isPersistenceEnabled()) {
+      try {
+        // Use UPDATE with ownership filter instead of blind upsert — prevents cross-wallet overwrite
+        const { error, count } = await supabase
+          .from('custom_agents')
+          .update({
             user_address: updated.userAddress.toLowerCase(),
             name: updated.name,
             description: updated.description,
@@ -631,14 +620,42 @@ export class CustomAgentService {
             win_rate: updated.winRate ?? 0,
             trades_count: updated.tradesCount ?? 0,
             updated_at: updated.updatedAt,
-          });
+          })
+          .eq('id', id)
+          .eq('user_address', existing.userAddress.toLowerCase());
+
+        if (error) {
+          console.error('[CustomAgentService] DB update error:', error);
+          // Fallback to upsert only for legacy rows that may not yet have strict owner match (starter templates)
+          if (STARTER_TEMPLATE_IDS.includes(id)) {
+            await supabase.from('custom_agents').upsert({
+              id: updated.id,
+              user_address: updated.userAddress.toLowerCase(),
+              name: updated.name,
+              description: updated.description,
+              symbol: updated.symbol,
+              timeframe: updated.timeframe,
+              strategy_type: updated.strategyType,
+              rules: updated.rules,
+              color: updated.color,
+              icon: updated.icon,
+              is_active: updated.isActive,
+              is_deployed: updated.isDeployed,
+              allocated_allowance: updated.allocatedAllowance,
+              spent_allowance: updated.spentAllowance,
+              pnl: updated.pnl ?? 0,
+              win_rate: updated.winRate ?? 0,
+              trades_count: updated.tradesCount ?? 0,
+              updated_at: updated.updatedAt,
+            });
+          }
         }
+        if (count === 0 && !STARTER_TEMPLATE_IDS.includes(id)) {
+          console.warn('[CustomAgentService] Update affected 0 rows — possible ownership mismatch for', id);
+        }
+      } catch (err: any) {
+        console.warn('[CustomAgentService] Could not update agent in DB:', err.message);
       }
-      if (count === 0 && !STARTER_TEMPLATE_IDS.includes(id)) {
-        console.warn('[CustomAgentService] Update affected 0 rows — possible ownership mismatch for', id);
-      }
-    } catch (err: any) {
-      console.warn('[CustomAgentService] Could not update agent in DB:', err.message);
     }
 
     return updated;
@@ -701,51 +718,63 @@ export class CustomAgentService {
   }
 
   public async recordTradeFill(agentId: string, tradeCost: number): Promise<void> {
-    const agent = await this.getCustomAgentById(agentId);
-    if (!agent) return;
+    const existing = this.inMemoryAgents.get(agentId) || await this.getCustomAgentById(agentId);
+    if (!existing) return;
 
-    const newSpent = Number(((agent.spentAllowance || 0) + tradeCost).toFixed(4));
-    const newTradesCount = (agent.tradesCount || 0) + 1;
+    const newSpent = Number(((existing.spentAllowance || 0) + tradeCost).toFixed(4));
+    const newTradesCount = (existing.tradesCount || 0) + 1;
+    const updatedAt = new Date().toISOString();
 
-    agent.spentAllowance = newSpent;
-    agent.tradesCount = newTradesCount;
-    agent.updatedAt = new Date().toISOString();
-    this.inMemoryAgents.set(agentId, agent);
+    const updatedAgent: CustomAgentDefinition = {
+      ...existing,
+      spentAllowance: newSpent,
+      tradesCount: newTradesCount,
+      updatedAt,
+    };
+    this.inMemoryAgents.set(agentId, updatedAgent);
 
-    try {
-      await supabase.from('custom_agents').update({
-        spent_allowance: newSpent,
-        trades_count: newTradesCount,
-        updated_at: agent.updatedAt,
-      }).eq('id', agentId).eq('user_address', agent.userAddress.toLowerCase());
-    } catch (err: any) {
-      console.warn(`[CustomAgentService] Failed to persist trade fill for agent ${agentId}:`, err.message);
+    if (isPersistenceEnabled()) {
+      try {
+        await supabase.from('custom_agents').update({
+          spent_allowance: newSpent,
+          trades_count: newTradesCount,
+          updated_at: updatedAt,
+        }).eq('id', agentId).eq('user_address', updatedAgent.userAddress.toLowerCase());
+      } catch (err: any) {
+        console.warn(`[CustomAgentService] Failed to persist trade fill for agent ${agentId}:`, err.message);
+      }
     }
   }
 
   public async recordTradeSettlement(agentId: string, realizedPnl: number, isWin: boolean): Promise<void> {
-    const agent = await this.getCustomAgentById(agentId);
-    if (!agent) return;
+    const existing = this.inMemoryAgents.get(agentId) || await this.getCustomAgentById(agentId);
+    if (!existing) return;
 
-    const newPnl = Number(((agent.pnl || 0) + realizedPnl).toFixed(2));
-    const totalTrades = Math.max(1, agent.tradesCount || 1);
-    const prevWins = Math.round(((agent.winRate || 0) / 100) * Math.max(0, totalTrades - 1));
+    const newPnl = Number(((existing.pnl || 0) + realizedPnl).toFixed(2));
+    const totalTrades = Math.max(1, existing.tradesCount || 1);
+    const prevWins = Math.round(((existing.winRate || 0) / 100) * Math.max(0, totalTrades - 1));
     const newWins = prevWins + (isWin ? 1 : 0);
     const newWinRate = Number(((newWins / totalTrades) * 100).toFixed(1));
+    const updatedAt = new Date().toISOString();
 
-    agent.pnl = newPnl;
-    agent.winRate = newWinRate;
-    agent.updatedAt = new Date().toISOString();
-    this.inMemoryAgents.set(agentId, agent);
+    const updatedAgent: CustomAgentDefinition = {
+      ...existing,
+      pnl: newPnl,
+      winRate: newWinRate,
+      updatedAt,
+    };
+    this.inMemoryAgents.set(agentId, updatedAgent);
 
-    try {
-      await supabase.from('custom_agents').update({
-        pnl: newPnl,
-        win_rate: newWinRate,
-        updated_at: agent.updatedAt,
-      }).eq('id', agentId).eq('user_address', agent.userAddress.toLowerCase());
-    } catch (err: any) {
-      console.warn(`[CustomAgentService] Failed to persist trade settlement for agent ${agentId}:`, err.message);
+    if (isPersistenceEnabled()) {
+      try {
+        await supabase.from('custom_agents').update({
+          pnl: newPnl,
+          win_rate: newWinRate,
+          updated_at: updatedAt,
+        }).eq('id', agentId).eq('user_address', updatedAgent.userAddress.toLowerCase());
+      } catch (err: any) {
+        console.warn(`[CustomAgentService] Failed to persist trade settlement for agent ${agentId}:`, err.message);
+      }
     }
   }
 
@@ -802,6 +831,7 @@ export class CustomAgentService {
       throw new Error('Forbidden: agent does not belong to authenticated wallet');
     }
     this.inMemoryAgents.delete(id);
+    if (!isPersistenceEnabled()) return true;
     try {
       const { error } = await supabase
         .from('custom_agents')
@@ -823,30 +853,32 @@ export class CustomAgentService {
   public async getCustomSwarms(userAddress?: string): Promise<CustomSwarmDefinition[]> {
     const list: CustomSwarmDefinition[] = [];
 
-    try {
-      let query = supabase.from('custom_swarms').select('*').order('created_at', { ascending: false });
-      if (userAddress) {
-        query = query.eq('user_address', userAddress.toLowerCase());
-      }
-      const { data, error } = await query;
-      if (!error && Array.isArray(data)) {
-        for (const row of data) {
-          list.push({
-            id: row.id,
-            userAddress: row.user_address,
-            name: row.name,
-            description: row.description || '',
-            agents: Array.isArray(row.agent_ids) ? row.agent_ids : [],
-            consensusRule: row.consensus_rule,
-            confidenceThreshold: Number(row.confidence_threshold) || 0.6,
-            isActive: row.is_active,
-            createdAt: row.created_at,
-            updatedAt: row.updated_at,
-          });
+    if (isPersistenceEnabled()) {
+      try {
+        let query = supabase.from('custom_swarms').select('*').order('created_at', { ascending: false });
+        if (userAddress) {
+          query = query.eq('user_address', userAddress.toLowerCase());
         }
+        const { data, error } = await query;
+        if (!error && Array.isArray(data)) {
+          for (const row of data) {
+            list.push({
+              id: row.id,
+              userAddress: row.user_address,
+              name: row.name,
+              description: row.description || '',
+              agents: Array.isArray(row.agent_ids) ? row.agent_ids : [],
+              consensusRule: row.consensus_rule,
+              confidenceThreshold: Number(row.confidence_threshold) || 0.6,
+              isActive: row.is_active,
+              createdAt: row.created_at,
+              updatedAt: row.updated_at,
+            });
+          }
+        }
+      } catch {
+        // ignore
       }
-    } catch {
-      // ignore
     }
 
     for (const [id, swarm] of this.inMemorySwarms.entries()) {
@@ -880,21 +912,23 @@ export class CustomAgentService {
 
     this.inMemorySwarms.set(id, swarm);
 
-    try {
-      await supabase.from('custom_swarms').insert({
-        id: swarm.id,
-        user_address: swarm.userAddress,
-        name: swarm.name,
-        description: swarm.description,
-        agent_ids: swarm.agents,
-        consensus_rule: swarm.consensusRule,
-        confidence_threshold: swarm.confidenceThreshold,
-        is_active: swarm.isActive,
-        created_at: swarm.createdAt,
-        updated_at: swarm.updatedAt,
-      });
-    } catch (err: any) {
-      console.warn('[CustomAgentService] Could not persist swarm to DB:', err.message);
+    if (isPersistenceEnabled()) {
+      try {
+        await supabase.from('custom_swarms').insert({
+          id: swarm.id,
+          user_address: swarm.userAddress,
+          name: swarm.name,
+          description: swarm.description,
+          agent_ids: swarm.agents,
+          consensus_rule: swarm.consensusRule,
+          confidence_threshold: swarm.confidenceThreshold,
+          is_active: swarm.isActive,
+          created_at: swarm.createdAt,
+          updated_at: swarm.updatedAt,
+        });
+      } catch (err: any) {
+        console.warn('[CustomAgentService] Could not persist swarm to DB:', err.message);
+      }
     }
 
     return swarm;
@@ -902,6 +936,7 @@ export class CustomAgentService {
 
   public async deleteCustomSwarm(id: string, userAddress: string): Promise<boolean> {
     this.inMemorySwarms.delete(id);
+    if (!isPersistenceEnabled()) return true;
     try {
       await supabase
         .from('custom_swarms')

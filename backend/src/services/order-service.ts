@@ -1,5 +1,5 @@
 import { type Hex, type Address, parseAbi, getAddress, isAddress, encodeFunctionData } from 'viem';
-import { supabase } from '../config/supabase.js';
+import { supabase, isPersistenceEnabled } from '../config/supabase.js';
 import { sessionService } from './session-service.js';
 import { telemetryWsGateway } from '../websocket/server.js';
 import { marketService } from './market-service.js';
@@ -376,9 +376,7 @@ export class OrderService {
   private lastExecutionFailureReason: string | null = null;
 
   private isPersistenceEnabled(): boolean {
-    if (process.env.VITEST === 'true' || process.env.NODE_ENV === 'test') return false;
-    const url = process.env.SUPABASE_URL || '';
-    return url.length > 0 && !url.includes('mock-project');
+    return isPersistenceEnabled();
   }
 
   private isGenericCustomName(name?: string | null): boolean {
@@ -649,6 +647,7 @@ export class OrderService {
   }
 
   private async hydrateMarketSnapshotsFromDb(): Promise<void> {
+    if (!this.isPersistenceEnabled()) return;
     try {
       const snapshotMissing = this.orders.filter((o) => !o.marketSnapshot);
       if (snapshotMissing.length === 0) return;
@@ -1140,7 +1139,7 @@ export class OrderService {
 
     // Persist to Supabase asynchronously
     if (
-      process.env.NODE_ENV !== 'test' &&
+      this.isPersistenceEnabled() &&
       isAddress(session.userAddress) &&
       txHash !== '0x1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef'
     ) {
@@ -1279,33 +1278,35 @@ export class OrderService {
       this.notifyStateChange();
 
       // Persist to Supabase asynchronously
-      try {
-        await marketService.ensureMarketPersisted(params.marketId, market?.symbol);
-        const insertRes = await supabase.from('orders').insert({
-          id: orderId,
-          user_address: params.userAddress,
-          session_id: null,
-          market_id: params.marketId,
-          agent_type: 'Manual',
-          source: 'TERMINAL',
-          outcome,
-          direction,
-          order_type: orderType,
-          price: quantizedPrice,
-          lot_size: quantizedSize,
-          total_cost: totalCost,
-          status: 'FILLED',
-          tx_hash: params.txHash,
-          pnl: 0,
-          is_settled: false,
-          created_at: now,
-          filled_at: now,
-        });
-        if (insertRes.error) {
-          console.error('[OrderService] Supabase submitUserOrder (direct) insert notice:', insertRes.error.message);
+      if (this.isPersistenceEnabled()) {
+        try {
+          await marketService.ensureMarketPersisted(params.marketId, market?.symbol);
+          const insertRes = await supabase.from('orders').insert({
+            id: orderId,
+            user_address: params.userAddress,
+            session_id: null,
+            market_id: params.marketId,
+            agent_type: 'Manual',
+            source: 'TERMINAL',
+            outcome,
+            direction,
+            order_type: orderType,
+            price: quantizedPrice,
+            lot_size: quantizedSize,
+            total_cost: totalCost,
+            status: 'FILLED',
+            tx_hash: params.txHash,
+            pnl: 0,
+            is_settled: false,
+            created_at: now,
+            filled_at: now,
+          });
+          if (insertRes.error) {
+            console.error('[OrderService] Supabase submitUserOrder (direct) insert notice:', insertRes.error.message);
+          }
+        } catch (err: any) {
+          console.error('[OrderService] Supabase submitUserOrder (direct) insert exception:', err?.message || err);
         }
-      } catch (err: any) {
-        console.error('[OrderService] Supabase submitUserOrder (direct) insert exception:', err?.message || err);
       }
 
       return orderExecution;
@@ -1446,34 +1447,36 @@ export class OrderService {
 
       this.notifyStateChange();
 
-      try {
-        await marketService.ensureMarketPersisted(params.marketId, market?.symbol);
-        const isUuid = session.id && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(session.id);
-        const insertRes = await supabase.from('orders').insert({
-          id: orderId,
-          user_address: params.userAddress,
-          session_id: isUuid ? session.id : null,
-          market_id: params.marketId,
-          agent_type: 'Manual',
-          source: 'TERMINAL',
-          outcome,
-          direction,
-          order_type: orderType,
-          price: quantizedPrice,
-          lot_size: quantizedSize,
-          total_cost: totalCost,
-          status: 'FILLED',
-          tx_hash: simTxHash,
-          pnl: 0,
-          is_settled: false,
-          created_at: now,
-          filled_at: now,
-        });
-        if (insertRes.error) {
-          console.error('[OrderService] Supabase submitUserOrder (rolling) insert notice:', insertRes.error.message);
+      if (this.isPersistenceEnabled()) {
+        try {
+          await marketService.ensureMarketPersisted(params.marketId, market?.symbol);
+          const isUuid = session.id && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(session.id);
+          const insertRes = await supabase.from('orders').insert({
+            id: orderId,
+            user_address: params.userAddress,
+            session_id: isUuid ? session.id : null,
+            market_id: params.marketId,
+            agent_type: 'Manual',
+            source: 'TERMINAL',
+            outcome,
+            direction,
+            order_type: orderType,
+            price: quantizedPrice,
+            lot_size: quantizedSize,
+            total_cost: totalCost,
+            status: 'FILLED',
+            tx_hash: simTxHash,
+            pnl: 0,
+            is_settled: false,
+            created_at: now,
+            filled_at: now,
+          });
+          if (insertRes.error) {
+            console.error('[OrderService] Supabase submitUserOrder (rolling) insert notice:', insertRes.error.message);
+          }
+        } catch (err: any) {
+          console.error('[OrderService] Supabase submitUserOrder (rolling) insert exception:', err?.message || err);
         }
-      } catch (err: any) {
-        console.error('[OrderService] Supabase submitUserOrder (rolling) insert exception:', err?.message || err);
       }
 
       return orderExecution;
@@ -1948,27 +1951,31 @@ export class OrderService {
         })();
       }
 
-      dbUpdates.push(
-        (async () => {
-          try {
-            const res = await supabase
-              .from('orders')
-              .update({
-                pnl: order.pnl,
-                status: order.status,
-                is_settled: true,
-                settled_at: order.settledAt,
-              })
-              .eq('id', order.id);
-            if (res.error && res.error.message.includes('is_settled')) {
-              await supabase.from('orders').update({ pnl: order.pnl, status: order.status }).eq('id', order.id);
-            }
-          } catch {}
-        })(),
-      );
+      if (this.isPersistenceEnabled()) {
+        dbUpdates.push(
+          (async () => {
+            try {
+              const res = await supabase
+                .from('orders')
+                .update({
+                  pnl: order.pnl,
+                  status: order.status,
+                  is_settled: true,
+                  settled_at: order.settledAt,
+                })
+                .eq('id', order.id);
+              if (res.error && res.error.message.includes('is_settled')) {
+                await supabase.from('orders').update({ pnl: order.pnl, status: order.status }).eq('id', order.id);
+              }
+            } catch {}
+          })(),
+        );
+      }
     }
 
-    await Promise.allSettled(dbUpdates);
+    if (this.isPersistenceEnabled() && dbUpdates.length > 0) {
+      await Promise.allSettled(dbUpdates);
+    }
 
     if (updatedEvents.length > 0) {
       // Sync pre-aggregated daily_pnl for fast analytics (issue #16)
@@ -2306,18 +2313,21 @@ export class OrderService {
         this.restingMakerQuotes.delete(order.id);
         if (order.status === 'PENDING') order.status = 'FILLED';
         updatedOrderPnlEvents.push({ orderId: order.id, marketId: order.marketId, pnl: order.pnl, outcome: order.outcome, winningOutcome });
-        void (async () => {
-          try {
-            const res = await supabase.from('orders').update({
-              pnl: order.pnl,
-              status: order.status,
-              is_settled: true,
-              settled_at: order.settledAt,
-            }).eq('id', order.id);
-            if (res.error && res.error.message.includes('is_settled')) {
-              await supabase.from('orders').update({ pnl: order.pnl, status: order.status }).eq('id', order.id);
-            }
-          } catch {}
+        if (this.isPersistenceEnabled()) {
+          void (async () => {
+            try {
+              const res = await supabase.from('orders').update({
+                pnl: order.pnl,
+                status: order.status,
+                is_settled: true,
+                settled_at: order.settledAt,
+              }).eq('id', order.id);
+              if (res.error && res.error.message.includes('is_settled')) {
+                await supabase.from('orders').update({ pnl: order.pnl, status: order.status }).eq('id', order.id);
+              }
+            } catch {}
+          })();
+        }
           // Synchronize realized PnL and win rate to matching deployed custom agent
           if (order.agentType === 'CUSTOM' && order.userAddress) {
             const isWin = (order.pnl || 0) > 0;
@@ -2338,8 +2348,7 @@ export class OrderService {
               } catch {}
             })();
           }
-        })();
-      }
+        }
 
       if (updatedOrderPnlEvents.length > 0) {
         // Sync pre-aggregated daily_pnl for fast analytics (issue #16)

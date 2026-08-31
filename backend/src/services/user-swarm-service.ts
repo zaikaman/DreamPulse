@@ -1,5 +1,5 @@
 import { isAddress, getAddress, type Address } from 'viem';
-import { supabase } from '../config/supabase.js';
+import { supabase, isPersistenceEnabled } from '../config/supabase.js';
 import type { AgentType } from '../types/index.js';
 
 export type SwarmMode = 'COPY' | 'PERSONAL';
@@ -23,12 +23,6 @@ export interface PersonalSwarmConfig {
 export const DEFAULT_VOLT_CONFIG = { driftThreshold: 0.002, minEdge: 0.03, lotSize: 5.0, maxTradeSize: 20.0 };
 export const DEFAULT_ORACLE_CONFIG = { minEdge: 0.035, lotSize: 5.0, maxTradeSize: 20.0 };
 export const DEFAULT_TITAN_CONFIG = { targetSpread: 0.04, inventoryAversion: 0.015, lotSize: 2.0 };
-
-function isPersistenceEnabled(): boolean {
-  if (process.env.VITEST === 'true' || process.env.NODE_ENV === 'test') return false;
-  const url = process.env.SUPABASE_URL || '';
-  return url.length > 0 && !url.includes('mock-project');
-}
 
 function buildDefaultConfig(userAddress: Address): PersonalSwarmConfig {
   const now = new Date().toISOString();
