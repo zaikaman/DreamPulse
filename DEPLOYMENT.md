@@ -47,7 +47,7 @@ The backend runs an Express HTTP server, WebSocket telemetry stream, and autonom
 |---|---|---|
 | `NODE_ENV` | `production` | Production environment mode |
 | `NPM_CONFIG_PRODUCTION` | `false` | Ensures `typescript` compiles during `heroku-postbuild` |
-| `FRONTEND_ORIGIN` | `*` (or `https://dreampulse.vercel.app`) | Allowed CORS origin(s) for frontend dashboard |
+| `FRONTEND_ORIGIN` | `*` (or `https://dreampulse-ai.vercel.app`) | Allowed CORS origin(s) for frontend dashboard |
 | `SUPABASE_URL` | `https://<your-project>.supabase.co` | Your Supabase project URL |
 | `SUPABASE_SERVICE_ROLE_KEY` | `eyJhbGciOi...` | Supabase Service Role Key (Backend writes) |
 | `SUPABASE_ANON_KEY` | `eyJhbGciOi...` | Supabase Anon Key |
