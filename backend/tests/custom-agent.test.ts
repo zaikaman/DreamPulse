@@ -1,6 +1,7 @@
-import { describe, it, expect, beforeEach, afterAll } from 'vitest';
+import { describe, it, expect, beforeEach, afterAll, vi } from 'vitest';
 import { customAgentService, STARTER_TEMPLATES } from '../src/services/custom-agent-service.js';
 import { customAgentEvaluator } from '../src/agents/custom-agent-evaluator.js';
+import { backtestService, type HistoricalCandle } from '../src/services/backtest-service.js';
 import type { CustomAgentDefinition, Market, SessionGrant } from '../src/types/index.js';
 import type { IAgentContext } from '../src/agents/base-agent.js';
 
@@ -157,6 +158,16 @@ describe('Custom Deployed Agents & Evaluation Engine', () => {
       },
       activeSessions: [mockSession],
     };
+
+    const momentumCandles: HistoricalCandle[] = Array.from({ length: 50 }, (_, i) => ({
+      timestamp: Date.now() - (50 - i) * 300000,
+      open: 2700 + i * 1.1,
+      high: 2702 + i * 1.1,
+      low: 2699 + i * 1.1,
+      close: 2701 + i * 1.1,
+      volume: 100 + i * 5,
+    }));
+    vi.spyOn(backtestService, 'fetchHistoricalCandles').mockResolvedValue(momentumCandles);
 
     const decision = await customAgentEvaluator.evaluate(agent, context, mockSession);
 
