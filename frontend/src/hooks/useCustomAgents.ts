@@ -117,7 +117,10 @@ export const useCustomAgents = (userAddress?: string): UseCustomAgentsReturn => 
       setIsSaving(true);
       setError(null);
       try {
-        const res = await apiClient.updateCustomAgent(id, payload);
+        const res = await apiClient.updateCustomAgent(id, {
+          ...payload,
+          userAddress: userAddress || undefined,
+        });
         if (res?.success && res.data) {
           setAgents((prev) => prev.map((a) => (a.id === id ? res.data : a)));
           return res.data;
@@ -130,7 +133,7 @@ export const useCustomAgents = (userAddress?: string): UseCustomAgentsReturn => 
         setIsSaving(false);
       }
     },
-    []
+    [userAddress]
   );
 
   const deleteAgent = useCallback(
