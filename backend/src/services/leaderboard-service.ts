@@ -2,6 +2,7 @@ import { supabase } from '../config/supabase.js';
 import { orderService } from './order-service.js';
 import { customAgentService, STARTER_TEMPLATES } from './custom-agent-service.js';
 import { SOMNIA_ADDRESSES, operatorAccount } from '../config/somnia.js';
+import { marketService } from './market-service.js';
 import type {
   CustomAgentDefinition,
   AgentType,
@@ -398,10 +399,10 @@ export class LeaderboardService {
     };
     const cutoffMs = timeCutoffs[tf] ? now - timeCutoffs[tf] : 0;
 
-    // 2. Fetch real orders and custom agents — DB-side limited for scale (P4)
-    // For 500+ agents, fetching all into RAM and sorting O(N log N) will timeout; use DB ORDER BY pnl DESC LIMIT 50
-    // We attempt top-50 via DB first; if that returns <50 but we have search filters, fall back to broader fetch.
-    const allOrders = orderService.getOrders({});
+    // 2. Fetch real orders and custom agents — DB-backed for accuracy (fixes #14: in-memory was capped at 1000 by PostgREST, missing history)
+    // Use async hybrid fetch to get full history (up to 10k) for correct PnL; in-memory alone was incomplete and caused cockpit vs arena divergence.
+    // In test mode, falls back to in-memory injected orders.
+    const allOrders = await orderService.getOrdersAsync({});
     let allCustomAgents: CustomAgentDefinition[];
     const useDbLimit = !query && symbolFilter === 'ALL' && strategyFilter === 'ALL' && sortBy === 'pnl';
     if (useDbLimit) {
@@ -455,33 +456,60 @@ export class LeaderboardService {
     });
 
     // 4. Compute real metrics for Custom Agents & Templates
-    // Strictly attribute orders per-agent by customAgentId, sessionId, and symbol+timeframe to prevent duplicate metrics
-    const customEntries: Array<Omit<ArenaAgentEntry, 'rank' | 'tierBadge'>> = allCustomAgents.map((agent) => {
-      const isTemplate = STARTER_TEMPLATES.some((t) => t.id === agent.id);
+    // Attribution: prefer explicit customAgentId (accurate per-agent isolation). For
+    // historical orders lacking that column (pre-014), fall back to symbol+window
+    // matching but deduplicate so an order is counted only once (prevents 5m orders
+    // being double-counted across multiple 5m agents with same symbol).
+    const assignedOrderIds = new Set<string>();
+    // Sort agents by stored pnl descending so ambiguous fallback orders are
+    // preferentially assigned to higher-ranked agents (deterministic)
+    const sortedForAttribution = [...allCustomAgents].sort((a, b) => (b.pnl ?? 0) - (a.pnl ?? 0));
+    const agentOrdersMap = new Map<string, OrderExecution[]>();
+    for (const agent of sortedForAttribution) {
       const agentSym = (agent.symbol || 'BTC/USD').toUpperCase();
       const agentTf = (agent.timeframe || '5m').toLowerCase();
       const agentAddr = agent.userAddress?.toLowerCase();
-
-      // Find orders strictly belonging to THIS custom agent
-      const agentOrders = allOrders.filter((o) => {
+      const matched: OrderExecution[] = [];
+      for (const o of allOrders) {
+        if (assignedOrderIds.has(o.id)) continue;
+        let belongs = false;
         if (o.customAgentId) {
-          return o.customAgentId === agent.id;
-        }
-        if (o.sessionId && o.sessionId === agent.id) {
-          return true;
-        }
-        if (o.agentType === 'CUSTOM' && o.userAddress?.toLowerCase() === agentAddr) {
+          belongs = o.customAgentId === agent.id;
+        } else if (o.sessionId && o.sessionId === agent.id) {
+          belongs = true;
+        } else if (o.agentType === 'CUSTOM' && o.userAddress?.toLowerCase() === agentAddr) {
           const orderSym = (o.marketSnapshot?.symbol || '').toUpperCase();
-          const orderWindow = (o.marketSnapshot?.windowDuration || '').toLowerCase();
+          // Window may be missing if market evicted; try marketService fallback
+          let orderWindow = (o.marketSnapshot?.windowDuration || '').toLowerCase();
+          if (!orderWindow) {
+            try {
+              const m = marketService.getMarketById(o.marketId);
+              if (m?.windowDuration) orderWindow = m.windowDuration.toLowerCase();
+            } catch {}
+          }
           if (orderSym === agentSym) {
             if (orderWindow && agentTf && agentTf !== 'all') {
-              return orderWindow === agentTf;
+              belongs = orderWindow === agentTf;
+            } else {
+              belongs = true;
             }
-            return true;
           }
         }
-        return false;
-      });
+        if (belongs) {
+          matched.push(o);
+          // Only mark as assigned if this was not an ambiguous fallback that could
+          // still be claimed by another agent with same symbol+window; for
+          // explicit customAgentId matches, assign exclusively. For fallback,
+          // assign exclusively as well to prevent double-counting.
+          assignedOrderIds.add(o.id);
+        }
+      }
+      agentOrdersMap.set(agent.id, matched);
+    }
+
+    const customEntries: Array<Omit<ArenaAgentEntry, 'rank' | 'tierBadge'>> = allCustomAgents.map((agent) => {
+      const isTemplate = STARTER_TEMPLATES.some((t) => t.id === agent.id);
+      const agentOrders = agentOrdersMap.get(agent.id) || [];
 
       const computed = this.computePerformanceMetrics(agentOrders, cutoffMs, agent.allocatedAllowance || 100);
       const storedTrades = agent.tradesCount ?? 0;
@@ -492,9 +520,13 @@ export class LeaderboardService {
 
       let metrics = computed;
 
-      // When cutoffMs === 0 (ALL) or when individual order history is sparse, reconcile with agent's authoritative stored performance
-      if (cutoffMs === 0) {
-        if (storedTrades > 0) {
+      // Prefer real settled order history (ground truth) over cached stored stats.
+      // Stored is only used as fallback when no orders exist in the selected window.
+      if (computed.tradesCount > 0) {
+        metrics = computed;
+      } else if (storedTrades > 0) {
+        if (cutoffMs === 0) {
+          // ALL timeframe: use authoritative stored performance directly
           const winsFromStored = Math.round((storedWinRate / 100) * storedTrades);
           const lossesFromStored = Math.max(0, storedTrades - winsFromStored);
           const pnlPctFromStored = allocatedAllowance > 0
@@ -526,13 +558,8 @@ export class LeaderboardService {
             spentAllowance,
             sparkline,
           };
-        }
-      } else {
-        // Windowed timeframe (24h, 7d, 30d):
-        if (computed.tradesCount > 0) {
-          metrics = computed;
-        } else if (storedTrades > 0) {
-          // If no individual order records in range, use windowed fraction of this agent's stored stats
+        } else {
+          // Windowed timeframe (24h, 7d, 30d) with no orders in window: show scaled stored estimate
           const windowRatio = tf === '24h' ? 0.25 : (tf === '7d' ? 0.75 : 1.0);
           const windowTrades = Math.max(1, Math.round(storedTrades * windowRatio));
           const windowPnl = Number((storedPnl * windowRatio).toFixed(2));
@@ -656,9 +683,9 @@ export class LeaderboardService {
     const sortBy = params.sortBy || 'pnl';
     const query = (params.searchQuery || '').trim().toLowerCase();
 
-    // 1. Query all orders from order service and filter strictly to real Terminal / Manual user orders
-    const allOrders = orderService.getOrders({});
-    const terminalOrders = allOrders.filter(
+    // 1. Query all orders DB-backed for accuracy (fixes #14: in-memory was incomplete)
+    const allOrdersDb = await orderService.getOrdersAsync({});
+    const terminalOrders = allOrdersDb.filter(
       (o) => (o.source === 'TERMINAL' || o.agentType === 'Manual') && Boolean(o.userAddress)
     );
 
@@ -857,7 +884,7 @@ export class LeaderboardService {
    */
   public async getTraderProfile(address: string): Promise<TraderProfileDetail | null> {
     const cleanAddr = address.toLowerCase();
-    const allUserOrders = orderService.getOrders({ userAddress: address });
+    const allUserOrders = await orderService.getOrdersAsync({ userAddress: address });
     const terminalOrders = allUserOrders.filter(
       (o) => o.source === 'TERMINAL' || o.agentType === 'Manual'
     );

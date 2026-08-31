@@ -138,6 +138,26 @@ export const OrderHistoryTable: React.FC<OrderHistoryTableProps> = ({
   const [isFetching, setIsFetching] = useState<boolean>(false);
   const [fetchError, setFetchError] = useState<string | null>(null);
   const [scopeTotals, setScopeTotals] = useState<{ totalFills: number; totalVolume: number }>({ totalFills: 0, totalVolume: 0 });
+  const [customAgentsMap, setCustomAgentsMap] = useState<Map<string, { name: string; strategyType?: string; color?: string }>>(new Map());
+
+  useEffect(() => {
+    let active = true;
+    apiClient.getCustomAgents(userAddress).then((res) => {
+      if (!active || !res?.data) return;
+      const map = new Map<string, { name: string; strategyType?: string; color?: string }>();
+      for (const ag of res.data) {
+        if (ag.id) {
+          map.set(ag.id, { name: ag.name, strategyType: ag.strategyType, color: ag.color });
+        }
+        const symKey = `${ag.symbol.toUpperCase()}:${(ag.timeframe || '5m').toLowerCase()}`;
+        if (!map.has(symKey)) {
+          map.set(symKey, { name: ag.name, strategyType: ag.strategyType, color: ag.color });
+        }
+      }
+      setCustomAgentsMap(map);
+    }).catch(() => {});
+    return () => { active = false; };
+  }, [userAddress]);
 
   const isFiltered = selectedAgent !== 'ALL' || selectedOutcome !== 'ALL' || debouncedSearch.trim().length > 0;
 
@@ -353,7 +373,55 @@ export const OrderHistoryTable: React.FC<OrderHistoryTableProps> = ({
     }
   };
 
-  const getAgentBadge = (agentType: AgentType) => {
+const STARTER_AGENT_MAP: Record<string, { name: string; subtext: string; color: string }> = {
+  '00000000-0000-0000-0000-000000000001': { name: 'RSI Oversold Dip Sniper', subtext: 'Mean Reversion (RSI)', color: '#2dd4bf' },
+  '00000000-0000-0000-0000-000000000002': { name: 'Bollinger Band Exhaustion Fade', subtext: 'Mean Reversion (BB)', color: '#f59e0b' },
+  '00000000-0000-0000-0000-000000000003': { name: 'Fast EMA Momentum Rider', subtext: 'Momentum (EMA)', color: '#a78bfa' },
+};
+
+  const resolveCustomAgentDetails = (order: OrderExecution, marketInfo?: ParsedMarketInfo): { name: string; subtext: string; color: string } => {
+    if (order.customAgentName) {
+      return {
+        name: order.customAgentName,
+        subtext: 'Custom Strategy',
+        color: '#2dd4bf',
+      };
+    }
+    if (order.customAgentId) {
+      if (STARTER_AGENT_MAP[order.customAgentId]) {
+        return STARTER_AGENT_MAP[order.customAgentId];
+      }
+      const found = customAgentsMap.get(order.customAgentId);
+      if (found) {
+        return {
+          name: found.name,
+          subtext: found.strategyType ? found.strategyType.replace(/_/g, ' ') : 'Custom Strategy',
+          color: found.color || '#2dd4bf',
+        };
+      }
+    }
+    const symbol = marketInfo?.symbol || (order.marketSnapshot?.symbol ? normalizeMarketSymbol(order.marketSnapshot.symbol) : 'BTC/USD');
+    const windowDuration = marketInfo?.windowDuration || order.marketSnapshot?.windowDuration || '5m';
+    const symKey = `${symbol.toUpperCase()}:${windowDuration.toLowerCase()}`;
+    const foundBySym = customAgentsMap.get(symKey);
+    if (foundBySym) {
+      return {
+        name: foundBySym.name,
+        subtext: foundBySym.strategyType ? foundBySym.strategyType.replace(/_/g, ' ') : 'Custom Strategy',
+        color: foundBySym.color || '#2dd4bf',
+      };
+    }
+
+    if (symbol.includes('BTC')) {
+      return STARTER_AGENT_MAP['00000000-0000-0000-0000-000000000001'];
+    }
+    if (windowDuration === '1m') {
+      return STARTER_AGENT_MAP['00000000-0000-0000-0000-000000000001'];
+    }
+    return STARTER_AGENT_MAP['00000000-0000-0000-0000-000000000002'];
+  };
+
+  const getAgentBadge = (agentType: AgentType, customDetails?: { name: string; subtext: string; color?: string }) => {
     switch (agentType) {
       case 'Volt':
         return (
@@ -376,13 +444,34 @@ export const OrderHistoryTable: React.FC<OrderHistoryTableProps> = ({
             <span>Titan</span>
           </span>
         );
-      case 'CUSTOM':
+      case 'CUSTOM': {
+        const displayName = customDetails?.name || 'Custom';
+        const badgeColor = customDetails?.color || '#2dd4bf';
         return (
-          <span style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', padding: '2px 6px', borderRadius: '4px', background: 'rgba(45, 212, 191, 0.12)', border: '1px solid rgba(45, 212, 191, 0.3)', color: 'var(--brand-cyan)', fontSize: '11px', fontWeight: 700 }}>
-            <SparklesIcon className="w-3 h-3" />
-            <span>Custom</span>
+          <span
+            title={displayName}
+            style={{
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: '4.5px',
+              padding: '2px 7px',
+              borderRadius: '4px',
+              background: 'rgba(45, 212, 191, 0.12)',
+              border: '1px solid rgba(45, 212, 191, 0.3)',
+              color: badgeColor,
+              fontSize: '11px',
+              fontWeight: 700,
+              maxWidth: '145px',
+              letterSpacing: '-0.01em',
+            }}
+          >
+            <SparklesIcon className="w-3 h-3 flex-shrink-0" />
+            <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+              {displayName}
+            </span>
           </span>
         );
+      }
       default:
         return <span style={{ fontSize: '11px', color: 'var(--muted-foreground)' }}>{agentType}</span>;
     }
@@ -590,6 +679,10 @@ export const OrderHistoryTable: React.FC<OrderHistoryTableProps> = ({
                     CUSTOM: 'Custom Strategy',
                   };
 
+                  const customDetails = order.agentType === 'CUSTOM' ? resolveCustomAgentDetails(order, marketInfo) : undefined;
+                  const agentSubtitle = order.agentType === 'CUSTOM' ? (customDetails?.subtext || 'Custom Strategy') : (agentRoleMap[order.agentType] || 'Swarm');
+                  const agentDisplayName = order.agentType === 'CUSTOM' ? (customDetails?.name || 'Custom') : order.agentType;
+
                   const tooltipTitle = `[Order Execution Breakdown]
 Asset: ${marketInfo.assetName} (${marketInfo.symbol}) ${marketInfo.windowDuration}
 Condition: Price > ${formatCurrencyAmount(marketInfo.strikePrice)} at Expiry
@@ -597,7 +690,7 @@ Order: ${order.direction} ${order.lotSize.toFixed(1)} lots @ ${order.price.toFix
 Cost: ${order.totalCost.toFixed(2)} tUSDC (Implied: ${(order.price * 100).toFixed(0)}%)
 Settlement: ${marketInfo.settlementPrice ? `Settled @ ${formatCurrencyAmount(marketInfo.settlementPrice)}` : (isOpen ? 'Open (Pending Expiry)' : 'Finalized')}
 Realized PnL: ${pnl !== 0 ? (pnl > 0 ? `+${pnl.toFixed(2)} tUSDC (Win)` : `${pnl.toFixed(2)} tUSDC (Loss)`) : (isOpen ? 'Open in progress' : '0.00 tUSDC')}
-Agent: ${order.agentType} (${agentRoleMap[order.agentType] || 'Autonomous Swarm'})
+Agent: ${agentDisplayName} (${agentSubtitle})
 Tx Hash: ${order.txHash || 'N/A'}`;
 
                   return (
@@ -618,9 +711,20 @@ Tx Hash: ${order.txHash || 'N/A'}`;
                       {/* 2. AGENT */}
                       <td style={{ padding: '10px 16px' }}>
                         <div style={{ display: 'flex', flexDirection: 'column', gap: '3px' }}>
-                          <div>{getAgentBadge(order.agentType)}</div>
-                          <span style={{ fontSize: '9.5px', color: 'var(--muted-foreground)', fontFamily: 'var(--font-mono)' }}>
-                            {agentRoleMap[order.agentType] || 'Swarm'}
+                          <div>{getAgentBadge(order.agentType, customDetails)}</div>
+                          <span
+                            style={{
+                              fontSize: '9.5px',
+                              color: 'var(--muted-foreground)',
+                              fontFamily: 'var(--font-mono)',
+                              maxWidth: '145px',
+                              overflow: 'hidden',
+                              textOverflow: 'ellipsis',
+                              whiteSpace: 'nowrap',
+                            }}
+                            title={agentSubtitle}
+                          >
+                            {agentSubtitle}
                           </span>
                         </div>
                       </td>

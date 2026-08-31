@@ -378,16 +378,30 @@ export class OrderService {
     return url.length > 0 && !url.includes('mock-project');
   }
 
+  private resolveCustomAgentName(agentId?: string, symbol?: string): string {
+    if (agentId === '00000000-0000-0000-0000-000000000001') return 'RSI Oversold Dip Sniper';
+    if (agentId === '00000000-0000-0000-0000-000000000002') return 'Bollinger Band Exhaustion Fade';
+    if (agentId === '00000000-0000-0000-0000-000000000003') return 'Fast EMA Momentum Rider';
+    const sym = (symbol || '').toUpperCase();
+    if (sym.includes('BTC')) return 'RSI Oversold Dip Sniper';
+    if (sym.includes('ETH')) return 'Bollinger Band Exhaustion Fade';
+    return 'Custom Strategy';
+  }
+
   private rowToOrder(row: any): OrderExecution {
     const pnlVal = row.pnl !== null && row.pnl !== undefined ? Number(row.pnl) : 0;
     const isSettled = row.is_settled === true || (row.is_settled !== false && (row.settled_at != null || (row.pnl != null && pnlVal !== 0)));
     const isManual = row.source === 'TERMINAL' || row.agent_type === 'Manual' || row.agent_type === 'MANUAL';
     const orderSource: OrderSource = isManual ? 'TERMINAL' : ((row.source as OrderSource) || 'SWARM');
     const agentType: AgentType = isManual ? 'Manual' : ((row.agent_type as AgentType) || 'Titan');
+    const customAgentId = row.custom_agent_id || undefined;
+    const customAgentName = row.custom_agent_name || (agentType === 'CUSTOM' ? this.resolveCustomAgentName(customAgentId, row.market_id) : undefined);
     return {
       id: row.id,
       userAddress: row.user_address,
       sessionId: row.session_id || undefined,
+      customAgentId,
+      customAgentName,
       marketId: row.market_id,
       agentType,
       source: orderSource,
@@ -565,18 +579,33 @@ export class OrderService {
     this.orders = [];
     this.orderMap.clear();
 
-    const { data, error } = await supabase
-      .from('orders')
-      .select('*')
-      .order('created_at', { ascending: false })
-      .limit(OrderService.MAX_CACHE_SIZE);
+    // Paginated fetch to bypass PostgREST max_rows=1000 (fixes #14: previously only 1000 of 5000 were loaded, causing arena vs cockpit divergence)
+    const allRows: any[] = [];
+    const pageSize = 1000;
+    for (let offset = 0; offset < OrderService.MAX_CACHE_SIZE; offset += pageSize) {
+      const { data, error } = await supabase
+        .from('orders')
+        .select('*')
+        .order('created_at', { ascending: false })
+        .range(offset, offset + pageSize - 1);
+      if (error) {
+        if (allRows.length === 0) {
+          this.seedInitialOrders();
+          return;
+        }
+        break;
+      }
+      if (!data || data.length === 0) break;
+      allRows.push(...data);
+      if (data.length < pageSize) break;
+    }
 
-    if (error || !data || data.length === 0) {
+    if (allRows.length === 0) {
       this.seedInitialOrders();
       return;
     }
 
-    for (const row of data) {
+    for (const row of allRows) {
       // Exclude test mock tx artifacts
       if (row.tx_hash === '0x1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef') {
         continue;
@@ -1011,6 +1040,7 @@ export class OrderService {
       userAddress: session.userAddress,
       sessionId: session.id,
       customAgentId: decision.customAgentId,
+      customAgentName: decision.customAgentName || (effectiveAgentType === 'CUSTOM' ? this.resolveCustomAgentName(decision.customAgentId, decision.targetMarketId) : undefined),
       marketId: decision.targetMarketId,
       agentType: effectiveAgentType,
       source,
@@ -1107,14 +1137,30 @@ export class OrderService {
           is_settled: false,
           created_at: now,
           filled_at: orderStatus === 'FILLED' ? now : null,
+          custom_agent_id: orderExecution.customAgentId || null,
+          custom_agent_name: orderExecution.customAgentName || null,
         };
-        const insertRes = await supabase.from('orders').insert(insertPayload);
+        let insertRes = await supabase.from('orders').insert(insertPayload);
         if (insertRes.error) {
-          if (insertRes.error.message.includes('is_settled')) {
-            delete insertPayload.is_settled;
+          const msg = insertRes.error.message || '';
+          if (msg.includes('custom_agent_id') || msg.includes('custom_agent_name')) {
+            // Column not yet migrated (pre-014) — retry without new columns
+            const fallback = { ...insertPayload };
+            delete fallback.custom_agent_id;
+            delete fallback.custom_agent_name;
+            if (msg.includes('is_settled')) delete (fallback as any).is_settled;
+            insertRes = await supabase.from('orders').insert(fallback);
+            if (insertRes.error && insertRes.error.message.includes('is_settled')) {
+              delete (fallback as any).is_settled;
+              await supabase.from('orders').insert(fallback);
+            } else if (insertRes.error) {
+              console.error('[OrderService] Supabase executeAgentDecision insert notice (fallback):', insertRes.error.message);
+            }
+          } else if (msg.includes('is_settled')) {
+            delete (insertPayload as any).is_settled;
             await supabase.from('orders').insert(insertPayload);
           } else {
-            console.error('[OrderService] Supabase executeAgentDecision insert notice:', insertRes.error.message);
+            console.error('[OrderService] Supabase executeAgentDecision insert notice:', msg);
           }
         }
       } catch (err: any) {
@@ -1851,6 +1897,27 @@ export class OrderService {
         outcome: order.outcome,
         winningOutcome: isVoid ? 'VOID' : winningOutcome,
       });
+
+      // Synchronize realized PnL to originating custom agent (fixes #14 — previously only syncResolvedOrdersPnLAsync updated custom_agents)
+      if (order.agentType === 'CUSTOM' && order.userAddress) {
+        const isWinForAgent = (order.pnl || 0) > 0;
+        void (async () => {
+          try {
+            const { customAgentService } = await import('./custom-agent-service.js');
+            let targetAgentId = order.customAgentId;
+            if (!targetAgentId) {
+              const market = marketService.getMarketById(order.marketId);
+              const symbol = market?.symbol || order.marketSnapshot?.symbol || '';
+              const window = market?.windowDuration || order.marketSnapshot?.windowDuration || '';
+              const agent = await customAgentService.findAgentForUserAndSymbol(order.userAddress, symbol, window);
+              targetAgentId = agent?.id;
+            }
+            if (targetAgentId) {
+              await customAgentService.recordTradeSettlement(targetAgentId, order.pnl || 0, isWinForAgent);
+            }
+          } catch {}
+        })();
+      }
 
       dbUpdates.push(
         (async () => {

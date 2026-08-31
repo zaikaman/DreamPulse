@@ -91,8 +91,13 @@ CREATE TABLE IF NOT EXISTS public.orders (
     is_settled BOOLEAN NOT NULL DEFAULT FALSE,
     settled_at TIMESTAMPTZ,
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-    filled_at TIMESTAMPTZ
+    filled_at TIMESTAMPTZ,
+    custom_agent_id UUID REFERENCES public.custom_agents(id) ON DELETE SET NULL,
+    custom_agent_name VARCHAR(64)
 );
+
+CREATE INDEX IF NOT EXISTS idx_orders_custom_agent ON public.orders(custom_agent_id, is_settled, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_orders_user_custom_agent ON public.orders(user_address, custom_agent_id, created_at DESC);
 
 -- ------------------------------------------------------------------------------
 -- 5. Autonomous Settlement Sweeps

@@ -802,6 +802,8 @@ export class MultiAgentSwarmRunner {
         customAgentEvaluator.recordTradeAttempt(agent.id, now);
 
         try {
+          decision.customAgentId = agent.id;
+          decision.customAgentName = agent.name;
           const result = await orderService.executeAgentDecision(decision, sessionGrant);
           if (result) {
             const executedCost = result.totalCost || estCost;
