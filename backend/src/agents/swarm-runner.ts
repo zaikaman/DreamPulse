@@ -196,7 +196,11 @@ export class MultiAgentSwarmRunner {
     } catch {
       return;
     }
-    const openMarkets = marketService.getActiveMarkets({ status: 'Open' });
+    const nowMs = Date.now();
+    const openMarkets = marketService.getActiveMarkets({ status: 'Open' }).filter((m) => {
+      const expiryMs = new Date(m.closeTimestamp).getTime();
+      return Number.isFinite(expiryMs) && expiryMs - nowMs > 20_000;
+    });
     const spotTickers = marketService.getAllSpotTickers();
 
     // 1. Evaluate Quantitative Trading Agents (Volt, Oracle, Titan) on open order book markets

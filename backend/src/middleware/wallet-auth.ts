@@ -131,8 +131,8 @@ export async function authenticateRequest(req: Request): Promise<AuthResult> {
   const eipIssuedAtRaw = getHeader(req, ['x-auth-issued-at', 'x-wallet-issued-at', 'x-issued-at', 'x-auth-timestamp']);
   const eipExpiresAtRaw = getHeader(req, ['x-auth-expires-at', 'x-wallet-expires-at', 'x-expires-at']);
 
-  const hasEipHeaders = Boolean(eipAddress || eipSignature || eipNonce || eipIssuedAtRaw || eipExpiresAtRaw);
-  if (eipAddress || eipSignature || eipNonce || eipIssuedAtRaw || eipExpiresAtRaw) {
+  const hasEipAuthAttempt = Boolean(eipSignature || eipNonce || eipIssuedAtRaw || eipExpiresAtRaw);
+  if (hasEipAuthAttempt) {
     // Require complete set
     if (!eipAddress || !eipSignature || !eipNonce || !eipIssuedAtRaw || !eipExpiresAtRaw) {
       return { address: null, method: null, error: 'Incomplete EIP-712 auth headers. Required: x-user-address, x-auth-signature, x-auth-nonce, x-auth-issued-at, x-auth-expires-at (or x-wallet-* aliases). Alternatively use Authorization: Bearer <jwt> from POST /auth/wallet-verify.' };
@@ -148,13 +148,6 @@ export async function authenticateRequest(req: Request): Promise<AuthResult> {
     if (!Number.isFinite(issuedAt) || !Number.isFinite(expiresAt)) {
       return { address: null, method: null, error: 'Invalid x-auth-issued-at / x-auth-expires-at (must be unix seconds)' };
     }
-    // Basic replay check (soft): if nonce seen before and still valid, reject
-    // Allow same nonce if same address reuses within window? For idempotency we allow but warn.
-    // Here we enforce strict replay protection: reject if nonce already in cache and not expired
-    // unless it's exactly same signature? For now, don't block on replay but track — strict mode commented.
-    // if (isNonceReplay(eipNonce)) {
-    //   return { address: null, method: null, error: 'Nonce already used (replay detected). Generate a fresh nonce.' };
-    // }
     const result = await verifyAuthSignature({
       userAddress: eipAddress,
       signature: eipSignature,
@@ -174,7 +167,8 @@ export async function authenticateRequest(req: Request): Promise<AuthResult> {
   const siweAddress = getHeader(req, ['x-siwe-address', 'x-siwe-wallet']);
   const siweMessageRaw = getHeader(req, ['x-siwe-message', 'x-siwe-message-b64', 'x-siwe-msg']);
   const siweSignature = getHeader(req, ['x-siwe-signature']);
-  if (siweAddress || siweMessageRaw || siweSignature) {
+  const hasSiweAttempt = Boolean(siweSignature || siweMessageRaw);
+  if (hasSiweAttempt) {
     if (!siweAddress || !siweMessageRaw || !siweSignature) {
       return { address: null, method: null, error: 'Incomplete SIWE headers. Required: x-siwe-address, x-siwe-message, x-siwe-signature. Alternatively use EIP-712 headers or Bearer JWT.' };
     }
@@ -340,12 +334,13 @@ export async function optionalWalletAuth(req: Request, res: Response, next: Next
   // an attacker could bypass mismatch checks by omitting header but keeping cookie).
   let hasCookieHint = false;
   try { hasCookieHint = Boolean(getCookie(req, JWT_COOKIE_NAME)); } catch {}
-  const hasAnyAuthHint =
+  const hasAuthProof =
     hasCookieHint ||
     Boolean(getHeader(req, ['authorization', 'x-auth-token'])) ||
-    Boolean(getHeader(req, ['x-user-address', 'x-wallet-address', 'x-address', 'x-auth-signature', 'x-siwe-address']));
+    Boolean(getHeader(req, ['x-auth-signature', 'x-wallet-signature', 'x-signature', 'x-auth-sig'])) ||
+    Boolean(getHeader(req, ['x-siwe-signature']));
 
-  if (!hasAnyAuthHint) {
+  if (!hasAuthProof) {
     next();
     return;
   }
@@ -375,10 +370,10 @@ export async function optionalWalletAuth(req: Request, res: Response, next: Next
     return;
   }
 
-  // Auth hint present but not verifiable (e.g., only x-user-address without signature)
+  // If proof was provided but could not be verified
   res.status(401).json({
     success: false,
     error:
-      'Invalid wallet authentication. If x-user-address is sent, you must also send x-auth-signature, x-auth-nonce, x-auth-issued-at, x-auth-expires-at (EIP-712) or use Authorization: Bearer <jwt>. See POST /api/v1/auth/wallet-verify.',
+      'Invalid wallet authentication. Include either Authorization: Bearer <jwt> OR valid EIP-712 signature headers OR SIWE signature headers.',
   });
 }

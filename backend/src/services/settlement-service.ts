@@ -299,33 +299,17 @@ export class SettlementService {
         }
       }
 
-      // 3. Fallback markets if indexer claimable call failed
+      // 3. Fallback markets if indexer claimable call failed:
+      // Use local in-memory catalog immediately (avoiding slow retry timeouts against a stalled indexer)
       const fallbackHexIds: string[] = [];
       if (!claimableOk) {
-        try {
-          const [finalized, resolved, voided] = await Promise.all([
-            fetchWithTimeout(
-              somniaExchange.client.listBinaryMarkets({ status: 'Finalized', venueId, limit: 20 }),
-              [],
-            ),
-            fetchWithTimeout(
-              somniaExchange.client.listBinaryMarkets({ status: 'Resolved', venueId, limit: 15 }),
-              [],
-            ),
-            fetchWithTimeout(
-              somniaExchange.client.listBinaryMarkets({ status: 'Voided', venueId, limit: 15 }),
-              [],
-            ),
-          ]);
-          for (const im of [...finalized, ...resolved, ...voided]) {
-            if (isValidHexMarket(im.marketId) && !tradedSeen.has(im.marketId.toLowerCase())) {
-              fallbackHexIds.push(im.marketId);
-            }
+        for (const m of marketService.getHistoricalMarkets(35)) {
+          const id = m.marketIdHex || m.id;
+          if (isValidHexMarket(id) && !tradedSeen.has(id.toLowerCase())) {
+            fallbackHexIds.push(id);
           }
-        } catch {
-          // Indexer fallback
         }
-        for (const m of marketService.getHistoricalMarkets(25)) {
+        for (const m of marketService.getActiveMarkets()) {
           const id = m.marketIdHex || m.id;
           if (isValidHexMarket(id) && !tradedSeen.has(id.toLowerCase())) {
             fallbackHexIds.push(id);
@@ -353,13 +337,11 @@ export class SettlementService {
       for (const id of tradedHexIds) pushOnchain(id);
       for (const id of fallbackHexIds) pushOnchain(id);
 
-      const ONCHAIN_SCAN_CAP = 50;
+      const ONCHAIN_SCAN_CAP = 30;
       const toCheck = onchainIds.slice(0, ONCHAIN_SCAN_CAP);
 
       // ── Production batched scan: 1) fetch market onchain states concurrently, 2) single multicall for all outcome balances ──
-      // Previously: 3 RPC per market (getMarketOnchain + 2×balanceOf) × 50 = 150 RPC serialised at concurrency 10 → 15-20s on /sweeper/summary.
-      // Now: N getMarketOnchain (parallel, cached) + 1-2 multicall aggregate3 for 2N balanceOf → ~50 + 1 RPC → <2s.
-      const MARKET_FETCH_CONCURRENCY = 10;
+      const MARKET_FETCH_CONCURRENCY = 15;
       const onchainResults = new Map<string, any>();
 
       for (let i = 0; i < toCheck.length; i += MARKET_FETCH_CONCURRENCY) {
@@ -661,8 +643,8 @@ export class SettlementService {
         console.warn('[SettlementService] Order scan note:', orderScanErr.message);
       }
 
-      // Cache result with 5-second TTL
-      this.scanCache.set(cacheKey, { positions, expiresAt: Date.now() + 5000 });
+      // Cache result with 10-second TTL
+      this.scanCache.set(cacheKey, { positions, expiresAt: Date.now() + 10000 });
 
       if (positions.length > 0) {
         const total = positions.reduce((sum, p) => sum + p.claimableAmount, 0);
@@ -696,8 +678,8 @@ export class SettlementService {
     const now = new Date().toISOString();
 
     if (unclaimed.length > 0) {
-      // Limit to 15 positions per invocation to prevent event-loop and txQueue starvation
-      const positionsToProcess = unclaimed.slice(0, 15);
+      // Limit to 5 positions per invocation to prevent event-loop delays and stay well within HTTP timeouts
+      const positionsToProcess = unclaimed.slice(0, 5);
 
       const hasGas = await hasOperatorGas().catch(() => false);
       const operatorBalance = await somniaExchange.client
@@ -764,9 +746,6 @@ export class SettlementService {
             if (transferHash) {
               if (remainingOperatorBalance >= pos.rawAmount) {
                 remainingOperatorBalance -= pos.rawAmount;
-              }
-              if (process.env.NODE_ENV !== 'test') {
-                await publicClient.waitForTransactionReceipt({ hash: transferHash, timeout: 5_000 }).catch(() => {});
               }
               txHash = transferHash;
             }
@@ -1137,8 +1116,8 @@ export class SettlementService {
         },
       };
 
-      // 5-second TTL
-      this.summaryCache.set(cacheKey, { summary: result, expiresAt: Date.now() + 5000 });
+      // 10-second TTL
+      this.summaryCache.set(cacheKey, { summary: result, expiresAt: Date.now() + 10000 });
       return result;
     };
 

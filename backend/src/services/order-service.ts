@@ -842,6 +842,12 @@ export class OrderService {
         const expiresAtSec = onchainExpiry > 0
           ? Math.min(nowSec + 300, onchainExpiry)
           : Math.floor(new Date(market!.closeTimestamp).getTime() / 1000);
+
+        if (expiresAtSec <= nowSec + 15 || (onchainExpiry > 0 && onchainExpiry <= nowSec + 15)) {
+          console.info(`[OrderService] Market ${market?.id || onchain.pool} expires in <= 15s (expiry: ${expiresAtSec}, now: ${nowSec}), skipping on-chain placement`);
+          return null;
+        }
+
         const expireTimestampNs = BigInt(expiresAtSec) * 1_000_000_000n;
 
         if (isOperatorMaster) {
