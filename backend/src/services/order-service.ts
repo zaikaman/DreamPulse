@@ -1678,6 +1678,60 @@ export class OrderService {
   }
 
   /**
+   * Retrieves all orders for a specific custom agent, querying Supabase directly by custom_agent_id
+   * and merging with in-memory cache to ensure no trades are missed across timeframes.
+   */
+  public async getOrdersForCustomAgent(agentId: string, userAddress?: string, sinceMs?: number): Promise<OrderExecution[]> {
+    const cleanUser = userAddress?.toLowerCase();
+    const memOrders = this.orders.filter((o) => {
+      if (o.customAgentId === agentId) return true;
+      if (o.sessionId === agentId) return true;
+      if (cleanUser && o.agentType === 'CUSTOM' && o.userAddress?.toLowerCase() === cleanUser) {
+        return true;
+      }
+      return false;
+    });
+
+    const seenIds = new Set(memOrders.map((o) => o.id));
+    const merged = [...memOrders];
+
+    if (this.isPersistenceEnabled()) {
+      try {
+        let query = supabase.from('orders').select('*').order('created_at', { ascending: false });
+        if (agentId && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(agentId)) {
+          query = query.or(`custom_agent_id.eq.${agentId},session_id.eq.${agentId}`);
+        } else if (cleanUser && isAddress(cleanUser)) {
+          query = query.eq('user_address', getAddress(cleanUser)).eq('agent_type', 'CUSTOM');
+        }
+        if (sinceMs && sinceMs > 0) {
+          query = query.gte('created_at', new Date(sinceMs).toISOString());
+        }
+        const { data, error } = await query.limit(1000);
+        if (!error && Array.isArray(data)) {
+          for (const row of data) {
+            if (row.tx_hash === '0x1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef') continue;
+            const mapped = this.rowToOrder(row);
+            if (!seenIds.has(mapped.id)) {
+              merged.push(mapped);
+              seenIds.add(mapped.id);
+            }
+          }
+        }
+      } catch {}
+    }
+
+    if (sinceMs && sinceMs > 0) {
+      return merged.filter((o) => {
+        const ts = o.settledAt ? new Date(o.settledAt).getTime() : new Date(o.createdAt).getTime();
+        return ts >= sinceMs;
+      });
+    }
+
+    return merged;
+  }
+
+
+  /**
    * Async paginated query that is DB-aware when cache is truncated.
    * Use for API/history; sync queryOrdersPaginated remains for hot-path callers.
    */

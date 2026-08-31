@@ -710,7 +710,9 @@ export const SwarmArenaView: React.FC<SwarmArenaViewProps> = ({
                   <th style={{ padding: '9px 14px', fontWeight: 500 }}>QUANT RULES</th>
                   <th style={{ padding: '9px 14px', textAlign: 'right', fontWeight: 500 }}>WIN RATE</th>
                   <th style={{ padding: '9px 14px', textAlign: 'right', fontWeight: 500 }}>SHARPE</th>
-                  <th style={{ padding: '9px 16px', textAlign: 'right', fontWeight: 500 }}>NET PNL ({timeframe.toUpperCase()})</th>
+                  <th style={{ padding: '9px 16px', textAlign: 'right', fontWeight: 500 }}>
+                    {timeframe === 'ALL' ? 'LIFETIME NET PNL' : `NET PNL (${timeframe.toUpperCase()})`}
+                  </th>
                   <th style={{ padding: '9px 16px', textAlign: 'right', fontWeight: 500 }}>ACTIONS</th>
                 </tr>
               </thead>

@@ -308,9 +308,12 @@ export class LeaderboardService {
     const winRate = settledCount > 0 ? Number(((wins / settledCount) * 100).toFixed(1)) : 0;
     const pnl = Number(settled.reduce((sum, o) => sum + (o.pnl ?? 0), 0).toFixed(2));
     const spentAllowance = Number(inRange.reduce((sum, o) => sum + (o.totalCost || 0), 0).toFixed(2));
-    const pnlPct = allocatedAllowance > 0
-      ? Number(((pnl / allocatedAllowance) * 100).toFixed(2))
-      : (spentAllowance > 0 ? Number(((pnl / spentAllowance) * 100).toFixed(2)) : 0);
+    // Calculate realistic ROI against spent allowance / capital deployed when allowance is large/unbounded
+    const pnlPct = spentAllowance > 0
+      ? Number(((pnl / spentAllowance) * 100).toFixed(2))
+      : (allocatedAllowance > 0 && allocatedAllowance <= 1000
+          ? Number(((pnl / allocatedAllowance) * 100).toFixed(2))
+          : (allocatedAllowance > 0 ? Number(((pnl / allocatedAllowance) * 100).toFixed(2)) : 0));
 
     let runningPnl = 0;
     const rawSparkline: number[] = [0];
@@ -330,7 +333,7 @@ export class LeaderboardService {
     if (rawSparkline.length < 2) rawSparkline.push(pnl);
     const sparkline = this.sampleSparkline(rawSparkline, 8);
 
-    const maxDrawdownPct = allocatedAllowance > 0
+    const maxDrawdownPct = allocatedAllowance > 0 && allocatedAllowance <= 1000
       ? Math.min(100, Number(((maxDrawdown / allocatedAllowance) * 100).toFixed(1)))
       : (peak > 0 ? Math.min(100, Number(((maxDrawdown / peak) * 100).toFixed(1))) : 0);
 
@@ -507,6 +510,19 @@ export class LeaderboardService {
       agentOrdersMap.set(agent.id, matched);
     }
 
+    // Direct fallback for agents whose orders were evicted from memory ring-buffer
+    for (const agent of allCustomAgents) {
+      const existing = agentOrdersMap.get(agent.id) || [];
+      if (existing.length === 0 && (agent.tradesCount ?? 0) > 0) {
+        try {
+          const directOrders = await orderService.getOrdersForCustomAgent(agent.id, agent.userAddress, cutoffMs);
+          if (directOrders.length > 0) {
+            agentOrdersMap.set(agent.id, directOrders);
+          }
+        } catch {}
+      }
+    }
+
     const customEntries: Array<Omit<ArenaAgentEntry, 'rank' | 'tierBadge'>> = allCustomAgents.map((agent) => {
       const isTemplate = STARTER_TEMPLATES.some((t) => t.id === agent.id);
       const agentOrders = agentOrdersMap.get(agent.id) || [];
@@ -520,54 +536,63 @@ export class LeaderboardService {
 
       let metrics = computed;
 
-      // Prefer real settled order history (ground truth) over cached stored stats.
-      // Stored is only used as fallback when no orders exist in the selected window.
-      if (computed.tradesCount > 0) {
-        metrics = computed;
-      } else if (storedTrades > 0) {
-        if (cutoffMs === 0) {
-          // ALL timeframe: use authoritative stored performance directly
-          const winsFromStored = Math.round((storedWinRate / 100) * storedTrades);
-          const lossesFromStored = Math.max(0, storedTrades - winsFromStored);
-          const pnlPctFromStored = allocatedAllowance > 0
-            ? Number(((storedPnl / allocatedAllowance) * 100).toFixed(2))
-            : (spentAllowance > 0 ? Number(((storedPnl / spentAllowance) * 100).toFixed(2)) : 0);
+      // When ALL timeframe is selected (cutoffMs === 0), authoritative stored performance
+      // from custom_agents table is the canonical lifetime truth (matching Cockpit view exactly).
+      if (cutoffMs === 0) {
+        if (storedTrades > 0 || computed.tradesCount > 0) {
+          const effectivePnl = storedTrades > 0 ? Number(storedPnl.toFixed(2)) : computed.pnl;
+          const effectiveTrades = storedTrades > 0 ? storedTrades : computed.tradesCount;
+          const effectiveWinRate = storedTrades > 0 ? storedWinRate : computed.winRate;
+          const winsFromStored = Math.round((effectiveWinRate / 100) * effectiveTrades);
+          const lossesFromStored = Math.max(0, effectiveTrades - winsFromStored);
+          const pnlPctFromStored = spentAllowance > 0
+            ? Number(((effectivePnl / spentAllowance) * 100).toFixed(2))
+            : (allocatedAllowance > 0 && allocatedAllowance <= 1000
+                ? Number(((effectivePnl / allocatedAllowance) * 100).toFixed(2))
+                : (allocatedAllowance > 0 ? Number(((effectivePnl / allocatedAllowance) * 100).toFixed(2)) : 0));
 
           const derivedSharpe = computed.tradesCount >= 2 && computed.sharpeRatio !== 0
             ? computed.sharpeRatio
-            : this.calculateDerivedSharpe(storedPnl, storedWinRate, storedTrades);
+            : this.calculateDerivedSharpe(effectivePnl, effectiveWinRate, effectiveTrades);
           const derivedSortino = computed.sortinoRatio > 0
             ? computed.sortinoRatio
             : (derivedSharpe > 0 ? Number((derivedSharpe * 1.25).toFixed(2)) : 0);
 
           let sparkline = computed.sparkline;
           if (computed.tradesCount === 0 || sparkline.every((v) => v === 0)) {
-            sparkline = this.generateOrganicSparkline(storedPnl);
+            sparkline = this.generateOrganicSparkline(effectivePnl);
           }
 
           metrics = {
-            pnl: Number(storedPnl.toFixed(2)),
+            pnl: effectivePnl,
             pnlPct: pnlPctFromStored,
-            winRate: storedWinRate,
-            tradesCount: storedTrades,
+            winRate: effectiveWinRate,
+            tradesCount: effectiveTrades,
             winsCount: winsFromStored,
             lossesCount: lossesFromStored,
             sharpeRatio: derivedSharpe,
             sortinoRatio: derivedSortino,
-            maxDrawdownPct: computed.maxDrawdownPct > 0 ? computed.maxDrawdownPct : (storedPnl > 0 ? Number(Math.max(1.5, 12 - (storedWinRate / 10)).toFixed(1)) : 15.0),
+            maxDrawdownPct: computed.maxDrawdownPct > 0 ? computed.maxDrawdownPct : (effectivePnl > 0 ? Number(Math.max(1.5, 12 - (effectiveWinRate / 10)).toFixed(1)) : 15.0),
             spentAllowance,
             sparkline,
           };
-        } else {
-          // Windowed timeframe (24h, 7d, 30d) with no orders in window: show scaled stored estimate
+        }
+      } else {
+        // Windowed timeframe (24h, 7d, 30d):
+        if (computed.tradesCount > 0) {
+          metrics = computed;
+        } else if (storedTrades > 0) {
+          // Fallback when no orders fall inside the window: scale stored estimate
           const windowRatio = tf === '24h' ? 0.25 : (tf === '7d' ? 0.75 : 1.0);
           const windowTrades = Math.max(1, Math.round(storedTrades * windowRatio));
           const windowPnl = Number((storedPnl * windowRatio).toFixed(2));
           const winsFromStored = Math.round((storedWinRate / 100) * windowTrades);
           const lossesFromStored = Math.max(0, windowTrades - winsFromStored);
-          const pnlPctFromStored = allocatedAllowance > 0
-            ? Number(((windowPnl / allocatedAllowance) * 100).toFixed(2))
-            : (spentAllowance > 0 ? Number(((windowPnl / spentAllowance) * 100).toFixed(2)) : 0);
+          const pnlPctFromStored = spentAllowance > 0
+            ? Number(((windowPnl / spentAllowance) * 100).toFixed(2))
+            : (allocatedAllowance > 0 && allocatedAllowance <= 1000
+                ? Number(((windowPnl / allocatedAllowance) * 100).toFixed(2))
+                : (allocatedAllowance > 0 ? Number(((windowPnl / allocatedAllowance) * 100).toFixed(2)) : 0));
 
           const derivedSharpe = this.calculateDerivedSharpe(windowPnl, storedWinRate, windowTrades);
           metrics = {
