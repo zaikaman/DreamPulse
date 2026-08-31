@@ -51,7 +51,7 @@
 15. [Smart Contracts & On-Chain Deployments](#smart-contracts--on-chain-deployments)
 16. [Hackathon Judging Criteria Alignment](#hackathon-judging-criteria-alignment)
 17. [Developer Feedback Report (Somnia & DreamDEX SDK)](#developer-feedback-report-somnia--dreamdex-sdk)
-18. [System Architecture Diagrams](#system-architecture-diagrams)
+18. [System Architecture & Execution Workflows](#system-architecture--execution-workflows)
 19. [API & WebSocket Telemetry Protocol](#api--websocket-telemetry-protocol)
 20. [Local Installation & Development Guide](#local-installation--development-guide)
 21. [Verification & Test Suite (220/220 Passing)](#verification--test-suite-220220-passing)
@@ -65,49 +65,32 @@
 
 **DreamPulse AI** is an institutional-grade, full-stack cyber-financial platform engineered specifically for **DreamDEX Event Contracts** on the **Somnia Shannon Testnet** (Chain ID `50312`).
 
-Built to answer the Somnia × DreamDEX Hackathon challenge across **all tracks** — consumer-facing trading applications, AI trading agents, analytics tools, social prediction products, and settlement infrastructure — DreamPulse replaces fragmented bot scripts with an end-to-end decentralized exchange ecosystem:
+Built to answer the Somnia × DreamDEX Hackathon challenge across **all tracks** — consumer-facing trading applications, AI trading agents, analytics tools, social prediction products, and settlement infrastructure — DreamPulse replaces fragmented bot scripts with an end-to-end decentralized exchange ecosystem.
 
-```mermaid
-flowchart TB
-    %% Client & Interface Layer
-    subgraph UI ["Client Application Layer (React · Vite · TypeScript)"]
-        direction LR
-        TERMINAL["Pro Trade Terminal\n• CLOB Order Book & Depth Ladders\n• Real-Time Binary SVG Charts\n• AI Alpha Copilot Reasoning"]
-        STUDIO["Visual Strategy Studio\n• Rule-Based Sentence AST Builder\n• Natural Language Strategy Synthesis\n• Dedicated Gemini AI Engine"]
-        BACKTEST["Quantitative Backtester\n• Binance Historical Spot Replay\n• Slippage & Latency Simulation\n• Sharpe / Sortino Risk Analytics"]
-        ARENA["Swarm Arena & Social Alpha\n• Agent & Forecaster Leaderboards\n• 1-Click Strategy Cloning\n• Real-Time Mirror Trading"]
-    end
+### Platform Architecture Overview
 
-    %% Intelligence & Core Engine Layer
-    subgraph ENGINE ["Intelligence & Quantitative Layer"]
-        direction LR
-        QUANT["Black-Scholes Math Engine\n• Abramowitz-Stegun CDF Φ(z)\n• Bayesian EWMA Volatility\n• Dynamic Fair Value & Edge"]
-        SWARM["Autonomous Agent Swarms\n• Titan MM (Dynamic Spread Liquidity)\n• Volt Sniper (Spot Velocity Exploitation)\n• Oracle Arb (CDF Mispricing Arbitrage)\n• Personal Isolated Swarms"]
-        SWEEPER["Settlement Sweeper\n• Autonomous Payout Claiming\n• Collateral Auto-Compounding\n• Stranded Capital Recovery"]
-    end
+DreamPulse AI is structured into four tightly integrated operational layers:
 
-    %% Execution & Security Layer
-    subgraph EXECUTION ["Execution & Security Infrastructure (Node.js · Express · TypeScript)"]
-        direction LR
-        RISK["Risk & Concurrency Guard\n• Pre-Flight Depth Sanitization\n• Serialized NonceManager Queue\n• Single-Trade & Daily Loss Leash"]
-        SESSION["Zero-Custody Session Gateway\n• EIP-712 Session Delegations\n• OperatorPermissionsRegistry\n• Instant Key Revocation"]
-        TELEMETRY["WebSocket Telemetry Gateway\n• Sub-50ms Real-Time State Streaming\n• Live LLM Thought Telemetry\n• System Health Monitoring"]
-    end
+1. **Client Application Layer (`React` · `Vite` · `TypeScript`)**
+   * **Pro Trade Terminal**: CLOB order book, real-time depth ladders, interactive binary charts, and AI Alpha Copilot guidance.
+   * **Visual Strategy Studio**: No-code sentence-based rule AST builder with dedicated Google Gemini strategy synthesis.
+   * **Quantitative Backtester**: Binance historical spot replay, friction/slippage simulation, and Sharpe/Sortino performance modeling.
+   * **Swarm Arena & Social Alpha**: Dual-track leaderboards, 1-click strategy cloning, and automated forecaster mirror trading.
 
-    %% Blockchain & Smart Contracts Layer
-    subgraph ONCHAIN ["On-Chain Settlement Layer (Somnia Shannon Testnet · Chain ID 50312)"]
-        direction LR
-        BATCH["BatchApprove.sol\n• Multi-Pool 1-Click Delegation\n• Token Allowance Aggregation\n• Gas-Optimized Router"]
-        DREAMDEX["DreamDEX CLOB Contracts\n• Binary Event Market Pools\n• Matching Engine & Limit Book\n• Oracle Resolution Settlement"]
-        SOMNIA["Somnia Shannon EVM L1\n• 400k+ TPS High Throughput\n• Sub-Second Block Finality\n• Zero-Slippage Execution"]
-    end
+2. **Intelligence & Quantitative Layer**
+   * **Black-Scholes Math Engine**: High-precision Abramowitz-Stegun normal CDF $\Phi(z)$, Bayesian EWMA volatility surfaces, and dynamic fair-value calculations.
+   * **Autonomous Agent Swarms**: Canonical protocol swarms alongside isolated per-wallet personal swarms (Volt Sniper, Oracle Arb, Titan MM).
+   * **Settlement Sweeper**: Autonomous payout monitoring, zero-loss batch redemptions, and direct collateral auto-compounding.
 
-    UI -->|"User Actions & Subscriptions"| EXECUTION
-    ENGINE -->|"Trading Signals & Valuations"| EXECUTION
-    EXECUTION -->|"High-Frequency Trades & Approvals"| ONCHAIN
-    ONCHAIN -->|"State Updates & Price Events"| ENGINE
-    EXECUTION -->|"Real-Time Telemetry Stream"| UI
-```
+3. **Execution & Security Infrastructure (`Node.js` · `Express` · `TypeScript`)**
+   * **Risk & Concurrency Guard**: Pre-flight depth sanitization, serialized NonceManager queue, and single-trade/daily loss caps.
+   * **Zero-Custody Session Gateway**: EIP-712 non-custodial session delegations via `OperatorPermissionsRegistry` with instant key revocation.
+   * **WebSocket Telemetry Gateway**: Sub-50ms real-time state streaming, live LLM thought broadcasts, and system health telemetry.
+
+4. **On-Chain Settlement Layer (`Somnia Shannon Testnet` · Chain ID `50312`)**
+   * **`BatchApprove.sol`**: Custom smart contract enabling 1-click multi-pool delegation and token allowance aggregation.
+   * **DreamDEX CLOB Contracts**: Rolling binary event market pools, order matching, and oracle settlement routing.
+   * **Somnia Shannon EVM L1**: High-throughput EVM execution (400k+ TPS), sub-second block finality, and zero-slippage execution.
 
 Whether you are a **manual retail trader** seeking real-time Black-Scholes edge and sub-second gasless order execution, a **no-code creator** building and backtesting custom binary agents, a **passive liquidity provider** copytrading the canonical multi-agent swarm, or an **algorithmic quant** running isolated personal swarms, DreamPulse provides a seamless, unified gateway to prediction markets.
 
@@ -129,41 +112,27 @@ Decentralized Central Limit Order Book (CLOB) prediction markets are the fastest
 
 ## The 6 Core Platform Pillars
 
-```
-┌─────────────────────────────────────────────────────────────────────────────────────────────────────────┐
-│                                   DREAMPULSE AI UNIFIED ECOSYSTEM                                       │
-├──────────────────────────┬───────────────────────────┬──────────────────────────────────────────────────┤
-│ 1. PRO TRADE TERMINAL    │ 2. STRATEGY STUDIO        │ 3. QUANT BACKTESTER                              │
-│ • Live SVG Settlement    │ • Visual Sentence Canvas  │ • Binance 1m/5m/15m/1h Historical Candlesticks   │
-│ • Strike Line & Zones    │ • Dedicated Gemini Copilot│ • Configurable Taker Slippage & Latency Delay    │
-│ • AI Alpha Copilot       │ • Isolated tUSDC Allowance│ • Sharpe, Sortino, Profit Factor, Drawdown Curve │
-│ • Gasless Session Ticket │ • JSON Rule AST Compiler  │ • 1-Click Bridge to Personal/Global Swarm        │
-├──────────────────────────┼───────────────────────────┼──────────────────────────────────────────────────┤
-│ 4. AUTONOMOUS SWARMS     │ 5. SWARM ARENA & SOCIAL   │ 6. SETTLEMENT SWEEPER                            │
-│ • 4 Autonomous Agents    │ • Dual-Track Leaderboard  │ • Autonomous Resolution Scanning                 │
-│ • Protocol vs Personal   │ • 1-Click Strategy Clone  │ • Zero-Loss Multi-Pool Batch Claims              │
-│ • COPY ↔ PERSONAL Modes  │ • Forecaster Mirroring    │ • 100% Direct Collateral Compounding             │
-│ • Sub-100ms Evaluation   │ • 4x Retina Proof Cards   │ • Gas-Optimized Native STT Batching              │
-└──────────────────────────┴───────────────────────────┴──────────────────────────────────────────────────┘
-```
+| Platform Pillar | Core Capabilities | Key Advantages |
+| :--- | :--- | :--- |
+| **1. Pro Trade Terminal** | Live binary settlement chart, strike price indicators, AI Alpha Copilot, gasless session tickets. | Sub-second order execution with real-time Black-Scholes edge calculations and 1-click follow. |
+| **2. Strategy Studio** | Visual sentence canvas, dedicated Gemini copilot, isolated tUSDC allowances, JSON rule AST compiler. | True no-code strategy creation without consuming shared background swarm quota. |
+| **3. Quant Backtester** | Binance 1m/5m/15m/1h historical data, configurable slippage and latency delays, Sortino and drawdown metrics. | Verified historical performance validation before deploying to personal or global swarms. |
+| **4. Autonomous Swarms** | 4 specialized autonomous agents (Volt, Oracle, Titan, Sweeper), protocol vs. personal swarms, 100ms evaluation loops. | Continuous two-sided market liquidity and latency arbitrage with isolated per-wallet parameters. |
+| **5. Swarm Arena & Social** | Dual-track leaderboards (AI fleet & human forecasters), 1-click strategy cloning, forecaster mirror trading. | Fully transparent on-chain performance tracking and high-resolution Proof-of-Alpha cards. |
+| **6. Settlement Sweeper** | Autonomous resolution scanning, zero-loss multi-pool batch claims, 100% collateral compounding. | Eliminates stranded capital by automatically recycling resolved payouts back into active bankrolls. |
 
 ---
 
 ## 1. Pro Trade Terminal with AI Alpha Copilot
 
-The **Trade Terminal** (`#trade` / `TradeTerminalView.tsx`) provides a professional, full-bleed execution environment for binary prediction contracts on Somnia DreamDEX:
+The **Trade Terminal** (`#trade` / `TradeTerminalView.tsx`) provides a professional, full-bleed execution environment for binary prediction contracts on Somnia DreamDEX.
 
-```mermaid
-flowchart LR
-    subgraph TradeTerminalView ["Trade Terminal Layout"]
-        NAV["Asset Switcher & Live Spot Tickers (BTC/USD, ETH/USD)"]
-        CHART["Visual Binary Settlement Chart\n(Strike Line · Spot Price Trail · UP/DOWN Payout Zones)"]
-        BOOK["CLOB Depth Ladder\n(1-Click Book Toggle)"]
-        COPILOT["AI Alpha Copilot\n(Black-Scholes Fair Value · Net Edge % · 1-Click Follow)"]
-        TICKET["Pro Binary Order Ticket\n(UP/DOWN Cards · Collateral Presets · Gasless Session Key)"]
-        DRAWER["Active Positions & Orders Drawer\n(Realized PnL · Live Claims · Explorer Links)"]
-    end
-```
+### Terminal Layout & Navigation Structure:
+* **Header & Market Switcher**: Live spot ticker feeds (BTC/USD, ETH/USD) with 1m/5m price drift calculations and synchronized countdown clocks.
+* **Settlement Canvas & Depth Book**: Center stage toggling seamlessly between the visual binary settlement chart and the full CLOB order book depth ladder.
+* **AI Alpha Copilot**: Real-time Black-Scholes fair value estimation $\Phi(z)$, net mathematical edge, and instantaneous 1-click execution.
+* **Order Ticket**: UP/DOWN conviction cards, collateral presets, and gasless session key order placement.
+* **Positions & Executions Drawer**: Persistent bottom drawer displaying active positions, resting orders, and on-chain settlement receipts.
 
 ### Key Terminal Features:
 * **Visual Binary Settlement Chart (`EventContractChart.tsx`)**: Real-time SVG chart displaying a dashed strike settlement price line, glowing spot price trail, shaded **UP (Emerald)** and **DOWN (Rose)** payout zones, AI Forecast projection cone overlay, interactive crosshair tooltips, and floating time-to-settlement badges.
@@ -184,24 +153,18 @@ flowchart LR
 
 ## 2. Visual Strategy Studio (No-Code Agent Builder)
 
-The **Visual Strategy Studio** (`#studio` / `StrategyStudioView.tsx`) enables anyone to assemble, customize, and deploy automated trading agents with zero coding required:
+The **Visual Strategy Studio** (`#studio` / `StrategyStudioView.tsx`) enables anyone to assemble, customize, and deploy automated trading agents with zero coding required.
 
-```mermaid
-flowchart LR
-    subgraph SequentialCapsules ["Visual Algorithmic Sentence Builder"]
-        direction LR
-        P1["[ 1. WHEN ]\nMarket & Timeframe\n(e.g., BTC/USD · 1m)"]
-        P2["[ 2. IF ]\nTrigger Condition Capsules\n(RSI < 28 · Bollinger Lower Touch)"]
-        P3["[ 3. THEN EXECUTE ]\nBinary Action & Expiry\n(CALL · 60s Expiry · $10 STT)"]
-        P4["[ 4. RISK LEASH ]\nAutonomous Guardrails\n(Max 2 Losses · 3m Cooldown · 75% Payout)"]
-        P1 --> P2 --> P3 --> P4
-    end
-```
+### Visual Algorithmic Sentence Workflow:
+1. **WHEN (Market & Timeframe)**: Select asset (`BTC/USD`, `ETH/USD`) and candle resolution (`1m`, `5m`, `15m`, `1h`).
+2. **IF (Trigger Conditions)**: Add multi-indicator capsules (e.g. `RSI < 28`, `Bollinger Lower Band Touch`, `EMA Momentum`).
+3. **THEN EXECUTE (Binary Action)**: Define trade direction (`CALL` or `PUT`), duration (`60s Turbo` to `1h`), and fixed lot stake.
+4. **RISK LEASH (Autonomous Guardrails)**: Set consecutive loss limits before pause, cooldown periods, and required payout hurdles.
 
 ### Core Studio Capabilities:
 * **Interactive Sentence & Capsule Canvas**:
   * **Market & Timeframe**: Select asset (`BTC/USD`, `ETH/USD`) and candle resolution (`1m`, `5m`, `15m`, `1h`).
-  * **Trigger Condition Capsules**: Add multi-indicator triggers (`RSI`, `BOLLINGER_LOWER`, `BOLLINGER_UPPER`, `EMA`, `SMA`, `PRICE_DRIFT`) with custom periods, comparison operators (`<`, `>`, `↑ Crosses Above`, `↓ Crosses Below`), and threshold values.
+  * **Trigger Condition Capsules**: Add multi-indicator triggers (`RSI`, `BOLLINGER_LOWER`, `BOLLINGER_UPPER`, `EMA`, `SMA`, `PRICE_DRIFT`) with custom periods, comparison operators (`<`, `>`, `Crosses Above`, `Crosses Below`), and threshold values.
   * **Configurable Logic Gate**: Switch seamlessly between `ALL Must Agree (AND)` and `ANY May Trigger (OR)`.
   * **Binary Action Specification**: Direction (`CALL` / `PUT`), contract duration (`60s Turbo`, `5m`, `15m`, `1h`), and fixed lot sizing.
   * **Autonomous Risk Leash**: Max consecutive loss ceiling before auto-pause, loss cooldown duration, and minimum required pool payout percentage.
@@ -249,33 +212,14 @@ The **Quantitative Backtesting Lab** (`#backtest` / `StrategyStudio.tsx`) allows
 
 ## 4. Autonomous Multi-Agent Swarms (Protocol & Personal)
 
-DreamPulse coordinates an orchestrated **Multi-Agent Swarm** that operates on a high-frequency **100ms evaluation cadence**:
+DreamPulse coordinates an orchestrated **Multi-Agent Swarm** operating on a high-frequency **100ms evaluation cadence**.
 
-```mermaid
-flowchart TB
-    subgraph SwarmEngine ["DreamPulse Autonomous Swarm Daemon (Node.js/TS)"]
-        QUANT["Quantitative Model Engine\n- Abramowitz-Stegun CDF Φ(z)\n- Bayesian Shrinkage EWMA Volatility\n- Depth VWAP & Integer Quantizer"]
-        
-        subgraph Agents ["Four Autonomous Micro-Agents"]
-            VOLT["Volt Sniper\n(Spot Staleness Momentum)"]
-            ORACLE["Oracle Arb\n(Vol Surface Arbitrage)"]
-            TITAN["Titan MM\n(Inventory-Skewed Liquidity)"]
-            SWEEPER["Sweeper\n(Batch Settlement Daemon)"]
-        end
-
-        LLM["Cognitive LLM Engines\n(Groq Swarm Telemetry + Gemini Strategy Studio)"]
-        RISK["Risk Control & Circuit Breaker\n- Self-Trade Depth Sanitizer\n- Dynamic NonceManager\n- Per-Session Caps"]
-    end
-
-    subgraph SomniaShannonL1 ["Somnia Shannon Testnet (Chain ID: 50312)"]
-        CLOB["DreamDEX CLOB Engine\nBinary Pools (5m, 15m, 1h)"]
-        OPR["OperatorPermissionsRegistry\n(Non-Custodial Scoped Approvals)"]
-        BATCH["BatchApprove.sol\nHelper Contract"]
-        SETTLE["Binary Settlement Router\n(Collateral Redemptions)"]
-    end
-
-    SwarmEngine <--> SomniaShannonL1
-```
+### Swarm Daemon Architecture & Component Flow:
+* **Quantitative Math Engine**: Abramowitz-Stegun normal CDF $\Phi(z)$, Bayesian EWMA volatility surfaces, depth-weighted VWAP, and quantized tick math.
+* **Cognitive Reasoning Engine**: Real-time Groq LLM telemetry broadcasting structured rationale and conviction scores for every executed trade.
+* **Four Autonomous Agent Personas**: `Volt Sniper` (momentum taker), `Oracle Arb` (implied vol arb), `Titan MM` (inventory-skewed maker), and `Sweeper` (settlement daemon).
+* **Risk & Circuit Breakers**: Self-trade depth sanitization, serialized NonceManager queues, and per-session single-trade / daily volume caps.
+* **On-Chain Somnia Integration**: Direct non-custodial interaction with DreamDEX binary market pools, `OperatorPermissionsRegistry`, and `BatchApprove.sol`.
 
 ### Hybrid Personal Swarm: Copy-Trading vs Isolated Per-Wallet Swarms
 
@@ -327,29 +271,15 @@ flowchart TB
 
 ## 5. Swarm Arena, Strategy Leaderboards & Proof-of-Alpha
 
-Fulfilling the hackathon's core vision for **Social Prediction Products**, **1-Click Strategy Cloning**, and **Viral Ecosystem Adoption**, DreamPulse introduces the **Swarm Arena** (`#arena`), **Dedicated Trader Profiles** (`#profile/:address`), and the **Proof-of-Alpha Card Studio**:
+Fulfilling the hackathon's core vision for **Social Prediction Products**, **1-Click Strategy Cloning**, and **Viral Ecosystem Adoption**, DreamPulse introduces the **Swarm Arena** (`#arena`), **Dedicated Trader Profiles** (`#profile/:address`), and the **Proof-of-Alpha Card Studio**.
 
-```mermaid
-flowchart TD
-    subgraph SwarmArena ["Swarm Arena & Strategy Leaderboard (#arena)"]
-        direction TB
-        TRACK1["🤖 AI Agent Fleet Track\n(Protocol Archetypes & User Custom Deployed Agents)"]
-        TRACK2["👤 Human Forecasters Track\n(100% Real CLOB Order Flow & On-Chain PnL)"]
-    end
-
-    subgraph Actions ["Social Actions & Composability"]
-        CLONE["⚡ 1-Click Strategy Clone\n(Imports Rule AST -> Personal Swarm / Studio)"]
-        MIRROR["👥 Autonomous Social Mirror\n(Auto-Replicate High-Ranked Forecasters)"]
-        CARD["🎨 Proof-of-Alpha Card Studio\n(2x/4x Retina Canvas Badges for Twitter & Telegram)"]
-        PROFILE["📊 Dedicated Trader Profile Page\n(Realized Alpha Curves, Distributions, Fills Table)"]
-    end
-
-    TRACK1 --> CLONE
-    TRACK1 --> CARD
-    TRACK2 --> MIRROR
-    TRACK2 --> PROFILE
-    PROFILE --> CARD
-```
+### Swarm Arena Structure & Social Ecosystem:
+* **AI Agent Fleet Track**: Protocol archetypes (Volt, Oracle, Titan) alongside user-deployed custom agents ranked by net PnL, Win Rate %, Sharpe/Sortino ratios, and rule AST summaries.
+* **Human Forecasters Track**: 100% genuine CLOB order flow and on-chain verified trader performance with tier badges (`APEX`, `GRANDMASTER`, `MASTER`).
+* **1-Click Strategy Cloning**: Instantly import any agent's quantitative parameters into your personal swarm or visual strategy studio.
+* **Autonomous Social Mirroring**: Auto-replicate high-ranked forecasters within strict non-custodial session risk bounds.
+* **Proof-of-Alpha Card Studio**: Generate 2x and 4x retina Canvas verification badges for sharing on X (Twitter), Telegram, and Discord.
+* **Dedicated Forecaster Profiles**: Full-page trader analytics featuring cumulative alpha curves, asset distributions, and on-chain fills history.
 
 ### 1. Dual-Track Arena & Quantitative Leaderboards
 * **AI Agent Fleet Track**: Ranks autonomous algorithmic agents (such as *Volt Latency Sniper*, *Oracle Volatility Harvester*, *Titan MM*, and community-deployed custom agents) by real Net PnL, Win Rate %, Total Fills, Sharpe/Sortino Ratios, and Quantitative Rule Summaries.
@@ -450,34 +380,14 @@ In ultra-short prediction contracts (5m, 15m), raw un-smoothed Black-Scholes pro
 
 One of the largest UX hurdles in Web3 prediction markets is that **every newly deployed binary pool contract requires separate ERC-20 token approval and operator authorization**. 
 
-DreamPulse solves this with a **two-tier non-custodial authorization architecture**:
+DreamPulse solves this with a **two-tier non-custodial authorization architecture**.
 
-```mermaid
-sequenceDiagram
-    autonumber
-    actor Trader as User Wallet (EOA)
-    participant UI as Cyber-Terminal UI
-    participant Batch as BatchApprove.sol (0x12c9...)
-    participant Registry as OperatorPermissionsRegistry (0x15C7...)
-    participant Swarm as DreamPulse Swarm Operator
-
-    Trader->>UI: Connect Wallet & Select Delegation Limits
-    Note over UI: Set Single Trade Cap ($20) & Daily Cap ($200)
-    UI->>Trader: Request 1-Click Batch Approval
-    Trader->>Batch: batchBoth(USDC, Registry, activePools[], operator, selectors, MAX)
-    Batch->>Registry: setOperatorApprovalForPool(pool, operator, selectors, true)
-    Batch-->>Trader: Confirmed (1 Transaction)
-    
-    UI->>Trader: Request EIP-712 Session Signature
-    Trader->>UI: Sign Typed Data (Non-Custodial SessionGrant)
-    UI->>Swarm: POST /api/v1/sessions/register (Store Session Record)
-    
-    Note over Swarm: Autonomous Trading Begins
-    Swarm->>Registry: Check isApprovedForPool(pool, user, operator, placeOrderFor)
-    Registry-->>Swarm: Approved = true
-    Swarm->>Somnia: placeOrderFor(user, isBid, price, quantity, ...)
-    Note over Somnia: Order executes non-custodially from User Funds
-```
+### Non-Custodial Delegation Lifecycle:
+1. **Wallet Connection & Risk Configuration**: User connects wallet and configures delegation limits (single-trade cap and cumulative daily cap).
+2. **1-Click Batch Approval**: User signs a single transaction via `BatchApprove.sol`, executing `setOperatorApprovalForPool` across all active and rolling prediction pools in the `OperatorPermissionsRegistry`.
+3. **EIP-712 Session Authorization**: User signs an off-chain EIP-712 typed data message (`SessionGrant`) granting non-custodial execution authority within the configured caps.
+4. **Session Registration**: Frontend registers the session grant with the backend daemon via `POST /api/v1/sessions/register`.
+5. **Autonomous Scoped Execution**: The swarm operator invokes `placeOrderFor` on Somnia Shannon testnet. The registry verifies scoped permissions and executes the order directly from user collateral with zero custody transfer.
 
 ### The Zero-Custody Invariant
 Agents operate strictly via Somnia's `OperatorPermissionsRegistry` using scoped function selectors:
@@ -509,26 +419,12 @@ The DreamPulse frontend is crafted with an ultra-refined, minimalist institution
 
 ## Minimalist Onboarding & First-Run Activation Flow
 
-To ensure new users are never overwhelmed by the depth of trading modules, DreamPulse features a multi-tiered onboarding architecture designed to get traders from wallet connection to first value in under 60 seconds:
+To ensure new users are never overwhelmed by the depth of trading modules, DreamPulse features a multi-tiered onboarding architecture designed to get traders from wallet connection to first value in under 60 seconds.
 
-```
-┌──────────────────────────────────────────────────────────────────────────────────┐
-│  LAYER 1: The First-Connect Glassmorphic Wizard (Modal Triggered on 1st Connect) │
-│  "3 Steps to First Value in < 60 seconds"                                        │
-└──────────────────────────────────────────────────────────────────────────────────┘
-                                      │
-                                      ▼
-┌─────────────────────────────────────────────────────────────────────────────┐
-│  LAYER 2: Interactive Path Selector ("Choose Your Journey")                 │
-│  [ Passive Swarm Copytrade ]   [ Pro Terminal & Copilot ]   [ Quant Studio ]│
-└─────────────────────────────────────────────────────────────────────────────┘
-                                      │
-                                      ▼
-┌─────────────────────────────────────────────────────────────────────────────────────┐
-│  LAYER 3: Persistent Quick-Start Quest Bar (Top of Overview & Sidebar)              │
-│  Progress: [████████░░░░] 2/4 Steps Completed (Claim Faucet -> Session -> 1st Trade)│
-└─────────────────────────────────────────────────────────────────────────────────────┘
-```
+### Onboarding Layers & User Journey:
+* **Layer 1: First-Connect Wizard**: 3-step modal triggered on first connection (Network Verification -> Faucet Claim -> Non-Custodial Session Delegation).
+* **Layer 2: Interactive Path Selector**: Guided routing choosing between Passive Swarm Copytrading, Pro Terminal with Copilot, or Quant Studio.
+* **Layer 3: Persistent Quick-Start Quest Bar**: Interactive progress tracker embedded across the terminal header (`2 / 4 Steps Completed`).
 
 ### 1. Interactive 4-Step First-Run Wizard (`OnboardingWizardModal.tsx`)
 Auto-triggers on the very first wallet connection per address/device (persisted in `localStorage`):
@@ -610,42 +506,19 @@ All DreamPulse interactions execute on the **Somnia Shannon Testnet**:
 
 ---
 
-## System Architecture Diagrams
+## System Architecture & Execution Workflows
 
-### Real-Time Swarm Execution Cycle
+### Real-Time Swarm Execution Lifecycle
 
-```mermaid
-sequenceDiagram
-    autonumber
-    participant Feed as Binance Spot WS
-    participant Swarm as Swarm Runner (100ms Tick)
-    participant Quant as Quant Engine (CDF / EWMA)
-    participant LLM as Groq / Gemini Reasoning Pool
-    participant Guard as Risk Guard & Order Sanitizer
-    participant Chain as Somnia Shannon Testnet
-    participant UI as Cyber-Terminal UI
-
-    Feed->>Swarm: Spot Price Update (e.g. BTC $95,240)
-    Swarm->>Quant: Compute Fair Value Φ(z) & 1m Drift
-    Quant-->>Swarm: Fair Value YES = 0.62, Drift = +0.35%
-    
-    alt Volt or Oracle Triggered (Edge ≥ Threshold)
-        Swarm->>Guard: Sanitize Depth (Strip Titan Quotes)
-        Guard-->>Swarm: Sanitized Depth Confirmed
-        Swarm->>LLM: Generate Structured Thought (Symbol, Strike, Edge)
-        LLM-->>Swarm: Thought Log { confidence: 0.94, rationale: "..." }
-        Swarm->>UI: Broadcast Telemetry (WebSocket)
-        Swarm->>Chain: somniaExchange.trader.placeOrder(...)
-        Chain-->>Swarm: Transaction Receipt (txHash, filledLots)
-        Swarm->>UI: Broadcast 'order_filled' + Play Audio Chime
-    end
-
-    alt Market Expired & Resolved
-        Swarm->>Chain: claimMarketPayout(...) via SettlementRouter
-        Chain-->>Swarm: Claim Confirmed (txHash, redeemedCollateral)
-        Swarm->>UI: Broadcast 'sweep_completed' + Trigger Celebration
-    end
-```
+1. **Spot Price Ingestion**: The daemon ingests live Binance spot ticker prices via sub-second WebSocket feeds (e.g., BTC/USD).
+2. **Quantitative Pricing & Drift Analysis**: The math engine computes Black-Scholes theoretical fair value $\Phi(z)$, Bayesian EWMA realized volatility, and 1m/5m price drift.
+3. **Trigger Evaluation & Edge Filtering**: If Volt Sniper or Oracle Arb identifies mispricing exceeding the required net margin of safety:
+   * **Depth Sanitization**: The risk guard strips resting Titan quotes to prevent self-trading.
+   * **Cognitive Reasoning**: The LLM engine records a structured thought log with confidence metrics and market rationale.
+   * **WebSocket Broadcast**: Telemetry is streamed in real time to connected web clients.
+   * **On-Chain Placement**: The operator invokes `placeOrderFor` on the Somnia DreamDEX CLOB.
+   * **Receipt Confirmation**: The transaction receipt is confirmed on-chain and broadcast to the user terminal.
+4. **Autonomous Resolution & Settlement**: When a contract transitions to `Finalized`, the Sweeper daemon detects unclaimed winning shares, calls `claimMarketPayout` via the settlement router, and auto-compounds the collateral.
 
 ---
 
