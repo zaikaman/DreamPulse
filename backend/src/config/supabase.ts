@@ -1,5 +1,10 @@
 import { createClient, SupabaseClient } from '@supabase/supabase-js';
+import WebSocket from 'ws';
 import { env } from './env.js';
+
+if (typeof globalThis.WebSocket === 'undefined') {
+  (globalThis as unknown as { WebSocket: typeof WebSocket }).WebSocket = WebSocket;
+}
 
 let serviceClientInstance: SupabaseClient | null = null;
 let anonClientInstance: SupabaseClient | null = null;
@@ -18,6 +23,9 @@ export function getServiceSupabase(): SupabaseClient {
         persistSession: false,
         autoRefreshToken: false,
       },
+      realtime: {
+        transport: WebSocket as any,
+      },
     });
   }
   return serviceClientInstance;
@@ -35,6 +43,9 @@ export function getAnonSupabase(): SupabaseClient {
     anonClientInstance = createClient(env.SUPABASE_URL, env.SUPABASE_ANON_KEY, {
       auth: {
         persistSession: false,
+      },
+      realtime: {
+        transport: WebSocket as any,
       },
     });
   }

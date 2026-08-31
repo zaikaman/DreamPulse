@@ -9,6 +9,7 @@ export default defineConfig({
       VITEST: 'true',
     },
     include: ['tests/**/*.test.ts'],
+    setupFiles: ['tests/setup-vitest.ts'],
     coverage: {
       provider: 'v8',
       reporter: ['text', 'json', 'html'],
