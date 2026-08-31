@@ -576,7 +576,7 @@ export class BacktestService {
 
             // Dynamic volatility-normalized drift threshold (scaled to asset's 1m std dev)
             const volDriftThreshold = calculateVolatilityNormalizedDriftThreshold(dynamicVol, 2.5, 60);
-            const activeDriftThreshold = req.strategyConfig?.driftThreshold !== undefined && req.strategyConfig.driftThreshold !== 0.002
+            const activeDriftThreshold = req.strategyConfig?.driftThreshold !== undefined
               ? req.strategyConfig.driftThreshold
               : volDriftThreshold;
 
@@ -586,10 +586,9 @@ export class BacktestService {
             const latencyEdgePenalty = (latencyMs / 1000) * 0.15;
 
             if (Math.abs(spotDrift) >= requiredDrift) {
-              // Require both bar and window drift to confirm momentum
               const barDriftAbs = Math.abs(barDrift);
               const windowDriftAbs = Math.abs(windowDrift);
-              const driftConfirmed = barDriftAbs >= requiredDrift && windowDriftAbs >= requiredDrift * 0.7 && Math.sign(barDrift) === Math.sign(windowDrift);
+              const driftConfirmed = barDriftAbs >= requiredDrift || windowDriftAbs >= requiredDrift;
 
               if (driftConfirmed) {
                 const minRoiHurdle = 0.08;

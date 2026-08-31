@@ -448,7 +448,7 @@ export class MultiAgentSwarmRunner {
         try {
           const startEvalTime = performance.now();
           const candidateTargets = settlementService.getCandidateSweeperTargets();
-          const uniqueTargets = Array.from(new Set(candidateTargets.map((a) => a.toLowerCase()))).slice(0, 6);
+          const uniqueTargets = Array.from(new Set(candidateTargets.map((a) => a.toLowerCase()))).slice(0, 12);
 
           let totalClaimedAcrossUsers = 0;
           let totalMarketsClaimedAcrossUsers = 0;
@@ -468,6 +468,9 @@ export class MultiAgentSwarmRunner {
                     );
                     if (sweepResult.claimedMarketsCount > 0) {
                       const claimedNum = parseFloat(sweepResult.totalClaimedAmount.replace(/[^0-9.]/g, '')) || 0;
+                      console.log(
+                        `[SwarmRunner] Autonomous sweep completed for ${targetAddress}: ${sweepResult.claimedMarketsCount} market(s) (${sweepResult.totalClaimedAmount}, tx: ${sweepResult.txHash})`,
+                      );
                       telemetryWsGateway.broadcastAgentThought({
                         id: `exec-sweep-${Date.now()}-${targetAddress.slice(0, 6)}`,
                         agent: 'Sweeper',
