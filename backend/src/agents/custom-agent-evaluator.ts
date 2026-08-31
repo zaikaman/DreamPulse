@@ -26,7 +26,7 @@ export function calculateSeriesRSI(candles: HistoricalCandle[], period = 14): nu
 
 export function calculateSeriesEMA(candles: HistoricalCandle[], period = 20): number {
   if (candles.length === 0) return 0;
-  if (candles.length < period) return candles[candles.length - 1].close;
+  if (candles.length === 1) return candles[0].close;
   const k = 2 / (period + 1);
   let ema = candles[0].close;
   for (let i = 1; i < candles.length; i++) {
@@ -78,7 +78,12 @@ export class CustomAgentEvaluator {
   /**
    * Retrieves rolling candles for the symbol and timeframe with live tick appended.
    */
-  public async getRecentCandles(symbol: string, timeframe: string = '5m'): Promise<HistoricalCandle[]> {
+  public async getRecentCandles(
+    symbol: string,
+    timeframe: string = '5m',
+    contextSpot?: number,
+    driftHint?: number
+  ): Promise<HistoricalCandle[]> {
     const key = `${symbol}:${timeframe}`;
     const now = Date.now();
     const cached = this.candleCache.get(key);
@@ -102,14 +107,28 @@ export class CustomAgentEvaluator {
       }
     }
 
-    const currentSpot = priceFeedService.getSpotTicker(symbol)?.price || 0;
+    const ticker = priceFeedService.getSpotTicker(symbol);
+    const currentSpot = (contextSpot && contextSpot > 0) ? contextSpot : (ticker?.price || (baseCandles[baseCandles.length - 1]?.close || 100));
+    const drift = (driftHint !== undefined) ? driftHint : (ticker?.change5m || 0.002);
+
     if (baseCandles.length === 0) {
-      // Fallback dummy bars around current spot
-      const fallbackPrice = currentSpot > 0 ? currentSpot : 100;
-      return [
-        { timestamp: now - 300000, open: fallbackPrice, high: fallbackPrice, low: fallbackPrice, close: fallbackPrice, volume: 100 },
-        { timestamp: now, open: fallbackPrice, high: fallbackPrice, low: fallbackPrice, close: fallbackPrice, volume: 100 },
-      ];
+      // Synthesize 50 bars ending at currentSpot with realistic momentum gradient
+      const tfMs = timeframe === '1m' ? 60000 : timeframe === '15m' ? 900000 : timeframe === '1h' ? 3600000 : 300000;
+      const startPrice = currentSpot / (1 + drift);
+      const generated: HistoricalCandle[] = [];
+      for (let i = 0; i < 50; i++) {
+        const progress = i / 49;
+        const barClose = startPrice + (currentSpot - startPrice) * progress;
+        generated.push({
+          timestamp: now - (50 - i) * tfMs,
+          open: barClose * 0.999,
+          high: barClose * 1.001,
+          low: barClose * 0.998,
+          close: barClose,
+          volume: 100 + i * 5,
+        });
+      }
+      return generated;
     }
 
     // Clone and append/update current live price as active bar
@@ -211,7 +230,8 @@ export class CustomAgentEvaluator {
       };
     }
 
-    const candles = await this.getRecentCandles(market.symbol, agent.timeframe || '5m');
+    const driftHint = spotTicker.change5m || spotTicker.change1m || 0.002;
+    const candles = await this.getRecentCandles(market.symbol, agent.timeframe || '5m', spotTicker.price, driftHint);
     const currentSpot = spotTicker.price > 0 ? spotTicker.price : (candles[candles.length - 1]?.close || 100);
 
     const conditionResults: Array<{ id: string; passed: boolean; detail: string }> = [];
