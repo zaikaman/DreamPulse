@@ -378,14 +378,21 @@ export class OrderService {
     return url.length > 0 && !url.includes('mock-project');
   }
 
-  private resolveCustomAgentName(agentId?: string, symbol?: string): string {
+  private isGenericCustomName(name?: string | null): boolean {
+    if (!name || typeof name !== 'string') return true;
+    const n = name.trim();
+    if (n.length === 0) return true;
+    const lower = n.toLowerCase();
+    return lower === 'custom strategy' || lower === 'custom' || lower === 'custom agent' || lower === 'custom swarm';
+  }
+
+  private resolveCustomAgentName(agentId?: string, _symbolOrMarketId?: string): string | undefined {
+    // Truthful resolution: only map known starter template IDs that are actually persisted as templates.
+    // Never synthesize a name from symbol — that was hallucinating "RSI Oversold" for any BTC order even when that agent was not deployed.
     if (agentId === '00000000-0000-0000-0000-000000000001') return 'RSI Oversold Dip Sniper';
     if (agentId === '00000000-0000-0000-0000-000000000002') return 'Bollinger Band Exhaustion Fade';
     if (agentId === '00000000-0000-0000-0000-000000000003') return 'Fast EMA Momentum Rider';
-    const sym = (symbol || '').toUpperCase();
-    if (sym.includes('BTC')) return 'RSI Oversold Dip Sniper';
-    if (sym.includes('ETH')) return 'Bollinger Band Exhaustion Fade';
-    return 'Custom Strategy';
+    return undefined;
   }
 
   private rowToOrder(row: any): OrderExecution {
@@ -395,7 +402,13 @@ export class OrderService {
     const orderSource: OrderSource = isManual ? 'TERMINAL' : ((row.source as OrderSource) || 'SWARM');
     const agentType: AgentType = isManual ? 'Manual' : ((row.agent_type as AgentType) || 'Titan');
     const customAgentId = row.custom_agent_id || undefined;
-    const customAgentName = row.custom_agent_name || (agentType === 'CUSTOM' ? this.resolveCustomAgentName(customAgentId, row.market_id) : undefined);
+    const rawCustomName: string | undefined = row.custom_agent_name || undefined;
+    const hasRealCustomName = rawCustomName && !this.isGenericCustomName(rawCustomName);
+    // Only heal with starter mapping if we have a known template ID; never synthesize from symbol (was fake data)
+    const healedName = hasRealCustomName
+      ? rawCustomName
+      : (agentType === 'CUSTOM' ? this.resolveCustomAgentName(customAgentId) : undefined);
+    const customAgentName = healedName;
     return {
       id: row.id,
       userAddress: row.user_address,
@@ -1035,12 +1048,19 @@ export class OrderService {
 
     const effectiveAgentType: AgentType = source === 'TERMINAL' ? 'Manual' : decision.agentType;
 
+    const rawDecisionName = decision.customAgentName?.trim();
+    const hasRealDecisionName = rawDecisionName && !this.isGenericCustomName(rawDecisionName);
+    // Prefer real decision name supplied by evaluator (agent.name for deployed agents); only fallback to starter ID mapping, never symbol synthesis
+    const resolvedCustomName = hasRealDecisionName
+      ? rawDecisionName
+      : (effectiveAgentType === 'CUSTOM' ? this.resolveCustomAgentName(decision.customAgentId) : undefined);
+
     const orderExecution: OrderExecution = {
       id: orderId,
       userAddress: session.userAddress,
       sessionId: session.id,
       customAgentId: decision.customAgentId,
-      customAgentName: decision.customAgentName || (effectiveAgentType === 'CUSTOM' ? this.resolveCustomAgentName(decision.customAgentId, decision.targetMarketId) : undefined),
+      customAgentName: resolvedCustomName,
       marketId: decision.targetMarketId,
       agentType: effectiveAgentType,
       source,

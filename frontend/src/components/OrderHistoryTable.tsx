@@ -140,22 +140,57 @@ export const OrderHistoryTable: React.FC<OrderHistoryTableProps> = ({
   const [scopeTotals, setScopeTotals] = useState<{ totalFills: number; totalVolume: number }>({ totalFills: 0, totalVolume: 0 });
   const [customAgentsMap, setCustomAgentsMap] = useState<Map<string, { name: string; strategyType?: string; color?: string }>>(new Map());
 
+  // Truthful resolution: only show names for *actually deployed* custom agents — never hallucinate starters.
+  const OPERATOR_ADDRESS = '0x93e300607c363E7D7a47e50f5c9fDf1723e859Cf';
   useEffect(() => {
     let active = true;
-    apiClient.getCustomAgents(userAddress).then((res) => {
-      if (!active || !res?.data) return;
+    const buildMap = (agents: any[]) => {
       const map = new Map<string, { name: string; strategyType?: string; color?: string }>();
-      for (const ag of res.data) {
-        if (ag.id) {
-          map.set(ag.id, { name: ag.name, strategyType: ag.strategyType, color: ag.color });
-        }
-        const symKey = `${ag.symbol.toUpperCase()}:${(ag.timeframe || '5m').toLowerCase()}`;
-        if (!map.has(symKey)) {
-          map.set(symKey, { name: ag.name, strategyType: ag.strategyType, color: ag.color });
-        }
+      for (const ag of agents) {
+        if (!ag?.name || !ag?.id) continue;
+        const isGeneric = !ag.name.trim() || ag.name.trim().toLowerCase() === 'custom strategy' || ag.name.trim().toLowerCase() === 'custom' || ag.name.trim().toLowerCase() === 'custom agent';
+        if (isGeneric) continue;
+        // Only index deployed + active agents for ledger truthfulness — undeployed templates must not generate fake fills
+        if (!ag.isDeployed || !ag.isActive) continue;
+        // Skip zero-address pristine templates (they are never deployed under real user)
+        if (!ag.userAddress || ag.userAddress.toLowerCase() === '0x0000000000000000000000000000000000000000') continue;
+        map.set(ag.id, { name: ag.name, strategyType: ag.strategyType, color: ag.color });
+        // Also index by symbol:timeframe for legacy orders that lost their custom_agent_id but still have denormalized name via symbol
+        // Only if this agent is the sole deployed for that pairing; otherwise keep first (deployed wins)
+        const symKey = `${(ag.symbol || 'BTC/USD').toUpperCase()}:${(ag.timeframe || '5m').toLowerCase()}`;
+        if (!map.has(symKey)) map.set(symKey, { name: ag.name, strategyType: ag.strategyType, color: ag.color });
       }
-      setCustomAgentsMap(map);
-    }).catch(() => {});
+      return map;
+    };
+
+    const fetchAll = async () => {
+      try {
+        const fetchedMaps: Map<string, { name: string; strategyType?: string; color?: string }>[] = [];
+        if (userAddress) {
+          try {
+            const r1 = await apiClient.getCustomAgents(userAddress);
+            if (r1?.data) fetchedMaps.push(buildMap(r1.data));
+          } catch {}
+        }
+        // Operator pools — canonical swarm custom agents visible in Public Swarm Ledger
+        try {
+          const rOp = await apiClient.getCustomAgents(OPERATOR_ADDRESS);
+          if (rOp?.data) fetchedMaps.push(buildMap(rOp.data));
+        } catch {}
+        // Do NOT fetch global starters — they are not deployed and would create hallucinated RSI fills
+
+        if (!active) return;
+        const merged = new Map<string, { name: string; strategyType?: string; color?: string }>();
+        for (const m of fetchedMaps) {
+          for (const [k, v] of m.entries()) {
+            if (!merged.has(k)) merged.set(k, v);
+          }
+        }
+        setCustomAgentsMap(merged);
+      } catch {}
+    };
+
+    void fetchAll();
     return () => { active = false; };
   }, [userAddress]);
 
@@ -373,55 +408,93 @@ export const OrderHistoryTable: React.FC<OrderHistoryTableProps> = ({
     }
   };
 
+// Starter template metadata — kept for StrategyStudio/library UI, NOT for ledger fallback (prevents fake RSI hallucinations)
 const STARTER_AGENT_MAP: Record<string, { name: string; subtext: string; color: string }> = {
   '00000000-0000-0000-0000-000000000001': { name: 'RSI Oversold Dip Sniper', subtext: 'Mean Reversion (RSI)', color: '#2dd4bf' },
   '00000000-0000-0000-0000-000000000002': { name: 'Bollinger Band Exhaustion Fade', subtext: 'Mean Reversion (BB)', color: '#f59e0b' },
   '00000000-0000-0000-0000-000000000003': { name: 'Fast EMA Momentum Rider', subtext: 'Momentum (EMA)', color: '#a78bfa' },
 };
 
-  const resolveCustomAgentDetails = (order: OrderExecution, marketInfo?: ParsedMarketInfo): { name: string; subtext: string; color: string } => {
-    if (order.customAgentName) {
-      return {
-        name: order.customAgentName,
-        subtext: 'Custom Strategy',
-        color: '#2dd4bf',
-      };
+  const isGenericAgentName = (n?: string | null): boolean => {
+    if (!n || typeof n !== 'string') return true;
+    const t = n.trim();
+    if (t.length === 0) return true;
+    const l = t.toLowerCase();
+    return l === 'custom strategy' || l === 'custom' || l === 'custom agent' || l === 'custom swarm';
+  };
+
+  const formatStrategySubtext = (strategyType?: string, symbol?: string, windowDuration?: string): string => {
+    if (strategyType && strategyType.trim() && strategyType.toLowerCase() !== 'custom') {
+      return strategyType.replace(/_/g, ' ');
     }
-    if (order.customAgentId) {
-      if (STARTER_AGENT_MAP[order.customAgentId]) {
-        return STARTER_AGENT_MAP[order.customAgentId];
-      }
-      const found = customAgentsMap.get(order.customAgentId);
-      if (found) {
-        return {
-          name: found.name,
-          subtext: found.strategyType ? found.strategyType.replace(/_/g, ' ') : 'Custom Strategy',
-          color: found.color || '#2dd4bf',
-        };
-      }
-    }
+    if (symbol && windowDuration) return `${symbol} • ${windowDuration}`;
+    if (symbol) return symbol;
+    return 'Custom Strategy';
+  };
+
+  const resolveCustomAgentDetails = (order: OrderExecution, marketInfo?: ParsedMarketInfo): { name: string; subtext: string; color: string } | null => {
     const symbol = marketInfo?.symbol || (order.marketSnapshot?.symbol ? normalizeMarketSymbol(order.marketSnapshot.symbol) : 'BTC/USD');
     const windowDuration = marketInfo?.windowDuration || order.marketSnapshot?.windowDuration || '5m';
+
+    // 1) Trust denormalized backend name ONLY if it's not generic placeholder — this is the single source of truth for deployed agents
+    if (order.customAgentName && !isGenericAgentName(order.customAgentName)) {
+      const enriched = order.customAgentId ? customAgentsMap.get(order.customAgentId) : undefined;
+      const strat = enriched?.strategyType;
+      return {
+        name: order.customAgentName.trim(),
+        subtext: formatStrategySubtext(strat, symbol, windowDuration),
+        color: enriched?.color || '#2dd4bf',
+      };
+    }
+
+    // 2) Resolve via deployed agentId — only if that id belongs to an actually deployed agent for this viewer/operator
+    if (order.customAgentId) {
+      // For starter IDs, only honor if that starter has been cloned & deployed (present in customAgentsMap); otherwise it's fake data
+      if (STARTER_AGENT_MAP[order.customAgentId]) {
+        const deployed = customAgentsMap.get(order.customAgentId);
+        if (deployed && !isGenericAgentName(deployed.name)) {
+          return {
+            name: deployed.name,
+            subtext: formatStrategySubtext(deployed.strategyType, symbol, windowDuration),
+            color: deployed.color || STARTER_AGENT_MAP[order.customAgentId].color,
+          };
+        }
+        // Starter ID with no deployed clone -> do NOT hallucinate template name
+      } else {
+        const found = customAgentsMap.get(order.customAgentId);
+        if (found && !isGenericAgentName(found.name)) {
+          return {
+            name: found.name,
+            subtext: formatStrategySubtext(found.strategyType, symbol, windowDuration),
+            color: found.color || '#2dd4bf',
+          };
+        }
+      }
+      // No deployed agent found for this customAgentId -> truthfully indicate archived/unknown rather than faking RSI
+      const shortId = order.customAgentId.slice(0, 8);
+      return {
+        name: `Archived #${shortId}`,
+        subtext: `${symbol} • ${windowDuration} • archived`,
+        color: '#6b7280',
+      };
+    }
+
+    // 3) Legacy symbol:timeframe heuristic — only for deployed agents, not starters. If no deployed match, do not hallucinate.
     const symKey = `${symbol.toUpperCase()}:${windowDuration.toLowerCase()}`;
     const foundBySym = customAgentsMap.get(symKey);
-    if (foundBySym) {
+    if (foundBySym && !isGenericAgentName(foundBySym.name)) {
       return {
         name: foundBySym.name,
-        subtext: foundBySym.strategyType ? foundBySym.strategyType.replace(/_/g, ' ') : 'Custom Strategy',
+        subtext: formatStrategySubtext(foundBySym.strategyType, symbol, windowDuration),
         color: foundBySym.color || '#2dd4bf',
       };
     }
 
-    if (symbol.includes('BTC')) {
-      return STARTER_AGENT_MAP['00000000-0000-0000-0000-000000000001'];
-    }
-    if (windowDuration === '1m') {
-      return STARTER_AGENT_MAP['00000000-0000-0000-0000-000000000001'];
-    }
-    return STARTER_AGENT_MAP['00000000-0000-0000-0000-000000000002'];
+    // 4) No truthful name available — return null so badge can show honest "Unknown" placeholder instead of hallucinating RSI/Bollinger
+    return null;
   };
 
-  const getAgentBadge = (agentType: AgentType, customDetails?: { name: string; subtext: string; color?: string }) => {
+  const getAgentBadge = (agentType: AgentType, customDetails?: { name: string; subtext: string; color?: string } | null) => {
     switch (agentType) {
       case 'Volt':
         return (
@@ -445,28 +518,65 @@ const STARTER_AGENT_MAP: Record<string, { name: string; subtext: string; color: 
           </span>
         );
       case 'CUSTOM': {
-        const displayName = customDetails?.name || 'Custom';
-        const badgeColor = customDetails?.color || '#2dd4bf';
+        // Truthful: if we have no deployed mapping, show honest archived/unknown — never hallucinate RSI/Bollinger
+        if (!customDetails) {
+          return (
+            <span
+              title="Unknown custom agent — archived or not deployed"
+              style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '4px',
+                padding: '2px 7px',
+                borderRadius: '4px',
+                background: 'rgba(107, 114, 128, 0.14)',
+                border: '1px solid rgba(107, 114, 128, 0.3)',
+                color: '#9ca3af',
+                fontSize: '11px',
+                fontWeight: 700,
+                maxWidth: '152px',
+                letterSpacing: '-0.01em',
+              }}
+            >
+              <SparklesIcon className="w-3 h-3 flex-shrink-0" />
+              <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>Archived Agent</span>
+            </span>
+          );
+        }
+        const isArchived = customDetails.name.startsWith('Archived #');
+        const displayName = customDetails.name.trim();
+        const badgeColor = customDetails.color || (isArchived ? '#6b7280' : '#2dd4bf');
+        const isLong = displayName.length > 22;
+        const isVeryLong = displayName.length > 28;
         return (
           <span
             title={displayName}
             style={{
               display: 'inline-flex',
               alignItems: 'center',
-              gap: '4.5px',
-              padding: '2px 7px',
+              gap: isLong ? '3.5px' : '4.5px',
+              padding: isVeryLong ? '2px 6px' : '2px 7px',
               borderRadius: '4px',
-              background: 'rgba(45, 212, 191, 0.12)',
-              border: '1px solid rgba(45, 212, 191, 0.3)',
+              background: isArchived ? 'rgba(107,114,128,0.12)' : 'rgba(45,212,191,0.11)',
+              border: `1px solid ${badgeColor}4D`,
               color: badgeColor,
-              fontSize: '11px',
+              fontSize: isVeryLong ? '10px' : '11px',
               fontWeight: 700,
-              maxWidth: '145px',
-              letterSpacing: '-0.01em',
+              maxWidth: isVeryLong ? '172px' : isLong ? '168px' : '152px',
+              letterSpacing: isLong ? '-0.02em' : '-0.01em',
+              lineHeight: 1.2,
             }}
           >
-            <SparklesIcon className="w-3 h-3 flex-shrink-0" />
-            <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+            <SparklesIcon className="w-3 h-3 flex-shrink-0" style={{ width: isVeryLong ? '11px' : '12px', height: isVeryLong ? '11px' : '12px' }} />
+            <span
+              style={{
+                overflow: 'hidden',
+                textOverflow: 'ellipsis',
+                whiteSpace: 'nowrap',
+                minWidth: 0,
+                flex: 1,
+              }}
+            >
               {displayName}
             </span>
           </span>
@@ -679,9 +789,17 @@ const STARTER_AGENT_MAP: Record<string, { name: string; subtext: string; color: 
                     CUSTOM: 'Custom Strategy',
                   };
 
-                  const customDetails = order.agentType === 'CUSTOM' ? resolveCustomAgentDetails(order, marketInfo) : undefined;
-                  const agentSubtitle = order.agentType === 'CUSTOM' ? (customDetails?.subtext || 'Custom Strategy') : (agentRoleMap[order.agentType] || 'Swarm');
-                  const agentDisplayName = order.agentType === 'CUSTOM' ? (customDetails?.name || 'Custom') : order.agentType;
+                  const customDetails = order.agentType === 'CUSTOM' ? resolveCustomAgentDetails(order, marketInfo) : null;
+                  // Truthful subtitle: use deployed mapping subtext if available, otherwise show symbol•window, never fake template subtext
+                  const rawSub = customDetails?.subtext;
+                  const healedSub = rawSub && !isGenericAgentName(rawSub) ? rawSub : formatStrategySubtext(customDetails ? undefined : undefined, marketInfo.symbol, marketInfo.windowDuration);
+                  const agentSubtitle = order.agentType === 'CUSTOM'
+                    ? (customDetails ? healedSub : `${marketInfo.symbol} • ${marketInfo.windowDuration} • archived`)
+                    : (agentRoleMap[order.agentType] || 'Swarm');
+                  const rawDisplay = customDetails?.name;
+                  const agentDisplayName = order.agentType === 'CUSTOM'
+                    ? (rawDisplay && !isGenericAgentName(rawDisplay) ? rawDisplay.trim() : (customDetails ? 'Archived Agent' : 'Unknown Custom Agent'))
+                    : order.agentType;
 
                   const tooltipTitle = `[Order Execution Breakdown]
 Asset: ${marketInfo.assetName} (${marketInfo.symbol}) ${marketInfo.windowDuration}
@@ -708,19 +826,20 @@ Tx Hash: ${order.txHash || 'N/A'}`;
                         </div>
                       </td>
 
-                      {/* 2. AGENT */}
+                      {/* 2. AGENT — production: actual agent name in badge, strategy/timeframe in subtitle, both truncated with tooltip */}
                       <td style={{ padding: '10px 16px' }}>
-                        <div style={{ display: 'flex', flexDirection: 'column', gap: '3px' }}>
-                          <div>{getAgentBadge(order.agentType, customDetails)}</div>
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '3px', minWidth: 0, maxWidth: '184px' }}>
+                          <div style={{ minWidth: 0 }}>{getAgentBadge(order.agentType, customDetails)}</div>
                           <span
                             style={{
                               fontSize: '9.5px',
                               color: 'var(--muted-foreground)',
                               fontFamily: 'var(--font-mono)',
-                              maxWidth: '145px',
+                              maxWidth: '172px',
                               overflow: 'hidden',
                               textOverflow: 'ellipsis',
                               whiteSpace: 'nowrap',
+                              display: 'block',
                             }}
                             title={agentSubtitle}
                           >
