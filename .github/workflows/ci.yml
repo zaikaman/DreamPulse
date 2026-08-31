@@ -1,0 +1,102 @@
+name: CI - Continuous Integration & Quality Gate
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  typecheck-and-lint:
+    name: Typecheck & Quality Gate
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Typecheck Backend
+        run: npm run typecheck:backend
+
+      - name: Typecheck Frontend
+        run: npm run typecheck:frontend
+
+  test-and-coverage:
+    name: Unit & Integration Tests (Vitest & V8 Coverage)
+    runs-on: ubuntu-latest
+    needs: typecheck-and-lint
+    env:
+      NODE_ENV: test
+      SUPABASE_JWT_SECRET: mock-supabase-jwt-secret-for-ci-testing-minimum-32-chars
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run Backend Test Suite with V8 Coverage
+        run: npm run test:coverage --workspace=dreampulse-backend
+
+      - name: Upload Coverage Artifact
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: backend-coverage-report
+          path: backend/coverage/
+          retention-days: 14
+
+  build-production:
+    name: Production Compilation & Build Verification
+    runs-on: ubuntu-latest
+    needs: test-and-coverage
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build Backend (TypeScript Node.js)
+        run: npm run build:backend
+
+      - name: Build Frontend (Vite + React 18 + Three.js)
+        run: npm run build:frontend
+
+      - name: Verify Full Production Artifacts
+        run: |
+          test -d backend/dist || (echo "Backend dist folder missing" && exit 1)
+          test -d frontend/dist || (echo "Frontend dist folder missing" && exit 1)
+          echo "Production compilation verified successfully."
+
+      - name: Upload Frontend Build Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: frontend-dist
+          path: frontend/dist/
+          retention-days: 7

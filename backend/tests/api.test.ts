@@ -224,6 +224,110 @@ describe('Express REST API Endpoints', () => {
     expect(resCfg2.body.config.copyTradeEnabled).toBe(false);
   });
 
+  it('GET /api/v1/analytics/equity and /api/v1/analytics/balance-history', async () => {
+    const res1 = await request(app).get('/api/v1/analytics/equity?range=30d&source=ALL');
+    expect(res1.status).toBe(200);
+    expect(res1.body.success).toBe(true);
+    expect(res1.body.data).toHaveProperty('summary');
+
+    const res2 = await request(app).get('/api/v1/analytics/balance-history?range=7d&source=SWARM');
+    expect(res2.status).toBe(200);
+    expect(res2.body.success).toBe(true);
+  });
+
+  it('GET /api/v1/arena/leaderboard/* and /api/v1/arena/stats endpoints return rankings', async () => {
+    const agentsRes = await request(app).get('/api/v1/arena/leaderboard/agents');
+    expect(agentsRes.status).toBe(200);
+    expect(agentsRes.body.success).toBe(true);
+
+    const tradersRes = await request(app).get('/api/v1/arena/leaderboard/traders');
+    expect(tradersRes.status).toBe(200);
+    expect(tradersRes.body.success).toBe(true);
+
+    const statsRes = await request(app).get('/api/v1/arena/stats');
+    expect(statsRes.status).toBe(200);
+    expect(statsRes.body.success).toBe(true);
+  });
+
+  it('GET /api/v1/portfolio/summary returns portfolio metrics', async () => {
+    const res = await request(app).get('/api/v1/portfolio/summary?userAddress=0x70997970C51812dc3A010C7d01b50e0d17dc79C8');
+    expect(res.status).toBe(200);
+    expect(res.body.success).toBe(true);
+    expect(res.body.data).toHaveProperty('realizedPnl');
+  });
+
+  it('GET /api/v1/markets/pools/future and /api/v1/markets/:id/depth', async () => {
+    const resPools = await request(app).get('/api/v1/markets/pools/future?horizonHours=24');
+    expect(resPools.status).toBe(200);
+    expect(resPools.body.success).toBe(true);
+
+    const resDepth = await request(app).get('/api/v1/markets/test-market-id/depth');
+    expect(resDepth.status).toBe(200);
+    expect(resDepth.body.success).toBe(true);
+  });
+
+  it('POST /api/v1/backtest/run executes historical backtest simulation', async () => {
+    const res = await request(app)
+      .post('/api/v1/backtest/run')
+      .send({
+        agentType: 'Volt',
+        symbol: 'BTC/USD',
+        period: '7d',
+        timeframe: '5m',
+        initialCapital: 1000,
+      });
+    expect(res.status).toBe(200);
+    expect(res.body.success).toBe(true);
+  });
+
+  it('manages custom agents and custom swarms via API routes', async () => {
+    const user = '0x70997970C51812dc3A010C7d01b50e0d17dc79C8';
+
+    // List agents
+    const listRes = await request(app).get(`/api/v1/agents/custom?userAddress=${user}`);
+    expect(listRes.status).toBe(200);
+
+    // Create custom swarm
+    const swarmRes = await request(app)
+      .post('/api/v1/swarms/custom')
+      .send({
+        userAddress: user,
+        name: 'Alpha Quant Swarm',
+        description: 'Multi-agent high frequency strategy',
+        agents: [],
+      });
+    expect(swarmRes.status).toBe(200);
+
+    // List swarms
+    const swarmsList = await request(app).get(`/api/v1/swarms/custom?userAddress=${user}`);
+    expect(swarmsList.status).toBe(200);
+
+    // Delete custom swarm
+    if (swarmRes.body.data?.id) {
+      const delRes = await request(app).delete(`/api/v1/swarms/custom/${swarmRes.body.data.id}?userAddress=${user}`);
+      expect(delRes.status).toBe(200);
+    }
+  });
+
+  it('handles swarm reset and status queries', async () => {
+    const user = '0x70997970C51812dc3A010C7d01b50e0d17dc79C8';
+
+    const statusRes = await request(app).get(`/api/v1/swarm/my-status?userAddress=${user}`);
+    expect(statusRes.status).toBe(200);
+
+    const resetRes = await request(app).post('/api/v1/swarm/reset').send({ userAddress: user });
+    expect(resetRes.status).toBe(200);
+  });
+
+  it('GET /api/v1/auth/status and POST /api/v1/auth/logout', async () => {
+    const sessRes = await request(app).get('/api/v1/auth/status');
+    expect(sessRes.status).toBe(200);
+    expect(sessRes.body.success).toBe(true);
+
+    const logoutRes = await request(app).post('/api/v1/auth/logout');
+    expect(logoutRes.status).toBe(200);
+  });
+
   describe('CORS and Security Headers', () => {
     it('allows requests from localhost with credentials support', async () => {
       const res = await request(app)
