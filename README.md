@@ -69,22 +69,44 @@ Built to answer the Somnia × DreamDEX Hackathon challenge across **all tracks**
 
 ```mermaid
 flowchart TB
-    subgraph PlatformLayer ["DreamPulse Cyber-Financial Platform"]
-        TERMINAL["⚡ Pro Trade Terminal\n(Live Binary SVG Chart · Spot Trails · Strike Lines · AI Alpha Copilot)"]
-        STUDIO["🎨 Visual Strategy Studio\n(No-Code Algorithmic Sentence Builder · Dedicated Gemini AI Prompt-to-Agent)"]
-        BACKTEST["📊 Quantitative Backtester\n(Historical Binance Replay · Slippage & Latency Simulation · Sharpe/Sortino)"]
-        SWARM["🤖 Autonomous Swarms\n(Canonical Protocol Swarm + Isolated Per-Wallet Personal Swarms)"]
-        ARENA["🏆 Swarm Arena & Social Alpha\n(Dual-Track Leaderboards · 1-Click Strategy Cloning · 4x Proof-of-Alpha Cards)"]
-        SWEEPER["♻️ Settlement Sweeper\n(100% Autonomous Winning Share Redemption · Direct Auto-Compounder)"]
+    %% Client & Interface Layer
+    subgraph UI ["Client Application Layer (React · Vite · TypeScript)"]
+        direction LR
+        TERMINAL["Pro Trade Terminal\n• CLOB Order Book & Depth Ladders\n• Real-Time Binary SVG Charts\n• AI Alpha Copilot Reasoning"]
+        STUDIO["Visual Strategy Studio\n• Rule-Based Sentence AST Builder\n• Natural Language Strategy Synthesis\n• Dedicated Gemini AI Engine"]
+        BACKTEST["Quantitative Backtester\n• Binance Historical Spot Replay\n• Slippage & Latency Simulation\n• Sharpe / Sortino Risk Analytics"]
+        ARENA["Swarm Arena & Social Alpha\n• Agent & Forecaster Leaderboards\n• 1-Click Strategy Cloning\n• Real-Time Mirror Trading"]
     end
 
-    subgraph InfrastructureLayer ["Somnia Shannon Testnet & DreamDEX CLOB Engine"]
-        QUANT["Quantitative Math Engine\n(Abramowitz-Stegun CDF Φ(z) · Bayesian EWMA Volatility · Anti-Pin-Risk)"]
-        SESSION["Zero-Custody Session Security\n(BatchApprove.sol · OperatorPermissionsRegistry · Single-Trade & Daily Caps)"]
-        CHAIN["Somnia Shannon EVM L1 (400k+ TPS · Sub-Second Confirmation · Zero Slippage)"]
+    %% Intelligence & Core Engine Layer
+    subgraph ENGINE ["Intelligence & Quantitative Layer"]
+        direction LR
+        QUANT["Black-Scholes Math Engine\n• Abramowitz-Stegun CDF Φ(z)\n• Bayesian EWMA Volatility\n• Dynamic Fair Value & Edge"]
+        SWARM["Autonomous Agent Swarms\n• Titan MM (Dynamic Spread Liquidity)\n• Volt Sniper (Spot Velocity Exploitation)\n• Oracle Arb (CDF Mispricing Arbitrage)\n• Personal Isolated Swarms"]
+        SWEEPER["Settlement Sweeper\n• Autonomous Payout Claiming\n• Collateral Auto-Compounding\n• Stranded Capital Recovery"]
     end
 
-    PlatformLayer --> InfrastructureLayer
+    %% Execution & Security Layer
+    subgraph EXECUTION ["Execution & Security Infrastructure (Node.js · Express · TypeScript)"]
+        direction LR
+        RISK["Risk & Concurrency Guard\n• Pre-Flight Depth Sanitization\n• Serialized NonceManager Queue\n• Single-Trade & Daily Loss Leash"]
+        SESSION["Zero-Custody Session Gateway\n• EIP-712 Session Delegations\n• OperatorPermissionsRegistry\n• Instant Key Revocation"]
+        TELEMETRY["WebSocket Telemetry Gateway\n• Sub-50ms Real-Time State Streaming\n• Live LLM Thought Telemetry\n• System Health Monitoring"]
+    end
+
+    %% Blockchain & Smart Contracts Layer
+    subgraph ONCHAIN ["On-Chain Settlement Layer (Somnia Shannon Testnet · Chain ID 50312)"]
+        direction LR
+        BATCH["BatchApprove.sol\n• Multi-Pool 1-Click Delegation\n• Token Allowance Aggregation\n• Gas-Optimized Router"]
+        DREAMDEX["DreamDEX CLOB Contracts\n• Binary Event Market Pools\n• Matching Engine & Limit Book\n• Oracle Resolution Settlement"]
+        SOMNIA["Somnia Shannon EVM L1\n• 400k+ TPS High Throughput\n• Sub-Second Block Finality\n• Zero-Slippage Execution"]
+    end
+
+    UI -->|"User Actions & Subscriptions"| EXECUTION
+    ENGINE -->|"Trading Signals & Valuations"| EXECUTION
+    EXECUTION -->|"High-Frequency Trades & Approvals"| ONCHAIN
+    ONCHAIN -->|"State Updates & Price Events"| ENGINE
+    EXECUTION -->|"Real-Time Telemetry Stream"| UI
 ```
 
 Whether you are a **manual retail trader** seeking real-time Black-Scholes edge and sub-second gasless order execution, a **no-code creator** building and backtesting custom binary agents, a **passive liquidity provider** copytrading the canonical multi-agent swarm, or an **algorithmic quant** running isolated personal swarms, DreamPulse provides a seamless, unified gateway to prediction markets.
@@ -108,21 +130,21 @@ Decentralized Central Limit Order Book (CLOB) prediction markets are the fastest
 ## The 6 Core Platform Pillars
 
 ```
-┌────────────────────────────────────────────────────────────────────────────────────────────────────────┐
-│                                   DREAMPULSE AI UNIFIED ECOSYSTEM                                      │
-├──────────────────────────┬──────────────────────────┬──────────────────────────────────────────────────┤
-│ 1. PRO TRADE TERMINAL    │ 2. STRATEGY STUDIO       │ 3. QUANT BACKTESTER                              │
-│ • Live SVG Settlement    │ • Visual Sentence Canvas │ • Binance 1m/5m/15m/1h Historical Candlesticks   │
+┌─────────────────────────────────────────────────────────────────────────────────────────────────────────┐
+│                                   DREAMPULSE AI UNIFIED ECOSYSTEM                                       │
+├──────────────────────────┬───────────────────────────┬──────────────────────────────────────────────────┤
+│ 1. PRO TRADE TERMINAL    │ 2. STRATEGY STUDIO        │ 3. QUANT BACKTESTER                              │
+│ • Live SVG Settlement    │ • Visual Sentence Canvas  │ • Binance 1m/5m/15m/1h Historical Candlesticks   │
 │ • Strike Line & Zones    │ • Dedicated Gemini Copilot│ • Configurable Taker Slippage & Latency Delay    │
 │ • AI Alpha Copilot       │ • Isolated tUSDC Allowance│ • Sharpe, Sortino, Profit Factor, Drawdown Curve │
-│ • Gasless Session Ticket │ • JSON Rule AST Compiler │ • 1-Click Bridge to Personal/Global Swarm        │
-├──────────────────────────┼──────────────────────────┼──────────────────────────────────────────────────┤
-│ 4. AUTONOMOUS SWARMS     │ 5. SWARM ARENA & SOCIAL  │ 6. SETTLEMENT SWEEPER                            │
-│ • 4 Autonomous Agents    │ • Dual-Track Leaderboard │ • Autonomous Resolution Scanning                 │
-│ • Protocol vs Personal   │ • 1-Click Strategy Clone │ • Zero-Loss Multi-Pool Batch Claims              │
-│ • COPY ↔ PERSONAL Modes  │ • Forecaster Mirroring   │ • 100% Direct Collateral Compounding             │
-│ • Sub-100ms Evaluation   │ • 4x Retina Proof Cards  │ • Gas-Optimized Native STT Batching              │
-└──────────────────────────┴──────────────────────────┴──────────────────────────────────────────────────┘
+│ • Gasless Session Ticket │ • JSON Rule AST Compiler  │ • 1-Click Bridge to Personal/Global Swarm        │
+├──────────────────────────┼───────────────────────────┼──────────────────────────────────────────────────┤
+│ 4. AUTONOMOUS SWARMS     │ 5. SWARM ARENA & SOCIAL   │ 6. SETTLEMENT SWEEPER                            │
+│ • 4 Autonomous Agents    │ • Dual-Track Leaderboard  │ • Autonomous Resolution Scanning                 │
+│ • Protocol vs Personal   │ • 1-Click Strategy Clone  │ • Zero-Loss Multi-Pool Batch Claims              │
+│ • COPY ↔ PERSONAL Modes  │ • Forecaster Mirroring    │ • 100% Direct Collateral Compounding             │
+│ • Sub-100ms Evaluation   │ • 4x Retina Proof Cards   │ • Gas-Optimized Native STT Batching              │
+└──────────────────────────┴───────────────────────────┴──────────────────────────────────────────────────┘
 ```
 
 ---
@@ -490,22 +512,22 @@ The DreamPulse frontend is crafted with an ultra-refined, minimalist institution
 To ensure new users are never overwhelmed by the depth of trading modules, DreamPulse features a multi-tiered onboarding architecture designed to get traders from wallet connection to first value in under 60 seconds:
 
 ```
-┌─────────────────────────────────────────────────────────────────────────────┐
+┌──────────────────────────────────────────────────────────────────────────────────┐
 │  LAYER 1: The First-Connect Glassmorphic Wizard (Modal Triggered on 1st Connect) │
-│  "3 Steps to First Value in < 60 seconds"                                    │
-└─────────────────────────────────────────────────────────────────────────────┘
+│  "3 Steps to First Value in < 60 seconds"                                        │
+└──────────────────────────────────────────────────────────────────────────────────┘
                                       │
                                       ▼
 ┌─────────────────────────────────────────────────────────────────────────────┐
-│  LAYER 2: Interactive Path Selector ("Choose Your Journey")                  │
-│  [ Passive Swarm Copytrade ]   [ Pro Terminal & Copilot ]   [ Quant Studio ] │
+│  LAYER 2: Interactive Path Selector ("Choose Your Journey")                 │
+│  [ Passive Swarm Copytrade ]   [ Pro Terminal & Copilot ]   [ Quant Studio ]│
 └─────────────────────────────────────────────────────────────────────────────┘
                                       │
                                       ▼
-┌─────────────────────────────────────────────────────────────────────────────┐
-│  LAYER 3: Persistent Quick-Start Quest Bar (Top of Overview & Sidebar)      │
+┌─────────────────────────────────────────────────────────────────────────────────────┐
+│  LAYER 3: Persistent Quick-Start Quest Bar (Top of Overview & Sidebar)              │
 │  Progress: [████████░░░░] 2/4 Steps Completed (Claim Faucet -> Session -> 1st Trade)│
-└─────────────────────────────────────────────────────────────────────────────┘
+└─────────────────────────────────────────────────────────────────────────────────────┘
 ```
 
 ### 1. Interactive 4-Step First-Run Wizard (`OnboardingWizardModal.tsx`)
