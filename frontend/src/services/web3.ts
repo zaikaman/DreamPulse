@@ -963,9 +963,12 @@ export class Web3Service {
     return { hash };
   }
 
+  private inFlightSupabaseAuthSignatures = new Map<string, Promise<Hex>>();
+
   /**
    * Signs Supabase realtime auth EIP-712 payload (wallet, nonce, issuedAt, expiresAt).
    * Used to mint short-lived JWT with `user_address` claim for RLS private-table realtime.
+   * Deduplicates in-flight signature requests per wallet so multiple simultaneous calls only prompt once.
    */
   public async signSupabaseAuth(params: {
     wallet: Address;
@@ -973,32 +976,15 @@ export class Web3Service {
     issuedAt: number;
     expiresAt: number;
   }): Promise<Hex> {
-    try {
-      const sig = await signTypedData(wagmiConfig, {
-        domain: {
-          name: AUTH_EIP712_DOMAIN.name,
-          version: AUTH_EIP712_DOMAIN.version,
-          chainId: AUTH_EIP712_DOMAIN.chainId,
-          verifyingContract: AUTH_EIP712_DOMAIN.verifyingContract,
-        },
-        types: AUTH_EIP712_TYPES,
-        primaryType: 'Auth',
-        message: {
-          wallet: params.wallet,
-          nonce: params.nonce,
-          issuedAt: BigInt(params.issuedAt),
-          expiresAt: BigInt(params.expiresAt),
-        },
-      });
-      return sig as Hex;
-    } catch (wagmiErr: any) {
-      if (wagmiErr?.code === 4001 || wagmiErr?.message?.includes('User rejected') || wagmiErr?.message?.includes('rejected')) {
-        throw new Error('Supabase auth signature rejected by user');
-      }
+    const key = params.wallet.toLowerCase();
+    const existing = this.inFlightSupabaseAuthSignatures.get(key);
+    if (existing) {
+      return existing;
+    }
+
+    const signingPromise = (async () => {
       try {
-        const wallet = await this.getWalletClient(params.wallet);
-        const signature = await wallet.signTypedData({
-          account: params.wallet,
+        const sig = await signTypedData(wagmiConfig, {
           domain: {
             name: AUTH_EIP712_DOMAIN.name,
             version: AUTH_EIP712_DOMAIN.version,
@@ -1014,14 +1000,44 @@ export class Web3Service {
             expiresAt: BigInt(params.expiresAt),
           },
         });
-        return signature as Hex;
-      } catch (fallbackErr: any) {
-        if (fallbackErr?.code === 4001 || fallbackErr?.message?.includes('User rejected') || fallbackErr?.message?.includes('rejected')) {
+        return sig as Hex;
+      } catch (wagmiErr: any) {
+        if (wagmiErr?.code === 4001 || wagmiErr?.message?.includes('User rejected') || wagmiErr?.message?.includes('rejected')) {
           throw new Error('Supabase auth signature rejected by user');
         }
-        throw new Error(`Failed to sign Supabase auth: ${fallbackErr?.message || wagmiErr?.message}`);
+        try {
+          const wallet = await this.getWalletClient(params.wallet);
+          const signature = await wallet.signTypedData({
+            account: params.wallet,
+            domain: {
+              name: AUTH_EIP712_DOMAIN.name,
+              version: AUTH_EIP712_DOMAIN.version,
+              chainId: AUTH_EIP712_DOMAIN.chainId,
+              verifyingContract: AUTH_EIP712_DOMAIN.verifyingContract,
+            },
+            types: AUTH_EIP712_TYPES,
+            primaryType: 'Auth',
+            message: {
+              wallet: params.wallet,
+              nonce: params.nonce,
+              issuedAt: BigInt(params.issuedAt),
+              expiresAt: BigInt(params.expiresAt),
+            },
+          });
+          return signature as Hex;
+        } catch (fallbackErr: any) {
+          if (fallbackErr?.code === 4001 || fallbackErr?.message?.includes('User rejected') || fallbackErr?.message?.includes('rejected')) {
+            throw new Error('Supabase auth signature rejected by user');
+          }
+          throw new Error(`Failed to sign Supabase auth: ${fallbackErr?.message || wagmiErr?.message}`);
+        }
+      } finally {
+        this.inFlightSupabaseAuthSignatures.delete(key);
       }
-    }
+    })();
+
+    this.inFlightSupabaseAuthSignatures.set(key, signingPromise);
+    return signingPromise;
   }
 
   /**

@@ -643,17 +643,22 @@ export function useSessionKey(): UseSessionKeyReturn {
           disconnectWallet();
         } else {
           const newAddress = accounts[0] as Address;
-          // Address change invalidates previous session
-          setActiveSession(null);
-          lastValidatedWalletRef.current = null;
-          setWallet((prev) => ({
-            ...prev,
-            isConnected: true,
-            address: newAddress,
-          }));
-          refreshBalances(newAddress);
-          fetchActiveSession(newAddress);
-          refreshAllowanceStatus().catch(() => {});
+          setWallet((prev) => {
+            if (prev.isConnected && prev.address?.toLowerCase() === newAddress.toLowerCase()) {
+              return prev;
+            }
+            // Address actually changed -> invalidate previous session
+            setActiveSession(null);
+            lastValidatedWalletRef.current = null;
+            refreshBalances(newAddress);
+            fetchActiveSession(newAddress);
+            refreshAllowanceStatus().catch(() => {});
+            return {
+              ...prev,
+              isConnected: true,
+              address: newAddress,
+            };
+          });
         }
       },
       onChainChanged: (chainIdHex) => {

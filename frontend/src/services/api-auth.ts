@@ -1,5 +1,4 @@
 import type { Address, Hex } from 'viem';
-import { web3Service } from './web3.js';
 
 const API_AUTH_STORAGE_KEY = 'dreampulse_api_auth';
 const SUPABASE_JWT_KEY = 'dreampulse_supabase_jwt';
@@ -99,12 +98,6 @@ export function getCachedAuthHeaders(): Record<string, string> {
   return {};
 }
 
-/**
- * Ensures we have a valid API auth for the given wallet.
- * Tries JWT first (no prompt), then cached EIP, then prompts once via signSupabaseAuth and caches.
- * Returns headers to attach to the next request.
- * Falls back to empty if user rejects.
- */
 export async function ensureApiAuthForWallet(walletAddress: Address): Promise<Record<string, string>> {
   // Already have valid JWT?
   const jwt = getStoredSupabaseJwtSafe();
@@ -124,47 +117,21 @@ export async function ensureApiAuthForWallet(walletAddress: Address): Promise<Re
       };
     }
   }
-  // Need fresh signature — prompt wallet once
-  const nonce = generateNonce();
-  const issuedAt = Math.floor(Date.now() / 1000);
-  const expiresAt = issuedAt + 86400; // 24h
-  let signature: Hex;
+
+  // Delegate to unified ensureSupabaseAuthForWallet (handles in-flight deduplication & EIP-712 / JWT caching)
   try {
-    signature = await web3Service.signSupabaseAuth({
-      wallet: walletAddress,
-      nonce,
-      issuedAt,
-      expiresAt,
-    });
+    const { ensureSupabaseAuthForWallet } = await import('./supabase-auth.js');
+    await ensureSupabaseAuthForWallet(walletAddress);
   } catch (e: any) {
     if (String(e?.message || '').toLowerCase().includes('rejected')) {
       return {};
     }
-    throw e;
   }
-  const auth: CachedApiAuth = {
-    address: walletAddress,
-    signature,
-    nonce,
-    issuedAt,
-    expiresAt,
-  };
-  setStoredApiAuth(auth);
-  return {
-    'x-user-address': walletAddress,
-    'x-auth-signature': signature,
-    'x-auth-nonce': nonce,
-    'x-auth-issued-at': String(issuedAt),
-    'x-auth-expires-at': String(expiresAt),
-  };
+
+  return getCachedAuthHeaders();
 }
 
-function generateNonce(): string {
-  try {
-    if (typeof crypto !== 'undefined' && (crypto as any).randomUUID) return (crypto as any).randomUUID();
-  } catch {}
-  return `${Date.now()}-${Math.random().toString(36).slice(2, 10)}-${Math.random().toString(36).slice(2, 10)}`;
-}
+
 
 /**
  * Clears all API auth (JWT + EIP) — call on wallet disconnect.
