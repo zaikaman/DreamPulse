@@ -50,7 +50,14 @@ const envSchema = z.object({
   SOMNIA_WS_URL: z.string().default('wss://api.infra.testnet.somnia.network/ws'),
   INDEXER_URL: z.string().default('https://dev.smk.somnia.host/v1/graphql'),
   SOMNIA_CHAIN_ID: z.string().default('50312').transform((val) => parseInt(val, 10)),
-  OPERATOR_PRIVATE_KEY: z.string().regex(/^0x[a-fA-F0-9]{64}$/, 'OPERATOR_PRIVATE_KEY must be a valid 0x-prefixed 32-byte hex string'),
+  OPERATOR_PRIVATE_KEY: z.preprocess((val) => {
+    if (typeof val !== 'string') return val;
+    let cleaned = val.trim().replace(/^["']|["']$/g, '');
+    if (/^[a-fA-F0-9]{64}$/.test(cleaned)) {
+      cleaned = `0x${cleaned}`;
+    }
+    return cleaned;
+  }, z.string().regex(/^0x[a-fA-F0-9]{64}$/, 'OPERATOR_PRIVATE_KEY must be a valid 0x-prefixed 32-byte hex string')),
 
   // Autonomous Swarm & Execution Control
   ENABLE_SWARM_RUNNER: z.preprocess((val) => {
@@ -68,7 +75,10 @@ const envSchema = z.object({
 
   // Security & Admin
   OPERATOR_ADMIN_SECRET: z.string().optional(),
-  FRONTEND_ORIGIN: z.string().default('*'),
+  FRONTEND_ORIGIN: z.preprocess((val) => {
+    if (typeof val !== 'string') return '*';
+    return val.trim().replace(/^["']|["']$/g, '');
+  }, z.string().default('*')),
   SUPABASE_JWT_SECRET: z.string().optional(),
   SUPABASE_JWT_EXPIRY_SECONDS: z.coerce.number().default(86400),
 
