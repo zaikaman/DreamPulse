@@ -126,9 +126,10 @@ export class TelemetryWebSocketServer {
   private ipBuckets: Map<string, { count: number; windowStart: number; violations: number }> = new Map();
   private socketBuckets: Map<WebSocket, { count: number; windowStart: number }> = new Map();
 
-  // Broadcast throttling
+  // Broadcast throttling & initial state cache
   private lastSwarmPnlBroadcastAt = 0;
   private lastPnlBroadcastAt = 0;
+  private lastSwarmPnlPayload: Record<string, any> | null = null;
 
   /**
    * Initializes WebSocket server attached to the main Express HTTP server.
@@ -257,6 +258,11 @@ export class TelemetryWebSocketServer {
         timestamp: Date.now(),
         message: 'DreamPulse High-Frequency Telemetry Stream Connected',
       });
+
+      // Send immediate cached swarm PnL tick for 0ms initial load
+      if (this.lastSwarmPnlPayload) {
+        this.sendToClient(ws, this.lastSwarmPnlPayload);
+      }
     });
 
     // Handle payload-too-large errors emitted by ws (code 1009)
@@ -762,10 +768,12 @@ export class TelemetryWebSocketServer {
     }
     this.lastSwarmPnlBroadcastAt = now;
 
-    const payloadString = JSON.stringify({
+    const payload = {
       event: 'swarm_pnl_tick',
       ...telemetry,
-    });
+    };
+    this.lastSwarmPnlPayload = payload;
+    const payloadString = JSON.stringify(payload);
 
     for (const [, sub] of this.clients) {
       if (sub.ws.readyState !== WebSocket.OPEN) continue;

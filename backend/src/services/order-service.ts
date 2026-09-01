@@ -1503,64 +1503,109 @@ export class OrderService {
   }
 
   /**
-   * Retrieves filtered order executions.
+   * Matches an order against compiled search criteria (0 allocations per row).
    */
-  public getOrders(params?: QueryOrdersParams): OrderExecution[] {
-    let result = [...this.orders];
-
-    // Source filtering (TERMINAL vs SWARM)
-    if (params?.source === 'TERMINAL') {
-      result = result.filter((o) => o.source === 'TERMINAL' || o.agentType === 'Manual');
-    } else if (params?.source === 'SWARM' || params?.swarmOnly || params?.scope === 'SWARM') {
-      result = result.filter((o) => (o.source !== 'TERMINAL' && o.agentType !== 'Manual'));
-      if (params?.swarmOnly || params?.scope === 'SWARM') {
-        const opAddr = (operatorAccount?.address || SOMNIA_ADDRESSES.operatorAccount).toLowerCase();
-        result = result.filter((o) => o.userAddress && o.userAddress.toLowerCase() === opAddr);
+  private matchesOrderCriteria(
+    o: OrderExecution,
+    criteria: {
+      isTerminal: boolean;
+      isSwarm: boolean;
+      swarmOnly: boolean;
+      opAddr: string;
+      normalizedUser?: string;
+      targetAgent?: string;
+      targetMarket?: string;
+      targetStatus?: OrderStatus;
+      targetOutcome?: OutcomeType;
+      searchQ?: string;
+    },
+  ): boolean {
+    if (criteria.isTerminal) {
+      if (o.source !== 'TERMINAL' && o.agentType !== 'Manual') return false;
+    } else if (criteria.isSwarm) {
+      if (o.source === 'TERMINAL' || o.agentType === 'Manual') return false;
+      if (criteria.swarmOnly) {
+        if (!o.userAddress || o.userAddress.toLowerCase() !== criteria.opAddr) return false;
       }
     }
 
+    if (criteria.normalizedUser && !criteria.swarmOnly) {
+      if (!o.userAddress || o.userAddress.toLowerCase() !== criteria.normalizedUser) return false;
+    }
+
+    if (criteria.targetAgent && (!o.agentType || o.agentType.toLowerCase() !== criteria.targetAgent)) {
+      return false;
+    }
+
+    if (criteria.targetMarket && (!o.marketId || o.marketId.toLowerCase() !== criteria.targetMarket)) {
+      return false;
+    }
+
+    if (criteria.targetStatus && o.status !== criteria.targetStatus) {
+      return false;
+    }
+
+    if (criteria.targetOutcome && o.outcome !== criteria.targetOutcome) {
+      return false;
+    }
+
+    if (criteria.searchQ) {
+      const q = criteria.searchQ;
+      const mMatch = o.marketId && o.marketId.toLowerCase().includes(q);
+      const uMatch = o.userAddress && o.userAddress.toLowerCase().includes(q);
+      const txMatch = o.txHash && o.txHash.toLowerCase().includes(q);
+      if (!mMatch && !uMatch && !txMatch) return false;
+    }
+
+    return true;
+  }
+
+  /**
+   * Retrieves filtered order executions with high-performance single-pass traversal.
+   */
+  public getOrders(params?: QueryOrdersParams): OrderExecution[] {
+    let normalizedUser: string | undefined = undefined;
     if (params?.userAddress && !params?.swarmOnly && params?.scope !== 'SWARM') {
       try {
         if (!isAddress(params.userAddress)) return [];
-        const normalized = getAddress(params.userAddress).toLowerCase();
-        result = result.filter((o) => o.userAddress && o.userAddress.toLowerCase() === normalized);
+        normalizedUser = getAddress(params.userAddress).toLowerCase();
       } catch {
         return [];
       }
     }
 
-    if (params?.agentType) {
-      result = result.filter((o) => o.agentType.toLowerCase() === params.agentType!.toLowerCase());
-    }
+    const opAddr = (operatorAccount?.address || SOMNIA_ADDRESSES.operatorAccount).toLowerCase();
+    const criteria = {
+      isTerminal: params?.source === 'TERMINAL',
+      isSwarm: params?.source === 'SWARM' || params?.swarmOnly || params?.scope === 'SWARM',
+      swarmOnly: params?.swarmOnly || params?.scope === 'SWARM',
+      opAddr,
+      normalizedUser,
+      targetAgent: params?.agentType ? params.agentType.toLowerCase() : undefined,
+      targetMarket: params?.marketId ? params.marketId.toLowerCase() : undefined,
+      targetStatus: params?.status,
+      targetOutcome: params?.outcome,
+      searchQ: params?.searchQuery?.trim() ? params.searchQuery.trim().toLowerCase() : undefined,
+    };
 
-    if (params?.marketId) {
-      result = result.filter((o) => o.marketId.toLowerCase() === params.marketId!.toLowerCase());
-    }
+    const offset = params?.offset && params.offset > 0 ? params.offset : 0;
+    const limit = params?.limit && params.limit > 0 ? params.limit : undefined;
+    const result: OrderExecution[] = [];
+    let matchIdx = 0;
 
-    if (params?.status) {
-      result = result.filter((o) => o.status === params.status);
-    }
+    const ordersList = this.orders;
+    const len = ordersList.length;
+    for (let i = 0; i < len; i++) {
+      const o = ordersList[i];
+      if (!this.matchesOrderCriteria(o, criteria)) continue;
 
-    if (params?.outcome) {
-      result = result.filter((o) => o.outcome === params.outcome);
-    }
-
-    if (params?.searchQuery && params.searchQuery.trim()) {
-      const q = params.searchQuery.toLowerCase();
-      result = result.filter(
-        (o) =>
-          (o.marketId && o.marketId.toLowerCase().includes(q)) ||
-          (o.userAddress && o.userAddress.toLowerCase().includes(q)) ||
-          (o.txHash && o.txHash.toLowerCase().includes(q))
-      );
-    }
-
-    if (params?.offset && params.offset > 0) {
-      result = result.slice(params.offset);
-    }
-
-    if (params?.limit !== undefined && params.limit > 0) {
-      result = result.slice(0, params.limit);
+      if (matchIdx >= offset) {
+        result.push(o);
+        if (limit !== undefined && result.length >= limit) {
+          break;
+        }
+      }
+      matchIdx++;
     }
 
     return result;
@@ -1793,20 +1838,55 @@ export class OrderService {
     totalFills: number;
     totalVolume: number;
   } {
-    const all = this.getOrders({ ...params, limit: undefined, offset: undefined });
-    const fills = all.filter((o) => o.status === 'FILLED');
-    const totalVolume = Number(
-      fills.reduce((sum, o) => sum + (o.totalCost || 0), 0).toFixed(4)
-    );
+    let normalizedUser: string | undefined = undefined;
+    if (params?.userAddress && !params?.swarmOnly && params?.scope !== 'SWARM') {
+      try {
+        if (!isAddress(params.userAddress)) return { totalCount: 0, totalFills: 0, totalVolume: 0 };
+        normalizedUser = getAddress(params.userAddress).toLowerCase();
+      } catch {
+        return { totalCount: 0, totalFills: 0, totalVolume: 0 };
+      }
+    }
+
+    const opAddr = (operatorAccount?.address || SOMNIA_ADDRESSES.operatorAccount).toLowerCase();
+    const criteria = {
+      isTerminal: params?.source === 'TERMINAL',
+      isSwarm: params?.source === 'SWARM' || params?.swarmOnly || params?.scope === 'SWARM',
+      swarmOnly: params?.swarmOnly || params?.scope === 'SWARM',
+      opAddr,
+      normalizedUser,
+      targetAgent: params?.agentType ? params.agentType.toLowerCase() : undefined,
+      targetMarket: params?.marketId ? params.marketId.toLowerCase() : undefined,
+      targetStatus: params?.status,
+      targetOutcome: params?.outcome,
+      searchQ: params?.searchQuery?.trim() ? params.searchQuery.trim().toLowerCase() : undefined,
+    };
+
+    let totalCount = 0;
+    let totalFills = 0;
+    let totalVolume = 0;
+
+    const ordersList = this.orders;
+    const len = ordersList.length;
+    for (let i = 0; i < len; i++) {
+      const o = ordersList[i];
+      if (!this.matchesOrderCriteria(o, criteria)) continue;
+      totalCount++;
+      if (o.status === 'FILLED') {
+        totalFills++;
+        totalVolume += (o.totalCost || 0);
+      }
+    }
+
     return {
-      totalCount: all.length,
-      totalFills: fills.length,
-      totalVolume,
+      totalCount,
+      totalFills,
+      totalVolume: Number(totalVolume.toFixed(4)),
     };
   }
 
   /**
-   * Queries orders with pagination metadata and accurate totals.
+   * Queries orders with pagination metadata and accurate totals in a single high-performance traversal.
    */
   public queryOrdersPaginated(params?: {
     userAddress?: string;
@@ -1830,38 +1910,65 @@ export class OrderService {
     pageSize: number;
     totalPages: number;
   } {
-    const allMatching = this.getOrders({
-      userAddress: params?.userAddress,
-      agentType: params?.agentType,
-      status: params?.status,
-      outcome: params?.outcome,
-      marketId: params?.marketId,
-      searchQuery: params?.searchQuery,
-      scope: params?.scope,
-      swarmOnly: params?.swarmOnly,
-      source: params?.source,
-      limit: undefined,
-      offset: undefined,
-    });
-
-    const total = allMatching.length;
-    const filled = allMatching.filter((o) => o.status === 'FILLED');
-    const totalFills = filled.length;
-    const totalVolume = Number(
-      filled.reduce((sum, o) => sum + (o.totalCost || 0), 0).toFixed(4)
-    );
-
     const pageSize = params?.pageSize || params?.limit || 50;
     const page = Math.max(1, params?.page || 1);
-    const totalPages = Math.max(1, Math.ceil(total / pageSize));
-    const startIndex = (page - 1) * pageSize;
-    const paginatedOrders = allMatching.slice(startIndex, startIndex + pageSize);
 
+    let normalizedUser: string | undefined = undefined;
+    if (params?.userAddress && !params?.swarmOnly && params?.scope !== 'SWARM') {
+      try {
+        if (!isAddress(params.userAddress)) {
+          return { orders: [], total: 0, totalFills: 0, totalVolume: 0, page: 1, pageSize, totalPages: 1 };
+        }
+        normalizedUser = getAddress(params.userAddress).toLowerCase();
+      } catch {
+        return { orders: [], total: 0, totalFills: 0, totalVolume: 0, page: 1, pageSize, totalPages: 1 };
+      }
+    }
+
+    const opAddr = (operatorAccount?.address || SOMNIA_ADDRESSES.operatorAccount).toLowerCase();
+    const criteria = {
+      isTerminal: params?.source === 'TERMINAL',
+      isSwarm: params?.source === 'SWARM' || params?.swarmOnly || params?.scope === 'SWARM',
+      swarmOnly: params?.swarmOnly || params?.scope === 'SWARM',
+      opAddr,
+      normalizedUser,
+      targetAgent: params?.agentType ? params.agentType.toLowerCase() : undefined,
+      targetMarket: params?.marketId ? params.marketId.toLowerCase() : undefined,
+      targetStatus: params?.status,
+      targetOutcome: params?.outcome,
+      searchQ: params?.searchQuery?.trim() ? params.searchQuery.trim().toLowerCase() : undefined,
+    };
+
+    const startIndex = (page - 1) * pageSize;
+    const endIndex = startIndex + pageSize;
+    const paginatedOrders: OrderExecution[] = [];
+    let totalCount = 0;
+    let totalFills = 0;
+    let totalVolume = 0;
+
+    const ordersList = this.orders;
+    const len = ordersList.length;
+    for (let i = 0; i < len; i++) {
+      const o = ordersList[i];
+      if (!this.matchesOrderCriteria(o, criteria)) continue;
+
+      if (totalCount >= startIndex && totalCount < endIndex) {
+        paginatedOrders.push(o);
+      }
+      totalCount++;
+
+      if (o.status === 'FILLED') {
+        totalFills++;
+        totalVolume += (o.totalCost || 0);
+      }
+    }
+
+    const totalPages = Math.max(1, Math.ceil(totalCount / pageSize));
     return {
       orders: paginatedOrders,
-      total,
+      total: totalCount,
       totalFills,
-      totalVolume,
+      totalVolume: Number(totalVolume.toFixed(4)),
       page,
       pageSize,
       totalPages,
@@ -2264,8 +2371,37 @@ export class OrderService {
         }
       }
 
-      // Now settle candidates
+      // Pre-fetch unique on-chain markets in parallel with cache
       const onchainMarketCache = new Map<string, any>();
+      const hexMarketIds = new Set<Hex>();
+      for (const order of candidates) {
+        if (order.isSettled) continue;
+        if (order.marketId.startsWith('0x') && order.marketId.length === 66) {
+          hexMarketIds.add(order.marketId as Hex);
+        }
+      }
+
+      if (hexMarketIds.size > 0 && process.env.NODE_ENV !== 'test') {
+        const fetchTasks = Array.from(hexMarketIds).map(async (mId) => {
+          const cached = orderOnchainMarketCache.get(mId);
+          if (cached && Date.now() < cached.expiresAt) {
+            onchainMarketCache.set(mId, cached.data);
+            return;
+          }
+          try {
+            const onchain = await Promise.race([
+              somniaExchange.client.getMarketOnchain(mId).catch(() => null),
+              new Promise<null>((resolve) => setTimeout(() => resolve(null), 1200)),
+            ]);
+            if (onchain) {
+              orderOnchainMarketCache.set(mId, { data: onchain, expiresAt: Date.now() + 15000 });
+              onchainMarketCache.set(mId, onchain);
+            }
+          } catch {}
+        });
+        await Promise.allSettled(fetchTasks);
+      }
+
       for (const order of candidates) {
         if (order.isSettled) continue;
         const market = marketService.getMarketById(order.marketId);
@@ -2277,14 +2413,7 @@ export class OrderService {
 
         if (isOnChainHexMarket && process.env.NODE_ENV !== 'test') {
           try {
-            let onchain = onchainMarketCache.get(order.marketId);
-            if (onchain === undefined) {
-              onchain = await Promise.race([
-                somniaExchange.client.getMarketOnchain(order.marketId as Hex).catch(() => null),
-                new Promise<null>((resolve) => setTimeout(() => resolve(null), 2500)),
-              ]);
-              onchainMarketCache.set(order.marketId, onchain);
-            }
+            const onchain = onchainMarketCache.get(order.marketId);
             if (onchain && (onchain.isResolved || onchain.finalized || onchain.status === 4 || onchain.status === 5)) {
               shouldResolve = true;
               if (onchain.isVoided || onchain.status === 5) {
@@ -2561,6 +2690,56 @@ export class OrderService {
   }
 
   /**
+   * Pre-aggregates Swarm PnLs and trade fill counts in a single fast O(N) pass.
+   */
+  public getSwarmAggregates(operatorAddress?: string): {
+    voltPnl: number;
+    oraclePnl: number;
+    titanPnl: number;
+    voltTrades: number;
+    oracleTrades: number;
+    titanTrades: number;
+  } {
+    const opAddr = (operatorAddress || operatorAccount?.address || SOMNIA_ADDRESSES.operatorAccount).toLowerCase();
+    let voltPnl = 0;
+    let oraclePnl = 0;
+    let titanPnl = 0;
+    let voltTrades = 0;
+    let oracleTrades = 0;
+    let titanTrades = 0;
+
+    const ordersList = this.orders;
+    const len = ordersList.length;
+    for (let i = 0; i < len; i++) {
+      const o = ordersList[i];
+      if (!o.userAddress || o.userAddress.toLowerCase() !== opAddr) continue;
+      const ag = o.agentType?.toLowerCase();
+      const pnl = o.pnl || 0;
+      const isCountableTrade = o.status === 'FILLED' || o.status === 'PENDING';
+
+      if (ag === 'volt') {
+        voltPnl += pnl;
+        if (isCountableTrade) voltTrades++;
+      } else if (ag === 'oracle') {
+        oraclePnl += pnl;
+        if (isCountableTrade) oracleTrades++;
+      } else if (ag === 'titan') {
+        titanPnl += pnl;
+        if (isCountableTrade) titanTrades++;
+      }
+    }
+
+    return {
+      voltPnl: Number(voltPnl.toFixed(2)),
+      oraclePnl: Number(oraclePnl.toFixed(2)),
+      titanPnl: Number(titanPnl.toFixed(2)),
+      voltTrades,
+      oracleTrades,
+      titanTrades,
+    };
+  }
+
+  /**
    * Returns total cumulative realized PnL for an agent type or across the entire portfolio/user.
    * Instant calculation summing stored order PnLs (0ms, zero network requests).
    */
@@ -2573,18 +2752,19 @@ export class OrderService {
     }
     const targetAddr = userAddress?.toLowerCase();
     const targetAgent = agentType?.toLowerCase();
-    const sum = Number(
-      this.orders
-        .filter((o) => {
-          if (targetAgent && (!o.agentType || o.agentType.toLowerCase() !== targetAgent)) return false;
-          if (targetAddr && (!o.userAddress || o.userAddress.toLowerCase() !== targetAddr)) return false;
-          return true;
-        })
-        .reduce((acc, o) => acc + (o.pnl || 0), 0)
-        .toFixed(2),
-    );
-    this.cachedPnlByKey.set(key, { sum, timestamp: now });
-    return sum;
+
+    let sum = 0;
+    const ordersList = this.orders;
+    const len = ordersList.length;
+    for (let i = 0; i < len; i++) {
+      const o = ordersList[i];
+      if (targetAgent && (!o.agentType || o.agentType.toLowerCase() !== targetAgent)) continue;
+      if (targetAddr && (!o.userAddress || o.userAddress.toLowerCase() !== targetAddr)) continue;
+      sum += (o.pnl || 0);
+    }
+    const rounded = Number(sum.toFixed(2));
+    this.cachedPnlByKey.set(key, { sum: rounded, timestamp: now });
+    return rounded;
   }
 
   public async getTotalRealizedPnlAsync(agentType?: AgentType, userAddress?: string): Promise<number> {

@@ -557,6 +557,9 @@ apiRouter.get('/sessions/:userAddress/allowance-status', optionalWalletAuth, asy
 // ------------------------------------------------------------------------------
 let cachedSwarmStatus: { at: number; data: any } | null = null;
 let cachedSwarmDetailed: { at: number; data: any } | null = null;
+let inFlightSwarmStatus: Promise<any> | null = null;
+let inFlightSwarmDetailed: Promise<any> | null = null;
+let lastOrdersSettlementSyncAt = 0;
 const SWARM_CACHE_MS = 800;
 
 export function invalidateSwarmCache(): void {
@@ -570,9 +573,21 @@ apiRouter.get('/agents/status', async (_req: Request, res: Response) => {
   if (cachedSwarmStatus && Date.now() - cachedSwarmStatus.at < SWARM_CACHE_MS) {
     return res.json(cachedSwarmStatus.data);
   }
-  const statusSummary = await swarmRunner.getSwarmStatusAsync();
-  const payload = { success: true, agents: statusSummary };
-  cachedSwarmStatus = { at: Date.now(), data: payload };
+  if (inFlightSwarmStatus) {
+    const data = await inFlightSwarmStatus;
+    return res.json(data);
+  }
+  inFlightSwarmStatus = (async () => {
+    try {
+      const statusSummary = await swarmRunner.getSwarmStatusAsync();
+      const payload = { success: true, agents: statusSummary };
+      cachedSwarmStatus = { at: Date.now(), data: payload };
+      return payload;
+    } finally {
+      inFlightSwarmStatus = null;
+    }
+  })();
+  const payload = await inFlightSwarmStatus;
   res.json(payload);
 });
 
@@ -580,9 +595,21 @@ apiRouter.get('/agents/detailed', async (_req: Request, res: Response) => {
   if (cachedSwarmDetailed && Date.now() - cachedSwarmDetailed.at < SWARM_CACHE_MS) {
     return res.json(cachedSwarmDetailed.data);
   }
-  const detailed = await swarmRunner.getDetailedSwarmStateAsync();
-  const payload = { success: true, ...detailed };
-  cachedSwarmDetailed = { at: Date.now(), data: payload };
+  if (inFlightSwarmDetailed) {
+    const data = await inFlightSwarmDetailed;
+    return res.json(data);
+  }
+  inFlightSwarmDetailed = (async () => {
+    try {
+      const detailed = await swarmRunner.getDetailedSwarmStateAsync();
+      const payload = { success: true, ...detailed };
+      cachedSwarmDetailed = { at: Date.now(), data: payload };
+      return payload;
+    } finally {
+      inFlightSwarmDetailed = null;
+    }
+  })();
+  const payload = await inFlightSwarmDetailed;
   res.json(payload);
 });
 
@@ -834,8 +861,12 @@ apiRouter.post('/swarm/reset', requireWalletAuth, async (req: Request, res: Resp
 apiRouter.get('/orders', optionalWalletAuth, async (req: Request, res: Response) => {
   const { userAddress, agentType, status, outcome, marketId, limit, page, pageSize, search, swarmOnly, scope, source } = req.query;
 
-  // Trigger non-blocking settlement sync of resolved on-chain / expired markets
-  void orderService.syncResolvedOrdersPnLAsync().catch(() => {});
+  // Trigger non-blocking settlement sync of resolved on-chain / expired markets (throttled to once per 3.5s)
+  const now = Date.now();
+  if (now - lastOrdersSettlementSyncAt > 3500) {
+    lastOrdersSettlementSyncAt = now;
+    void orderService.syncResolvedOrdersPnLAsync().catch(() => {});
+  }
 
   const params: Parameters<typeof orderService.queryOrdersPaginated>[0] = {
     userAddress: typeof userAddress === 'string' ? userAddress : undefined,

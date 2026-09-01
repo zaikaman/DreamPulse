@@ -912,22 +912,19 @@ export class MultiAgentSwarmRunner {
    */
   public getSwarmStatus(): SwarmStatusSummary {
     const operatorAddr = operatorAccount.address;
-    const voltPnl = orderService.getTotalRealizedPnl('Volt', operatorAddr);
-    const oraclePnl = orderService.getTotalRealizedPnl('Oracle', operatorAddr);
-    const titanPnl = orderService.getTotalRealizedPnl('Titan', operatorAddr);
+    const agg = orderService.getSwarmAggregates(operatorAddr);
+    const voltPnl = agg.voltPnl;
+    const oraclePnl = agg.oraclePnl;
+    const titanPnl = agg.titanPnl;
 
     this.telemetry.Volt.pnlAmount = voltPnl;
     this.telemetry.Oracle.pnlAmount = oraclePnl;
     this.telemetry.Titan.pnlAmount = titanPnl;
 
-    // Total all-time fills per agent — strictly operator wallet (canonical swarm). Copy-trade fills for delegated users are personal, not swarm.
-    this.telemetry.Volt.tradesToday = orderService.getOrders({ agentType: 'Volt', status: 'FILLED', userAddress: operatorAddr }).length + orderService.getOrders({ agentType: 'Volt', status: 'PENDING', userAddress: operatorAddr }).length;
-    // Fallback to all statuses if filtering returns 0 due to no FILLED yet, count total all-time
-    if (this.telemetry.Volt.tradesToday === 0) this.telemetry.Volt.tradesToday = orderService.getOrders({ agentType: 'Volt', userAddress: operatorAddr }).length;
-    this.telemetry.Oracle.tradesToday = orderService.getOrders({ agentType: 'Oracle', status: 'FILLED', userAddress: operatorAddr }).length + orderService.getOrders({ agentType: 'Oracle', status: 'PENDING', userAddress: operatorAddr }).length;
-    if (this.telemetry.Oracle.tradesToday === 0) this.telemetry.Oracle.tradesToday = orderService.getOrders({ agentType: 'Oracle', userAddress: operatorAddr }).length;
-    this.telemetry.Titan.tradesToday = orderService.getOrders({ agentType: 'Titan', status: 'FILLED', userAddress: operatorAddr }).length + orderService.getOrders({ agentType: 'Titan', status: 'PENDING', userAddress: operatorAddr }).length;
-    if (this.telemetry.Titan.tradesToday === 0) this.telemetry.Titan.tradesToday = orderService.getOrders({ agentType: 'Titan', userAddress: operatorAddr }).length;
+    // Total all-time fills per agent — strictly operator wallet (canonical swarm)
+    this.telemetry.Volt.tradesToday = agg.voltTrades;
+    this.telemetry.Oracle.tradesToday = agg.oracleTrades;
+    this.telemetry.Titan.tradesToday = agg.titanTrades;
 
     const userSweeps = settlementService.getSweepHistory(operatorAccount.address);
     const confirmedSweeps = userSweeps.filter(
@@ -982,38 +979,7 @@ export class MultiAgentSwarmRunner {
   }
 
   public async getSwarmStatusAsync(): Promise<SwarmStatusSummary> {
-    const operatorAddr = operatorAccount.address;
-    const [voltPnl, oraclePnl, titanPnl] = await Promise.all([
-      orderService.getTotalRealizedPnlAsync('Volt', operatorAddr),
-      orderService.getTotalRealizedPnlAsync('Oracle', operatorAddr),
-      orderService.getTotalRealizedPnlAsync('Titan', operatorAddr),
-    ]);
-    this.telemetry.Volt.pnlAmount = voltPnl;
-    this.telemetry.Oracle.pnlAmount = oraclePnl;
-    this.telemetry.Titan.pnlAmount = titanPnl;
-    this.telemetry.Volt.tradesToday = orderService.getOrders({ agentType: 'Volt', status: 'FILLED', userAddress: operatorAddr }).length + orderService.getOrders({ agentType: 'Volt', status: 'PENDING', userAddress: operatorAddr }).length;
-    if (this.telemetry.Volt.tradesToday === 0) this.telemetry.Volt.tradesToday = orderService.getOrders({ agentType: 'Volt', userAddress: operatorAddr }).length;
-    this.telemetry.Oracle.tradesToday = orderService.getOrders({ agentType: 'Oracle', status: 'FILLED', userAddress: operatorAddr }).length + orderService.getOrders({ agentType: 'Oracle', status: 'PENDING', userAddress: operatorAddr }).length;
-    if (this.telemetry.Oracle.tradesToday === 0) this.telemetry.Oracle.tradesToday = orderService.getOrders({ agentType: 'Oracle', userAddress: operatorAddr }).length;
-    this.telemetry.Titan.tradesToday = orderService.getOrders({ agentType: 'Titan', status: 'FILLED', userAddress: operatorAddr }).length + orderService.getOrders({ agentType: 'Titan', status: 'PENDING', userAddress: operatorAddr }).length;
-    if (this.telemetry.Titan.tradesToday === 0) this.telemetry.Titan.tradesToday = orderService.getOrders({ agentType: 'Titan', userAddress: operatorAddr }).length;
-    const userSweeps = settlementService.getSweepHistory(operatorAccount.address);
-    const confirmedSweeps = userSweeps.filter((s) => s.status === 'CONFIRMED' && s.txHash && s.txHash !== '0x0000000000000000000000000000000000000000000000000000000000000000');
-    const sweeperPnl = confirmedSweeps.reduce((acc, s) => acc + (s.claimableAmount || 0), 0);
-    this.telemetry.Sweeper.pnlAmount = Number(sweeperPnl.toFixed(2));
-    this.telemetry.Sweeper.tradesToday = confirmedSweeps.length;
-    try {
-      telemetryWsGateway.broadcastSwarmPnl({ volt: voltPnl, oracle: oraclePnl, titan: titanPnl, sweeper: sweeperPnl, totalSwarm: Number((voltPnl + oraclePnl + titanPnl).toFixed(2)), timestamp: Date.now() });
-    } catch {}
-    const voltPrefix = voltPnl >= 0 ? '+' : '';
-    const oraclePrefix = oraclePnl >= 0 ? '+' : '';
-    const titanPrefix = titanPnl >= 0 ? '+' : '';
-    return {
-      volt: { status: this.telemetry.Volt.status, evalLatencyMs: this.telemetry.Volt.evalLatencyMs, tradesToday: this.telemetry.Volt.tradesToday, pnl: `${voltPrefix}${voltPnl.toFixed(2)} tUSDC` },
-      oracle: { status: this.telemetry.Oracle.status, evalLatencyMs: this.telemetry.Oracle.evalLatencyMs, tradesToday: this.telemetry.Oracle.tradesToday, pnl: `${oraclePrefix}${oraclePnl.toFixed(2)} tUSDC` },
-      titan: { status: this.telemetry.Titan.status, activeQuotes: 6, spreadCaptured: `${titanPrefix}${titanPnl.toFixed(2)} tUSDC` },
-      sweeper: { status: this.telemetry.Sweeper.status, lastSweep: new Date(this.telemetry.Sweeper.lastActionTimestamp).toISOString(), totalClaimed: `+${this.telemetry.Sweeper.pnlAmount.toFixed(2)} tUSDC` },
-    };
+    return this.getSwarmStatus();
   }
 
   public async getDetailedSwarmStateAsync(): Promise<Record<string, any>> {

@@ -66,8 +66,18 @@ function getAuthHeadersForRequest(): Record<string, string> {
   return {};
 }
 
+const inFlightGetRequests = new Map<string, Promise<any>>();
+const customAgentsCache = new Map<string, { at: number; data: any }>();
+const CUSTOM_AGENTS_CACHE_TTL_MS = 30000;
+
 async function fetchJson<T>(endpoint: string, options?: RequestInit): Promise<T> {
+  const isGet = !options?.method || options.method.toUpperCase() === 'GET';
   const url = `${API_BASE_URL}${endpoint}`;
+
+  if (isGet && inFlightGetRequests.has(url)) {
+    return inFlightGetRequests.get(url)! as Promise<T>;
+  }
+
   const authHeaders = getAuthHeadersForRequest();
   // Merge: explicit caller headers win over cached auth (allows override for wallet-verify which must NOT send stale auth)
   const mergedHeaders: Record<string, string> = {
@@ -82,29 +92,39 @@ async function fetchJson<T>(endpoint: string, options?: RequestInit): Promise<T>
     delete (mergedHeaders as any)['authorization'];
   }
   const { headers: _ignoredHeaders, credentials: _ignoredCreds, ...restOptions } = (options as Record<string, any>) || {};
-  const response = await fetch(url, {
-    ...restOptions,
-    // SECURITY: httpOnly cookie hardening — backend sets dreampulse_jwt as HttpOnly (see wallet-auth.ts).
-    // credentials:'include' ensures Cookie is sent cross-site (Heroku ↔ Vercel) when backend sets SameSite=None;Secure.
-    // Cookie is not readable via JS (XSS cannot steal it), unlike localStorage Bearer. Fetch will send both
-    // Authorization header (fallback for legacy localStorage) and Cookie (preferred httpOnly). Backend checks both.
-    credentials: 'include',
-    headers: mergedHeaders,
-  });
 
-  if (!response.ok) {
-    const errorBody = await response.text();
-    let errorMsg = errorBody;
-    try {
-      const parsed = JSON.parse(errorBody);
-      if (parsed && typeof parsed.error === 'string') {
-        errorMsg = parsed.error;
-      }
-    } catch {}
-    throw new Error(errorMsg);
+  const executeFetch = async (): Promise<T> => {
+    const response = await fetch(url, {
+      ...restOptions,
+      // SECURITY: httpOnly cookie hardening — backend sets dreampulse_jwt as HttpOnly (see wallet-auth.ts).
+      credentials: 'include',
+      headers: mergedHeaders,
+    });
+
+    if (!response.ok) {
+      const errorBody = await response.text();
+      let errorMsg = errorBody;
+      try {
+        const parsed = JSON.parse(errorBody);
+        if (parsed && typeof parsed.error === 'string') {
+          errorMsg = parsed.error;
+        }
+      } catch {}
+      throw new Error(errorMsg);
+    }
+
+    return response.json() as Promise<T>;
+  };
+
+  if (isGet) {
+    const p = executeFetch().finally(() => {
+      inFlightGetRequests.delete(url);
+    });
+    inFlightGetRequests.set(url, p);
+    return p;
   }
 
-  return response.json() as Promise<T>;
+  return executeFetch();
 }
 
 export const apiClient = {
@@ -407,8 +427,17 @@ export const apiClient = {
 
   // Custom Agent & Swarm Studio
   async getCustomAgents(userAddress?: string): Promise<{ success: boolean; count: number; data: CustomAgentDefinition[] }> {
+    const key = (userAddress || 'GLOBAL').toLowerCase();
+    const cached = customAgentsCache.get(key);
+    if (cached && Date.now() - cached.at < CUSTOM_AGENTS_CACHE_TTL_MS) {
+      return cached.data;
+    }
     const q = userAddress ? `?userAddress=${encodeURIComponent(userAddress)}` : '';
-    return fetchJson(`/agents/custom${q}`);
+    const res = await fetchJson<{ success: boolean; count: number; data: CustomAgentDefinition[] }>(`/agents/custom${q}`);
+    if (res?.success) {
+      customAgentsCache.set(key, { at: Date.now(), data: res });
+    }
+    return res;
   },
 
   async getCustomAgentById(id: string): Promise<{ success: boolean; data: CustomAgentDefinition }> {
@@ -427,6 +456,7 @@ export const apiClient = {
     icon?: string;
     isActive?: boolean;
   }): Promise<{ success: boolean; data: CustomAgentDefinition }> {
+    customAgentsCache.clear();
     return fetchJson('/agents/custom', {
       method: 'POST',
       body: JSON.stringify(payload),
@@ -434,6 +464,7 @@ export const apiClient = {
   },
 
   async updateCustomAgent(id: string, payload: Partial<CustomAgentDefinition>): Promise<{ success: boolean; data: CustomAgentDefinition }> {
+    customAgentsCache.clear();
     return fetchJson(`/agents/custom/${encodeURIComponent(id)}`, {
       method: 'PUT',
       body: JSON.stringify(payload),
