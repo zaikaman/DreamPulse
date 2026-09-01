@@ -840,12 +840,11 @@ export class OrderService {
         if (blockedUntil && Date.now() < blockedUntil) {
           return null;
         }
-        // Differentiate maker (LIMIT_QUOTE) and taker (TAKER_BUY, TAKER_SELL, BATCH_SWEEP, etc.):
-        // - LIMIT_QUOTE (0): NormalOrder — fills crossing book liquidity and rests remaining on the order book.
-        // - TAKER (2 / MARKET / IOC): ImmediateOrCancel — fills available crossing liquidity and immediately cancels any unfilled residual,
-        //   preventing unintended lingering resting orders from skewing CLOB orderbook depth and self-trade sanitization.
+        // All on-chain orders (both maker LIMIT_QUOTE and taker TAKER_BUY / TAKER_SELL) use ORDER_TYPE.LIMIT (0):
+        // NormalOrder fills crossing book liquidity immediately and rests any remaining quantity on the order book,
+        // eliminating ImmediateOrCancelNoFill reverts on sparse/unmatched ticks while still taking available crossing depth.
         const isMaker = decision.action === 'LIMIT_QUOTE';
-        const orderTypeEnum = isMaker ? ORDER_TYPE.LIMIT : ORDER_TYPE.MARKET;
+        const orderTypeEnum = ORDER_TYPE.LIMIT;
         const one = 10n ** BigInt(SOMNIA_ADDRESSES.decimals);
         const priceYes = outcome === 'YES' ? rawPriceOwn : one - rawPriceOwn;
         const nowSec = Math.floor(Date.now() / 1000);
