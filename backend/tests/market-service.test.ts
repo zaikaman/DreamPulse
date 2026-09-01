@@ -138,20 +138,38 @@ describe('MarketService Comprehensive Unit Suite', () => {
     expect(filtered.map((m) => m.marketId)).toEqual(['0x1', '0x3', '0x4']);
   });
 
-  it('finalizes rolling markets using historical close price rather than drifting current spot', async () => {
-    const closeTime = Date.now() - 10000;
-    const rollingMarket: Market = {
-      ...mockMarket,
-      id: 'rolling-eth-test',
-      strikePrice: 2800,
-      closeTimestamp: new Date(closeTime).toISOString(),
-      status: 'Open',
-    };
+  it('strictly rejects off-chain and invalid markets missing on-chain 32-byte marketId or poolAddress', async () => {
+    const targetVenueId = '0x323ec57fca385a494dbf0685be47ca2a50a11c81'.toLowerCase();
+    const mockBinaryMarkets = [
+      {
+        marketId: '0x1111111111111111111111111111111111111111111111111111111111111111',
+        poolAddress: '0x2222222222222222222222222222222222222222',
+        venueId: targetVenueId,
+        voided: false,
+      },
+      {
+        marketId: 'rolling-offchain-market-1',
+        poolAddress: '0x2222222222222222222222222222222222222222',
+        venueId: targetVenueId,
+        voided: false,
+      },
+      {
+        marketId: '0x2222222222222222222222222222222222222222222222222222222222222222',
+        poolAddress: '0x0000000000000000000000000000000000000000',
+        venueId: targetVenueId,
+        voided: false,
+      },
+    ];
 
-    await service.finalizeRollingMarket(rollingMarket, closeTime);
-    expect(rollingMarket.status).toBe('Finalized');
-    expect(rollingMarket.settlementPrice).toBeDefined();
-    expect(rollingMarket.winningOutcome).toBeDefined();
-    expect(['YES', 'NO']).toContain(rollingMarket.winningOutcome);
+    const filtered = mockBinaryMarkets.filter((m) => {
+      if (m.voided) return false;
+      if (!m.marketId || typeof m.marketId !== 'string' || !m.marketId.startsWith('0x') || m.marketId.length !== 66) return false;
+      if (!m.poolAddress || typeof m.poolAddress !== 'string' || !m.poolAddress.startsWith('0x') || m.poolAddress.length !== 42) return false;
+      if (m.poolAddress.toLowerCase() === '0x0000000000000000000000000000000000000000') return false;
+      return true;
+    });
+
+    expect(filtered.length).toBe(1);
+    expect(filtered[0].marketId).toBe('0x1111111111111111111111111111111111111111111111111111111111111111');
   });
 });

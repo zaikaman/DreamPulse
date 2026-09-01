@@ -319,7 +319,7 @@ export class BacktestService {
           }
         }
       } catch {
-        // Fall back to DreamDEX / deterministic generator - clear partial binance data on error so fallback can trigger
+        // Fall back to DreamDEX - clear partial binance data on error so fallback can trigger
         if (candles.length < 10) {
           candles.length = 0;
         }
@@ -378,51 +378,7 @@ export class BacktestService {
           }
         }
       } catch {
-        // Fall back to deterministic seed data
         if (candles.length < 10) candles.length = 0;
-      }
-    }
-
-    // 3. Fallback deterministic realistic historical series generator when live network endpoints are unavailable (e.g. CI/offline/rate-limits)
-    if (candles.length === 0) {
-      let basePrice = 96500;
-      let decimals = 2;
-      if (symbol.toUpperCase().includes('ETH')) {
-        basePrice = 2750;
-      }
-
-      let stepMs = 5 * 60 * 1000;
-      if (interval === '1m') stepMs = 60 * 1000;
-      else if (interval === '15m') stepMs = 15 * 60 * 1000;
-      else if (interval === '1h') stepMs = 60 * 60 * 1000;
-
-      const totalSteps = Math.min(50000, Math.max(60, Math.floor((endMs - startMs) / stepMs)));
-
-      let prevClose = basePrice;
-      for (let i = 0; i < totalSteps; i++) {
-        const barTime = startMs + i * stepMs;
-        // Multi-frequency price action with realistic crypto market volatility dynamics
-        const macroTrend = Math.sin(i * 0.08) * 0.008;
-        const microNoise = Math.cos(i * 0.35) * 0.0035 + (Math.sin(i * 1.1) * 0.002);
-        const impulse = i % 8 === 0 ? (i % 16 === 0 ? 0.004 : -0.0035) : 0;
-        const barReturn = macroTrend + microNoise + impulse;
-
-        const open = prevClose;
-        const close = Number((open * (1 + barReturn)).toFixed(decimals));
-        const high = Number((Math.max(open, close) * (1 + Math.abs(microNoise) * 1.2 + 0.001)).toFixed(decimals));
-        const low = Number((Math.min(open, close) * (1 - Math.abs(microNoise) * 1.2 - 0.001)).toFixed(decimals));
-        const volume = Number((80 + Math.abs(Math.sin(i * 0.25)) * 350).toFixed(2));
-
-        candles.push({
-          timestamp: barTime,
-          open,
-          high,
-          low,
-          close,
-          volume,
-        });
-
-        prevClose = close;
       }
     }
 

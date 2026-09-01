@@ -7,6 +7,10 @@ export default defineConfig({
     env: {
       NODE_ENV: 'test',
       VITEST: 'true',
+      SUPABASE_URL: 'https://test-project.supabase.co',
+      SUPABASE_SERVICE_ROLE_KEY: 'test-service-role-key',
+      SUPABASE_ANON_KEY: 'test-anon-key',
+      OPERATOR_PRIVATE_KEY: '0x0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef',
     },
     include: ['tests/**/*.test.ts'],
     setupFiles: ['tests/setup-vitest.ts'],

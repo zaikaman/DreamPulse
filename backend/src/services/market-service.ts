@@ -168,10 +168,14 @@ export class MarketService extends EventEmitter {
       );
       const binaryMarkets = await Promise.race([fetchMarketsPromise, timeoutPromise]);
 
-      // Filter active markets from the Somnia DreamDEX venues
+      // Filter active markets from the Somnia DreamDEX venues (strictly genuine on-chain markets)
       const targetVenueId = env.DREAMDEX_VENUE_ID.toLowerCase();
       const liveBinaryMarkets = binaryMarkets.filter((m) => {
         if (m.voided) return false;
+        if (!m.marketId || typeof m.marketId !== 'string' || !m.marketId.startsWith('0x') || m.marketId.length !== 66) return false;
+        if (!m.poolAddress || typeof m.poolAddress !== 'string' || !m.poolAddress.startsWith('0x') || m.poolAddress.length !== 42) return false;
+        if (m.poolAddress.toLowerCase() === '0x0000000000000000000000000000000000000000') return false;
+        if (m.poolAddress.toLowerCase() === SOMNIA_ADDRESSES.binaryModule.toLowerCase()) return false;
         if (m.venueId && m.venueId.toLowerCase() === targetVenueId) return true;
         if (m.operatorId === 2 || m.operatorId === 4) return true;
         return false;
@@ -221,7 +225,7 @@ export class MarketService extends EventEmitter {
         }
 
         const spot = this.spotPrices.get(symbol)?.price || 0;
-        const marketId = String(m.marketId || m.id || `${SOMNIA_ADDRESSES.binaryModule}-${m.id}`);
+        const marketId = String(m.marketId);
         discoveredIds.add(marketId);
 
         const existingMarket = this.markets.get(marketId);
@@ -421,13 +425,8 @@ export class MarketService extends EventEmitter {
             const stale = this.markets.get(id);
             if (stale) {
               const closeMs = new Date(stale.closeTimestamp).getTime();
-              const isHexMarket = stale.id.startsWith('0x') && stale.id.length === 66;
               if (Date.now() >= closeMs && stale.status !== 'Finalized') {
-                if (!isHexMarket) {
-                  void this.finalizeRollingMarket(stale, closeMs);
-                } else {
-                  stale.status = 'Resolving';
-                }
+                stale.status = 'Resolving';
               }
               this.archiveHistoricalMarket(stale);
               this.markets.delete(id);
@@ -573,18 +572,10 @@ export class MarketService extends EventEmitter {
       const timeLeftSeconds = Math.max(0, Math.floor((closeTime - now) / 1000));
 
       if (timeLeftSeconds <= 0 && market.status === 'Open') {
-        const isHexMarket = market.id.startsWith('0x') && market.id.length === 66;
-        if (!isHexMarket) {
-          this.markets.delete(id);
-          this.depthBooks.delete(id);
-          expiredCount++;
-          void this.finalizeRollingMarket(market, closeTime);
-        } else {
-          market.status = 'Resolving';
-          void import('./order-service.js').then((mod) => {
-            void mod.orderService.syncResolvedOrdersPnLAsync({ force: true });
-          }).catch(() => {});
-        }
+        market.status = 'Resolving';
+        void import('./order-service.js').then((mod) => {
+          void mod.orderService.syncResolvedOrdersPnLAsync({ force: true });
+        }).catch(() => {});
       } else if (market.status === 'Open') {
         const ticker = this.spotPrices.get(market.symbol);
         const spot = ticker?.price || market.strikePrice;
@@ -619,34 +610,6 @@ export class MarketService extends EventEmitter {
     if (expiredCount > 0) {
       this.emit('markets_expired', { expiredCount, timestamp: now });
     }
-  }
-
-  /**
-   * Finalizes an off-chain/rolling market deterministically using the historical price at exact close timestamp
-   * to avoid outcome flipping if spot price moved in the subsequent minute.
-   */
-  public async finalizeRollingMarket(market: Market, closeMs: number): Promise<void> {
-    market.status = 'Finalized';
-
-    // Deterministically fetch historical price at exact close timestamp
-    let histPrice: number | null = null;
-    try {
-      histPrice = await priceFeedService.getHistoricalPriceAt(market.symbol, closeMs);
-    } catch {
-      histPrice = null;
-    }
-
-    const settlementPrice = histPrice ?? this.spotPrices.get(market.symbol)?.price ?? market.strikePrice;
-    market.settlementPrice = settlementPrice;
-    market.winningOutcome = settlementPrice >= market.strikePrice ? 'YES' : 'NO';
-
-    this.archiveHistoricalMarket(market);
-    await this.persistFinalizedMarket(market).catch(() => {});
-
-    try {
-      const { orderService } = await import('./order-service.js');
-      await orderService.settleOrdersForMarket(market.id, market.winningOutcome, market.settlementPrice);
-    } catch {}
   }
 
   /**

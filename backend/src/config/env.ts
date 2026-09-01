@@ -50,7 +50,7 @@ const envSchema = z.object({
   SOMNIA_WS_URL: z.string().default('wss://api.infra.testnet.somnia.network/ws'),
   INDEXER_URL: z.string().default('https://dev.smk.somnia.host/v1/graphql'),
   SOMNIA_CHAIN_ID: z.string().default('50312').transform((val) => parseInt(val, 10)),
-  OPERATOR_PRIVATE_KEY: z.string().default('0x0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef'),
+  OPERATOR_PRIVATE_KEY: z.string().regex(/^0x[a-fA-F0-9]{64}$/, 'OPERATOR_PRIVATE_KEY must be a valid 0x-prefixed 32-byte hex string'),
 
   // Autonomous Swarm & Execution Control
   ENABLE_SWARM_RUNNER: z.preprocess((val) => {
@@ -84,7 +84,7 @@ export const env = envSchema.parse({
   SOMNIA_RPC_URL: process.env.SOMNIA_RPC_URL || process.env.RPC_URL || 'https://api.infra.testnet.somnia.network',
   SOMNIA_WS_URL: process.env.SOMNIA_WS_URL || process.env.WS_RPC_URL || 'wss://api.infra.testnet.somnia.network/ws',
   INDEXER_URL: process.env.INDEXER_URL || 'https://dev.smk.somnia.host/v1/graphql',
-  OPERATOR_PRIVATE_KEY: process.env.OPERATOR_PRIVATE_KEY || process.env.PRIVATE_KEY || '0x0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef',
+  OPERATOR_PRIVATE_KEY: process.env.OPERATOR_PRIVATE_KEY || process.env.PRIVATE_KEY,
   GROQ_KEYS: finalGroqKeys,
 });
 

@@ -5,8 +5,9 @@ import { sessionService } from '../src/services/session-service.js';
 import { orderService } from '../src/services/order-service.js';
 import { marketService } from '../src/services/market-service.js';
 import { socialCopyService } from '../src/services/social-copy-service.js';
-import { operatorAccount } from '../src/config/somnia.js';
+import { operatorAccount, somniaExchange } from '../src/config/somnia.js';
 import type { Market } from '../src/types/index.js';
+import type { Address, Hex } from 'viem';
 
 describe('Social Forecaster Mirror Trading', () => {
   const forecasterAddress = '0x327e766EB317e5A3FA6dB30c0A5b9735Ad1aEdae';
@@ -17,11 +18,13 @@ describe('Social Forecaster Mirror Trading', () => {
     // Clear in-memory caches
     orderService.clearCache();
 
-    // Register active mock market
+    // Register active mock onchain market
     const now = Date.now();
+    const marketIdHex = '0x1111111111111111111111111111111111111111111111111111111111111111' as Hex;
     const market: Market = {
-      id: `0xmarket_social_${Date.now()}`,
-      marketIdHex: '0x0000000000000000000000000000000000000000',
+      id: marketIdHex,
+      marketIdHex,
+      poolAddress: '0x2222222222222222222222222222222222222222' as Address,
       symbol: 'BTC/USD',
       strikePrice: 95000,
       windowDuration: '5m',
@@ -39,6 +42,25 @@ describe('Social Forecaster Mirror Trading', () => {
     };
     (marketService as any).markets.set(market.id, market);
     mockMarketId = market.id;
+
+    vi.spyOn(somniaExchange.client, 'getMarketOnchain').mockResolvedValue({
+      pool: '0x2222222222222222222222222222222222222222' as Address,
+      status: 1, // Trading
+      expiry: BigInt(Math.floor(Date.now() / 1000) + 300),
+      outcomeToken: '0x3333333333333333333333333333333333333333' as Address,
+      yesId: 1n,
+      noId: 2n,
+      collateral: '0x70a86D8842FB63C4Ad2b7cdddF530eBf1BB25d8E' as Address,
+    } as any);
+
+    vi.spyOn(somniaExchange.trader, 'placeOrder').mockImplementation(async (params: any) => {
+      return {
+        hash: '0x1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef',
+        orderId: 101n,
+        fills: [{ quantityFilled: params.quantity }],
+        receipt: { status: 'success' },
+      } as any;
+    });
 
     // Register active session for Copier
     await sessionService.registerSession({

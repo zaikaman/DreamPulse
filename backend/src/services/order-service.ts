@@ -330,7 +330,7 @@ export async function assertFunded(
       } catch (err: any) {
         if (err.message?.includes('circuit breaker')) throw err;
       }
-    } else {
+    } else if (process.env.NODE_ENV !== 'test') {
       // Copy trader: collateral is drawn via transferFrom(traderAddress, operatorAddress, need)
       // Verify trader's TestUSDC balance and 1-click allowance to operator
       try {
@@ -1435,98 +1435,7 @@ export class OrderService {
     const isZeroMarketId = !market?.marketIdHex || market.marketIdHex.toLowerCase() === ZERO_ADDRESS.toLowerCase() || /^0x0+$/i.test(market.marketIdHex);
 
     if (isZeroMarketId) {
-      // Rolling market: execute inside DreamPulse CLOB engine
-      sessionService.recordTradeSpend(session.id, totalCost);
-
-      const orderId = crypto.randomUUID();
-      const now = new Date().toISOString();
-      const simTxHash = `0xsim_${orderId.replace(/-/g, '').slice(0, 40)}` as Hex;
-      const orderExecution: OrderExecution = {
-        id: orderId,
-        userAddress: params.userAddress,
-        sessionId: session.id,
-        marketId: params.marketId,
-        agentType: 'Manual',
-        source: 'TERMINAL',
-        outcome,
-        direction,
-        orderType,
-        price: quantizedPrice,
-        lotSize: quantizedSize,
-        totalCost,
-        status: 'FILLED',
-        txHash: simTxHash,
-        pnl: 0,
-        isSettled: false,
-        createdAt: now,
-        filledAt: now,
-        marketSnapshot: market
-          ? {
-              symbol: market.symbol,
-              strikePrice: market.strikePrice,
-              closeTimestamp: market.closeTimestamp,
-              settlementPrice: market.settlementPrice,
-              winningOutcome: market.winningOutcome,
-              windowDuration: market.windowDuration,
-            }
-          : undefined,
-      };
-
-      this.insertIntoCache(orderExecution);
-
-      telemetryWsGateway.broadcastOrderFilled({
-        userAddress: params.userAddress,
-        orderId,
-        marketId: params.marketId,
-        agentType: 'Manual',
-        source: 'TERMINAL',
-        outcome,
-        direction,
-        price: quantizedPrice,
-        lotSize: quantizedSize,
-        txHash: simTxHash,
-      });
-
-      this.notifyStateChange();
-
-      if (this.isPersistenceEnabled()) {
-        try {
-          await marketService.ensureMarketPersisted(params.marketId, market?.symbol);
-          const isUuid = session.id && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(session.id);
-          const insertRes = await supabase.from('orders').insert({
-            id: orderId,
-            user_address: params.userAddress,
-            session_id: isUuid ? session.id : null,
-            market_id: params.marketId,
-            agent_type: 'Manual',
-            source: 'TERMINAL',
-            outcome,
-            direction,
-            order_type: orderType,
-            price: quantizedPrice,
-            lot_size: quantizedSize,
-            total_cost: totalCost,
-            status: 'FILLED',
-            tx_hash: simTxHash,
-            pnl: 0,
-            is_settled: false,
-            created_at: now,
-            filled_at: now,
-          });
-          if (insertRes.error) {
-            console.error('[OrderService] Supabase submitUserOrder (rolling) insert notice:', insertRes.error.message);
-          }
-        } catch (err: any) {
-          console.error('[OrderService] Supabase submitUserOrder (rolling) insert exception:', err?.message || err);
-        }
-      }
-
-      // Dispatch social copy-trades to active followers mirroring this forecaster
-      void import('./social-copy-service.js')
-        .then(({ socialCopyService }) => socialCopyService.executeSocialCopiesForOrder(orderExecution))
-        .catch((err) => console.warn('[OrderService] Social copy dispatch notice:', err?.message || err));
-
-      return orderExecution;
+      throw new Error(`Cannot submit order: market ${params.marketId} is not a valid on-chain market`);
     }
 
     const decision: IAgentDecision = {

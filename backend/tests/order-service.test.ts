@@ -2,45 +2,51 @@ import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { OrderService, orderService } from '../src/services/order-service.js';
 import { marketService } from '../src/services/market-service.js';
 import { sessionService } from '../src/services/session-service.js';
-import { SOMNIA_ADDRESSES, operatorAccount } from '../src/config/somnia.js';
-import type { IAgentDecision } from '../agents/base-agent.js';
-import type { Market, OrderExecution, SessionGrant } from '../types/index.js';
+import { operatorAccount } from '../src/config/somnia.js';
+import type { IAgentDecision } from '../src/agents/base-agent.js';
+import type { Market, SessionGrant } from '../src/types/index.js';
+import type { SessionRecord } from '../src/services/session-service.js';
+import type { Address, Hex } from 'viem';
 
 describe('OrderService Comprehensive Suite', () => {
   let service: OrderService;
   const userAddress = operatorAccount.address;
 
-  const mockSession: SessionGrant = {
+  const mockSession: SessionRecord & SessionGrant = {
     id: 'sess-12345678',
-    userAddress,
+    userAddress: userAddress as Address,
     operatorAddress: operatorAccount.address,
     permissions: ['placeOrderFor', 'cancelOrderFor'],
     maxTradeSize: 100,
     dailyVolumeCap: 1000,
     spentToday: 0,
+    lastSpendResetTimestamp: Date.now(),
     expiresAt: new Date(Date.now() + 3600000).toISOString(),
     isActive: true,
+    nonce: 1,
+    signature: ('0x' + 'a'.repeat(130)) as Hex,
     createdAt: new Date().toISOString(),
-    signature: '0x' + 'a'.repeat(130),
-    rawSignedData: '{}',
+    updatedAt: new Date().toISOString(),
   };
 
   const mockMarket: Market = {
-    id: 'market-btc-up-5m-1',
+    id: '0x1111111111111111111111111111111111111111111111111111111111111111',
+    marketIdHex: '0x1111111111111111111111111111111111111111111111111111111111111111',
+    poolAddress: '0x2222222222222222222222222222222222222222',
     symbol: 'BTC/USD',
     windowDuration: '5m',
     strikePrice: 96000,
     openTimestamp: new Date(Date.now() - 60000).toISOString(),
     closeTimestamp: new Date(Date.now() + 240000).toISOString(),
+    resolutionTimestamp: new Date(Date.now() + 300000).toISOString(),
     status: 'Open',
     bestBidYes: 0.48,
     bestAskYes: 0.52,
     bestBidNo: 0.48,
     bestAskNo: 0.52,
+    impliedProbYes: 0.50,
     fairValueYes: 0.55,
     edgePercentage: 0.05,
-    volume: 15000,
-    tradeCount: 45,
   };
 
   beforeEach(() => {
@@ -75,7 +81,7 @@ describe('OrderService Comprehensive Suite', () => {
 
   it('executes agent decision for canonical swarm runner and creates order record', async () => {
     const decision: IAgentDecision = {
-      agentType: 'VOLT_SNIPER',
+      agentType: 'Volt',
       targetMarketId: mockMarket.id,
       action: 'TAKER_BUY',
       targetOutcome: 'YES',
@@ -87,7 +93,7 @@ describe('OrderService Comprehensive Suite', () => {
 
     const order = await service.executeAgentDecision(decision, mockSession);
     if (order) {
-      expect(order.agentType).toBe('VOLT_SNIPER');
+      expect(order.agentType).toBe('Volt');
       expect(order.source).toBe('SWARM');
       expect(order.lotSize).toBe(2.0);
     }
@@ -95,7 +101,7 @@ describe('OrderService Comprehensive Suite', () => {
 
   it('returns null when agent decision has HOLD action', async () => {
     const holdDecision: IAgentDecision = {
-      agentType: 'TITAN_MM',
+      agentType: 'Titan',
       targetMarketId: mockMarket.id,
       action: 'HOLD',
       rationale: 'No edge found',
@@ -115,6 +121,7 @@ describe('OrderService Comprehensive Suite', () => {
       orderType: 'LIMIT',
       price: 0.50,
       lotSize: 1.0,
+      txHash: '0x1111111111111111111111111111111111111111111111111111111111111111',
     });
 
     await service.submitUserOrder({
@@ -125,6 +132,7 @@ describe('OrderService Comprehensive Suite', () => {
       orderType: 'LIMIT',
       price: 0.45,
       lotSize: 3.0,
+      txHash: '0x2222222222222222222222222222222222222222222222222222222222222222',
     });
 
     const allOrders = service.getOrders();
@@ -146,6 +154,7 @@ describe('OrderService Comprehensive Suite', () => {
       orderType: 'LIMIT',
       price: 0.40,
       lotSize: 10.0,
+      txHash: '0x3333333333333333333333333333333333333333333333333333333333333333',
     });
 
     const orderLost = await service.submitUserOrder({
@@ -155,6 +164,7 @@ describe('OrderService Comprehensive Suite', () => {
       orderType: 'LIMIT',
       price: 0.60,
       lotSize: 10.0,
+      txHash: '0x4444444444444444444444444444444444444444444444444444444444444444',
     });
 
     // Settle orders for market
@@ -178,9 +188,10 @@ describe('OrderService Comprehensive Suite', () => {
       orderType: 'LIMIT',
       price: 0.45,
       lotSize: 10.0,
+      txHash: '0x5555555555555555555555555555555555555555555555555555555555555555',
     });
 
-    const count = service.getActivePositionCount(mockMarket.id, userAddress);
+    const count = service.getActivePositionCount(undefined, userAddress);
     expect(typeof count).toBe('number');
 
     const pnl = await service.getTotalRealizedPnlAsync(undefined, userAddress);
