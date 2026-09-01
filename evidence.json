@@ -1,0 +1,131 @@
+{
+  "project": "DreamPulse AI",
+  "version": "1.0.0",
+  "network": {
+    "name": "Somnia Shannon Testnet",
+    "chainId": 50312,
+    "rpcUrl": "https://dream-rpc.somnia.network",
+    "explorerUrl": "https://shannon-explorer.somnia.network"
+  },
+  "contracts": {
+    "batchApprove": "0x12c9c45fa740ce7469dacff368b08ca7edcaac26",
+    "operatorPermissionsRegistry": "0x15C7e8CE38F021c5b45d098AaD788f63090bF20A",
+    "binaryModule": "0x3ecC694Cef705358864a646142ac17A90E29e388",
+    "marketsCore": "0x2802504314685D89bF6C992CA5a8e7cC78bc0294",
+    "clobFactory": "0xb2BE8EE02F96379DB75f01802384593EBa9bfF04",
+    "binarySettlement": "0xbF4a49e0Dfd092e5FBE8E5761064C49533e6Ed23",
+    "collateralRouter": "0xbC0C9834B15ACE38bB50dDaa7d7f7C7CC4DC183C",
+    "oracleHub": "0xe40db387cC98601Dd11bd634fF2f3AD5686dE32b",
+    "testUsdc": "0x70a86D8842FB63C4Ad2b7cdddF530eBf1BB25d8E",
+    "canonicalOperator": "0x93e300607c363E7D7a47e50f5c9fDf1723e859Cf"
+  },
+  "verificationSuite": {
+    "totalTests": 239,
+    "testSuites": 23,
+    "passingRate": "100%",
+    "zeroAnyTypes": true,
+    "runner": "Vitest v3.2.7"
+  },
+  "proofTrails": {
+    "autonomousSwarmIocFlow": {
+      "name": "Path A: Autonomous Swarm Execution (Sub-Second IOC Taker)",
+      "description": "Autonomous quantitative agent detects probability mispricing and executes an Immediate-Or-Cancel (IOC) taker order on the Somnia CLOB, followed by automated settlement sweeping upon contract resolution.",
+      "delegation": {
+        "userAddress": "0x46cC04De981E603958e4612f877D72427c5b6544",
+        "sessionId": "6e72fe0c-1e91-4a0b-96d4-03ccaedf7d67",
+        "operatorAddress": "0x93e300607c363E7D7a47e50f5c9fDf1723e859Cf",
+        "nonce": 6,
+        "onChainAuthorized": true,
+        "delegationTxHash": "0xab2191086f101982e592e0fdd935f9a340db890b138f444cb2f99228a228d4aa",
+        "delegationExplorerUrl": "https://shannon-explorer.somnia.network/tx/0xab2191086f101982e592e0fdd935f9a340db890b138f444cb2f99228a228d4aa",
+        "riskCeilings": {
+          "maxTradeSize": "1000000000 tUSDC",
+          "dailyVolumeCap": "1000000000 tUSDC",
+          "withdrawalPrivileges": "NONE"
+        }
+      },
+      "reasoning": {
+        "agentType": "Oracle",
+        "model": "Groq Qwen 2.5 (qwen/qwen3.6-27b)",
+        "strategy": "Black-Scholes Volatility Surface Arbitrage",
+        "targetMarketId": "0x0000000000000000000000000000000000000000000000000000000000010502",
+        "marketSequenceNumber": 66818,
+        "symbol": "BTC/USD 5m",
+        "rationale": "Closed-form Gaussian CDF Φ(z) priced theoretical probability at 68.2% vs resting CLOB ask price of 50.5c. Net edge exceeds required margin of safety (+17.7%)."
+      },
+      "orderExecution": {
+        "orderId": "ae9f1f48-08cd-4a35-89c7-df49103b1039",
+        "source": "SWARM",
+        "orderType": "IOC",
+        "direction": "BUY",
+        "outcome": "YES",
+        "price": 0.505,
+        "lotSize": 4,
+        "totalCost": 2.02,
+        "status": "FILLED",
+        "orderTxHash": "0x8fcdd64ca37614976f2d3d38a4f676bf3c2f82fd9e57d0a066f48f0dd7262c69",
+        "orderExplorerUrl": "https://shannon-explorer.somnia.network/tx/0x8fcdd64ca37614976f2d3d38a4f676bf3c2f82fd9e57d0a066f48f0dd7262c69",
+        "executedAt": "2026-09-01T16:45:21.371Z"
+      },
+      "settlementRedemption": {
+        "sweepId": "be29a882-50f4-4be5-ae2b-c2a1e8f33f73",
+        "resolvedOutcome": "YES",
+        "payoutAmount": 4.0,
+        "realizedNetPnl": 1.98,
+        "payoutToken": "tUSDC",
+        "isCompounded": false,
+        "claimStatus": "CONFIRMED",
+        "settlementTxHash": "0x8fcdd64ca37614976f2d3d38a4f676bf3c2f82fd9e57d0a066f48f0dd7262c69",
+        "settlementExplorerUrl": "https://shannon-explorer.somnia.network/tx/0x8fcdd64ca37614976f2d3d38a4f676bf3c2f82fd9e57d0a066f48f0dd7262c69",
+        "settledAt": "2026-09-01T16:50:15.169Z"
+      },
+      "uiImpact": {
+        "websocketEvent": "sweep_completed",
+        "equityCurveDelta": "+1.98 tUSDC",
+        "soundChimeTriggered": true,
+        "arenaLeaderboardUpdate": "Rank and Sharpe ratio recalculated in real time"
+      }
+    },
+    "manualTerminalLimitFlow": {
+      "name": "Path B: Interactive Pro Trade Terminal Execution (Resting LIMIT Maker)",
+      "description": "Human forecaster interacts directly with the CLOB Trade Terminal, selects a price level on the depth ladder, and places a resting LIMIT maker order signed by the user wallet.",
+      "user": {
+        "userAddress": "0x46cC04De981E603958e4612f877D72427c5b6544"
+      },
+      "intent": {
+        "terminalView": "TradeTerminalView",
+        "targetMarketId": "0x00000000000000000000000000000000000000000000000000000000000104dc",
+        "marketSequenceNumber": 66780,
+        "symbol": "BTC/USD 5m",
+        "inputSource": "1-Click Depth Ladder Autofill + Custom Size Preset"
+      },
+      "orderExecution": {
+        "orderId": "14a127ab-b51f-4aa3-aa14-38052e6018ff",
+        "source": "TERMINAL",
+        "agentType": "Manual",
+        "orderType": "LIMIT",
+        "direction": "BUY",
+        "outcome": "YES",
+        "price": 0.11,
+        "lotSize": 454,
+        "totalCost": 49.94,
+        "status": "FILLED",
+        "orderTxHash": "0x2d3ea83abf4d83a6f473059bdb53a90d54ec3a84332906b9c1da67f1f7523fff",
+        "orderExplorerUrl": "https://shannon-explorer.somnia.network/tx/0x2d3ea83abf4d83a6f473059bdb53a90d54ec3a84332906b9c1da67f1f7523fff",
+        "placedAt": "2026-09-01T16:34:26.011Z",
+        "filledAt": "2026-09-01T16:34:26.011Z"
+      },
+      "lifecycleResolution": {
+        "isSettled": true,
+        "settledAt": "2026-09-01T16:35:05.431Z",
+        "pnl": -49.94,
+        "reconciliation": "Order fully reconciled into Forecaster Trading History and Arena equity curve"
+      },
+      "uiImpact": {
+        "depthLadderReflect": "Resting liquidity added to YES bid ladder before fill",
+        "orderBookBroadcast": "WebSocket channel 'order_book' updated with new depth levels",
+        "toastNotification": "Order executed and logged with txHash link to Somnia Explorer"
+      }
+    }
+  }
+}
