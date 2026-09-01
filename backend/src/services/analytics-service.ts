@@ -485,19 +485,20 @@ export class AnalyticsService {
   private async tryLoadDailyPnl(
     normalizedUser: string,
     range: AnalyticsRange,
-    cutoffMs: number
+    cutoffMs: number,
+    source: 'ALL' | 'SWARM' | 'TERMINAL' = 'ALL',
   ): Promise<{ equity: EquityPoint[]; daily: DailyBar[]; ledger: LedgerRow[] } | null> {
     if (!AnalyticsService.USE_DAILY_PNL) return null;
     if (process.env.VITEST === 'true' || process.env.NODE_ENV === 'test') return null;
     const url = process.env.SUPABASE_URL || '';
     if (!url || url.includes('mock-project')) return null;
     try {
-      const cutoffDate = new Date(cutoffMs).toISOString().slice(0, 10); // YYYY-MM-DD
+      const cutoffDate = cutoffMs > 0 ? new Date(cutoffMs).toISOString().slice(0, 10) : '1970-01-01'; // YYYY-MM-DD
       const { data, error } = await supabase
         .from('daily_pnl')
         .select('*')
         .eq('user_address', normalizedUser)
-        .eq('source', 'ALL')
+        .eq('source', source)
         .gte('day', cutoffDate)
         .order('day', { ascending: true });
       if (error || !data || data.length === 0) return null;
@@ -555,25 +556,61 @@ export class AnalyticsService {
     const computeAnalytics = async (): Promise<AnalyticsResponse> => {
       const isOperator = normalizedUser ? normalizedUser === operatorAccount.address.toLowerCase() : false;
       const cutoffMs = getRangeCutoff(range);
-
-      // Fetch orders — use DB-aware async that includes evicted history when cache is capped (issue #13)
-      const allOrders: OrderExecution[] = await (orderService as any).getOrdersAsync
-        ? await (orderService as any).getOrdersAsync({ limit: undefined } as any)
-        : orderService.getOrders({ limit: undefined } as any);
-
-      // Single partition pass instead of 3 separate filters
       const operatorLower = operatorAccount.address.toLowerCase();
+      const targetUser = normalizedUser || operatorLower;
+
+      // Targeted order fetching: partition in-memory orders first
       let userOrders: OrderExecution[] = [];
       let operatorOrders: OrderExecution[] = [];
-      if (normalizedUser) {
-        for (const o of allOrders) {
-          const lower = o.userAddress ? o.userAddress.toLowerCase() : '';
-          if (lower === normalizedUser) userOrders.push(o);
-          if (lower === operatorLower) operatorOrders.push(o);
+
+      const memOrders: OrderExecution[] = typeof orderService.getOrders === 'function' ? orderService.getOrders() : [];
+      for (const o of memOrders) {
+        const lower = o.userAddress ? o.userAddress.toLowerCase() : '';
+        if (normalizedUser && lower === normalizedUser) userOrders.push(o);
+        if (lower === operatorLower) operatorOrders.push(o);
+      }
+
+      // If persistence enabled, query DB scoped specifically to userAddress / operatorAddress (indexed) instead of scanning all 5000+ orders
+      if (typeof (orderService as any).isPersistenceEnabled === 'function' && (orderService as any).isPersistenceEnabled()) {
+        const dbTasks: Promise<void>[] = [];
+        if (normalizedUser && userOrders.length === 0) {
+          dbTasks.push(
+            (async () => {
+              try {
+                const dbUser = await (orderService as any).getOrdersAsync({ userAddress: normalizedUser });
+                if (Array.isArray(dbUser) && dbUser.length > 0) {
+                  const seen = new Set(userOrders.map((o) => o.id));
+                  for (const o of dbUser) {
+                    if (!seen.has(o.id)) {
+                      userOrders.push(o);
+                      seen.add(o.id);
+                    }
+                  }
+                }
+              } catch {}
+            })()
+          );
         }
-      } else {
-        for (const o of allOrders) {
-          if (o.userAddress && o.userAddress.toLowerCase() === operatorLower) operatorOrders.push(o);
+        if (operatorOrders.length === 0) {
+          dbTasks.push(
+            (async () => {
+              try {
+                const dbOp = await (orderService as any).getOrdersAsync({ userAddress: operatorLower });
+                if (Array.isArray(dbOp) && dbOp.length > 0) {
+                  const seen = new Set(operatorOrders.map((o) => o.id));
+                  for (const o of dbOp) {
+                    if (!seen.has(o.id)) {
+                      operatorOrders.push(o);
+                      seen.add(o.id);
+                    }
+                  }
+                }
+              } catch {}
+            })()
+          );
+        }
+        if (dbTasks.length > 0) {
+          await Promise.all(dbTasks);
         }
       }
 
@@ -599,10 +636,28 @@ export class AnalyticsService {
         else swarmOrdersAll.push(o);
       }
 
+      // Load pre-aggregated daily_pnl in parallel for instant O(1) indexed curves
+      const [primaryDailyPnl, swarmDailyPnl, terminalDailyPnl] = await Promise.all([
+        this.tryLoadDailyPnl(targetUser, range, cutoffMs, source),
+        normalizedUser && normalizedUser !== operatorLower
+          ? this.tryLoadDailyPnl(operatorLower, range, cutoffMs, 'ALL')
+          : Promise.resolve(null),
+        source === 'ALL'
+          ? this.tryLoadDailyPnl(targetUser, range, cutoffMs, 'TERMINAL')
+          : Promise.resolve(null),
+      ]);
+
       const primaryComputed = computeEquityAndDaily(primaryOrders, cutoffMs);
       const swarmComputed = computeEquityAndDaily(operatorOrders, cutoffMs);
       const terminalComputed = computeEquityAndDaily(terminalOrdersAll, cutoffMs);
       const swarmUserComputed = computeEquityAndDaily(swarmOrdersAll, cutoffMs);
+
+      // Use pre-aggregated curves if available, with computed curves as fallback
+      const finalEquity = primaryDailyPnl?.equity ?? primaryComputed.equity;
+      const finalDaily = primaryDailyPnl?.daily ?? primaryComputed.daily;
+      const finalLedger = primaryDailyPnl?.ledger ?? primaryComputed.ledger;
+      const finalTerminalEquity = terminalDailyPnl?.equity ?? terminalComputed.equity;
+      const finalSwarmEquity = swarmDailyPnl?.equity ?? swarmComputed.equity;
 
       // Enrich summary with on-chain unclaimed + claimed
       let unclaimedPnl = 0;
@@ -650,16 +705,16 @@ export class AnalyticsService {
         terminalSummary: terminalComputed.summary,
         swarmSummary: swarmUserComputed.summary,
         sourceBreakdown,
-        equityCurve: primaryComputed.equity,
-        terminalEquityCurve: terminalComputed.equity,
-        swarmEquityCurve: swarmComputed.equity,
-        dailyBars: primaryComputed.daily,
+        equityCurve: finalEquity,
+        terminalEquityCurve: finalTerminalEquity,
+        swarmEquityCurve: finalSwarmEquity,
+        dailyBars: finalDaily,
         agentBreakdown,
         swarmAgentBreakdown,
         outcomeBreakdown,
         symbolBreakdown,
         windowBreakdown,
-        ledger: primaryComputed.ledger,
+        ledger: finalLedger,
         recentTrades,
       };
 

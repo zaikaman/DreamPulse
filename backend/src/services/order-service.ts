@@ -2563,6 +2563,7 @@ export class OrderService {
 
           void import('./settlement-service.js').then((m) => m.settlementService.invalidateCache()).catch(() => {});
           void import('./analytics-service.js').then((m) => m.analyticsService.invalidateCache()).catch(() => {});
+          void import('./leaderboard-service.js').then((m) => m.leaderboardService.invalidateCache()).catch(() => {});
 
           // Autonomously trigger instant settlement sweeps for winning users (Trade Terminal & personal swarms)
           const winningUserAddresses = new Set<string>();

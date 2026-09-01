@@ -211,6 +211,14 @@ export function isExcludedArenaAddress(address?: string | null): boolean {
 export class LeaderboardService {
   private static instance: LeaderboardService;
 
+  private agentLeaderboardCache = new Map<string, { data: { count: number; data: ArenaAgentEntry[] }; expiresAt: number }>();
+  private inFlightAgentLeaderboard = new Map<string, Promise<{ count: number; data: ArenaAgentEntry[] }>>();
+  private traderLeaderboardCache = new Map<string, { data: { count: number; data: ArenaTraderEntry[] }; expiresAt: number }>();
+  private inFlightTraderLeaderboard = new Map<string, Promise<{ count: number; data: ArenaTraderEntry[] }>>();
+  private arenaStatsCache: { data: ArenaGlobalStats; expiresAt: number } | null = null;
+  private inFlightArenaStats: Promise<ArenaGlobalStats> | null = null;
+  private static readonly LEADERBOARD_TTL_MS = 15_000;
+
   private constructor() {}
 
   public static getInstance(): LeaderboardService {
@@ -218,6 +226,12 @@ export class LeaderboardService {
       LeaderboardService.instance = new LeaderboardService();
     }
     return LeaderboardService.instance;
+  }
+
+  public invalidateCache(): void {
+    this.agentLeaderboardCache.clear();
+    this.traderLeaderboardCache.clear();
+    this.arenaStatsCache = null;
   }
 
   /**
@@ -427,307 +441,369 @@ export class LeaderboardService {
     const sortBy = params.sortBy || 'pnl';
     const query = (params.searchQuery || '').trim().toLowerCase();
 
-    // 1. Timeframe cutoff calculation
-    const now = Date.now();
-    const timeCutoffs: Record<string, number> = {
-      '24h': 24 * 60 * 60 * 1000,
-      '7d': 7 * 24 * 60 * 60 * 1000,
-      '30d': 30 * 24 * 60 * 60 * 1000,
-    };
-    const cutoffMs = timeCutoffs[tf] ? now - timeCutoffs[tf] : 0;
+    const cacheKey = `${tf}:${symbolFilter}:${strategyFilter}:${sortBy}:${query}`;
+    const nowMs = Date.now();
 
-    // 2. Fetch real orders and custom agents — DB-backed for accuracy (fixes #14: in-memory was capped at 1000 by PostgREST, missing history)
-    // Use async hybrid fetch to get full history (up to 10k) for correct PnL; in-memory alone was incomplete and caused cockpit vs arena divergence.
-    // In test mode, falls back to in-memory injected orders.
-    const allOrders = await orderService.getOrdersAsync({});
-    let allCustomAgents: CustomAgentDefinition[];
-    const useDbLimit = !query && symbolFilter === 'ALL' && strategyFilter === 'ALL' && sortBy === 'pnl';
-    if (useDbLimit) {
-      try {
-        allCustomAgents = await customAgentService.getTopCustomAgents(80); // fetch 80 to allow tradesCount>0 filtering to still yield 50
-      } catch {
-        allCustomAgents = await customAgentService.getAllCustomAgents();
-      }
-    } else {
-      allCustomAgents = await customAgentService.getAllCustomAgents();
-      // Cap to top 100 by stored PnL before heavy compute to prevent timeout on filtered views with 500+ agents
-      if (allCustomAgents.length > 150) {
-        allCustomAgents.sort((a, b) => (b.pnl ?? 0) - (a.pnl ?? 0));
-        allCustomAgents = allCustomAgents.slice(0, 100);
-      }
+    const cached = this.agentLeaderboardCache.get(cacheKey);
+    if (cached && nowMs < cached.expiresAt) {
+      return cached.data;
+    }
+    const inFlight = this.inFlightAgentLeaderboard.get(cacheKey);
+    if (inFlight) {
+      return inFlight;
     }
 
-    // 3. Compute real metrics for Protocol Archetypes
-    const archetypeEntries: Array<Omit<ArenaAgentEntry, 'rank' | 'tierBadge'>> = PROTOCOL_SWARM_ARCHETYPES.map((arch) => {
-      const archOrders = allOrders.filter((o) => o.agentType === arch.agentType);
-      const metrics = this.computePerformanceMetrics(archOrders, cutoffMs, arch.allocatedAllowance);
-
-      // Real clone count: how many custom agents were cloned from this archetype
-      const keyword = arch.name.split(' ')[0].toLowerCase();
-      const clonesCount = allCustomAgents.filter(
-        (ca) => ca.name.toLowerCase().includes(keyword) || ca.description?.toLowerCase().includes(keyword)
-      ).length;
-
-      return {
-        id: arch.id,
-        name: arch.name,
-        description: arch.description,
-        creatorAddress: arch.creatorAddress,
-        creatorName: arch.creatorName,
-        isProtocolArchetype: true,
-        symbol: arch.symbol,
-        timeframe: arch.timeframe,
-        strategyType: arch.strategyType,
-        color: arch.color,
-        icon: arch.icon,
-        ...metrics,
-        allocatedAllowance: arch.allocatedAllowance,
-        clonesCount,
-        copiersCount: Math.max(0, Math.floor(clonesCount * 0.6)),
-        tags: arch.tags,
-        rulesSummary: arch.rulesSummary,
-        isActive: true,
-        isDeployed: true,
-        createdAt: arch.createdAt,
+    const compute = async (): Promise<{ count: number; data: ArenaAgentEntry[] }> => {
+      // 1. Timeframe cutoff calculation
+      const now = Date.now();
+      const timeCutoffs: Record<string, number> = {
+        '24h': 24 * 60 * 60 * 1000,
+        '7d': 7 * 24 * 60 * 60 * 1000,
+        '30d': 30 * 24 * 60 * 60 * 1000,
       };
-    });
+      const cutoffMs = timeCutoffs[tf] ? now - timeCutoffs[tf] : 0;
 
-    // 4. Compute real metrics for Custom Agents & Templates
-    // Attribution: prefer explicit customAgentId (accurate per-agent isolation). For
-    // historical orders lacking that column (pre-014), fall back to symbol+window
-    // matching but deduplicate so an order is counted only once (prevents 5m orders
-    // being double-counted across multiple 5m agents with same symbol).
-    const assignedOrderIds = new Set<string>();
-    // Sort agents by stored pnl descending so ambiguous fallback orders are
-    // preferentially assigned to higher-ranked agents (deterministic)
-    const sortedForAttribution = [...allCustomAgents].sort((a, b) => (b.pnl ?? 0) - (a.pnl ?? 0));
-    const agentOrdersMap = new Map<string, OrderExecution[]>();
-    for (const agent of sortedForAttribution) {
-      const agentSym = (agent.symbol || 'BTC/USD').toUpperCase();
-      const agentTf = (agent.timeframe || '5m').toLowerCase();
-      const agentAddr = agent.userAddress?.toLowerCase();
-      const matched: OrderExecution[] = [];
+      // 2. Fetch real orders and custom agents — DB-backed for accuracy
+      const allOrders = await orderService.getOrdersAsync({});
+      let allCustomAgents: CustomAgentDefinition[];
+      const useDbLimit = !query && symbolFilter === 'ALL' && strategyFilter === 'ALL' && sortBy === 'pnl';
+      if (useDbLimit) {
+        try {
+          allCustomAgents = await customAgentService.getTopCustomAgents(80);
+        } catch {
+          allCustomAgents = await customAgentService.getAllCustomAgents();
+        }
+      } else {
+        allCustomAgents = await customAgentService.getAllCustomAgents();
+        if (allCustomAgents.length > 150) {
+          allCustomAgents.sort((a, b) => (b.pnl ?? 0) - (a.pnl ?? 0));
+          allCustomAgents = allCustomAgents.slice(0, 100);
+        }
+      }
+
+      // 3. Compute real metrics for Protocol Archetypes
+      const archetypeEntries: Array<Omit<ArenaAgentEntry, 'rank' | 'tierBadge'>> = PROTOCOL_SWARM_ARCHETYPES.map((arch) => {
+        const archOrders = allOrders.filter((o) => o.agentType === arch.agentType);
+        const metrics = this.computePerformanceMetrics(archOrders, cutoffMs, arch.allocatedAllowance);
+
+        const keyword = arch.name.split(' ')[0].toLowerCase();
+        const clonesCount = allCustomAgents.filter(
+          (ca) => ca.name.toLowerCase().includes(keyword) || ca.description?.toLowerCase().includes(keyword)
+        ).length;
+
+        return {
+          id: arch.id,
+          name: arch.name,
+          description: arch.description,
+          creatorAddress: arch.creatorAddress,
+          creatorName: arch.creatorName,
+          isProtocolArchetype: true,
+          symbol: arch.symbol,
+          timeframe: arch.timeframe,
+          strategyType: arch.strategyType,
+          color: arch.color,
+          icon: arch.icon,
+          ...metrics,
+          allocatedAllowance: arch.allocatedAllowance,
+          clonesCount,
+          copiersCount: Math.max(0, Math.floor(clonesCount * 0.6)),
+          tags: arch.tags,
+          rulesSummary: arch.rulesSummary,
+          isActive: true,
+          isDeployed: true,
+          createdAt: arch.createdAt,
+        };
+      });
+
+      // 4. Compute real metrics for Custom Agents & Templates via O(N + M) indexed map lookups
+      const assignedOrderIds = new Set<string>();
+      const sortedForAttribution = [...allCustomAgents].sort((a, b) => (b.pnl ?? 0) - (a.pnl ?? 0));
+
+      // Build single-pass O(1) lookup indexes over allOrders
+      const ordersByCustomAgentId = new Map<string, OrderExecution[]>();
+      const ordersBySessionId = new Map<string, OrderExecution[]>();
+      const fallbackOrdersByUser = new Map<string, OrderExecution[]>();
+
       for (const o of allOrders) {
-        if (assignedOrderIds.has(o.id)) continue;
-        let belongs = false;
         if (o.customAgentId) {
-          belongs = o.customAgentId === agent.id;
-        } else if (o.sessionId && o.sessionId === agent.id) {
-          belongs = true;
-        } else if (o.agentType === 'CUSTOM' && o.userAddress?.toLowerCase() === agentAddr) {
-          const orderSym = (o.marketSnapshot?.symbol || '').toUpperCase();
-          // Window may be missing if market evicted; try marketService fallback
-          let orderWindow = (o.marketSnapshot?.windowDuration || '').toLowerCase();
-          if (!orderWindow) {
-            try {
-              const m = marketService.getMarketById(o.marketId);
-              if (m?.windowDuration) orderWindow = m.windowDuration.toLowerCase();
-            } catch {}
-          }
-          if (orderSym === agentSym) {
-            if (orderWindow && agentTf && agentTf !== 'all') {
-              belongs = orderWindow === agentTf;
-            } else {
-              belongs = true;
+          let list = ordersByCustomAgentId.get(o.customAgentId);
+          if (!list) { list = []; ordersByCustomAgentId.set(o.customAgentId, list); }
+          list.push(o);
+        }
+        if (o.sessionId) {
+          let list = ordersBySessionId.get(o.sessionId);
+          if (!list) { list = []; ordersBySessionId.set(o.sessionId, list); }
+          list.push(o);
+        }
+        if (o.agentType === 'CUSTOM' && o.userAddress) {
+          const userLower = o.userAddress.toLowerCase();
+          let list = fallbackOrdersByUser.get(userLower);
+          if (!list) { list = []; fallbackOrdersByUser.set(userLower, list); }
+          list.push(o);
+        }
+      }
+
+      const agentOrdersMap = new Map<string, OrderExecution[]>();
+      for (const agent of sortedForAttribution) {
+        const matched: OrderExecution[] = [];
+
+        // 1. Direct customAgentId match (O(1))
+        const directCustom = ordersByCustomAgentId.get(agent.id);
+        if (directCustom) {
+          for (const o of directCustom) {
+            if (!assignedOrderIds.has(o.id)) {
+              matched.push(o);
+              assignedOrderIds.add(o.id);
             }
           }
         }
-        if (belongs) {
-          matched.push(o);
-          // Only mark as assigned if this was not an ambiguous fallback that could
-          // still be claimed by another agent with same symbol+window; for
-          // explicit customAgentId matches, assign exclusively. For fallback,
-          // assign exclusively as well to prevent double-counting.
-          assignedOrderIds.add(o.id);
-        }
-      }
-      agentOrdersMap.set(agent.id, matched);
-    }
 
-    // Direct fallback for agents whose orders were evicted from memory ring-buffer
-    for (const agent of allCustomAgents) {
-      const existing = agentOrdersMap.get(agent.id) || [];
-      if (existing.length === 0 && (agent.tradesCount ?? 0) > 0) {
-        try {
-          const directOrders = await orderService.getOrdersForCustomAgent(agent.id, agent.userAddress, cutoffMs);
-          if (directOrders.length > 0) {
-            agentOrdersMap.set(agent.id, directOrders);
+        // 2. Direct sessionId match (O(1))
+        const directSession = ordersBySessionId.get(agent.id);
+        if (directSession) {
+          for (const o of directSession) {
+            if (!assignedOrderIds.has(o.id)) {
+              matched.push(o);
+              assignedOrderIds.add(o.id);
+            }
           }
-        } catch {}
-      }
-    }
+        }
 
-    const customEntries: Array<Omit<ArenaAgentEntry, 'rank' | 'tierBadge'>> = allCustomAgents.map((agent) => {
-      const isTemplate = STARTER_TEMPLATES.some((t) => t.id === agent.id);
-      const agentOrders = agentOrdersMap.get(agent.id) || [];
+        // 3. Fallback matching scoped only to user's own custom orders
+        const agentAddr = agent.userAddress?.toLowerCase();
+        if (agentAddr) {
+          const userCustomOrders = fallbackOrdersByUser.get(agentAddr);
+          if (userCustomOrders && userCustomOrders.length > 0) {
+            const agentSym = (agent.symbol || 'BTC/USD').toUpperCase();
+            const agentTf = (agent.timeframe || '5m').toLowerCase();
 
-      const computed = this.computePerformanceMetrics(agentOrders, cutoffMs, agent.allocatedAllowance || 100);
-      const storedTrades = agent.tradesCount ?? 0;
-      const storedPnl = agent.pnl ?? 0;
-      const storedWinRate = agent.winRate ?? 0;
-      const spentAllowance = agent.spentAllowance ?? computed.spentAllowance;
-      const allocatedAllowance = agent.allocatedAllowance || 100;
+            for (const o of userCustomOrders) {
+              if (assignedOrderIds.has(o.id)) continue;
+              const orderSym = (o.marketSnapshot?.symbol || '').toUpperCase();
+              let orderWindow = (o.marketSnapshot?.windowDuration || '').toLowerCase();
+              if (!orderWindow && o.marketId) {
+                try {
+                  const m = marketService.getMarketById(o.marketId);
+                  if (m?.windowDuration) orderWindow = m.windowDuration.toLowerCase();
+                } catch {}
+              }
 
-      let metrics = computed;
+              let belongs = false;
+              if (orderSym === agentSym) {
+                if (orderWindow && agentTf && agentTf !== 'all') {
+                  belongs = orderWindow === agentTf;
+                } else {
+                  belongs = true;
+                }
+              }
 
-      // When ALL timeframe is selected (cutoffMs === 0), authoritative stored performance
-      // from custom_agents table is the canonical lifetime truth (matching Cockpit view exactly).
-      if (cutoffMs === 0) {
-        if (storedTrades > 0 || computed.tradesCount > 0) {
-          const effectivePnl = storedTrades > 0 ? Number(storedPnl.toFixed(2)) : computed.pnl;
-          const effectiveTrades = storedTrades > 0 ? storedTrades : computed.tradesCount;
-          const effectiveWinRate = storedTrades > 0 ? storedWinRate : computed.winRate;
-          const winsFromStored = Math.round((effectiveWinRate / 100) * effectiveTrades);
-          const lossesFromStored = Math.max(0, effectiveTrades - winsFromStored);
-          const pnlPctFromStored = spentAllowance > 0
-            ? Number(((effectivePnl / spentAllowance) * 100).toFixed(2))
-            : (allocatedAllowance > 0 && allocatedAllowance <= 1000
-                ? Number(((effectivePnl / allocatedAllowance) * 100).toFixed(2))
-                : (allocatedAllowance > 0 ? Number(((effectivePnl / allocatedAllowance) * 100).toFixed(2)) : 0));
-
-          const derivedSharpe = computed.tradesCount >= 2 && computed.sharpeRatio !== 0
-            ? computed.sharpeRatio
-            : this.calculateDerivedSharpe(effectivePnl, effectiveWinRate, effectiveTrades);
-          const derivedSortino = computed.sortinoRatio > 0
-            ? computed.sortinoRatio
-            : (derivedSharpe > 0 ? Number((derivedSharpe * 1.25).toFixed(2)) : 0);
-
-          let sparkline = computed.sparkline;
-          if (computed.tradesCount === 0 || sparkline.every((v) => v === 0)) {
-            sparkline = this.generateOrganicSparkline(effectivePnl);
+              if (belongs) {
+                matched.push(o);
+                assignedOrderIds.add(o.id);
+              }
+            }
           }
-
-          metrics = {
-            pnl: effectivePnl,
-            pnlPct: pnlPctFromStored,
-            winRate: effectiveWinRate,
-            tradesCount: effectiveTrades,
-            winsCount: winsFromStored,
-            lossesCount: lossesFromStored,
-            sharpeRatio: derivedSharpe,
-            sortinoRatio: derivedSortino,
-            maxDrawdownPct: computed.maxDrawdownPct > 0 ? computed.maxDrawdownPct : (effectivePnl > 0 ? Number(Math.max(1.5, 12 - (effectiveWinRate / 10)).toFixed(1)) : 15.0),
-            spentAllowance,
-            sparkline,
-          };
         }
-      } else {
-        // Windowed timeframe (24h, 7d, 30d):
-        if (computed.tradesCount > 0) {
-          metrics = computed;
-        } else if (storedTrades > 0) {
-          // Fallback when no orders fall inside the window: scale stored estimate
-          const windowRatio = tf === '24h' ? 0.25 : (tf === '7d' ? 0.75 : 1.0);
-          const windowTrades = Math.max(1, Math.round(storedTrades * windowRatio));
-          const windowPnl = Number((storedPnl * windowRatio).toFixed(2));
-          const winsFromStored = Math.round((storedWinRate / 100) * windowTrades);
-          const lossesFromStored = Math.max(0, windowTrades - winsFromStored);
-          const pnlPctFromStored = spentAllowance > 0
-            ? Number(((windowPnl / spentAllowance) * 100).toFixed(2))
-            : (allocatedAllowance > 0 && allocatedAllowance <= 1000
-                ? Number(((windowPnl / allocatedAllowance) * 100).toFixed(2))
-                : (allocatedAllowance > 0 ? Number(((windowPnl / allocatedAllowance) * 100).toFixed(2)) : 0));
 
-          const derivedSharpe = this.calculateDerivedSharpe(windowPnl, storedWinRate, windowTrades);
-          metrics = {
-            pnl: windowPnl,
-            pnlPct: pnlPctFromStored,
-            winRate: storedWinRate,
-            tradesCount: windowTrades,
-            winsCount: winsFromStored,
-            lossesCount: lossesFromStored,
-            sharpeRatio: derivedSharpe,
-            sortinoRatio: derivedSharpe > 0 ? Number((derivedSharpe * 1.25).toFixed(2)) : 0,
-            maxDrawdownPct: storedPnl > 0 ? Number(Math.max(1.5, 10 - (storedWinRate / 10)).toFixed(1)) : 15.0,
-            spentAllowance: Number((spentAllowance * windowRatio).toFixed(2)),
-            sparkline: this.generateOrganicSparkline(windowPnl),
-          };
-        }
+        agentOrdersMap.set(agent.id, matched);
       }
 
-      // Rules summary chips
-      const ruleChips: string[] = [];
-      if (agent.rules?.conditions) {
-        for (const c of agent.rules.conditions) {
-          ruleChips.push(`${c.indicator} ${c.operator.replace('_', ' ')} ${c.value}`);
-        }
-      }
-      if (agent.rules?.action) {
-        ruleChips.push(`${agent.rules.action.direction} (${agent.rules.action.stakeAmount} USDC)`);
+      // Parallel direct fallback for agents whose orders were evicted from memory ring-buffer
+      const missingAgents = allCustomAgents.filter((agent) => {
+        const existing = agentOrdersMap.get(agent.id) || [];
+        return existing.length === 0 && (agent.tradesCount ?? 0) > 0;
+      });
+
+      if (missingAgents.length > 0) {
+        await Promise.all(
+          missingAgents.map(async (agent) => {
+            try {
+              const directOrders = await orderService.getOrdersForCustomAgent(agent.id, agent.userAddress, cutoffMs);
+              if (directOrders.length > 0) {
+                agentOrdersMap.set(agent.id, directOrders);
+              }
+            } catch {}
+          })
+        );
       }
 
-      return {
-        id: agent.id,
-        name: agent.name,
-        description: agent.description || 'Custom autonomous binary options trading agent.',
-        creatorAddress: agent.userAddress,
-        creatorName: isTemplate ? 'DreamPulse Labs' : `${agent.userAddress.slice(0, 6)}...${agent.userAddress.slice(-4)}`,
-        isProtocolArchetype: isTemplate,
-        symbol: agent.symbol || 'BTC/USD',
-        timeframe: agent.timeframe || '5m',
-        strategyType: agent.strategyType || 'CUSTOM',
-        color: agent.color || '#2dd4bf',
-        icon: agent.icon || 'BoltIcon',
-        ...metrics,
-        allocatedAllowance: agent.allocatedAllowance || 100,
-        clonesCount: 0,
-        copiersCount: 0,
-        tags: [agent.strategyType, agent.timeframe, agent.symbol],
-        rulesSummary: ruleChips.length > 0 ? ruleChips : [`${agent.strategyType} Strategy`],
-        isActive: agent.isActive !== false,
-        isDeployed: agent.isDeployed === true,
-        createdAt: agent.createdAt || new Date().toISOString(),
+      const customEntries: Array<Omit<ArenaAgentEntry, 'rank' | 'tierBadge'>> = allCustomAgents.map((agent) => {
+        const isTemplate = STARTER_TEMPLATES.some((t) => t.id === agent.id);
+        const agentOrders = agentOrdersMap.get(agent.id) || [];
+
+        const computed = this.computePerformanceMetrics(agentOrders, cutoffMs, agent.allocatedAllowance || 100);
+        const storedTrades = agent.tradesCount ?? 0;
+        const storedPnl = agent.pnl ?? 0;
+        const storedWinRate = agent.winRate ?? 0;
+        const spentAllowance = agent.spentAllowance ?? computed.spentAllowance;
+        const allocatedAllowance = agent.allocatedAllowance || 100;
+
+        let metrics = computed;
+
+        if (cutoffMs === 0) {
+          if (storedTrades > 0 || computed.tradesCount > 0) {
+            const effectivePnl = storedTrades > 0 ? Number(storedPnl.toFixed(2)) : computed.pnl;
+            const effectiveTrades = storedTrades > 0 ? storedTrades : computed.tradesCount;
+            const effectiveWinRate = storedTrades > 0 ? storedWinRate : computed.winRate;
+            const winsFromStored = Math.round((effectiveWinRate / 100) * effectiveTrades);
+            const lossesFromStored = Math.max(0, effectiveTrades - winsFromStored);
+            const pnlPctFromStored = spentAllowance > 0
+              ? Number(((effectivePnl / spentAllowance) * 100).toFixed(2))
+              : (allocatedAllowance > 0 && allocatedAllowance <= 1000
+                  ? Number(((effectivePnl / allocatedAllowance) * 100).toFixed(2))
+                  : (allocatedAllowance > 0 ? Number(((effectivePnl / allocatedAllowance) * 100).toFixed(2)) : 0));
+
+            const derivedSharpe = computed.tradesCount >= 2 && computed.sharpeRatio !== 0
+              ? computed.sharpeRatio
+              : this.calculateDerivedSharpe(effectivePnl, effectiveWinRate, effectiveTrades);
+            const derivedSortino = computed.sortinoRatio > 0
+              ? computed.sortinoRatio
+              : (derivedSharpe > 0 ? Number((derivedSharpe * 1.25).toFixed(2)) : 0);
+
+            let sparkline = computed.sparkline;
+            if (computed.tradesCount === 0 || sparkline.every((v) => v === 0)) {
+              sparkline = this.generateOrganicSparkline(effectivePnl);
+            }
+
+            metrics = {
+              pnl: effectivePnl,
+              pnlPct: pnlPctFromStored,
+              winRate: effectiveWinRate,
+              tradesCount: effectiveTrades,
+              winsCount: winsFromStored,
+              lossesCount: lossesFromStored,
+              sharpeRatio: derivedSharpe,
+              sortinoRatio: derivedSortino,
+              maxDrawdownPct: computed.maxDrawdownPct > 0 ? computed.maxDrawdownPct : (effectivePnl > 0 ? Number(Math.max(1.5, 12 - (effectiveWinRate / 10)).toFixed(1)) : 15.0),
+              spentAllowance,
+              sparkline,
+            };
+          }
+        } else {
+          // Windowed timeframe (24h, 7d, 30d):
+          if (computed.tradesCount > 0) {
+            metrics = computed;
+          } else if (storedTrades > 0) {
+            const windowRatio = tf === '24h' ? 0.25 : (tf === '7d' ? 0.75 : 1.0);
+            const windowTrades = Math.max(1, Math.round(storedTrades * windowRatio));
+            const windowPnl = Number((storedPnl * windowRatio).toFixed(2));
+            const winsFromStored = Math.round((storedWinRate / 100) * windowTrades);
+            const lossesFromStored = Math.max(0, windowTrades - winsFromStored);
+            const pnlPctFromStored = spentAllowance > 0
+              ? Number(((windowPnl / spentAllowance) * 100).toFixed(2))
+              : (allocatedAllowance > 0 && allocatedAllowance <= 1000
+                  ? Number(((windowPnl / allocatedAllowance) * 100).toFixed(2))
+                  : (allocatedAllowance > 0 ? Number(((windowPnl / allocatedAllowance) * 100).toFixed(2)) : 0));
+
+            const derivedSharpe = this.calculateDerivedSharpe(windowPnl, storedWinRate, windowTrades);
+            metrics = {
+              pnl: windowPnl,
+              pnlPct: pnlPctFromStored,
+              winRate: storedWinRate,
+              tradesCount: windowTrades,
+              winsCount: winsFromStored,
+              lossesCount: lossesFromStored,
+              sharpeRatio: derivedSharpe,
+              sortinoRatio: derivedSharpe > 0 ? Number((derivedSharpe * 1.25).toFixed(2)) : 0,
+              maxDrawdownPct: storedPnl > 0 ? Number(Math.max(1.5, 10 - (storedWinRate / 10)).toFixed(1)) : 15.0,
+              spentAllowance: Number((spentAllowance * windowRatio).toFixed(2)),
+              sparkline: this.generateOrganicSparkline(windowPnl),
+            };
+          }
+        }
+
+        // Rules summary chips
+        const ruleChips: string[] = [];
+        if (agent.rules?.conditions) {
+          for (const c of agent.rules.conditions) {
+            ruleChips.push(`${c.indicator} ${c.operator.replace('_', ' ')} ${c.value}`);
+          }
+        }
+        if (agent.rules?.action) {
+          ruleChips.push(`${agent.rules.action.direction} (${agent.rules.action.stakeAmount} USDC)`);
+        }
+
+        return {
+          id: agent.id,
+          name: agent.name,
+          description: agent.description || 'Custom autonomous binary options trading agent.',
+          creatorAddress: agent.userAddress,
+          creatorName: isTemplate ? 'DreamPulse Labs' : `${agent.userAddress.slice(0, 6)}...${agent.userAddress.slice(-4)}`,
+          isProtocolArchetype: isTemplate,
+          symbol: agent.symbol || 'BTC/USD',
+          timeframe: agent.timeframe || '5m',
+          strategyType: agent.strategyType || 'CUSTOM',
+          color: agent.color || '#2dd4bf',
+          icon: agent.icon || 'BoltIcon',
+          ...metrics,
+          allocatedAllowance: agent.allocatedAllowance || 100,
+          clonesCount: 0,
+          copiersCount: 0,
+          tags: [agent.strategyType, agent.timeframe, agent.symbol],
+          rulesSummary: ruleChips.length > 0 ? ruleChips : [`${agent.strategyType} Strategy`],
+          isActive: agent.isActive !== false,
+          isDeployed: agent.isDeployed === true,
+          createdAt: agent.createdAt || new Date().toISOString(),
+        };
+      });
+
+      // 5. Combine Protocol Archetypes + Custom Agents
+      let combined = [...archetypeEntries, ...customEntries];
+
+      // 5b. Only agents that have executed at least one trade/order in the selected timeframe may appear on the arena
+      combined = combined.filter((e) => e.tradesCount > 0);
+
+      // 6. Apply Filters
+      if (symbolFilter !== 'ALL') {
+        combined = combined.filter((e) => e.symbol.toUpperCase() === symbolFilter || e.symbol === 'ALL');
+      }
+      if (strategyFilter !== 'ALL') {
+        combined = combined.filter((e) => e.strategyType.toUpperCase() === strategyFilter);
+      }
+      if (query) {
+        combined = combined.filter(
+          (e) =>
+            e.name.toLowerCase().includes(query) ||
+            e.description.toLowerCase().includes(query) ||
+            e.creatorName.toLowerCase().includes(query) ||
+            e.symbol.toLowerCase().includes(query)
+        );
+      }
+
+      // 7. Apply Sorting — DB already ordered by pnl for default case, but re-sort for winRate/sharpe variants
+      combined.sort((a, b) => {
+        if (sortBy === 'winRate') return b.winRate - a.winRate;
+        if (sortBy === 'trades') return b.tradesCount - a.tradesCount;
+        if (sortBy === 'sharpe') return b.sharpeRatio - a.sharpeRatio;
+        return b.pnl - a.pnl; // default PnL
+      });
+
+      // 7b. DB-side LIMIT 50 — cap payload and compute after sorting to avoid shipping 500+ agents to frontend (P4)
+      const limited = combined.slice(0, 50);
+
+      // 8. Assign Ranks & Tier Badges
+      const rankedList: ArenaAgentEntry[] = limited.map((item, index) => {
+        const rank = index + 1;
+        return {
+          ...item,
+          rank,
+          tierBadge: this.getTierBadge(rank),
+        };
+      });
+
+      const res = {
+        count: rankedList.length,
+        data: rankedList,
       };
-    });
-
-    // 5. Combine Protocol Archetypes + Custom Agents
-    let combined = [...archetypeEntries, ...customEntries];
-
-    // 5b. Only agents that have executed at least one trade/order in the selected timeframe may appear on the arena
-    combined = combined.filter((e) => e.tradesCount > 0);
-
-    // 6. Apply Filters
-    if (symbolFilter !== 'ALL') {
-      combined = combined.filter((e) => e.symbol.toUpperCase() === symbolFilter || e.symbol === 'ALL');
-    }
-    if (strategyFilter !== 'ALL') {
-      combined = combined.filter((e) => e.strategyType.toUpperCase() === strategyFilter);
-    }
-    if (query) {
-      combined = combined.filter(
-        (e) =>
-          e.name.toLowerCase().includes(query) ||
-          e.description.toLowerCase().includes(query) ||
-          e.creatorName.toLowerCase().includes(query) ||
-          e.symbol.toLowerCase().includes(query)
-      );
-    }
-
-    // 7. Apply Sorting — DB already ordered by pnl for default case, but re-sort for winRate/sharpe variants
-    combined.sort((a, b) => {
-      if (sortBy === 'winRate') return b.winRate - a.winRate;
-      if (sortBy === 'trades') return b.tradesCount - a.tradesCount;
-      if (sortBy === 'sharpe') return b.sharpeRatio - a.sharpeRatio;
-      return b.pnl - a.pnl; // default PnL
-    });
-
-    // 7b. DB-side LIMIT 50 — cap payload and compute after sorting to avoid shipping 500+ agents to frontend (P4)
-    const limited = combined.slice(0, 50);
-
-    // 8. Assign Ranks & Tier Badges
-    const rankedList: ArenaAgentEntry[] = limited.map((item, index) => {
-      const rank = index + 1;
-      return {
-        ...item,
-        rank,
-        tierBadge: this.getTierBadge(rank),
-      };
-    });
-
-    return {
-      count: rankedList.length,
-      data: rankedList,
+      this.agentLeaderboardCache.set(cacheKey, { data: res, expiresAt: Date.now() + LeaderboardService.LEADERBOARD_TTL_MS });
+      return res;
     };
+
+    const promise = compute().finally(() => {
+      this.inFlightAgentLeaderboard.delete(cacheKey);
+    });
+    this.inFlightAgentLeaderboard.set(cacheKey, promise);
+    return promise;
   }
 
   /**
@@ -742,203 +818,221 @@ export class LeaderboardService {
     const sortBy = params.sortBy || 'pnl';
     const query = (params.searchQuery || '').trim().toLowerCase();
 
-    // 1. Query all orders DB-backed for accuracy (fixes #14: in-memory was incomplete)
-    const allOrdersDb = await orderService.getOrdersAsync({});
-    const terminalOrders = allOrdersDb.filter(
-      (o) =>
-        (o.source === 'TERMINAL' || o.agentType === 'Manual') &&
-        Boolean(o.userAddress) &&
-        !isExcludedArenaAddress(o.userAddress)
-    );
+    const cacheKey = `${range}:${sortBy}:${query}`;
+    const nowMs = Date.now();
 
-    // 2. Filter by timeframe cutoff if specified
-    const now = Date.now();
-    const timeCutoffs: Record<string, number> = {
-      '24h': 24 * 60 * 60 * 1000,
-      '7d': 7 * 24 * 60 * 60 * 1000,
-      '30d': 30 * 24 * 60 * 60 * 1000,
-    };
-    const rangeMs = timeCutoffs[range];
-    const inRangeOrders = rangeMs
-      ? terminalOrders.filter((o) => {
-          const ts = o.createdAt ? new Date(o.createdAt).getTime() : now;
-          return now - ts <= rangeMs;
-        })
-      : terminalOrders;
+    const cached = this.traderLeaderboardCache.get(cacheKey);
+    if (cached && nowMs < cached.expiresAt) {
+      return cached.data;
+    }
+    const inFlight = this.inFlightTraderLeaderboard.get(cacheKey);
+    if (inFlight) {
+      return inFlight;
+    }
 
-    // 3. Group by user address
-    const traderMap = new Map<
-      string,
-      {
-        orders: OrderExecution[];
-        realizedPnl: number;
-        volume: number;
-        wins: number;
-        losses: number;
-        symbolCounts: Map<string, number>;
-        windowCounts: Map<string, number>;
-        synergyMatches: number;
+    const compute = async (): Promise<{ count: number; data: ArenaTraderEntry[] }> => {
+      // 1. Query all orders DB-backed for accuracy (fixes #14: in-memory was incomplete)
+      const allOrdersDb = await orderService.getOrdersAsync({});
+      const terminalOrders = allOrdersDb.filter(
+        (o) =>
+          (o.source === 'TERMINAL' || o.agentType === 'Manual') &&
+          Boolean(o.userAddress) &&
+          !isExcludedArenaAddress(o.userAddress)
+      );
+
+      // 2. Filter by timeframe cutoff if specified
+      const now = Date.now();
+      const timeCutoffs: Record<string, number> = {
+        '24h': 24 * 60 * 60 * 1000,
+        '7d': 7 * 24 * 60 * 60 * 1000,
+        '30d': 30 * 24 * 60 * 60 * 1000,
+      };
+      const rangeMs = timeCutoffs[range];
+      const inRangeOrders = rangeMs
+        ? terminalOrders.filter((o) => {
+            const ts = o.createdAt ? new Date(o.createdAt).getTime() : now;
+            return now - ts <= rangeMs;
+          })
+        : terminalOrders;
+
+      // 3. Group by user address
+      const traderMap = new Map<
+        string,
+        {
+          orders: OrderExecution[];
+          realizedPnl: number;
+          volume: number;
+          wins: number;
+          losses: number;
+          symbolCounts: Map<string, number>;
+          windowCounts: Map<string, number>;
+          synergyMatches: number;
+        }
+      >();
+
+      for (const order of inRangeOrders) {
+        if (!order.userAddress) continue;
+        const addr = order.userAddress.toLowerCase();
+        if (!traderMap.has(addr)) {
+          traderMap.set(addr, {
+            orders: [],
+            realizedPnl: 0,
+            volume: 0,
+            wins: 0,
+            losses: 0,
+            symbolCounts: new Map(),
+            windowCounts: new Map(),
+            synergyMatches: 0,
+          });
+        }
+        const record = traderMap.get(addr)!;
+        record.orders.push(order);
+        record.volume += order.totalCost || 0;
+
+        const sym = order.marketSnapshot?.symbol || 'BTC/USD';
+        record.symbolCounts.set(sym, (record.symbolCounts.get(sym) || 0) + 1);
+
+        const win = order.marketSnapshot?.windowDuration || '5m';
+        record.windowCounts.set(win, (record.windowCounts.get(win) || 0) + 1);
+
+        if (order.isSettled) {
+          record.realizedPnl += order.pnl || 0;
+          if ((order.pnl || 0) > 0) {
+            record.wins += 1;
+            record.synergyMatches += 1;
+          } else if ((order.pnl || 0) < 0) {
+            record.losses += 1;
+          }
+        }
       }
-    >();
 
-    for (const order of inRangeOrders) {
-      if (!order.userAddress) continue;
-      const addr = order.userAddress.toLowerCase();
-      if (!traderMap.has(addr)) {
-        traderMap.set(addr, {
-          orders: [],
-          realizedPnl: 0,
-          volume: 0,
-          wins: 0,
-          losses: 0,
-          symbolCounts: new Map(),
-          windowCounts: new Map(),
-          synergyMatches: 0,
+      // 4. Transform strictly real trader data
+      const realTraders: Array<Omit<ArenaTraderEntry, 'rank' | 'tierBadge'>> = [];
+
+      for (const [addr, data] of traderMap.entries()) {
+        // Sort user orders chronologically
+        data.orders.sort(
+          (a, b) => new Date(a.createdAt || 0).getTime() - new Date(b.createdAt || 0).getTime()
+        );
+
+        // Calculate streak from real order history
+        let currentStreak = 0;
+        let bestStreak = 0;
+        for (const o of data.orders) {
+          if (!o.isSettled) continue;
+          if ((o.pnl || 0) > 0) {
+            currentStreak = currentStreak >= 0 ? currentStreak + 1 : 1;
+            if (currentStreak > bestStreak) bestStreak = currentStreak;
+          } else if ((o.pnl || 0) < 0) {
+            currentStreak = currentStreak <= 0 ? currentStreak - 1 : -1;
+          }
+        }
+
+        // Determine favorite symbol
+        let favoriteSymbol = 'BTC/USD';
+        let maxSymCount = 0;
+        for (const [s, c] of data.symbolCounts.entries()) {
+          if (c > maxSymCount) {
+            maxSymCount = c;
+            favoriteSymbol = s;
+          }
+        }
+
+        // Determine favorite timeframe
+        let favoriteWindow = '5m';
+        let maxWinCount = 0;
+        for (const [w, c] of data.windowCounts.entries()) {
+          if (c > maxWinCount) {
+            maxWinCount = c;
+            favoriteWindow = w;
+          }
+        }
+
+        const tradesCount = data.orders.length;
+        const settledTrades = data.wins + data.losses;
+        const winRate = settledTrades > 0 ? Number(((data.wins / settledTrades) * 100).toFixed(1)) : 0;
+        const pnlPct = data.volume > 0 ? Number(((data.realizedPnl / data.volume) * 100).toFixed(2)) : 0;
+
+        // Copilot synergy: alignment with swarm positions
+        const copilotSynergyScore =
+          settledTrades > 0 ? Math.min(100, Math.round((data.synergyMatches / settledTrades) * 100)) : 100;
+
+        // Real sparkline from real user cumulative PnL
+        let runningPnl = 0;
+        const sparklinePoints: number[] = [0];
+        for (const o of data.orders) {
+          if (o.isSettled) {
+            runningPnl += o.pnl || 0;
+            sparklinePoints.push(Number(runningPnl.toFixed(2)));
+          }
+        }
+        if (sparklinePoints.length < 2) sparklinePoints.push(data.realizedPnl);
+        const sparkline = this.sampleSparkline(sparklinePoints, 8);
+
+        realTraders.push({
+          userAddress: addr,
+          traderTitle: `Forecaster ${addr.slice(0, 6)}...${addr.slice(-4)}`,
+          realizedPnl: Number(data.realizedPnl.toFixed(2)),
+          pnlPct,
+          winRate,
+          tradesCount,
+          winsCount: data.wins,
+          lossesCount: data.losses,
+          volume: Number(data.volume.toFixed(2)),
+          currentStreak,
+          bestStreak,
+          copilotSynergyScore,
+          favoriteSymbol,
+          favoriteWindow,
+          sparkline,
+          lastActiveAt: data.orders[data.orders.length - 1]?.createdAt || new Date().toISOString(),
         });
       }
-      const record = traderMap.get(addr)!;
-      record.orders.push(order);
-      record.volume += order.totalCost || 0;
 
-      const sym = order.marketSnapshot?.symbol || 'BTC/USD';
-      record.symbolCounts.set(sym, (record.symbolCounts.get(sym) || 0) + 1);
-
-      const win = order.marketSnapshot?.windowDuration || '5m';
-      record.windowCounts.set(win, (record.windowCounts.get(win) || 0) + 1);
-
-      if (order.isSettled) {
-        record.realizedPnl += order.pnl || 0;
-        if ((order.pnl || 0) > 0) {
-          record.wins += 1;
-          record.synergyMatches += 1;
-        } else if ((order.pnl || 0) < 0) {
-          record.losses += 1;
-        }
-      }
-    }
-
-    // 4. Transform strictly real trader data
-    const realTraders: Array<Omit<ArenaTraderEntry, 'rank' | 'tierBadge'>> = [];
-
-    for (const [addr, data] of traderMap.entries()) {
-      // Sort user orders chronologically
-      data.orders.sort(
-        (a, b) => new Date(a.createdAt || 0).getTime() - new Date(b.createdAt || 0).getTime()
-      );
-
-      // Calculate streak from real order history
-      let currentStreak = 0;
-      let bestStreak = 0;
-      for (const o of data.orders) {
-        if (!o.isSettled) continue;
-        if ((o.pnl || 0) > 0) {
-          currentStreak = currentStreak >= 0 ? currentStreak + 1 : 1;
-          if (currentStreak > bestStreak) bestStreak = currentStreak;
-        } else if ((o.pnl || 0) < 0) {
-          currentStreak = currentStreak <= 0 ? currentStreak - 1 : -1;
-        }
+      // 5. Apply Search Filter
+      let filtered = realTraders;
+      if (query) {
+        filtered = filtered.filter(
+          (t) =>
+            t.userAddress.toLowerCase().includes(query) ||
+            t.traderTitle.toLowerCase().includes(query) ||
+            t.favoriteSymbol.toLowerCase().includes(query)
+        );
       }
 
-      // Determine favorite symbol
-      let favoriteSymbol = 'BTC/USD';
-      let maxSymCount = 0;
-      for (const [s, c] of data.symbolCounts.entries()) {
-        if (c > maxSymCount) {
-          maxSymCount = c;
-          favoriteSymbol = s;
-        }
-      }
-
-      // Determine favorite window
-      let favoriteWindow = '5m';
-      let maxWinCount = 0;
-      for (const [w, c] of data.windowCounts.entries()) {
-        if (c > maxWinCount) {
-          maxWinCount = c;
-          favoriteWindow = w;
-        }
-      }
-
-      const settledCount = data.wins + data.losses;
-      const winRate = settledCount > 0 ? Number(((data.wins / settledCount) * 100).toFixed(1)) : 0;
-      const pnl = Number(data.realizedPnl.toFixed(2));
-      const volume = Number(data.volume.toFixed(2));
-      const pnlPct = volume > 0 ? Number(((pnl / volume) * 100).toFixed(1)) : 0;
-      const copilotSynergyScore = settledCount > 0
-        ? Math.min(100, Math.max(0, Number(((data.synergyMatches / settledCount) * 100).toFixed(0))))
-        : 100;
-
-      // Real cumulative equity sparkline
-      let runningPnl = 0;
-      const sparkline: number[] = [0];
-      for (const o of data.orders) {
-        if (o.isSettled) {
-          runningPnl += o.pnl || 0;
-          sparkline.push(Number(runningPnl.toFixed(2)));
-        }
-      }
-      if (sparkline.length < 2) {
-        sparkline.push(pnl);
-      }
-
-      const shortAddr = `${addr.slice(0, 6)}...${addr.slice(-4)}`;
-      const traderTitle = `Forecaster ${shortAddr}`;
-
-      realTraders.push({
-        userAddress: addr,
-        traderTitle,
-        realizedPnl: pnl,
-        pnlPct,
-        winRate,
-        tradesCount: data.orders.length,
-        winsCount: data.wins,
-        lossesCount: data.losses,
-        volume,
-        currentStreak,
-        bestStreak: Math.max(bestStreak, Math.abs(currentStreak)),
-        copilotSynergyScore,
-        favoriteSymbol,
-        favoriteWindow,
-        sparkline,
-        lastActiveAt: data.orders[data.orders.length - 1]?.createdAt || new Date().toISOString(),
+      // 6. Apply Sorting
+      filtered.sort((a, b) => {
+        if (sortBy === 'winRate') return b.winRate - a.winRate;
+        if (sortBy === 'volume') return b.volume - a.volume;
+        if (sortBy === 'streak') return b.currentStreak - a.currentStreak;
+        return b.realizedPnl - a.realizedPnl; // default PnL
       });
-    }
 
-    // 5. Apply Search Filter
-    let filtered = realTraders;
-    if (query) {
-      filtered = filtered.filter(
-        (t) =>
-          t.userAddress.toLowerCase().includes(query) ||
-          t.traderTitle.toLowerCase().includes(query) ||
-          t.favoriteSymbol.toLowerCase().includes(query)
-      );
-    }
+      // 7. DB-side LIMIT 50 — cap trader leaderboard to top 50 (P4)
+      const limitedTraders = filtered.slice(0, 50);
+      // 8. Assign Ranks
+      const rankedList: ArenaTraderEntry[] = limitedTraders.map((trader, index) => {
+        const rank = index + 1;
+        return {
+          ...trader,
+          rank,
+          tierBadge: this.getTierBadge(rank),
+        };
+      });
 
-    // 6. Sort Traders
-    filtered.sort((a, b) => {
-      if (sortBy === 'winRate') return b.winRate - a.winRate;
-      if (sortBy === 'volume') return b.volume - a.volume;
-      if (sortBy === 'streak') return b.currentStreak - a.currentStreak;
-      return b.realizedPnl - a.realizedPnl; // default PnL
-    });
-
-    // 7. DB-side LIMIT 50 — cap trader leaderboard to top 50 (P4)
-    const limitedTraders = filtered.slice(0, 50);
-    // 8. Assign Ranks
-    const rankedList: ArenaTraderEntry[] = limitedTraders.map((trader, index) => {
-      const rank = index + 1;
-      return {
-        ...trader,
-        rank,
-        tierBadge: this.getTierBadge(rank),
+      const res = {
+        count: rankedList.length,
+        data: rankedList,
       };
-    });
-
-    return {
-      count: rankedList.length,
-      data: rankedList,
+      this.traderLeaderboardCache.set(cacheKey, { data: res, expiresAt: Date.now() + LeaderboardService.LEADERBOARD_TTL_MS });
+      return res;
     };
+
+    const promise = compute().finally(() => {
+      this.inFlightTraderLeaderboard.delete(cacheKey);
+    });
+    this.inFlightTraderLeaderboard.set(cacheKey, promise);
+    return promise;
   }
 
   /**
@@ -1126,31 +1220,50 @@ export class LeaderboardService {
    * Retrieves overall Arena platform statistics.
    */
   public async getArenaStats(): Promise<ArenaGlobalStats> {
-    const { data: agents } = await this.getAgentLeaderboard({ timeframe: 'ALL' });
-    const { data: traders } = await this.getTraderLeaderboard({ range: 'ALL' });
+    const nowMs = Date.now();
+    if (this.arenaStatsCache && nowMs < this.arenaStatsCache.expiresAt) {
+      return this.arenaStatsCache.data;
+    }
+    if (this.inFlightArenaStats) {
+      return this.inFlightArenaStats;
+    }
 
-    const totalVolume = Number(
-      (agents.reduce((s, a) => s + a.spentAllowance, 0) + traders.reduce((s, t) => s + t.volume, 0)).toFixed(2)
-    );
-    const totalCommunityPnl = Number(
-      (agents.reduce((s, a) => s + a.pnl, 0) + traders.reduce((s, t) => s + t.realizedPnl, 0)).toFixed(2)
-    );
-    const totalClones = agents.reduce((s, a) => s + (a.clonesCount || 0), 0);
-    const apexStreak = Math.max(
-      ...traders.map((t) => t.bestStreak),
-      ...agents.map((a) => (a.winsCount > 0 ? Math.min(a.winsCount, 12) : 0)),
-      0
-    );
+    const compute = async (): Promise<ArenaGlobalStats> => {
+      const { data: agents } = await this.getAgentLeaderboard({ timeframe: 'ALL' });
+      const { data: traders } = await this.getTraderLeaderboard({ range: 'ALL' });
 
-    return {
-      totalArenaVolume: totalVolume,
-      totalCommunityPnl,
-      totalActiveAgents: agents.length,
-      totalRegisteredTraders: traders.length,
-      apexWinStreak: apexStreak,
-      totalClonesCount: totalClones,
-      generatedAt: new Date().toISOString(),
+      const totalVolume = Number(
+        (agents.reduce((s, a) => s + a.spentAllowance, 0) + traders.reduce((s, t) => s + t.volume, 0)).toFixed(2)
+      );
+      const totalCommunityPnl = Number(
+        (agents.reduce((s, a) => s + a.pnl, 0) + traders.reduce((s, t) => s + t.realizedPnl, 0)).toFixed(2)
+      );
+      const totalClones = agents.reduce((s, a) => s + (a.clonesCount || 0), 0);
+      const apexStreak = Math.max(
+        ...traders.map((t) => t.bestStreak),
+        ...agents.map((a) => (a.winsCount > 0 ? Math.min(a.winsCount, 12) : 0)),
+        0
+      );
+
+      const res: ArenaGlobalStats = {
+        totalArenaVolume: totalVolume,
+        totalCommunityPnl,
+        totalActiveAgents: agents.length,
+        totalRegisteredTraders: traders.length,
+        apexWinStreak: apexStreak,
+        totalClonesCount: totalClones,
+        generatedAt: new Date().toISOString(),
+      };
+
+      this.arenaStatsCache = { data: res, expiresAt: Date.now() + LeaderboardService.LEADERBOARD_TTL_MS };
+      return res;
     };
+
+    const promise = compute().finally(() => {
+      this.inFlightArenaStats = null;
+    });
+    this.inFlightArenaStats = promise;
+    return promise;
   }
 }
 

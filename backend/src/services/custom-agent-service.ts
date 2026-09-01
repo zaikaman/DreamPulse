@@ -563,6 +563,7 @@ export class CustomAgentService {
       }
     }
 
+    void import('./leaderboard-service.js').then((m) => m.leaderboardService.invalidateCache()).catch(() => {});
     return agent;
   }
 
@@ -658,6 +659,7 @@ export class CustomAgentService {
       }
     }
 
+    void import('./leaderboard-service.js').then((m) => m.leaderboardService.invalidateCache()).catch(() => {});
     return updated;
   }
 
@@ -841,8 +843,10 @@ export class CustomAgentService {
       if (error) {
         console.error('[CustomAgentService] DB delete error:', error);
       }
+      void import('./leaderboard-service.js').then((m) => m.leaderboardService.invalidateCache()).catch(() => {});
       return !error;
     } catch {
+      void import('./leaderboard-service.js').then((m) => m.leaderboardService.invalidateCache()).catch(() => {});
       return true;
     }
   }
