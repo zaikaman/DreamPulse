@@ -34,15 +34,18 @@ describe('MarketService Comprehensive Unit Suite', () => {
     service.stop();
   });
 
-  it('retrieves spot price with fallback and spot tickers map', () => {
+  it('retrieves spot price accurately from live ticker observations with no artificial fallbacks', () => {
+    (service as any).spotPrices.set('BTC/USD', { symbol: 'BTC/USD', price: 96500 });
+    (service as any).spotPrices.set('ETH/USD', { symbol: 'ETH/USD', price: 2750 });
+
     const btcSpot = service.getSpotPrice('BTC/USD');
-    expect(btcSpot).toBeGreaterThan(0);
+    expect(btcSpot).toBe(96500);
 
     const ethSpot = service.getSpotPrice('ETH/USD');
-    expect(ethSpot).toBeGreaterThan(0);
+    expect(ethSpot).toBe(2750);
 
     const unknownSpot = service.getSpotPrice('UNKNOWN/USD');
-    expect(unknownSpot).toBe(100);
+    expect(unknownSpot).toBe(0);
 
     const all = service.getAllSpotTickers();
     expect(typeof all).toBe('object');
@@ -80,7 +83,7 @@ describe('MarketService Comprehensive Unit Suite', () => {
     const depth = service.getMarketDepth(mockMarket.id);
     expect(depth).toBeDefined();
     expect(depth?.symbol).toBe('ETH/USD');
-    expect(depth?.yesBids.length).toBeGreaterThan(0);
+    expect(Array.isArray(depth?.yesBids)).toBe(true);
   });
 
   it('handles live spot updates and recalculates fair values and edges', () => {

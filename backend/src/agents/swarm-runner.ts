@@ -111,10 +111,9 @@ export class MultiAgentSwarmRunner {
           return;
         }
 
-        // 3. Filter out generic mock fallback spam (gsk_mock 0.92) unless it contains actual calculated rationale
+        // 3. Filter out generic fallback spam unless it contains actual calculated rationale
         if (
-          thought.reasoningText.includes('Evaluated quantitative edge on Somnia Shannon CLOB') &&
-          thought.confidence === 0.92
+          thought.reasoningText.includes('Evaluated quantitative edge on Somnia Shannon CLOB')
         ) {
           return;
         }

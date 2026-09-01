@@ -69,9 +69,7 @@ export class MarketService extends EventEmitter {
   public getSpotPrice(symbol: string): number {
     const ticker = this.spotPrices.get(symbol);
     if (ticker && ticker.price > 0) return ticker.price;
-    if (symbol === 'BTC/USD') return 96500;
-    if (symbol === 'ETH/USD') return 2750;
-    return 100;
+    return 0;
   }
 
   private handleLiveSpotUpdate(ticker: SpotTicker): void {
@@ -222,7 +220,7 @@ export class MarketService extends EventEmitter {
           symbol = `${rawAsset}/USD`;
         }
 
-        const spot = this.spotPrices.get(symbol)?.price || (symbol === 'BTC/USD' ? 77000 : 2400);
+        const spot = this.spotPrices.get(symbol)?.price || 0;
         const marketId = String(m.marketId || m.id || `${SOMNIA_ADDRESSES.binaryModule}-${m.id}`);
         discoveredIds.add(marketId);
 
@@ -529,19 +527,7 @@ export class MarketService extends EventEmitter {
       }
     }
 
-    // If no explicit CLOB levels provided but market has top bid/ask (e.g. from direct orderbook fill/quote)
-    if (yesBids.length === 0 && market.bestBidYes > 0) {
-      yesBids.push({ price: market.bestBidYes, quantity: 100, total: Number((market.bestBidYes * 100).toFixed(2)) });
-    }
-    if (yesAsks.length === 0 && market.bestAskYes > 0) {
-      yesAsks.push({ price: market.bestAskYes, quantity: 100, total: Number((market.bestAskYes * 100).toFixed(2)) });
-    }
-    if (noBids.length === 0 && market.bestBidNo > 0) {
-      noBids.push({ price: market.bestBidNo, quantity: 100, total: Number((market.bestBidNo * 100).toFixed(2)) });
-    }
-    if (noAsks.length === 0 && market.bestAskNo > 0) {
-      noAsks.push({ price: market.bestAskNo, quantity: 100, total: Number((market.bestAskNo * 100).toFixed(2)) });
-    }
+
 
     const depth: OrderBookDepth = {
       marketId: market.id,
@@ -791,12 +777,12 @@ export class MarketService extends EventEmitter {
         close_timestamp: existing?.closeTimestamp || new Date().toISOString(),
         resolution_timestamp: existing?.resolutionTimestamp || new Date().toISOString(),
         status: existing?.status || 'Active',
-        best_bid_yes: existing?.bestBidYes ?? 0.5,
-        best_ask_yes: existing?.bestAskYes ?? 0.5,
-        best_bid_no: existing?.bestBidNo ?? 0.5,
-        best_ask_no: existing?.bestAskNo ?? 0.5,
-        implied_prob_yes: existing?.impliedProbYes ?? 0.5,
-        fair_value_yes: existing?.fairValueYes ?? 0.5,
+        best_bid_yes: existing?.bestBidYes ?? 0,
+        best_ask_yes: existing?.bestAskYes ?? 0,
+        best_bid_no: existing?.bestBidNo ?? 0,
+        best_ask_no: existing?.bestAskNo ?? 0,
+        implied_prob_yes: existing?.impliedProbYes ?? 0,
+        fair_value_yes: existing?.fairValueYes ?? 0,
         edge_percentage: existing?.edgePercentage ?? 0,
         updated_at: new Date().toISOString(),
       }, { onConflict: 'id' });

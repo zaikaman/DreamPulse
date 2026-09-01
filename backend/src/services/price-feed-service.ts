@@ -42,29 +42,6 @@ export class PriceFeedService extends EventEmitter {
   constructor() {
     super();
     this.setMaxListeners(100);
-    this.seedDefaultTickers();
-  }
-
-  private seedDefaultTickers(): void {
-    const now = Date.now();
-    const defaults: Record<string, { price: number; high: number; low: number; vol: number }> = {
-      'BTC/USD': { price: 96450.0, high: 97800.0, low: 95200.0, vol: 18450.2 },
-      'ETH/USD': { price: 2745.5, high: 2820.0, low: 2690.0, vol: 84200.5 },
-    };
-
-    for (const [symbol, data] of Object.entries(defaults)) {
-      this.spotPrices.set(symbol, {
-        symbol,
-        price: data.price,
-        change1m: 0.0,
-        change5m: 0.0,
-        high24h: data.high,
-        low24h: data.low,
-        volume24h: data.vol,
-        timestamp: now,
-        priceHistory: [{ timestamp: now, price: data.price }],
-      });
-    }
   }
 
   /**

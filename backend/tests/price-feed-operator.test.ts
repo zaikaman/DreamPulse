@@ -16,11 +16,17 @@ describe('PriceFeedService, UserSwarmService & OperatorApprovalService Suite', (
       feed.stop();
     });
 
-    it('initializes with default spot prices for BTC/USD and ETH/USD', () => {
+    it('starts with clean unseeded state and ingests live spot updates for BTC/USD and ETH/USD', () => {
+      expect(feed.getSpotTicker('BTC/USD')).toBeUndefined();
+      expect(feed.getSpotTicker('ETH/USD')).toBeUndefined();
+
+      feed.recordPriceUpdate('BTC/USD', 96500, 97800, 95200, 18450);
+      feed.recordPriceUpdate('ETH/USD', 2750, 2820, 2690, 84200);
+
       const btcTicker = feed.getSpotTicker('BTC/USD');
       const ethTicker = feed.getSpotTicker('ETH/USD');
-      expect(btcTicker?.price).toBeGreaterThan(50000);
-      expect(ethTicker?.price).toBeGreaterThan(1000);
+      expect(btcTicker?.price).toBe(96500);
+      expect(ethTicker?.price).toBe(2750);
 
       const allTickers = feed.getAllSpotTickers();
       expect(allTickers['BTC/USD']).toBeDefined();
@@ -28,10 +34,10 @@ describe('PriceFeedService, UserSwarmService & OperatorApprovalService Suite', (
     });
 
     it('updates spot price on micro ticks and records price update', () => {
-      const initial = feed.getSpotTicker('BTC/USD')?.price || 96000;
+      feed.recordPriceUpdate('BTC/USD', 96000, 97000, 95000, 5000);
       feed.simulateMicroTick('BTC/USD', 100);
       const updated = feed.getSpotTicker('BTC/USD')?.price;
-      expect(updated).toBe(initial + 100);
+      expect(updated).toBe(96100);
 
       feed.recordPriceUpdate('BTC/USD', 98000, 99000, 95000, 5000);
       expect(feed.getSpotTicker('BTC/USD')?.price).toBe(98000);
@@ -51,6 +57,7 @@ describe('PriceFeedService, UserSwarmService & OperatorApprovalService Suite', (
     });
 
     it('detects price staleness properly', () => {
+      feed.recordPriceUpdate('BTC/USD', 96000, 97000, 95000, 1000);
       expect(feed.isPriceStale('BTC/USD', 60000)).toBe(false);
       // Unknown symbol is considered stale
       expect(feed.isPriceStale('UNKNOWN/USD', 1000)).toBe(true);

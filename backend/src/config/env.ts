@@ -22,27 +22,27 @@ for (let i = 2; i <= 50; i++) {
   }
 }
 
-const defaultGroqKeys = ['gsk_mock_key_1', 'gsk_mock_key_2', 'gsk_mock_key_3', 'gsk_mock_key_4'];
-const finalGroqKeys = rawGroqKeys.length > 0 ? rawGroqKeys : defaultGroqKeys;
+const defaultGroqKeys: string[] = [];
+const finalGroqKeys = rawGroqKeys;
 
 const envSchema = z.object({
   PORT: z.coerce.number().default(5000),
   NODE_ENV: z.enum(['development', 'production', 'test']).default('development'),
 
-  // Supabase
-  SUPABASE_URL: z.string().url().default('https://mock-project.supabase.co'),
-  SUPABASE_SERVICE_ROLE_KEY: z.string().default('mock-service-role-key'),
-  SUPABASE_ANON_KEY: z.string().default('mock-anon-key'),
+  // Supabase (Fail fast if credentials are not configured)
+  SUPABASE_URL: z.string().url('SUPABASE_URL must be a valid URL'),
+  SUPABASE_SERVICE_ROLE_KEY: z.string().min(1, 'SUPABASE_SERVICE_ROLE_KEY is required'),
+  SUPABASE_ANON_KEY: z.string().min(1, 'SUPABASE_ANON_KEY is required'),
 
-  // Groq LLM (Primary Pool with Round-Robin Rotation)
+  // Groq LLM (Primary Pool with Round-Robin Rotation - optional with deterministic agent fallback)
   GROQ_BASE_URL: z.string().default('https://api.groq.com/openai/v1'),
   GROQ_MODEL: z.string().default('qwen/qwen3.6-27b'),
   GROQ_KEYS: z.array(z.string()).default(finalGroqKeys),
 
-  // Gemini LLM (Exclusively for Strategy Studio Builder)
+  // Gemini LLM (Exclusively for Strategy Studio Builder - optional)
   GEMINI_BASE_URL: z.string().default('https://generativelanguage.googleapis.com/v1beta/openai/'),
-  GEMINI_API_KEY: z.string().default('mock-gemini-key'),
-  GEMINI_MODEL: z.string().default('gemini-2.5-flash'),
+  GEMINI_API_KEY: z.string().optional(),
+  GEMINI_MODEL: z.string().default('gemini-3.1-flash-lite'),
 
   // Somnia Blockchain & Network
   NETWORK: z.enum(['testnet', 'mainnet']).default('testnet'),

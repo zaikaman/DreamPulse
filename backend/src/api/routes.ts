@@ -762,35 +762,10 @@ apiRouter.get('/agents/logs', async (req: Request, res: Response) => {
 
   // 2. Fetch live thoughts from WebSocket telemetry gateway buffer
   const liveLogs = telemetryWsGateway.getRecentAgentLogs(agentType, limit);
-  if (liveLogs.length > 0) {
-    return res.json({
-      success: true,
-      count: liveLogs.length,
-      logs: liveLogs,
-    });
-  }
-
-  // 3. Synthesize live log entries from recent swarm order executions if stream buffer is warming up
-  const recentOrders = orderService.getOrders({
-    agentType: agentType as AgentType,
-    swarmOnly: true,
-  }).slice(0, limit);
-
-  const fallbackLogs = recentOrders.map((o) => ({
-    id: `log-${o.id}`,
-    agentType: o.agentType || 'Swarm',
-    marketId: o.marketId,
-    triggerEvent: 'SWARM_EXECUTION',
-    confidence: 0.92,
-    actionTaken: `${o.direction}_${o.outcome}`,
-    reasoningText: `Executed ${o.direction} ${o.lotSize} lots on outcome ${o.outcome} @ $${o.price.toFixed(2)} with hash ${o.txHash ? o.txHash.slice(0, 10) + '...' : 'pending'}`,
-    createdAt: o.createdAt,
-  }));
-
   return res.json({
     success: true,
-    count: fallbackLogs.length,
-    logs: fallbackLogs,
+    count: liveLogs.length,
+    logs: liveLogs,
   });
 });
 

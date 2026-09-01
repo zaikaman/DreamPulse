@@ -61,7 +61,9 @@ Explain your execution decision in JSON format with keys "confidence" (float 0.0
     });
 
     const parsed = JSON.parse(rawJson);
-    const confidence = typeof parsed.confidence === 'number' ? Math.min(0.99, Math.max(0.60, parsed.confidence)) : 0.94;
+    const confidence = typeof parsed.confidence === 'number' && !isNaN(parsed.confidence)
+      ? Number(Math.min(0.99, Math.max(0.0, parsed.confidence)).toFixed(2))
+      : undefined;
     const thought = (parsed.thought && !parsed.thought.includes('Evaluated quantitative edge on Somnia Shannon CLOB'))
       ? parsed.thought
       : fallbackThought(ctx);
@@ -69,7 +71,7 @@ Explain your execution decision in JSON format with keys "confidence" (float 0.0
     return {
       agent: ctx.agentType,
       triggerEvent: ctx.triggerEvent,
-      confidence: Number(confidence.toFixed(2)),
+      ...(confidence !== undefined ? { confidence } : {}),
       action: (ctx.actionPlanned as StructuredAgentThought['action']) || 'HOLD',
       thought,
       metadata: {
@@ -83,7 +85,6 @@ Explain your execution decision in JSON format with keys "confidence" (float 0.0
     return {
       agent: ctx.agentType,
       triggerEvent: ctx.triggerEvent,
-      confidence: 0.91,
       action: (ctx.actionPlanned as StructuredAgentThought['action']) || 'HOLD',
       thought: fallbackThought(ctx),
       metadata: {

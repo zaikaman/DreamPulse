@@ -20,7 +20,7 @@ export interface AgentLogItem {
   agentType: string;
   marketId?: string;
   triggerEvent: string;
-  confidence: number;
+  confidence?: number;
   actionTaken: string;
   reasoningText: string;
   txHash?: string;
@@ -608,7 +608,7 @@ export class TelemetryWebSocketServer {
     id?: string;
     agent: string;
     marketId?: string;
-    confidence: number;
+    confidence?: number;
     action: string;
     thought: string;
     txHash?: string;
@@ -662,7 +662,7 @@ export class TelemetryWebSocketServer {
     id?: string;
     agent: string;
     marketId?: string;
-    confidence: number;
+    confidence?: number;
     action: string;
     thought: string;
     triggerEvent?: string;

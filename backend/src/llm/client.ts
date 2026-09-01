@@ -12,7 +12,7 @@ export interface StructuredReasoningRequest {
 export interface StructuredAgentThought {
   agent: string;
   triggerEvent: string;
-  confidence: number;
+  confidence?: number;
   action: 'TAKER_SNIPE' | 'LIMIT_QUOTE' | 'BATCH_CLAIM' | 'HOLD';
   thought: string;
   metadata?: Record<string, unknown>;
@@ -92,7 +92,7 @@ export function schedulePersistKeyIndex(index: number): void {
 }
 
 // ------------------------------------------------------------------------------
-// Gemini Fallback Client Singleton
+// Gemini Client Singleton
 // ------------------------------------------------------------------------------
 let geminiFallbackClient: OpenAI | null = null;
 
@@ -100,7 +100,7 @@ function getGeminiClient(): OpenAI {
   if (!geminiFallbackClient) {
     geminiFallbackClient = new OpenAI({
       baseURL: env.GEMINI_BASE_URL,
-      apiKey: env.GEMINI_API_KEY || 'dummy-key',
+      apiKey: env.GEMINI_API_KEY || '',
     });
   }
   return geminiFallbackClient;
@@ -152,7 +152,7 @@ export function setGroqKeyIndex(index: number): void {
 export async function generateStrategyWithGemini(
   request: StructuredReasoningRequest,
 ): Promise<string | null> {
-  if (!env.GEMINI_API_KEY || env.GEMINI_API_KEY.includes('mock') || env.GEMINI_API_KEY === 'dummy-key') {
+  if (!env.GEMINI_API_KEY || !env.GEMINI_API_KEY.trim()) {
     return null;
   }
 
@@ -187,14 +187,14 @@ export async function generateStrategyWithGemini(
 export async function generateStructuredReasoning(
   request: StructuredReasoningRequest,
 ): Promise<string> {
-  const groqKeys = (env.GROQ_KEYS || []).filter((k) => !k.startsWith('gsk_mock'));
+  const groqKeys = env.GROQ_KEYS || [];
   const maxGroqAttempts = Math.min(3, groqKeys.length);
 
-  // 1. Try Groq Pool in Round-Robin order — skip entirely if only mock keys are configured (avoids 401 spam)
+  // 1. Try Groq Pool in Round-Robin order
   if (maxGroqAttempts > 0) {
     for (let attempt = 0; attempt < maxGroqAttempts; attempt++) {
       const apiKey = getNextGroqKey();
-      if (!apiKey || apiKey.startsWith('gsk_mock')) break;
+      if (!apiKey) break;
 
       try {
         const groq = getGroqClient(apiKey);
@@ -215,17 +215,13 @@ export async function generateStructuredReasoning(
         }
       } catch (groqErr) {
         const errMsg = groqErr instanceof Error ? groqErr.message : String(groqErr);
-        // Suppress noisy 401 logs when running offline with placeholder keys
-        if (!errMsg.includes('401')) {
-          console.warn(`[LLM Groq Rotation] Key failed (attempt ${attempt + 1}/${maxGroqAttempts}): ${errMsg}`);
-        }
+        console.warn(`[LLM Groq Rotation] Key failed (attempt ${attempt + 1}/${maxGroqAttempts}): ${errMsg}`);
       }
     }
   }
 
-  // 2. Deterministic Reasoning Fallback (Gemini is strictly reserved for Strategy Studio)
+  // 2. Deterministic Reasoning Fallback (No artificial confidence score when running without LLM)
   return JSON.stringify({
-    confidence: 0.92,
     thought: 'Evaluated quantitative edge on Somnia Shannon CLOB. Executing deterministic rule strategy.',
   });
 }

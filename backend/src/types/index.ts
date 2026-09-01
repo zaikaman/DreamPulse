@@ -136,7 +136,7 @@ export interface AgentThoughtLog {
   agentType: AgentType;
   marketId?: string;
   triggerEvent: string;
-  confidence: number;
+  confidence?: number;
   actionTaken: string;
   reasoningText: string;
   txHash?: string;
