@@ -170,4 +170,79 @@ describe('Social Forecaster Mirror Trading', () => {
     });
     expect(copierOrders.length).toBe(0);
   });
+
+  it('caps copied position size according to configured maxTradeSize', async () => {
+    // Copier sets maxTradeSize of $2.50 USDC
+    await socialCopyService.toggleSocialCopy(copierAddress, forecasterAddress, true, 2.50, 500);
+
+    // Forecaster places a large 20-lot order at $0.50 ($10 total cost)
+    await orderService.submitUserOrder({
+      userAddress: forecasterAddress as any,
+      marketId: mockMarketId,
+      outcome: 'YES',
+      direction: 'BUY',
+      orderType: 'IOC',
+      price: 0.50,
+      lotSize: 20,
+    });
+
+    await new Promise((resolve) => setTimeout(resolve, 50));
+
+    // Copier order should be capped at $2.50 / $0.50 = 5 lots
+    const copierOrders = orderService.getOrders({
+      userAddress: copierAddress,
+      marketId: mockMarketId,
+      source: 'TERMINAL',
+    });
+
+    expect(copierOrders.length).toBe(1);
+    expect(copierOrders[0].lotSize).toBe(5);
+    expect(copierOrders[0].totalCost).toBeCloseTo(2.50, 2);
+  });
+
+  it('respects per-forecaster daily volume cap and pauses copy trades when exceeded', async () => {
+    // Copier sets daily cap of $5.00 USDC
+    await socialCopyService.toggleSocialCopy(copierAddress, forecasterAddress, true, 50, 5.00);
+
+    // Trade 1: Forecaster places order costing $4.00 (8 lots at $0.50) -> should be mirrored
+    await orderService.submitUserOrder({
+      userAddress: forecasterAddress as any,
+      marketId: mockMarketId,
+      outcome: 'YES',
+      direction: 'BUY',
+      orderType: 'IOC',
+      price: 0.50,
+      lotSize: 8,
+    });
+
+    await new Promise((resolve) => setTimeout(resolve, 50));
+
+    let copierOrders = orderService.getOrders({
+      userAddress: copierAddress,
+      marketId: mockMarketId,
+      source: 'TERMINAL',
+    });
+    expect(copierOrders.length).toBe(1);
+
+    // Trade 2: Forecaster places another order costing $4.00 -> would exceed $5 daily cap ($4 + $4 = $8 > $5)
+    await orderService.submitUserOrder({
+      userAddress: forecasterAddress as any,
+      marketId: mockMarketId,
+      outcome: 'NO',
+      direction: 'BUY',
+      orderType: 'IOC',
+      price: 0.50,
+      lotSize: 8,
+    });
+
+    await new Promise((resolve) => setTimeout(resolve, 50));
+
+    copierOrders = orderService.getOrders({
+      userAddress: copierAddress,
+      marketId: mockMarketId,
+      source: 'TERMINAL',
+    });
+    // Still only 1 copied order because 2nd was skipped due to daily volume cap
+    expect(copierOrders.length).toBe(1);
+  });
 });

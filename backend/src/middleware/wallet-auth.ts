@@ -349,7 +349,9 @@ export async function optionalWalletAuth(req: Request, res: Response, next: Next
   if (result.address) {
     const mismatch = checkAddressMismatch(req, result.address);
     if (mismatch) {
-      res.status(401).json({ success: false, error: mismatch });
+      // For optional auth routes (e.g. GET /agents/custom?userAddress=0x...), if a stale cookie
+      // from a previously connected wallet is present, gracefully downgrade to public unauthenticated query
+      next();
       return;
     }
     req.walletAddress = result.address;
@@ -365,15 +367,6 @@ export async function optionalWalletAuth(req: Request, res: Response, next: Next
     return;
   }
 
-  if (result.error) {
-    res.status(401).json({ success: false, error: result.error });
-    return;
-  }
-
-  // If proof was provided but could not be verified
-  res.status(401).json({
-    success: false,
-    error:
-      'Invalid wallet authentication. Include either Authorization: Bearer <jwt> OR valid EIP-712 signature headers OR SIWE signature headers.',
-  });
+  // If proof was provided but could not be verified (e.g. expired token), gracefully downgrade for optional reads
+  next();
 }

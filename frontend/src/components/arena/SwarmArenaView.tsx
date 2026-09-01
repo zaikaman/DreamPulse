@@ -14,6 +14,7 @@ import {
   XMarkIcon,
   ArrowTopRightOnSquareIcon,
   UserPlusIcon,
+  AdjustmentsHorizontalIcon,
 } from '@heroicons/react/24/outline';
 import type {
   ArenaAgentEntry,
@@ -24,6 +25,7 @@ import type {
 import type { WalletState } from '../../hooks/useSessionKey.js';
 import { useArenaLeaderboard } from '../../hooks/useArenaLeaderboard.js';
 import { ProofOfAlphaModal } from './ProofOfAlphaModal.js';
+import { SocialCopyRiskModal } from './SocialCopyRiskModal.js';
 import { Spinner } from '../ui/Spinner.js';
 import { Badge } from '../ui/badge.js';
 import { Button } from '../ui/button.js';
@@ -98,6 +100,8 @@ export const SwarmArenaView: React.FC<SwarmArenaViewProps> = ({
     isCopyTradeLoading,
     copyTradeStatusMsg,
     isForecasterMirrored,
+    getCopierConfig,
+    followingConfigs,
     toggleSocialCopyTrading,
     clearMessages,
   } = useArenaLeaderboard(wallet?.address || undefined);
@@ -105,6 +109,19 @@ export const SwarmArenaView: React.FC<SwarmArenaViewProps> = ({
   // Card Generator Modal State
   const [isCardModalOpen, setIsCardModalOpen] = useState<boolean>(false);
   const [cardModalConfig, setCardModalConfig] = useState<ProofOfAlphaCardConfig | null>(null);
+
+  // Social Copy Risk Modal State
+  const [isSocialRiskModalOpen, setIsSocialRiskModalOpen] = useState<boolean>(false);
+  const [selectedTraderForRisk, setSelectedTraderForRisk] = useState<ArenaTraderEntry | null>(null);
+
+  const handleOpenForecasterRiskModal = (trader: ArenaTraderEntry) => {
+    if (!wallet?.isConnected) {
+      if (onConnectWallet) onConnectWallet();
+      return;
+    }
+    setSelectedTraderForRisk(trader);
+    setIsSocialRiskModalOpen(true);
+  };
 
   const handleOpenCardModal = (config: ProofOfAlphaCardConfig) => {
     setCardModalConfig(config);
@@ -416,6 +433,46 @@ export const SwarmArenaView: React.FC<SwarmArenaViewProps> = ({
           </Button>
         </div>
       </div>
+
+      {/* Active Social Mirrors Quick Bar */}
+      {activeTrack === 'TRADERS' && followingConfigs.length > 0 && (
+        <div className="terminal-panel p-3 bg-secondary/20 border border-[#00e676]/30 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+          <div className="flex items-center gap-2.5 flex-wrap">
+            <div className="w-2 h-2 rounded-full bg-[#00e676] animate-pulse" />
+            <span className="text-xs font-semibold text-foreground font-mono">
+              Active Forecaster Mirrors ({followingConfigs.length}):
+            </span>
+            <div className="flex items-center flex-wrap gap-1.5">
+              {followingConfigs.map((cfg) => {
+                const matchedTrader = traders.find((t) => t.userAddress.toLowerCase() === (cfg.targetAddress || '').toLowerCase());
+                const name = matchedTrader?.traderTitle || `${cfg.targetAddress.slice(0, 6)}...${cfg.targetAddress.slice(-4)}`;
+                return (
+                  <button
+                    key={cfg.targetAddress}
+                    type="button"
+                    onClick={() => {
+                      const tr = matchedTrader || {
+                        userAddress: cfg.targetAddress,
+                        traderTitle: name,
+                        tierBadge: 'PRO',
+                      };
+                      handleOpenForecasterRiskModal(tr as ArenaTraderEntry);
+                    }}
+                    className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded bg-card border border-border/60 text-foreground font-mono text-[11px] hover:border-[#00e676]/60 transition-colors cursor-pointer"
+                    title="Click to adjust risk limits or stop mirroring"
+                  >
+                    <span>{name}</span>
+                    <Badge variant="outline" className="text-[9px] px-1 py-0 border-[#00ffcc]/40 text-[#00ffcc]">
+                      ${cfg.maxTradeSize ?? 50} Max
+                    </Badge>
+                    <AdjustmentsHorizontalIcon className="w-3 h-3 text-muted-foreground hover:text-foreground" />
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* 4. Sleek Top 3 Spotlight Cards (Redesigned with Overview Restraint) */}
       {!isLoading && (activeTrack === 'AGENTS' ? agents.length >= 3 : traders.length >= 3) && (
@@ -815,7 +872,7 @@ export const SwarmArenaView: React.FC<SwarmArenaViewProps> = ({
                             size="sm"
                             onClick={() => handleCloneAgentClick(agent)}
                             disabled={cloningAgentId === agent.id}
-                            className="h-6 text-xs text-muted-foreground hover:text-foreground gap-1 font-normal"
+                            className="h-6 text-xs text-muted-foreground hover:text-foreground gap-1 font-normal cursor-pointer"
                             title="Clone strategy into Studio"
                           >
                             {cloningAgentId === agent.id ? <Spinner size="sm" /> : <DocumentDuplicateIcon className="w-2.5 h-2.5" />}
@@ -826,7 +883,7 @@ export const SwarmArenaView: React.FC<SwarmArenaViewProps> = ({
                             variant="ghost"
                             size="sm"
                             onClick={() => handleBacktestAgentClick(agent)}
-                            className="h-6 text-xs text-muted-foreground hover:text-foreground gap-1 font-normal px-2"
+                            className="h-6 text-xs text-muted-foreground hover:text-foreground gap-1 font-normal px-2 cursor-pointer"
                             title="Replay in Backtester"
                           >
                             <BeakerIcon className="w-2.5 h-2.5" />
@@ -836,7 +893,7 @@ export const SwarmArenaView: React.FC<SwarmArenaViewProps> = ({
                             variant="ghost"
                             size="sm"
                             onClick={() => handleShareAgent(agent)}
-                            className="h-6 text-xs text-muted-foreground hover:text-foreground gap-1 font-normal px-2"
+                            className="h-6 text-xs text-muted-foreground hover:text-foreground gap-1 font-normal px-2 cursor-pointer"
                             title="Generate Alpha Card"
                           >
                             <ShareIcon className="w-2.5 h-2.5" />
@@ -873,121 +930,147 @@ export const SwarmArenaView: React.FC<SwarmArenaViewProps> = ({
                     </td>
                   </tr>
                 ) : (
-                  traders.map((trader) => (
-                    <tr
-                      key={trader.userAddress}
-                      className="border-b border-border/30 hover:bg-muted/30 transition-colors"
-                    >
-                      {/* Rank */}
-                      <td style={{ padding: '10px 14px', textAlign: 'center' }} className="font-mono text-muted-foreground text-xs">
-                        {trader.rank}
-                      </td>
+                  traders.map((trader) => {
+                    const copierCfg = getCopierConfig(trader.userAddress);
+                    const isMirrored = isForecasterMirrored(trader.userAddress);
 
-                      {/* Trader & Address */}
-                      <td style={{ padding: '10px 16px' }}>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                          <span style={{ fontWeight: 600 }} className="text-foreground">{trader.traderTitle}</span>
-                        </div>
-                        <div className="text-[11px] text-muted-foreground font-mono">
-                          {trader.userAddress.slice(0, 8)}...{trader.userAddress.slice(-6)}
-                        </div>
-                      </td>
+                    return (
+                      <tr
+                        key={trader.userAddress}
+                        className="border-b border-border/30 hover:bg-muted/30 transition-colors"
+                      >
+                        {/* Rank */}
+                        <td style={{ padding: '10px 14px', textAlign: 'center' }} className="font-mono text-muted-foreground text-xs">
+                          {trader.rank}
+                        </td>
 
-                      {/* Fav Market */}
-                      <td style={{ padding: '10px 14px' }}>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                          <span className="font-mono text-xs text-foreground font-medium">{trader.favoriteSymbol}</span>
-                          <Badge variant="secondary" className="font-mono text-[10px] px-1.5 py-0 text-muted-foreground">
-                            {trader.favoriteWindow}
+                        {/* Trader & Address */}
+                        <td style={{ padding: '10px 16px' }}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                            <span style={{ fontWeight: 600 }} className="text-foreground">{trader.traderTitle}</span>
+                            {isMirrored && (
+                              <Badge variant="outline" className="font-mono text-[9px] px-1 py-0 border-[#00e676]/40 text-[#00e676] bg-[#00e676]/5">
+                                MIRRORING (${copierCfg?.maxTradeSize ?? 50})
+                              </Badge>
+                            )}
+                          </div>
+                          <div className="text-[11px] text-muted-foreground font-mono">
+                            {trader.userAddress.slice(0, 8)}...{trader.userAddress.slice(-6)}
+                          </div>
+                        </td>
+
+                        {/* Fav Market */}
+                        <td style={{ padding: '10px 14px' }}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                            <span className="font-mono text-xs text-foreground font-medium">{trader.favoriteSymbol}</span>
+                            <Badge variant="secondary" className="font-mono text-[10px] px-1.5 py-0 text-muted-foreground">
+                              {trader.favoriteWindow}
+                            </Badge>
+                          </div>
+                        </td>
+
+                        {/* Copilot Synergy */}
+                        <td style={{ padding: '10px 14px', textAlign: 'center' }} className="font-mono">
+                          <Badge variant="outline" className="font-mono text-[10px] text-muted-foreground bg-secondary/30 border-border/50">
+                            {trader.copilotSynergyScore}%
                           </Badge>
-                        </div>
-                      </td>
+                        </td>
 
-                      {/* Copilot Synergy */}
-                      <td style={{ padding: '10px 14px', textAlign: 'center' }} className="font-mono">
-                        <Badge variant="outline" className="font-mono text-[10px] text-muted-foreground bg-secondary/30 border-border/50">
-                          {trader.copilotSynergyScore}%
-                        </Badge>
-                      </td>
+                        {/* Win Rate */}
+                        <td style={{ padding: '10px 14px', textAlign: 'right' }} className="font-mono">
+                          <div className="text-foreground font-medium">{trader.winRate}%</div>
+                          <div className="text-[10px] text-muted-foreground">{trader.winsCount}W / {trader.lossesCount}L</div>
+                        </td>
 
-                      {/* Win Rate */}
-                      <td style={{ padding: '10px 14px', textAlign: 'right' }} className="font-mono">
-                        <div className="text-foreground font-medium">{trader.winRate}%</div>
-                        <div className="text-[10px] text-muted-foreground">{trader.winsCount}W / {trader.lossesCount}L</div>
-                      </td>
+                        {/* Streak */}
+                        <td style={{ padding: '10px 14px', textAlign: 'center' }} className="font-mono text-xs text-muted-foreground">
+                          {trader.currentStreak}
+                        </td>
 
-                      {/* Streak */}
-                      <td style={{ padding: '10px 14px', textAlign: 'center' }} className="font-mono text-xs text-muted-foreground">
-                        {trader.currentStreak}
-                      </td>
+                        {/* Realized PnL */}
+                        <td style={{ padding: '10px 16px', textAlign: 'right' }} className="font-mono">
+                          <div className={cn(
+                            "font-semibold",
+                            trader.realizedPnl >= 0 ? "text-[#00e676]" : "text-[#ff3366]"
+                          )}>
+                            {trader.realizedPnl >= 0 ? `+${trader.realizedPnl.toFixed(2)}` : trader.realizedPnl.toFixed(2)} USDC
+                          </div>
+                          <div className="text-[10px] text-muted-foreground">
+                            ${trader.volume.toLocaleString()} Vol
+                          </div>
+                        </td>
 
-                      {/* Realized PnL */}
-                      <td style={{ padding: '10px 16px', textAlign: 'right' }} className="font-mono">
-                        <div className={cn(
-                          "font-semibold",
-                          trader.realizedPnl >= 0 ? "text-[#00e676]" : "text-[#ff3366]"
-                        )}>
-                          {trader.realizedPnl >= 0 ? `+${trader.realizedPnl.toFixed(2)}` : trader.realizedPnl.toFixed(2)} USDC
-                        </div>
-                        <div className="text-[10px] text-muted-foreground">
-                          ${trader.volume.toLocaleString()} Vol
-                        </div>
-                      </td>
+                        {/* Actions */}
+                        <td style={{ padding: '10px 16px', textAlign: 'right' }}>
+                          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: '4px' }}>
+                            {wallet?.address && wallet.address.toLowerCase() !== trader.userAddress.toLowerCase() && (
+                              <>
+                                <Button
+                                  variant={isMirrored ? "outline" : "default"}
+                                  size="sm"
+                                  onClick={() => handleOpenForecasterRiskModal(trader)}
+                                  disabled={isCopyTradeLoading && copyTradingTarget?.toLowerCase() === trader.userAddress.toLowerCase()}
+                                  className={cn(
+                                    "h-6 text-xs gap-1 font-mono px-2 cursor-pointer",
+                                    isMirrored
+                                      ? "border-[#00e676]/40 text-[#00e676] hover:bg-[#00e676]/10"
+                                      : "bg-[#00e676] text-black hover:bg-[#00c853] font-semibold"
+                                  )}
+                                  title={isMirrored ? "Adjust Risk Limits or Stop Mirroring" : "Configure Mirror Risk & Position Sizing"}
+                                >
+                                  {isCopyTradeLoading && copyTradingTarget?.toLowerCase() === trader.userAddress.toLowerCase() ? (
+                                    <Spinner size="sm" />
+                                  ) : isMirrored ? (
+                                    <>
+                                      <CheckCircleIcon className="w-2.5 h-2.5 text-[#00e676]" />
+                                      <span>Mirroring</span>
+                                    </>
+                                  ) : (
+                                    <>
+                                      <UserPlusIcon className="w-2.5 h-2.5" />
+                                      <span>Mirror</span>
+                                    </>
+                                  )}
+                                </Button>
 
-                      {/* Actions */}
-                      <td style={{ padding: '10px 16px', textAlign: 'right' }}>
-                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: '4px' }}>
-                          {wallet?.address && wallet.address.toLowerCase() !== trader.userAddress.toLowerCase() && (
+                                {isMirrored && (
+                                  <Button
+                                    variant="ghost"
+                                    size="sm"
+                                    onClick={() => handleOpenForecasterRiskModal(trader)}
+                                    className="h-6 w-6 p-0 text-muted-foreground hover:text-[#00ffcc] hover:bg-[#00ffcc]/10 rounded cursor-pointer"
+                                    title="Adjust Risk Limits & Position Size"
+                                  >
+                                    <AdjustmentsHorizontalIcon className="w-3.5 h-3.5" />
+                                  </Button>
+                                )}
+                              </>
+                            )}
+
                             <Button
-                              variant={isForecasterMirrored(trader.userAddress) ? "outline" : "default"}
+                              variant="outline"
                               size="sm"
-                              onClick={() => toggleSocialCopyTrading(trader.userAddress, !isForecasterMirrored(trader.userAddress))}
-                              disabled={isCopyTradeLoading && copyTradingTarget?.toLowerCase() === trader.userAddress.toLowerCase()}
-                              className={cn(
-                                "h-6 text-xs gap-1 font-mono px-2",
-                                isForecasterMirrored(trader.userAddress) && "border-[#ff3366]/40 text-[#ff3366] hover:bg-[#ff3366]/10"
-                              )}
-                              title={isForecasterMirrored(trader.userAddress) ? "Stop Mirroring" : "Mirror Forecaster"}
+                              onClick={() => handleOpenTraderProfile(trader.userAddress)}
+                              className="h-6 text-xs text-muted-foreground hover:text-foreground gap-1 font-normal cursor-pointer"
                             >
-                              {isCopyTradeLoading && copyTradingTarget?.toLowerCase() === trader.userAddress.toLowerCase() ? (
-                                <Spinner size="sm" />
-                              ) : isForecasterMirrored(trader.userAddress) ? (
-                                <>
-                                  <CheckCircleIcon className="w-2.5 h-2.5 text-[#00e676]" />
-                                  <span>Mirroring</span>
-                                </>
-                              ) : (
-                                <>
-                                  <UserPlusIcon className="w-2.5 h-2.5" />
-                                  <span>Mirror</span>
-                                </>
-                              )}
+                              <span>Profile</span>
+                              <ArrowTopRightOnSquareIcon className="w-2.5 h-2.5" />
                             </Button>
-                          )}
 
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            onClick={() => handleOpenTraderProfile(trader.userAddress)}
-                            className="h-6 text-xs text-muted-foreground hover:text-foreground gap-1 font-normal"
-                          >
-                            <span>Profile</span>
-                            <ArrowTopRightOnSquareIcon className="w-2.5 h-2.5" />
-                          </Button>
-
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            onClick={() => handleShareTrader(trader)}
-                            className="h-6 text-xs text-muted-foreground hover:text-foreground gap-1 font-normal px-2"
-                            title="Generate Alpha Card"
-                          >
-                            <ShareIcon className="w-2.5 h-2.5" />
-                          </Button>
-                        </div>
-                      </td>
-                    </tr>
-                  ))
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => handleShareTrader(trader)}
+                              className="h-6 text-xs text-muted-foreground hover:text-foreground gap-1 font-normal px-2 cursor-pointer"
+                              title="Generate Alpha Card"
+                            >
+                              <ShareIcon className="w-2.5 h-2.5" />
+                            </Button>
+                          </div>
+                        </td>
+                      </tr>
+                    );
+                  })
                 )}
               </tbody>
             </table>
@@ -1003,6 +1086,32 @@ export const SwarmArenaView: React.FC<SwarmArenaViewProps> = ({
           setCardModalConfig(null);
         }}
         config={cardModalConfig}
+      />
+
+      {/* 7. Social Forecaster Mirror Risk & Position Size Modal */}
+      <SocialCopyRiskModal
+        isOpen={isSocialRiskModalOpen}
+        onClose={() => {
+          setIsSocialRiskModalOpen(false);
+          setSelectedTraderForRisk(null);
+        }}
+        trader={selectedTraderForRisk}
+        existingConfig={selectedTraderForRisk ? getCopierConfig(selectedTraderForRisk.userAddress) : undefined}
+        isCurrentlyMirroring={selectedTraderForRisk ? isForecasterMirrored(selectedTraderForRisk.userAddress) : false}
+        isLoading={isCopyTradeLoading}
+        onConfirm={async (params) => {
+          await toggleSocialCopyTrading(
+            params.targetAddress,
+            true,
+            params.maxTradeSize,
+            params.dailyVolumeCap
+          );
+        }}
+        onStopMirroring={async (targetAddress) => {
+          await toggleSocialCopyTrading(targetAddress, false);
+        }}
+        hasActiveSession={Boolean(wallet?.isConnected)}
+        onOpenSessionModal={_onOpenSessionModal}
       />
     </div>
   );

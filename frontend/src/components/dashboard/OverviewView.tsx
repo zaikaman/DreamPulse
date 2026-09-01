@@ -14,6 +14,7 @@ import { useOnboarding } from '../../hooks/useOnboarding.js';
 import { StatCardsGrid } from './StatCardsGrid.js';
 import { SessionStatusBar } from '../SessionStatusBar.js';
 import { OnboardingQuestBar } from './OnboardingQuestBar.js';
+import { SwarmRiskModal } from '../arena/SwarmRiskModal.js';
 import { OpportunityTableSkeleton, Skeleton } from '../ui/Skeleton.js';
 import { Badge } from '../ui/badge.js';
 import { Button } from '../ui/button.js';
@@ -58,6 +59,7 @@ const OverviewViewComponent: React.FC<OverviewViewProps> = ({
 }) => {
   const [isHovered, setIsHovered] = useState<boolean>(false);
   const [nowTime, setNowTime] = useState<number>(Date.now());
+  const [isSwarmRiskModalOpen, setIsSwarmRiskModalOpen] = useState<boolean>(false);
 
   useEffect(() => {
     const timer = setInterval(() => setNowTime(Date.now()), 1000);
@@ -151,6 +153,7 @@ const OverviewViewComponent: React.FC<OverviewViewProps> = ({
           isFauceting={isFauceting}
           onClaimFaucet={onClaimFaucet}
           onOpenModal={onOpenSessionModal}
+          onOpenFleetRisk={() => setIsSwarmRiskModalOpen(true)}
           onConnectWallet={onConnectWallet}
           onSwitchNetwork={onSwitchNetwork}
           isCopyTradeEnabled={isCopyTradeEnabled}
@@ -232,7 +235,12 @@ const OverviewViewComponent: React.FC<OverviewViewProps> = ({
                 ) : (
                   opportunities.map(({ market, edge, implied, fair, action }) => {
                     const isSelected = selectedMarketId === market.id;
-                    const isYesEdge = edge > 0;
+                    const isYesEdge = (edge ?? 0) > 0;
+                    const formattedStrike = typeof market?.strikePrice === 'number'
+                      ? `$${market.strikePrice.toLocaleString()}`
+                      : market?.strikePrice
+                      ? `$${market.strikePrice}`
+                      : '—';
                     return (
                       <tr
                         key={market.id}
@@ -244,26 +252,26 @@ const OverviewViewComponent: React.FC<OverviewViewProps> = ({
                       >
                         <td style={{ padding: '10px 18px' }}>
                           <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                            <span style={{ fontWeight: 600 }} className="text-foreground">{market.symbol}</span>
+                            <span style={{ fontWeight: 600 }} className="text-foreground">{market?.symbol || 'BTC/USD'}</span>
                             <span className="font-mono text-muted-foreground text-xs">
-                              ${market.strikePrice.toLocaleString()}
+                              {formattedStrike}
                             </span>
                           </div>
                         </td>
                         <td style={{ padding: '10px 14px' }}>
                           <Badge variant="secondary" className="font-mono text-[10px] px-1.5 py-0 text-muted-foreground">
-                            {market.windowDuration}
+                            {market?.windowDuration || '5m'}
                           </Badge>
                         </td>
                         <td style={{ padding: '10px 14px' }} className="font-mono text-muted-foreground">
-                          {(implied * 100).toFixed(1)}%
+                          {((implied ?? 0.5) * 100).toFixed(1)}%
                         </td>
                         <td style={{ padding: '10px 14px' }} className="font-mono font-medium text-foreground">
-                          {(fair * 100).toFixed(1)}%
+                          {((fair ?? 0.5) * 100).toFixed(1)}%
                         </td>
                         <td style={{ padding: '10px 14px' }}>
                           <span className={cn("font-mono font-semibold", isYesEdge ? "text-[#00e676]" : "text-[#ff3366]")}>
-                            {isYesEdge ? '+' : ''}{(edge * 100).toFixed(1)}%
+                            {isYesEdge ? '+' : ''}{((edge ?? 0) * 100).toFixed(1)}%
                           </span>
                         </td>
                         <td style={{ padding: '10px 14px' }}>
@@ -486,6 +494,13 @@ const OverviewViewComponent: React.FC<OverviewViewProps> = ({
           </div>
         </div>
       </div>
+
+      {/* Swarm Fleet Risk & Position Sizing Modal */}
+      <SwarmRiskModal
+        isOpen={isSwarmRiskModalOpen}
+        onClose={() => setIsSwarmRiskModalOpen(false)}
+        userAddress={wallet?.address || undefined}
+      />
     </div>
   );
 };

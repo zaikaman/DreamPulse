@@ -8,6 +8,7 @@ import type {
   ArenaTimeframe,
   ArenaSortBy,
   CustomAgentDefinition,
+  SocialCopyConfig,
 } from '../types/index.js';
 
 export type ArenaTrackType = 'AGENTS' | 'TRADERS';
@@ -42,6 +43,7 @@ export function useArenaLeaderboard(userAddress?: string | null) {
   const [isCopyTradeLoading, setIsCopyTradeLoading] = useState<boolean>(false);
   const [copyTradeStatusMsg, setCopyTradeStatusMsg] = useState<string | null>(null);
   const [mirroredTargets, setMirroredTargets] = useState<Set<string>>(new Set());
+  const [followingConfigs, setFollowingConfigs] = useState<SocialCopyConfig[]>([]);
 
   const isMountedRef = useRef<boolean>(true);
 
@@ -49,12 +51,19 @@ export function useArenaLeaderboard(userAddress?: string | null) {
   const fetchFollowing = useCallback(async () => {
     if (!userAddress) {
       setMirroredTargets(new Set());
+      setFollowingConfigs([]);
       return;
     }
     try {
       const res = await apiClient.getSocialCopyFollowing(userAddress);
       if (isMountedRef.current && res.success && Array.isArray(res.data)) {
-        const set = new Set<string>(res.data.map((r: any) => (r.targetAddress || r.target_address || '').toLowerCase()).filter(Boolean));
+        setFollowingConfigs(res.data);
+        const set = new Set<string>(
+          res.data
+            .filter((r) => r.isActive !== false)
+            .map((r: any) => (r.targetAddress || r.target_address || '').toLowerCase())
+            .filter(Boolean)
+        );
         setMirroredTargets(set);
       }
     } catch {}
@@ -176,8 +185,13 @@ export function useArenaLeaderboard(userAddress?: string | null) {
     }
   }, [userAddress, fetchLeaderboardData]);
 
-  // Social Copy-Trading Toggle
-  const toggleSocialCopyTrading = useCallback(async (targetAddress: string, enabled: boolean) => {
+  // Social Copy-Trading Toggle & Risk Configuration
+  const toggleSocialCopyTrading = useCallback(async (
+    targetAddress: string,
+    enabled: boolean,
+    maxTradeSize?: number,
+    dailyVolumeCap?: number,
+  ) => {
     if (!userAddress) {
       setError('Please connect your wallet to enable social copy-trading');
       return;
@@ -193,6 +207,8 @@ export function useArenaLeaderboard(userAddress?: string | null) {
         userAddress,
         targetAddress,
         enabled,
+        maxTradeSize,
+        dailyVolumeCap,
       });
       if (res.success) {
         setCopyTradeStatusMsg(res.message);
@@ -205,9 +221,20 @@ export function useArenaLeaderboard(userAddress?: string | null) {
           }
           return next;
         });
+        // Update following configs state immediately
+        setFollowingConfigs((prev) => {
+          const targetLower = targetAddress.toLowerCase();
+          const filtered = prev.filter(
+            (c) => (c.targetAddress || '').toLowerCase() !== targetLower
+          );
+          if (enabled && res.config) {
+            return [...filtered, res.config];
+          }
+          return filtered;
+        });
       }
     } catch (err: any) {
-      setError(err.message || 'Failed to toggle copy-trading');
+      setError(err.message || 'Failed to update copy-trading settings');
     } finally {
       setIsCopyTradeLoading(false);
       setCopyTradingTarget(null);
@@ -218,6 +245,14 @@ export function useArenaLeaderboard(userAddress?: string | null) {
     if (!targetAddress) return false;
     return mirroredTargets.has(targetAddress.toLowerCase());
   }, [mirroredTargets]);
+
+  const getCopierConfig = useCallback((targetAddress: string): SocialCopyConfig | undefined => {
+    if (!targetAddress) return undefined;
+    const targetLower = targetAddress.toLowerCase();
+    return followingConfigs.find(
+      (c) => (c.targetAddress || '').toLowerCase() === targetLower
+    );
+  }, [followingConfigs]);
 
   const clearMessages = useCallback(() => {
     setCloneSuccessMsg(null);
@@ -259,7 +294,9 @@ export function useArenaLeaderboard(userAddress?: string | null) {
     isCopyTradeLoading,
     copyTradeStatusMsg,
     mirroredTargets,
+    followingConfigs,
     isForecasterMirrored,
+    getCopierConfig,
     toggleSocialCopyTrading,
     clearMessages,
   };

@@ -14,6 +14,8 @@ export interface SocialCopyRelation {
   isActive: boolean;
   maxTradeSize?: number;
   dailyVolumeCap?: number;
+  spentToday?: number;
+  lastSpendResetTimestamp?: number;
   totalCopiedTrades: number;
   totalCopiedVolume: number;
   createdAt: string;
@@ -244,6 +246,19 @@ export class SocialCopyService {
           continue;
         }
 
+        // Validate copier relation daily volume cap if set
+        if (copierRel.dailyVolumeCap && copierRel.dailyVolumeCap > 0) {
+          const nowMs = Date.now();
+          if (!copierRel.lastSpendResetTimestamp || nowMs - copierRel.lastSpendResetTimestamp > 24 * 3600 * 1000) {
+            copierRel.spentToday = 0;
+            copierRel.lastSpendResetTimestamp = nowMs;
+          }
+          if ((copierRel.spentToday || 0) + totalCost > copierRel.dailyVolumeCap) {
+            console.warn(`[SocialCopyService] Mirror skipped for ${copierRel.copierAddress}: Daily volume cap of ${copierRel.dailyVolumeCap} USDC reached for Forecaster ${copierRel.targetAddress}`);
+            continue;
+          }
+        }
+
         // Validate session risk allowance
         const riskCheck = sessionService.validateTradeAllowance(session.id, totalCost);
         if (!riskCheck.allowed) {
@@ -354,7 +369,8 @@ export class SocialCopyService {
         if (copiedExecution) {
           executedOrders.push(copiedExecution);
 
-          // Update copier statistics
+          // Update copier statistics & daily spend
+          copierRel.spentToday = (copierRel.spentToday || 0) + totalCost;
           copierRel.totalCopiedTrades += 1;
           copierRel.totalCopiedVolume += totalCost;
           copierRel.updatedAt = new Date().toISOString();

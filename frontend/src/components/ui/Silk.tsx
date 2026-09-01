@@ -152,7 +152,24 @@ export const Silk: React.FC<SilkProps> = ({
 
   return (
     <div className={className} style={{ width: '100%', height: '100%', ...style }}>
-      <Canvas dpr={[1, 2]} frameloop="always" gl={{ alpha: true, antialias: true }}>
+      <Canvas
+        dpr={[1, 2]}
+        frameloop="always"
+        gl={{
+          alpha: true,
+          antialias: true,
+          powerPreference: 'low-power',
+        }}
+        onCreated={({ gl }) => {
+          gl.domElement.addEventListener(
+            'webglcontextlost',
+            (event) => {
+              event.preventDefault();
+            },
+            false,
+          );
+        }}
+      >
         <SilkPlane ref={meshRef} uniforms={uniforms} />
       </Canvas>
     </div>

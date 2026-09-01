@@ -18,6 +18,7 @@ import type {
   ArenaGlobalStats,
   ArenaTimeframe,
   ArenaSortBy,
+  SocialCopyConfig,
 } from '../types/index.js';
 
 const rawApiUrl = ((import.meta as any).env?.VITE_BACKEND_HTTP_URL || '').trim();
@@ -584,7 +585,7 @@ export const apiClient = {
     enabled: boolean;
     maxTradeSize?: number;
     dailyVolumeCap?: number;
-  }): Promise<{ success: boolean; isCopying?: boolean; config: any; message: string }> {
+  }): Promise<{ success: boolean; isCopying?: boolean; config: SocialCopyConfig; message: string }> {
     return fetchJson('/arena/copytrade/toggle', {
       method: 'POST',
       body: JSON.stringify(payload),
@@ -594,14 +595,14 @@ export const apiClient = {
   async getSocialCopyTradeStatus(
     userAddress: string,
     targetAddress: string,
-  ): Promise<{ success: boolean; isCopying: boolean; config: any }> {
+  ): Promise<{ success: boolean; isCopying: boolean; config: SocialCopyConfig | null }> {
     const params = new URLSearchParams({ userAddress, targetAddress });
     return fetchJson(`/arena/copytrade/status?${params.toString()}`);
   },
 
   async getSocialCopyFollowing(
     userAddress: string,
-  ): Promise<{ success: boolean; count: number; data: any[] }> {
+  ): Promise<{ success: boolean; count: number; data: SocialCopyConfig[] }> {
     const params = new URLSearchParams({ userAddress });
     return fetchJson(`/arena/copytrade/following?${params.toString()}`);
   },

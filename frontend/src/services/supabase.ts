@@ -22,8 +22,9 @@ const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY || 'mock-anon-key
 
 export const supabaseBrowser: SupabaseClient = createClient(supabaseUrl, supabaseAnonKey, {
   auth: {
-    persistSession: true,
-    autoRefreshToken: true,
+    persistSession: false,
+    autoRefreshToken: false,
+    detectSessionInUrl: false,
   },
   realtime: {
     params: {
@@ -70,16 +71,9 @@ export function clearStoredSupabaseJwt(): void {
  */
 export async function setSupabaseAuth(token: string): Promise<void> {
   try {
-    // supabase-js v2: setSession for REST; realtime.setAuth for Realtime
-    const maybeAuth: any = (supabaseBrowser as any).auth;
-    if (maybeAuth?.setSession) {
-      await maybeAuth.setSession({ access_token: token, refresh_token: token }).catch(() => {});
-    }
     const maybeRealtime: any = (supabaseBrowser as any).realtime;
     if (maybeRealtime?.setAuth) {
       maybeRealtime.setAuth(token);
-    } else if ((supabaseBrowser as any).realtime?.setAuth) {
-      (supabaseBrowser as any).realtime.setAuth(token);
     }
   } catch (e) {
     console.warn('[Supabase] setSupabaseAuth warn:', e);
@@ -89,8 +83,6 @@ export async function setSupabaseAuth(token: string): Promise<void> {
 export async function clearSupabaseAuth(): Promise<void> {
   clearStoredSupabaseJwt();
   try {
-    const maybeAuth: any = (supabaseBrowser as any).auth;
-    if (maybeAuth?.signOut) await maybeAuth.signOut().catch(() => {});
     const maybeRealtime: any = (supabaseBrowser as any).realtime;
     if (maybeRealtime?.setAuth) maybeRealtime.setAuth(null);
   } catch {}
@@ -148,8 +140,9 @@ export function subscribeToTable<T = any>(
     return createNoopChannel();
   }
 
+  const channelTopic = `public:${table}_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`;
   const channel = supabaseBrowser
-    .channel(`public:${table}`)
+    .channel(channelTopic)
     .on(
       'postgres_changes',
       { event: '*', schema: 'public', table },
@@ -186,8 +179,9 @@ export function subscribeToPrivateTable<T = any>(
   if (needsJwt && !getStoredSupabaseJwt()) {
     console.warn(`[Supabase] subscribeToPrivateTable('${table}') without JWT — RLS will deny until wallet-verify mints token. Polling will cover.`);
   }
+  const channelTopic = `private:${table}:${lower}_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`;
   const channel = supabaseBrowser
-    .channel(`private:${table}:${lower}`)
+    .channel(channelTopic)
     .on(
       'postgres_changes',
       { event: '*', schema: 'public', table, filter: `user_address=eq.${lower}` },

@@ -327,6 +327,19 @@ export type ArenaTimeframe = '24h' | '7d' | '30d' | 'ALL';
 export type ArenaSortBy = 'pnl' | 'winRate' | 'trades' | 'sharpe' | 'volume' | 'streak';
 export type ArenaTierBadge = 'APEX' | 'GRANDMASTER' | 'MASTER' | 'PRO' | 'EMERGING';
 
+export interface SocialCopyConfig {
+  id?: string;
+  copierAddress?: string;
+  targetAddress: string;
+  isActive: boolean;
+  maxTradeSize?: number;
+  dailyVolumeCap?: number;
+  totalCopiedTrades?: number;
+  totalCopiedVolume?: number;
+  createdAt?: string;
+  updatedAt?: string;
+}
+
 export interface ArenaAgentEntry {
   id: string;
   name: string;

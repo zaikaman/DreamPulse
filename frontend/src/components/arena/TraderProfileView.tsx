@@ -13,10 +13,12 @@ import {
   CurrencyDollarIcon,
   DocumentDuplicateIcon,
   CheckIcon,
+  AdjustmentsHorizontalIcon,
 } from '@heroicons/react/24/outline';
-import type { TraderProfileDetail, ProofOfAlphaCardConfig } from '../../types/index.js';
+import type { TraderProfileDetail, ProofOfAlphaCardConfig, SocialCopyConfig } from '../../types/index.js';
 import { apiClient } from '../../services/api.js';
 import { ProofOfAlphaModal } from './ProofOfAlphaModal.js';
+import { SocialCopyRiskModal } from './SocialCopyRiskModal.js';
 import { Spinner } from '../ui/Spinner.js';
 import { Badge } from '../ui/badge.js';
 import { Button } from '../ui/button.js';
@@ -37,6 +39,7 @@ export const TraderProfileView: React.FC<TraderProfileViewProps> = ({
   targetAddress,
   onBack,
   onConnectWallet,
+  onOpenSessionModal,
 }) => {
   const address = targetAddress || wallet?.address || '';
   const [profile, setProfile] = useState<TraderProfileDetail | null>(null);
@@ -46,8 +49,12 @@ export const TraderProfileView: React.FC<TraderProfileViewProps> = ({
 
   // Copy-Trading State
   const [isCopyTrading, setIsCopyTrading] = useState<boolean>(false);
+  const [copyConfig, setCopyConfig] = useState<SocialCopyConfig | null>(null);
   const [isCopyTradeLoading, setIsCopyTradeLoading] = useState<boolean>(false);
   const [copyTradeStatusMsg, setCopyTradeStatusMsg] = useState<string | null>(null);
+
+  // Social Copy Risk Modal State
+  const [isRiskModalOpen, setIsRiskModalOpen] = useState<boolean>(false);
 
   // Proof-of-Alpha Card Modal State
   const [isCardModalOpen, setIsCardModalOpen] = useState<boolean>(false);
@@ -89,6 +96,7 @@ export const TraderProfileView: React.FC<TraderProfileViewProps> = ({
         .then((res) => {
           if (isMounted && res.success) {
             setIsCopyTrading(Boolean(res.isCopying));
+            setCopyConfig(res.config || null);
           }
         })
         .catch(() => {});
@@ -107,8 +115,8 @@ export const TraderProfileView: React.FC<TraderProfileViewProps> = ({
     setTimeout(() => setCopiedAddress(false), 2000);
   };
 
-  // Toggle Copy-Trading
-  const handleToggleCopyTrade = async () => {
+  // Open Risk Configuration Modal
+  const handleOpenRiskModal = () => {
     if (!wallet?.isConnected) {
       if (onConnectWallet) onConnectWallet();
       return;
@@ -119,28 +127,65 @@ export const TraderProfileView: React.FC<TraderProfileViewProps> = ({
       return;
     }
 
+    setIsRiskModalOpen(true);
+  };
+
+  // Confirm Copy-Trading Risk & Position Sizing
+  const handleConfirmRisk = async (params: {
+    targetAddress: string;
+    enabled: boolean;
+    maxTradeSize: number;
+    dailyVolumeCap: number;
+  }) => {
     setIsCopyTradeLoading(true);
     setCopyTradeStatusMsg(null);
     try {
-      const nextEnabled = !isCopyTrading;
       const res = await apiClient.toggleSocialCopyTrade({
         userAddress: wallet.address,
-        targetAddress: address,
-        enabled: nextEnabled,
+        targetAddress: params.targetAddress,
+        enabled: true,
+        maxTradeSize: params.maxTradeSize,
+        dailyVolumeCap: params.dailyVolumeCap,
       });
 
       if (res.success) {
-        setIsCopyTrading(nextEnabled);
+        setIsCopyTrading(true);
+        setCopyConfig(res.config || null);
         setCopyTradeStatusMsg(
-          nextEnabled
-            ? `Autonomous mirror active for Forecaster ${address.slice(0, 6)}...${address.slice(-4)}`
-            : `Mirror trading stopped for Forecaster ${address.slice(0, 6)}...${address.slice(-4)}`
+          `Autonomous mirror active (Max $${params.maxTradeSize} USDC / $${params.dailyVolumeCap} Daily Cap)`
         );
       } else {
         setCopyTradeStatusMsg(res.message || 'Failed to update copy-trading preferences.');
       }
     } catch (err) {
       setCopyTradeStatusMsg(err instanceof Error ? err.message : 'Error updating copy-trade settings.');
+    } finally {
+      setIsCopyTradeLoading(false);
+    }
+  };
+
+  // Stop Mirroring
+  const handleStopMirror = async (targetAddr: string) => {
+    setIsCopyTradeLoading(true);
+    setCopyTradeStatusMsg(null);
+    try {
+      const res = await apiClient.toggleSocialCopyTrade({
+        userAddress: wallet.address,
+        targetAddress: targetAddr,
+        enabled: false,
+      });
+
+      if (res.success) {
+        setIsCopyTrading(false);
+        setCopyConfig(null);
+        setCopyTradeStatusMsg(
+          `Mirror trading stopped for Forecaster ${targetAddr.slice(0, 6)}...${targetAddr.slice(-4)}`
+        );
+      } else {
+        setCopyTradeStatusMsg(res.message || 'Failed to stop copy-trading.');
+      }
+    } catch (err) {
+      setCopyTradeStatusMsg(err instanceof Error ? err.message : 'Error stopping mirror trading.');
     } finally {
       setIsCopyTradeLoading(false);
     }
@@ -243,30 +288,46 @@ export const TraderProfileView: React.FC<TraderProfileViewProps> = ({
             <span>Share Alpha Card</span>
           </Button>
 
-          <Button
-            variant={isCopyTrading ? "outline" : "default"}
-            size="sm"
-            onClick={handleToggleCopyTrade}
-            disabled={isCopyTradeLoading || !address}
-            className={cn(
-              "h-8 text-xs font-medium gap-1.5 font-mono px-3",
-              isCopyTrading && "border-[#ff3366]/40 text-[#ff3366] hover:bg-[#ff3366]/10"
+          <div className="flex items-center gap-1.5">
+            <Button
+              variant={isCopyTrading ? "outline" : "default"}
+              size="sm"
+              onClick={handleOpenRiskModal}
+              disabled={isCopyTradeLoading || !address}
+              className={cn(
+                "h-8 text-xs font-medium gap-1.5 font-mono px-3 cursor-pointer",
+                isCopyTrading
+                  ? "border-[#00e676]/40 text-[#00e676] hover:bg-[#00e676]/10"
+                  : "bg-[#00e676] text-black hover:bg-[#00c853] font-semibold"
+              )}
+            >
+              {isCopyTradeLoading ? (
+                <Spinner size="sm" />
+              ) : isCopyTrading ? (
+                <>
+                  <CheckCircleIcon className="w-3.5 h-3.5 text-[#00e676]" />
+                  <span>Mirroring (${copyConfig?.maxTradeSize ?? 50} Max)</span>
+                </>
+              ) : (
+                <>
+                  <UserPlusIcon className="w-3.5 h-3.5" />
+                  <span>Mirror Forecaster</span>
+                </>
+              )}
+            </Button>
+
+            {isCopyTrading && (
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={handleOpenRiskModal}
+                className="h-8 w-8 p-0 text-muted-foreground hover:text-[#00ffcc] hover:bg-[#00ffcc]/10 border-border/60 rounded-lg cursor-pointer"
+                title="Adjust Risk Limits & Position Sizing"
+              >
+                <AdjustmentsHorizontalIcon className="w-4 h-4" />
+              </Button>
             )}
-          >
-            {isCopyTradeLoading ? (
-              <Spinner size="sm" />
-            ) : isCopyTrading ? (
-              <>
-                <CheckCircleIcon className="w-3.5 h-3.5 text-[#00e676]" />
-                <span>Active Mirror (Stop)</span>
-              </>
-            ) : (
-              <>
-                <UserPlusIcon className="w-3.5 h-3.5" />
-                <span>Mirror Forecaster</span>
-              </>
-            )}
-          </Button>
+          </div>
         </div>
       </div>
 
@@ -620,6 +681,20 @@ export const TraderProfileView: React.FC<TraderProfileViewProps> = ({
           setCardModalConfig(null);
         }}
         config={cardModalConfig}
+      />
+
+      {/* Social Copy Risk & Position Size Modal */}
+      <SocialCopyRiskModal
+        isOpen={isRiskModalOpen}
+        onClose={() => setIsRiskModalOpen(false)}
+        trader={summary || { userAddress: address }}
+        existingConfig={copyConfig}
+        isCurrentlyMirroring={isCopyTrading}
+        isLoading={isCopyTradeLoading}
+        onConfirm={handleConfirmRisk}
+        onStopMirroring={handleStopMirror}
+        hasActiveSession={Boolean(wallet?.isConnected)}
+        onOpenSessionModal={onOpenSessionModal ? () => onOpenSessionModal() : undefined}
       />
     </div>
   );
