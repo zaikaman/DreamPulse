@@ -369,6 +369,11 @@ const OverviewViewComponent: React.FC<OverviewViewProps> = ({
                 const tick = liveTicks.get(m.id);
                 const implied = tick?.impliedProb ?? m.impliedProbYes;
                 const isSelected = selectedMarketId === m.id;
+                const formattedStrike = typeof m?.strikePrice === 'number'
+                  ? `$${m.strikePrice.toLocaleString()}`
+                  : m?.strikePrice
+                  ? `$${m.strikePrice}`
+                  : '—';
                 return (
                   <div
                     key={m.id}
@@ -381,17 +386,17 @@ const OverviewViewComponent: React.FC<OverviewViewProps> = ({
                     )}
                   >
                     <div className="flex items-center gap-2">
-                      <span className="font-semibold text-xs text-foreground">{m.symbol}</span>
-                      <span className="font-mono text-xs text-muted-foreground">${m.strikePrice.toLocaleString()}</span>
+                      <span className="font-semibold text-xs text-foreground">{m?.symbol || 'BTC/USD'}</span>
+                      <span className="font-mono text-xs text-muted-foreground">{formattedStrike}</span>
                       <Badge variant="secondary" className="font-mono text-[10px] px-1.5 py-0 text-muted-foreground">
-                        {m.windowDuration}
+                        {m?.windowDuration || '5m'}
                       </Badge>
                     </div>
 
                     <div className="flex items-center gap-3">
                       <div className="flex flex-col items-end text-xs font-mono">
-                        <span className="text-foreground font-medium">YES: {(implied * 100).toFixed(0)}%</span>
-                        <span className="text-muted-foreground text-[10px]">NO: {((1 - implied) * 100).toFixed(0)}%</span>
+                        <span className="text-foreground font-medium">YES: {((implied ?? 0.5) * 100).toFixed(0)}%</span>
+                        <span className="text-muted-foreground text-[10px]">NO: {((1 - (implied ?? 0.5)) * 100).toFixed(0)}%</span>
                       </div>
 
                       <Button

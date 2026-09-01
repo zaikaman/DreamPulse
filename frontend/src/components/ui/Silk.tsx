@@ -119,6 +119,26 @@ export interface SilkProps {
   style?: React.CSSProperties;
 }
 
+class SilkErrorBoundary extends React.Component<{ children: React.ReactNode }, { hasError: boolean }> {
+  constructor(props: { children: React.ReactNode }) {
+    super(props);
+    this.state = { hasError: false };
+  }
+
+  static getDerivedStateFromError() {
+    return { hasError: true };
+  }
+
+  componentDidCatch() {}
+
+  render() {
+    if (this.state.hasError) {
+      return <div className="w-full h-full bg-gradient-to-b from-secondary/15 via-background/40 to-background/80" />;
+    }
+    return this.props.children;
+  }
+}
+
 export const Silk: React.FC<SilkProps> = ({
   speed = 5,
   scale = 1,
@@ -151,28 +171,30 @@ export const Silk: React.FC<SilkProps> = ({
   }, [speed, scale, noiseIntensity, color, rotation, uniforms]);
 
   return (
-    <div className={className} style={{ width: '100%', height: '100%', ...style }}>
-      <Canvas
-        dpr={[1, 2]}
-        frameloop="always"
-        gl={{
-          alpha: true,
-          antialias: true,
-          powerPreference: 'low-power',
-        }}
-        onCreated={({ gl }) => {
-          gl.domElement.addEventListener(
-            'webglcontextlost',
-            (event) => {
-              event.preventDefault();
-            },
-            false,
-          );
-        }}
-      >
-        <SilkPlane ref={meshRef} uniforms={uniforms} />
-      </Canvas>
-    </div>
+    <SilkErrorBoundary>
+      <div className={className} style={{ width: '100%', height: '100%', ...style }}>
+        <Canvas
+          dpr={[1, 1.5]}
+          frameloop="always"
+          gl={{
+            alpha: true,
+            antialias: false,
+            powerPreference: 'low-power',
+          }}
+          onCreated={({ gl }) => {
+            gl.domElement.addEventListener(
+              'webglcontextlost',
+              (event) => {
+                event.preventDefault();
+              },
+              false,
+            );
+          }}
+        >
+          <SilkPlane ref={meshRef} uniforms={uniforms} />
+        </Canvas>
+      </div>
+    </SilkErrorBoundary>
   );
 };
 
