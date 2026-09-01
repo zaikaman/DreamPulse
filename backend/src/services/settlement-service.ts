@@ -739,81 +739,92 @@ export class SettlementService {
       const isCopyTrader = normalizedUser.toLowerCase() !== operatorAccount.address.toLowerCase();
 
       if (isCopyTrader) {
-        // First: Pre-sweep redemption from DreamDEX:
-        // Try to redeem any held on-chain outcome tokens for this market using operator key.
-        // If already redeemed earlier, Somnia module might revert with InsufficientBalance/Missing params, which is safely caught.
-        if (hasGas) {
-          for (const pos of positionsToProcess) {
-            if (pos.marketIdHex && pos.rawAmount > 0n) {
-              try {
-                let outcomeToken = pos.outcomeToken;
-                if (!outcomeToken) {
-                  const onchain = await somniaExchange.client.getMarketOnchain(pos.marketIdHex).catch(() => null);
-                  outcomeToken = onchain?.outcomeToken as Address | undefined;
-                }
-                if (outcomeToken) {
-                  await executeOperatorTx(() =>
-                    somniaExchange.trader.redeem({
-                      marketId: pos.marketIdHex!,
-                      outcomeIdx: pos.outcomeIdx,
-                      amount: pos.rawAmount,
-                      outcomeToken,
-                    }),
-                  ).catch((rErr: any) => {
-                    if (
-                      !rErr.message?.includes('Missing or invalid parameters') &&
-                      !rErr.message?.includes('account does not exist') &&
-                      !rErr.message?.includes('InsufficientBalance') &&
-                      !rErr.message?.includes('gas')
-                    ) {
+        const decimals = SOMNIA_ADDRESSES.decimals;
+        const one = 10n ** BigInt(decimals);
+
+        const payablePositions: UnclaimedPosition[] = [];
+        let accumulatedRaw = 0n;
+
+        for (const pos of positionsToProcess) {
+          if (pos.rawAmount <= 0n) continue;
+
+          let redeemedCollateralRaw = 0n;
+          if (process.env.NODE_ENV === 'test') {
+            redeemedCollateralRaw = pos.rawAmount;
+          } else if (hasGas && pos.marketIdHex) {
+            try {
+              let outcomeToken = pos.outcomeToken;
+              let onchain = await somniaExchange.client.getMarketOnchain(pos.marketIdHex).catch(() => null);
+              if (!outcomeToken && onchain?.outcomeToken) {
+                outcomeToken = onchain.outcomeToken as Address;
+              }
+              if (outcomeToken && onchain) {
+                const winId = pos.outcomeIdx === 0 ? onchain.yesId : onchain.noId;
+                if (winId !== undefined) {
+                  const opBal = await somniaExchange.client.getOutcomeBalance({
+                    outcomeToken,
+                    account: operatorAccount.address,
+                    id: BigInt(winId),
+                  }).catch(() => 0n);
+
+                  // STRICT INVARIANT: ONLY execute on-chain redeem if operator actually holds > 0n outcome tokens
+                  if (opBal > 0n) {
+                    const redeemAmount = opBal < pos.rawAmount ? opBal : pos.rawAmount;
+                    const rRes = await executeOperatorTx(() =>
+                      somniaExchange.trader.redeem({
+                        marketId: pos.marketIdHex!,
+                        outcomeIdx: pos.outcomeIdx,
+                        amount: redeemAmount,
+                        outcomeToken,
+                      }),
+                    ).catch((rErr: any) => {
                       console.warn(`[SettlementService] Pre-sweep redeem note for market ${pos.marketId}:`, rErr.message);
+                      return null;
+                    });
+
+                    if (rRes?.hash) {
+                      redeemedCollateralRaw = redeemAmount;
                     }
-                  });
+                  }
                 }
-              } catch {}
+              }
+            } catch (err: any) {
+              console.warn(`[SettlementService] Pre-sweep check error:`, err?.message);
+            }
+          }
+
+          if (redeemedCollateralRaw > 0n) {
+            accumulatedRaw += redeemedCollateralRaw;
+            payablePositions.push({
+              ...pos,
+              rawAmount: redeemedCollateralRaw,
+              claimableAmount: Number((Number(redeemedCollateralRaw) / Number(one)).toFixed(4)),
+            });
+          } else {
+            // Settle locally so the scanner never loops on un-redeemable or already-handled positions
+            void orderService.settleOrdersForMarket(pos.marketId, pos.winningOutcome).catch(() => {});
+            if (pos.marketIdHex && pos.marketIdHex.toLowerCase() !== pos.marketId.toLowerCase()) {
+              void orderService.settleOrdersForMarket(pos.marketIdHex, pos.winningOutcome).catch(() => {});
             }
           }
         }
 
-        // Direct payout aggregation for user wallets: query fresh on-chain operator balance directly (replenished by redemptions above)
-        const decimals = SOMNIA_ADDRESSES.decimals;
-        const one = 10n ** BigInt(decimals);
-        let operatorBalance = 0n;
-        if (process.env.NODE_ENV !== 'test') {
-          try {
-            operatorBalance = await publicClient.readContract({
-              address: SOMNIA_ADDRESSES.testUsdc,
-              abi: ERC20_ABI,
-              functionName: 'balanceOf',
-              args: [operatorAccount.address],
-            });
-          } catch {
-            operatorBalance = 0n;
-          }
-        } else {
-          operatorBalance = 10000n * one;
-        }
-
-        // Limit each user batch to at most 50 tUSDC or available balance
-        const MAX_BATCH_RAW = 50n * one;
-        const availableBudget = operatorBalance < MAX_BATCH_RAW ? operatorBalance : MAX_BATCH_RAW;
-
-        let accumulatedRaw = 0n;
-        const payablePositions: UnclaimedPosition[] = [];
-        for (const pos of positionsToProcess) {
-          if (pos.rawAmount <= 0n) continue;
-          if (process.env.NODE_ENV === 'test' || accumulatedRaw + pos.rawAmount <= availableBudget) {
-            accumulatedRaw += pos.rawAmount;
-            payablePositions.push(pos);
-          } else {
-            break;
-          }
-        }
-
-        if (payablePositions.length > 0) {
+        if (payablePositions.length > 0 && accumulatedRaw > 0n) {
           let txHash: Hex | undefined;
           if (process.env.NODE_ENV !== 'test') {
-            const canPayout = hasGas && accumulatedRaw > 0n && operatorBalance >= accumulatedRaw;
+            let operatorBalance = 0n;
+            try {
+              operatorBalance = await publicClient.readContract({
+                address: SOMNIA_ADDRESSES.testUsdc,
+                abi: ERC20_ABI,
+                functionName: 'balanceOf',
+                args: [operatorAccount.address],
+              });
+            } catch {
+              operatorBalance = 0n;
+            }
+
+            const canPayout = hasGas && operatorBalance >= accumulatedRaw;
             if (canPayout) {
               try {
                 const transferHash = await executeOperatorWriteContract({
@@ -918,21 +929,34 @@ export class SettlementService {
           if (hasGas && pos.marketIdHex) {
             try {
               let outcomeToken = pos.outcomeToken;
-              if (!outcomeToken) {
-                const onchain = await somniaExchange.client.getMarketOnchain(pos.marketIdHex).catch(() => null);
-                outcomeToken = onchain?.outcomeToken as Address | undefined;
+              let onchain = await somniaExchange.client.getMarketOnchain(pos.marketIdHex).catch(() => null);
+              if (!outcomeToken && onchain?.outcomeToken) {
+                outcomeToken = onchain.outcomeToken as Address;
               }
-              if (outcomeToken) {
-                const res = await executeOperatorTx(() =>
-                  somniaExchange.trader.redeem({
-                    marketId: pos.marketIdHex!,
-                    outcomeIdx: pos.outcomeIdx,
-                    amount: pos.rawAmount,
+              if (outcomeToken && onchain) {
+                const winId = pos.outcomeIdx === 0 ? onchain.yesId : onchain.noId;
+                if (winId !== undefined) {
+                  const opBal = await somniaExchange.client.getOutcomeBalance({
                     outcomeToken,
-                  }),
-                ).catch(() => null);
-                if (res?.hash) {
-                  txHash = res.hash.startsWith('0x') ? (res.hash as Hex) : (`0x${res.hash}` as Hex);
+                    account: operatorAccount.address,
+                    id: BigInt(winId),
+                  }).catch(() => 0n);
+
+                  // STRICT INVARIANT: Only call on-chain redeem if operator actually holds > 0n tokens
+                  if (opBal > 0n) {
+                    const redeemAmount = opBal < pos.rawAmount ? opBal : pos.rawAmount;
+                    const res = await executeOperatorTx(() =>
+                      somniaExchange.trader.redeem({
+                        marketId: pos.marketIdHex!,
+                        outcomeIdx: pos.outcomeIdx,
+                        amount: redeemAmount,
+                        outcomeToken,
+                      }),
+                    ).catch(() => null);
+                    if (res?.hash) {
+                      txHash = res.hash.startsWith('0x') ? (res.hash as Hex) : (`0x${res.hash}` as Hex);
+                    }
+                  }
                 }
               }
             } catch (err: any) {
@@ -953,6 +977,11 @@ export class SettlementService {
             } else if (process.env.NODE_ENV === 'test') {
               txHash = '0x1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef' as Hex;
             } else {
+              // Settle order locally so scanner does not loop on it
+              void orderService.settleOrdersForMarket(pos.marketId, pos.winningOutcome).catch(() => {});
+              if (pos.marketIdHex && pos.marketIdHex.toLowerCase() !== pos.marketId.toLowerCase()) {
+                void orderService.settleOrdersForMarket(pos.marketIdHex, pos.winningOutcome).catch(() => {});
+              }
               continue;
             }
           }
