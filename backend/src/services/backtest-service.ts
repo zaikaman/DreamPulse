@@ -85,9 +85,17 @@ export interface DetailedBacktestResult extends BacktestResult {
 const BINANCE_PAIR_MAPPINGS: Record<string, string> = {
   'BTC/USD': 'BTCUSDT',
   'ETH/USD': 'ETHUSDT',
-  'BTCUSDT': 'BTCUSDT',
-  'ETHUSDT': 'ETHUSDT',
 };
+
+function getBinanceSymbol(symbol: string): string | null {
+  if (!symbol) return null;
+  const cleaned = symbol.toUpperCase().trim();
+  if (cleaned === 'BTC/USD') return 'BTCUSDT';
+  if (cleaned === 'ETH/USD') return 'ETHUSDT';
+  return null;
+}
+
+
 
 function calculateSeriesRSI(candles: HistoricalCandle[], period = 14): number {
   if (candles.length < period + 1) return 50;
@@ -240,7 +248,10 @@ export class BacktestService {
     const intervalMs = intervalMsMap[interval] ?? 5 * 60 * 1000;
 
     const candles: HistoricalCandle[] = [];
-    const binancePair = BINANCE_PAIR_MAPPINGS[symbol];
+    const binancePair = getBinanceSymbol(symbol);
+    if (!binancePair) {
+      return [];
+    }
 
     // Helper: chunked parallel fetch with bounded concurrency (avoids 50× sequential await)
     const chunkConcurrency = 5;
@@ -374,49 +385,6 @@ export class BacktestService {
       }
     }
 
-    // 3. Fallback deterministic realistic historical series generator
-    if (candles.length === 0) {
-      let basePrice = 96500;
-      let decimals = 2;
-      if (symbol.startsWith('ETH')) {
-        basePrice = 2750;
-      }
-
-      let stepMs = 5 * 60 * 1000;
-      if (interval === '1m') stepMs = 60 * 1000;
-      else if (interval === '15m') stepMs = 15 * 60 * 1000;
-      else if (interval === '1h') stepMs = 60 * 60 * 1000;
-
-      const totalSteps = Math.min(50000, Math.max(60, Math.floor((endMs - startMs) / stepMs)));
-
-      let prevClose = basePrice;
-      for (let i = 0; i < totalSteps; i++) {
-        const barTime = startMs + i * stepMs;
-        // Multi-frequency price action with realistic crypto market volatility dynamics
-        const macroTrend = Math.sin(i * 0.08) * 0.008;
-        const microNoise = Math.cos(i * 0.35) * 0.0035 + (Math.sin(i * 1.1) * 0.002);
-        const impulse = i % 8 === 0 ? (i % 16 === 0 ? 0.004 : -0.0035) : 0;
-        const barReturn = macroTrend + microNoise + impulse;
-
-        const open = prevClose;
-        const close = Number((open * (1 + barReturn)).toFixed(decimals));
-        const high = Number((Math.max(open, close) * (1 + Math.abs(microNoise) * 1.2 + 0.001)).toFixed(decimals));
-        const low = Number((Math.min(open, close) * (1 - Math.abs(microNoise) * 1.2 - 0.001)).toFixed(decimals));
-        const volume = Number((80 + Math.abs(Math.sin(i * 0.25)) * 350).toFixed(2));
-
-        candles.push({
-          timestamp: barTime,
-          open,
-          high,
-          low,
-          close,
-          volume,
-        });
-
-        prevClose = close;
-      }
-    }
-
     // Deduplicate, filter to requested window, and sort chronologically
     const deduped = new Map<number, HistoricalCandle>();
     for (const c of candles) {
@@ -438,7 +406,9 @@ export class BacktestService {
       return Array.from(m.values());
     })();
     finalCandles.sort((a, b) => a.timestamp - b.timestamp);
-    this.setCachedCandlesLRU(cacheKey, finalCandles);
+    if (finalCandles.length > 0) {
+      this.setCachedCandlesLRU(cacheKey, finalCandles);
+    }
     return finalCandles;
   }
 
@@ -480,6 +450,9 @@ export class BacktestService {
 
     // Ingest historical candles across the requested window & timeframe
     const candles = await this.fetchHistoricalCandles(symbol, startTime, endTime, timeframe);
+    if (!candles || candles.length === 0) {
+      throw new Error(`Insufficient historical candlestick data available for symbol ${symbol}`);
+    }
 
     const trades: DetailedBacktestResult['trades'] = [];
     const equityCurve: DetailedBacktestResult['equityCurve'] = [];

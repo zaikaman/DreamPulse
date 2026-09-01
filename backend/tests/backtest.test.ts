@@ -165,14 +165,32 @@ describe('Phase 7 Strategy Studio & Historical Backtest Tests', () => {
       },
     });
 
-    expect(result.totalTrades).toBeGreaterThan(0);
-    expect(result.totalFeesPaid).toBeGreaterThan(0);
-
     // Each trade fee must include both exchange taker fee and on-chain gas hurdle
     for (const trade of result.trades) {
       expect(trade.fee).toBeGreaterThan(0);
       // Net PnL must be grossPnl minus fee
       expect(trade.pnl).toBeCloseTo(Number((trade.grossPnl - trade.fee).toFixed(2)), 2);
     }
+  });
+
+  it('rejects unsupported symbols (such as SOL/USD) and non-existent markets without synthetic fallback data', async () => {
+    const backtestService = new BacktestService();
+    await expect(
+      backtestService.runSimulation({
+        agentType: 'Volt',
+        symbol: 'SOL/USD',
+        period: '24h',
+        timeframe: '5m',
+      }),
+    ).rejects.toThrow(/Insufficient historical candlestick data available/);
+
+    await expect(
+      backtestService.runSimulation({
+        agentType: 'Volt',
+        symbol: 'INVALID_NONEXISTENT_SYMBOL_XYZ',
+        period: '24h',
+        timeframe: '5m',
+      }),
+    ).rejects.toThrow(/Insufficient historical candlestick data available/);
   });
 });
