@@ -1,9 +1,18 @@
 import type { Request, Response, NextFunction } from 'express';
 import jwt from 'jsonwebtoken';
 import { isAddress, getAddress, type Address, type Hex, verifyMessage } from 'viem';
-import { verifyAuthSignature, AUTH_EIP712_DOMAIN, AUTH_EIP712_TYPES } from '../services/auth-service.js';
+import {
+  verifyAuthSignature,
+  AUTH_EIP712_DOMAIN,
+  AUTH_EIP712_TYPES,
+  rememberNonce,
+  isNonceReplay,
+  clearNonceCache,
+} from '../services/auth-service.js';
 import { env } from '../config/env.js';
 import { getCookie, JWT_COOKIE_NAME } from '../config/cookie.js';
+
+export { rememberNonce, isNonceReplay, clearNonceCache };
 
 // Augment Express Request to carry authenticated wallet
 declare global {
@@ -34,37 +43,6 @@ function getHeader(req: Request, names: string[]): string | undefined {
 
 function isTestEnv(): boolean {
   return process.env.NODE_ENV === 'test' || process.env.VITEST === 'true';
-}
-
-// Simple in-memory nonce cache to detect replay (nonce -> expiresAtSec)
-const nonceCache = new Map<string, number>();
-const NONCE_MAX_SIZE = 5000;
-function rememberNonce(nonce: string, expiresAt: number): void {
-  const nowSec = Math.floor(Date.now() / 1000);
-  if (expiresAt <= nowSec) return;
-  if (nonceCache.size > NONCE_MAX_SIZE) {
-    // evict expired
-    for (const [k, exp] of [...nonceCache.entries()]) {
-      if (exp <= nowSec) nonceCache.delete(k);
-      if (nonceCache.size <= NONCE_MAX_SIZE - 1000) break;
-    }
-    if (nonceCache.size > NONCE_MAX_SIZE) {
-      // still full, clear oldest half
-      const keys = [...nonceCache.keys()].slice(0, 1000);
-      for (const k of keys) nonceCache.delete(k);
-    }
-  }
-  nonceCache.set(nonce, expiresAt);
-}
-function isNonceReplay(nonce: string): boolean {
-  const exp = nonceCache.get(nonce);
-  if (exp === undefined) return false;
-  const nowSec = Math.floor(Date.now() / 1000);
-  if (exp <= nowSec) {
-    nonceCache.delete(nonce);
-    return false;
-  }
-  return true;
 }
 
 interface AuthResult {

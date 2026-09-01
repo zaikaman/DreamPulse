@@ -104,8 +104,25 @@ export class SettlementService {
   // Immutable on-chain finalized market state cache (finalized/voided markets never change status)
   private finalizedMarketStateCache = new Map<string, any>();
 
-  // Known zero balances for finalized contracts: once an account is verified to have 0 balance on an expired finalized contract, skip RPC in future
-  private knownFinalizedZeroBalances = new Set<string>();
+  // Known zero balances for finalized contracts: cached with TTL (5 min) to avoid eternal poisoning if account later receives/deposits tokens
+  private knownFinalizedZeroBalances = new Map<string, number>();
+  private static readonly FINALIZED_ZERO_BAL_TTL_MS = 5 * 60 * 1000;
+
+  private isKnownFinalizedZeroBalance(cacheKey: string, marketKey: string): boolean {
+    const key = `${cacheKey}:${marketKey}`;
+    const exp = this.knownFinalizedZeroBalances.get(key);
+    if (!exp) return false;
+    if (Date.now() > exp) {
+      this.knownFinalizedZeroBalances.delete(key);
+      return false;
+    }
+    return true;
+  }
+
+  private setKnownFinalizedZeroBalance(cacheKey: string, marketKey: string): void {
+    const key = `${cacheKey}:${marketKey}`;
+    this.knownFinalizedZeroBalances.set(key, Date.now() + SettlementService.FINALIZED_ZERO_BAL_TTL_MS);
+  }
 
   constructor() {
     this.initializeFromDb().catch((err) => {
@@ -121,9 +138,16 @@ export class SettlementService {
       const key = userAddress.toLowerCase();
       this.summaryCache.delete(key);
       this.scanCache.delete(key);
+      const prefix = `${key}:`;
+      for (const k of this.knownFinalizedZeroBalances.keys()) {
+        if (k.startsWith(prefix)) {
+          this.knownFinalizedZeroBalances.delete(k);
+        }
+      }
     } else {
       this.summaryCache.clear();
       this.scanCache.clear();
+      this.knownFinalizedZeroBalances.clear();
     }
   }
 
@@ -138,7 +162,6 @@ export class SettlementService {
     if (this.loadedUsers.has(normalized)) {
       return;
     }
-    this.loadedUsers.add(normalized);
 
     try {
       let page = 0;
@@ -151,7 +174,12 @@ export class SettlementService {
           .order('claimed_at', { ascending: false })
           .range(page * pageSize, (page + 1) * pageSize - 1);
 
-        if (error || !data || data.length === 0) {
+        if (error) {
+          console.warn(`[SettlementService] Supabase error loading sweeps for ${normalized}:`, error.message);
+          return;
+        }
+
+        if (!data || data.length === 0) {
           break;
         }
 
@@ -189,8 +217,10 @@ export class SettlementService {
         }
         page++;
       }
+      this.loadedUsers.add(normalized);
     } catch (err: any) {
       console.warn(`[SettlementService] User sweeps load warning for ${normalized}:`, err.message);
+      this.loadedUsers.delete(normalized);
     }
   }
 
@@ -469,7 +499,7 @@ export class SettlementService {
         const key = id.toLowerCase();
         if (onchainSeen.has(key) || alreadyFound.has(key)) return;
         // Zero-balance filter: only skip if operator verified 0 balance on this finalized contract
-        if (isOperator && this.knownFinalizedZeroBalances.has(`${cacheKey}:${key}`)) return;
+        if (isOperator && this.isKnownFinalizedZeroBalance(cacheKey, key)) return;
         // Already swept filter (only skip if operator; for copy-traders, readOnchainPosition will check remaining unswept balance)
         if (isOperator && this.sweeps.some((s) => s.userAddress.toLowerCase() === cacheKey && s.marketId.toLowerCase() === key)) return;
         onchainSeen.add(key);
@@ -625,7 +655,7 @@ export class SettlementService {
           for (const { marketId, onchain } of pendingBalanceChecks) {
             const bal = balanceMap.get(marketId.toLowerCase());
             if (bal && bal.yesBal === 0n && bal.noBal === 0n && (onchain.finalized || onchain.isVoided)) {
-              this.knownFinalizedZeroBalances.add(`${cacheKey}:${marketId.toLowerCase()}`);
+              this.setKnownFinalizedZeroBalance(cacheKey, marketId.toLowerCase());
             }
           }
         }

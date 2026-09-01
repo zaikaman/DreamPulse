@@ -105,8 +105,8 @@ const PRIVATE_REALTIME_TABLES = new Set<string>([
   'sweeps',
   'backtests',
   'agent_strategies',
-  'custom_agents',
-  'custom_swarms',
+  'social_copy_trades',
+  'daily_pnl',
 ]);
 
 function createNoopChannel(): RealtimeChannel {
@@ -162,10 +162,16 @@ export function subscribeToTable<T = any>(
 }
 
 /**
- * Subscribes to a private table with row-level filter `user_address=eq.<lower>`.
+ * Subscribes to a private table for a specific user address.
  * Requires prior setSupabaseAuth(token) from wallet-verify. If no JWT is
  * present, it still subscribes but RLS will return 0 rows (graceful degrade
- * to polling). Use for sessions, user_swarm_configs, orders, sweeps, etc.
+ * to polling).
+ *
+ * NOTE: We do not pass `filter: user_address=eq.<lower>` in the postgres_changes
+ * filter config because Supabase Realtime CDC filters are case-sensitive string
+ * matches which drop records when addresses are stored checksummed (e.g. 0xAbC...).
+ * Server-side tenant isolation is enforced by Postgres RLS (012_harden_rls_policies.sql),
+ * and client-side case-insensitive address filtering is applied below.
  */
 export function subscribeToPrivateTable<T = any>(
   table: string,
@@ -173,6 +179,7 @@ export function subscribeToPrivateTable<T = any>(
   onInsert?: (payload: T) => void,
   onUpdate?: (payload: T) => void,
   onDelete?: (payload: T) => void,
+  addressField: string = 'user_address',
 ): RealtimeChannel {
   const lower = userAddress.toLowerCase();
   const needsJwt = PRIVATE_REALTIME_TABLES.has(table);
@@ -184,8 +191,15 @@ export function subscribeToPrivateTable<T = any>(
     .channel(channelTopic)
     .on(
       'postgres_changes',
-      { event: '*', schema: 'public', table, filter: `user_address=eq.${lower}` },
+      { event: '*', schema: 'public', table },
       (payload) => {
+        const row: any = payload.new || payload.old;
+        if (row) {
+          const rowAddr = row[addressField] || row.user_address || row.copier_address || row.target_address;
+          if (rowAddr && typeof rowAddr === 'string' && rowAddr.toLowerCase() !== lower) {
+            return;
+          }
+        }
         if (payload.eventType === 'INSERT' && onInsert) {
           onInsert(payload.new as T);
         } else if (payload.eventType === 'UPDATE' && onUpdate) {

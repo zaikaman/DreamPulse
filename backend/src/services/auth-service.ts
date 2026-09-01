@@ -46,6 +46,43 @@ export function isSupabaseJwtConfigured(): boolean {
   return getJwtSecret() !== null;
 }
 
+// Bounded in-memory nonce cache to detect replay attacks (nonce -> expiresAtSec)
+const nonceCache = new Map<string, number>();
+const NONCE_MAX_SIZE = 5000;
+
+export function rememberNonce(nonce: string, expiresAt: number): void {
+  const nowSec = Math.floor(Date.now() / 1000);
+  if (expiresAt <= nowSec) return;
+  if (nonceCache.size > NONCE_MAX_SIZE) {
+    // evict expired
+    for (const [k, exp] of [...nonceCache.entries()]) {
+      if (exp <= nowSec) nonceCache.delete(k);
+      if (nonceCache.size <= NONCE_MAX_SIZE - 1000) break;
+    }
+    if (nonceCache.size > NONCE_MAX_SIZE) {
+      // still full, clear oldest half
+      const keys = [...nonceCache.keys()].slice(0, 1000);
+      for (const k of keys) nonceCache.delete(k);
+    }
+  }
+  nonceCache.set(nonce, expiresAt);
+}
+
+export function isNonceReplay(nonce: string): boolean {
+  const exp = nonceCache.get(nonce);
+  if (exp === undefined) return false;
+  const nowSec = Math.floor(Date.now() / 1000);
+  if (exp <= nowSec) {
+    nonceCache.delete(nonce);
+    return false;
+  }
+  return true;
+}
+
+export function clearNonceCache(): void {
+  nonceCache.clear();
+}
+
 export async function verifyAuthSignature(params: AuthVerifyParams): Promise<{ valid: boolean; reason?: string }> {
   const { userAddress, signature, nonce, issuedAt, expiresAt } = params;
 
@@ -59,6 +96,11 @@ export async function verifyAuthSignature(params: AuthVerifyParams): Promise<{ v
   if (expiresAt <= nowSec) return { valid: false, reason: 'Auth already expired' };
   if (expiresAt - issuedAt > 7 * 24 * 3600) return { valid: false, reason: 'Auth window too long (max 7d)' };
   if (expiresAt - issuedAt < 60) return { valid: false, reason: 'Auth window too short (min 60s)' };
+
+  // Check nonce replay before expensive crypto verification
+  if (isNonceReplay(nonce)) {
+    return { valid: false, reason: 'Nonce already used (replay detected)' };
+  }
 
   const normalized = getAddress(userAddress) as Address;
 
@@ -77,6 +119,9 @@ export async function verifyAuthSignature(params: AuthVerifyParams): Promise<{ v
       signature: signature as Hex,
     });
     if (!valid) return { valid: false, reason: 'EIP-712 Auth signature verification failed' };
+
+    // Valid signature: remember nonce to block replay for the remainder of its validity window
+    rememberNonce(nonce, expiresAt);
     return { valid: true };
   } catch (e: any) {
     return { valid: false, reason: e.message || 'Signature verification error' };

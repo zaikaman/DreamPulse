@@ -31,7 +31,8 @@ DECLARE
     'public.user_swarm_configs',
     'public.custom_agents',
     'public.custom_swarms',
-    'public.daily_pnl'
+    'public.daily_pnl',
+    'public.social_copy_trades'
   ];
 BEGIN
   FOREACH tbl IN ARRAY tables

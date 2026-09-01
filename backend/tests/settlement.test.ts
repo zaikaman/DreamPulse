@@ -428,5 +428,28 @@ describe('Phase 6 Settlement Sweeper & Collateral Compounder Tests', () => {
       const targets = settlementService.getCandidateSweeperTargets();
       expect(targets.some((t) => t.toLowerCase() === terminalUserAddress.toLowerCase())).toBe(true);
     });
+
+    it('properly evicts known zero-balance cache entries on invalidateCache', () => {
+      const settlementService = new SettlementService();
+      const userA = '0x1111222233334444555566667777888899990000';
+      const userB = '0x2222333344445555666677778888999900001111';
+      const marketId = '0x3333444455556666777788889999000011112222';
+
+      // Set zero balance cache entries via private helper access
+      (settlementService as any).setKnownFinalizedZeroBalance(userA.toLowerCase(), marketId.toLowerCase());
+      (settlementService as any).setKnownFinalizedZeroBalance(userB.toLowerCase(), marketId.toLowerCase());
+
+      expect((settlementService as any).isKnownFinalizedZeroBalance(userA.toLowerCase(), marketId.toLowerCase())).toBe(true);
+      expect((settlementService as any).isKnownFinalizedZeroBalance(userB.toLowerCase(), marketId.toLowerCase())).toBe(true);
+
+      // Invalidate specifically userA
+      settlementService.invalidateCache(userA);
+      expect((settlementService as any).isKnownFinalizedZeroBalance(userA.toLowerCase(), marketId.toLowerCase())).toBe(false);
+      expect((settlementService as any).isKnownFinalizedZeroBalance(userB.toLowerCase(), marketId.toLowerCase())).toBe(true);
+
+      // Global invalidation
+      settlementService.invalidateCache();
+      expect((settlementService as any).isKnownFinalizedZeroBalance(userB.toLowerCase(), marketId.toLowerCase())).toBe(false);
+    });
   });
 });

@@ -483,12 +483,14 @@ export const apiClient = {
   },
 
   async deleteCustomAgent(id: string, userAddress: string): Promise<{ success: boolean }> {
+    customAgentsCache.clear();
     return fetchJson(`/agents/custom/${encodeURIComponent(id)}?userAddress=${encodeURIComponent(userAddress)}`, {
       method: 'DELETE',
     });
   },
 
   async deployCustomAgent(id: string, userAddress: string, allowance?: number): Promise<{ success: boolean; data: CustomAgentDefinition }> {
+    customAgentsCache.clear();
     return fetchJson(`/agents/custom/${encodeURIComponent(id)}/deploy`, {
       method: 'POST',
       body: JSON.stringify({ userAddress, allowance }),
@@ -496,6 +498,7 @@ export const apiClient = {
   },
 
   async pauseCustomAgent(id: string, userAddress: string): Promise<{ success: boolean; data: CustomAgentDefinition }> {
+    customAgentsCache.clear();
     return fetchJson(`/agents/custom/${encodeURIComponent(id)}/pause`, {
       method: 'POST',
       body: JSON.stringify({ userAddress }),
@@ -503,6 +506,7 @@ export const apiClient = {
   },
 
   async setCustomAgentAllowance(id: string, userAddress: string, allowance: number): Promise<{ success: boolean; data: CustomAgentDefinition }> {
+    customAgentsCache.clear();
     return fetchJson(`/agents/custom/${encodeURIComponent(id)}/allowance`, {
       method: 'POST',
       body: JSON.stringify({ userAddress, allowance }),

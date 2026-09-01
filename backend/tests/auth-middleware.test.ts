@@ -9,6 +9,8 @@ import {
   mintSupabaseJwt,
   verifyAndMint,
   isSupabaseJwtConfigured,
+  clearNonceCache,
+  isNonceReplay,
 } from '../src/services/auth-service.js';
 import {
   authenticateRequest,
@@ -28,12 +30,14 @@ describe('AuthService & WalletAuth Middleware Comprehensive Suite', () => {
   const originalEnv = { ...process.env };
 
   beforeEach(() => {
+    clearNonceCache();
     (env as any).SUPABASE_JWT_SECRET = mockJwtSecret;
     process.env.SUPABASE_JWT_SECRET = mockJwtSecret;
     process.env.SUPABASE_JWT_EXPIRY_SECONDS = '3600';
   });
 
   afterEach(() => {
+    clearNonceCache();
     (env as any).SUPABASE_JWT_SECRET = originalEnvSecret;
     process.env = { ...originalEnv };
     vi.restoreAllMocks();
@@ -187,14 +191,66 @@ describe('AuthService & WalletAuth Middleware Comprehensive Suite', () => {
       expect(decoded.aud).toBe('authenticated');
       expect(decoded.role).toBe('authenticated');
 
+      const nonce2 = 'session-nonce-random-789012';
+      const signature2 = await testAccount.signTypedData({
+        domain: AUTH_EIP712_DOMAIN,
+        types: AUTH_EIP712_TYPES,
+        primaryType: 'Auth',
+        message: {
+          wallet: userAddress,
+          nonce: nonce2,
+          issuedAt: BigInt(nowSec),
+          expiresAt: BigInt(expiresAt),
+        },
+      });
+
       const combinedRes = await verifyAndMint({
+        userAddress,
+        signature: signature2,
+        nonce: nonce2,
+        issuedAt: nowSec,
+        expiresAt,
+      });
+      expect(combinedRes.token).toBeDefined();
+    });
+
+    it('rejects replayed nonce on verifyAuthSignature', async () => {
+      const nowSec = Math.floor(Date.now() / 1000);
+      const expiresAt = nowSec + 3600;
+      const nonce = 'replay-nonce-test-12345678';
+
+      const signature = await testAccount.signTypedData({
+        domain: AUTH_EIP712_DOMAIN,
+        types: AUTH_EIP712_TYPES,
+        primaryType: 'Auth',
+        message: {
+          wallet: userAddress,
+          nonce,
+          issuedAt: BigInt(nowSec),
+          expiresAt: BigInt(expiresAt),
+        },
+      });
+
+      const firstVerify = await verifyAuthSignature({
         userAddress,
         signature,
         nonce,
         issuedAt: nowSec,
         expiresAt,
       });
-      expect(combinedRes.token).toBeDefined();
+      expect(firstVerify.valid).toBe(true);
+      expect(isNonceReplay(nonce)).toBe(true);
+
+      // Second attempt with exact same nonce and signature must fail immediately
+      const secondVerify = await verifyAuthSignature({
+        userAddress,
+        signature,
+        nonce,
+        issuedAt: nowSec,
+        expiresAt,
+      });
+      expect(secondVerify.valid).toBe(false);
+      expect(secondVerify.reason).toContain('Nonce already used (replay detected)');
     });
 
     it('rejects mintSupabaseJwt when secret is missing or address is invalid', () => {
