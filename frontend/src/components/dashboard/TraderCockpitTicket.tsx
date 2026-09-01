@@ -712,7 +712,7 @@ export const TraderCockpitTicket: React.FC<TraderCockpitTicketProps> = ({
         </div>
         <div className="flex items-center justify-between text-muted-foreground">
           <span>SOMI</span>
-          <span>{wallet.balanceSTT || '1.25'}</span>
+          <span>{wallet.balanceSTT || '0.000'}</span>
         </div>
         <div className="flex items-center justify-between text-muted-foreground pt-1 border-t border-border/20 text-[10px]">
           <span>Execution Path</span>

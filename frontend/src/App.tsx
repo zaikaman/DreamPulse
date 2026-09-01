@@ -165,23 +165,30 @@ export const App: React.FC = () => {
   });
 
   const [initialSpotPrices, setInitialSpotPrices] = useState<Record<string, number>>({});
+  const [spotTickers, setSpotTickers] = useState<Record<string, { symbol: string; price: number; change1m: number; change5m: number; high24h: number; low24h: number; volume24h: number; timestamp: number }>>({});
 
-  // Initial load of live spot prices from REST API
+  // Periodic load of live spot prices and 1m metrics from REST API
   useEffect(() => {
-    apiClient
-      .getSpotPrices()
-      .then((res) => {
-        if (res.success && res.data) {
-          const prices: Record<string, number> = {};
-          for (const [sym, ticker] of Object.entries(res.data)) {
-            prices[sym] = ticker.price;
+    const fetchSpots = () => {
+      apiClient
+        .getSpotPrices()
+        .then((res) => {
+          if (res.success && res.data) {
+            setSpotTickers(res.data);
+            const prices: Record<string, number> = {};
+            for (const [sym, ticker] of Object.entries(res.data)) {
+              prices[sym] = ticker.price;
+            }
+            setInitialSpotPrices(prices);
           }
-          setInitialSpotPrices(prices);
-        }
-      })
-      .catch((_err) => {
-        // Fallback silently
-      });
+        })
+        .catch((_err) => {
+          // Fallback silently
+        });
+    };
+    fetchSpots();
+    const interval = setInterval(fetchSpots, 10000);
+    return () => clearInterval(interval);
   }, []);
 
   // Procedural audio feedback on real-time user events
@@ -311,6 +318,7 @@ export const App: React.FC = () => {
               liveTicks={liveTicks}
               depthMap={depthMap}
               currentSpotPrices={currentSpotPrices}
+              spotTickers={spotTickers}
               isLoading={isMarketsLoading}
               wallet={wallet}
               activeSession={activeSession}

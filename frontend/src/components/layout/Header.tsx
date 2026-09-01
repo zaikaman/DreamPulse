@@ -68,7 +68,7 @@ export const Header: React.FC<HeaderProps> = ({
 }) => {
   const btcPrice = spotPrices["BTC/USD"] || spotPrices["BTC"] || 0;
   const ethPrice = spotPrices["ETH/USD"] || spotPrices["ETH"] || 0;
-  const somniaPrice = spotPrices["SOMI/USD"] || spotPrices["STT/USD"] || spotPrices["SOMNIA"] || 1.25;
+  const somniaPrice = spotPrices["SOMI/USD"] || spotPrices["STT/USD"] || spotPrices["SOMNIA"] || 0;
 
   return (
     <header className="sticky top-0 z-20 w-full border-b border-border/50 bg-background/80 backdrop-blur-xl">

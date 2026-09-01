@@ -102,7 +102,7 @@ export const StatCardsGrid: React.FC<StatCardsGridProps> = ({
   const userCollateral = wallet?.balanceCollateral || '0.00';
   const userNativeGas = wallet?.balanceSTT || '0.000';
   const isCollateralZero = parseFloat(userCollateral) === 0;
-  const total24hVolume = (swarmSummary as any)?.total24hVolume || 12480.5;
+  const total24hVolume = (swarmDetailed as any)?.total24hVolume ?? (swarmSummary as any)?.total24hVolume ?? 0;
   const activeMarketsCount = markets.filter((m) => m.status === 'Open').length || markets.length;
 
   return (
@@ -305,7 +305,7 @@ export const StatCardsGrid: React.FC<StatCardsGridProps> = ({
               <div className="stat-card-footer">
                 <span className="inline-flex items-center gap-1.5 font-mono text-[11px] text-muted-foreground whitespace-nowrap">
                   <BoltIcon className="w-3 h-3 text-amber-400 flex-shrink-0" />
-                  <span>{totalSwarmFills > 0 ? `${totalSwarmFills} on-chain trades` : '8 on-chain trades'}</span>
+                  <span>{totalSwarmFills} on-chain trades</span>
                 </span>
                 <span className="font-mono text-[11px] text-muted-foreground whitespace-nowrap truncate">
                   Somnia Shannon

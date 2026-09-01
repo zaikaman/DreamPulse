@@ -10,6 +10,7 @@ import type { Market } from '../../types/index.js';
 import type { MarketTickData } from '../../hooks/useTelemetry.js';
 import { MarketMatrix } from '../MarketMatrix.js';
 import { Badge } from '../ui/badge.js';
+import { cn } from '../../lib/utils.js';
 
 interface MarketsExplorerViewProps {
   markets: Market[];
@@ -47,7 +48,7 @@ export const MarketsExplorerView: React.FC<MarketsExplorerViewProps> = ({
 
   // Compute average spread
   const avgSpread = useMemo(() => {
-    if (markets.length === 0) return 0.02;
+    if (markets.length === 0) return 0;
     const total = markets.reduce((sum, m) => {
       const spread = Math.max(0, m.bestAskYes - m.bestBidYes);
       return sum + spread;
@@ -80,10 +81,10 @@ export const MarketsExplorerView: React.FC<MarketsExplorerViewProps> = ({
             TOP ALPHA MISPRICING
           </span>
           <div className="flex items-baseline justify-between mt-1">
-            <span className="text-xl font-bold font-mono text-[#00e676]">
-              +{topEdgeMarket.edge > 0 ? (topEdgeMarket.edge * 100).toFixed(1) : '49.9'}%
+            <span className={cn("text-xl font-bold font-mono", topEdgeMarket.edge > 0 ? "text-[#00e676]" : "text-muted-foreground")}>
+              {topEdgeMarket.edge > 0 ? `+${(topEdgeMarket.edge * 100).toFixed(1)}%` : '—'}
             </span>
-            {topEdgeMarket.market && (
+            {topEdgeMarket.market && topEdgeMarket.edge > 0 && (
               <button
                 type="button"
                 onClick={() => onOpenTradeTerminal(topEdgeMarket.market!.id)}

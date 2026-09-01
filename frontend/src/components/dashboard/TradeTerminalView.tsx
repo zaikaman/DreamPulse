@@ -28,6 +28,7 @@ interface TradeTerminalViewProps {
   liveTicks: Map<string, MarketTickData>;
   depthMap: Map<string, DepthUpdateData>;
   currentSpotPrices: Record<string, number>;
+  spotTickers?: Record<string, { price: number; change1m?: number; change5m?: number; high24h?: number; low24h?: number; volume24h?: number; timestamp?: number }>;
   isLoading?: boolean;
   wallet: WalletState;
   activeSession?: SessionGrant | null;
@@ -45,6 +46,7 @@ export const TradeTerminalView: React.FC<TradeTerminalViewProps> = ({
   liveTicks,
   depthMap,
   currentSpotPrices,
+  spotTickers,
   isLoading = false,
   wallet,
   activeSession,
@@ -92,6 +94,13 @@ export const TradeTerminalView: React.FC<TradeTerminalViewProps> = ({
   const marketDirection = isMarketUp ? 'Up' : 'Down';
   const marketConfidence = (isMarketUp ? marketProbYes * 100 : (1 - marketProbYes) * 100).toFixed(0);
   const depth = market ? depthMap.get(market.id) : undefined;
+
+  const tickerData = market?.symbol
+    ? spotTickers?.[market.symbol] || spotTickers?.[`${market.symbol}/USD`] || spotTickers?.[market.symbol.split('/')[0]]
+    : undefined;
+  const change1m = tickerData?.change1m ?? (confluence?.priceActionScore !== undefined && confluence.priceActionScore !== 0 ? confluence.priceActionScore * 0.001 : 0);
+  const isPositiveDelta = change1m >= 0;
+  const formattedDelta = `${isPositiveDelta ? '+' : ''}${(change1m * 100).toFixed(2)}%`;
 
   // Real-time dynamic countdown & formatted expiry
   const { formattedExpiry } = useMarketCountdown(market?.closeTimestamp, market?.windowDuration);
@@ -149,9 +158,15 @@ export const TradeTerminalView: React.FC<TradeTerminalViewProps> = ({
               <span className="text-sm font-bold text-foreground">
                 ${spot.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
               </span>
-              <span className="text-xs font-bold text-[#00e676]">
-                +1.51%
-              </span>
+              {change1m !== 0 ? (
+                <span className={cn("text-xs font-bold", isPositiveDelta ? "text-[#00e676]" : "text-[#ff3366]")}>
+                  {formattedDelta}
+                </span>
+              ) : (
+                <span className="text-xs font-medium text-muted-foreground">
+                  0.00%
+                </span>
+              )}
             </div>
 
             {/* Event Question Title */}

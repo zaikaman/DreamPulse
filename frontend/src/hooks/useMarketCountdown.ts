@@ -10,7 +10,7 @@ export interface MarketCountdownResult {
 
 export function useMarketCountdown(
   closeTimestamp?: string,
-  windowDuration: '1m' | '5m' | '15m' | '1h' | string = '15m',
+  _windowDuration: '1m' | '5m' | '15m' | '1h' | string = '15m',
   onExpire?: () => void
 ): MarketCountdownResult {
   const [now, setNow] = useState<number>(Date.now());
@@ -36,10 +36,9 @@ export function useMarketCountdown(
   const closeTime = closeTimestamp ? new Date(closeTimestamp).getTime() : 0;
   const hasValidCloseTime = closeTime > 0 && !isNaN(closeTime);
 
-  let diff: number;
-  let isExpired: boolean;
-  let isLocked: boolean;
-  let expiryDate: Date;
+  let diff = 0;
+  let isExpired = false;
+  let isLocked = false;
 
   if (hasValidCloseTime) {
     const rawDiff = Math.floor((closeTime - now) / 1000);
@@ -52,14 +51,6 @@ export function useMarketCountdown(
       isExpired = false;
       isLocked = false;
     }
-    expiryDate = new Date(closeTime);
-  } else {
-    // Deterministic fallback cycle only when no valid closeTimestamp is provided
-    const cycleSeconds = windowDuration === '1m' ? 60 : windowDuration === '1h' ? 3600 : windowDuration === '5m' ? 300 : 900;
-    diff = cycleSeconds - (Math.floor(now / 1000) % cycleSeconds);
-    isExpired = false;
-    isLocked = false;
-    expiryDate = new Date(now + diff * 1000);
   }
 
   // Render-phase side-effect fix: expiry callback is now a passive effect, not a render mutation.
@@ -74,13 +65,22 @@ export function useMarketCountdown(
     }
   }, [isExpired, hasValidCloseTime, closeTimestamp]);
 
-  const m = Math.floor(diff / 60);
-  const s = diff % 60;
-  const formattedCountdown = `${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
+  let formattedCountdown: string;
+  let formattedExpiry: string;
 
-  const hours = String(expiryDate.getHours()).padStart(2, '0');
-  const minutes = String(expiryDate.getMinutes()).padStart(2, '0');
-  const formattedExpiry = `${hours}:${minutes}`;
+  if (hasValidCloseTime) {
+    const m = Math.floor(diff / 60);
+    const s = diff % 60;
+    formattedCountdown = `${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
+
+    const expiryDate = new Date(closeTime);
+    const hours = String(expiryDate.getHours()).padStart(2, '0');
+    const minutes = String(expiryDate.getMinutes()).padStart(2, '0');
+    formattedExpiry = `${hours}:${minutes}`;
+  } else {
+    formattedCountdown = '--:--';
+    formattedExpiry = '—';
+  }
 
   return {
     formattedCountdown,
@@ -90,3 +90,4 @@ export function useMarketCountdown(
     isLocked,
   };
 }
+
