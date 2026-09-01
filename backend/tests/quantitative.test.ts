@@ -13,6 +13,10 @@ import {
   calculateVolatilityNormalizedDriftThreshold,
   calculateEdgeProportionalLots,
   calculateRoiEdge,
+  calculateNetExecutableEdge,
+  DEFAULT_TAKER_FEE_RATE,
+  DEFAULT_GAS_HURDLE,
+  DEFAULT_TOTAL_LIVE_HURDLE,
 } from '../src/quantitative/pricing.js';
 import { quantizePrice, quantizeLotSize, toContractUnits, fromContractUnits } from '../src/quantitative/quantizer.js';
 
@@ -191,6 +195,28 @@ describe('Quantitative Pricing & Edge Calculation Engine', () => {
     const smallCapUsd = 2.0; // max 4 lots at $0.50
     const lotsCapped = calculateEdgeProportionalLots(baseLots, 0.15, minEdge, smallCapUsd, price);
     expect(lotsCapped).toBe(4.0);
+  });
+
+  it('calculates net executable edge accounting for live taker fee and gas friction', () => {
+    // 0.30% taker fee + 0.40% gas hurdle = 0.70% total live friction hurdle
+    expect(DEFAULT_TAKER_FEE_RATE).toBe(0.003);
+    expect(DEFAULT_GAS_HURDLE).toBe(0.004);
+    expect(DEFAULT_TOTAL_LIVE_HURDLE).toBe(0.007);
+
+    // Fair value 0.55 vs execution price 0.50 -> raw edge 0.05
+    // Friction: 0.50 * 0.003 (0.0015) + 0.004 = 0.0055
+    // Net edge = 0.05 - 0.0055 = 0.0445
+    const netEdge = calculateNetExecutableEdge(0.55, 0.50);
+    expect(netEdge).toBe(0.0445);
+
+    // Custom fee & gas params
+    const customNetEdge = calculateNetExecutableEdge(0.55, 0.50, 0.001, 0.002);
+    // Friction: 0.50 * 0.001 (0.0005) + 0.002 = 0.0025 -> Net = 0.05 - 0.0025 = 0.0475
+    expect(customNetEdge).toBe(0.0475);
+
+    // Invalid prices
+    expect(calculateNetExecutableEdge(0, 0.50)).toBe(-1);
+    expect(calculateNetExecutableEdge(0.55, 0)).toBe(-1);
   });
 });
 

@@ -149,4 +149,30 @@ describe('Phase 7 Strategy Studio & Historical Backtest Tests', () => {
     expect(result1m.timeframe).toBe('1m');
     expect(result1m.equityCurve.length).toBeGreaterThan(0);
   });
+
+  it('enforces live 0.70% execution friction hurdle (30 bps fee + 40 bps gas) by default', async () => {
+    const backtestService = new BacktestService();
+    const result = await backtestService.runSimulation({
+      agentType: 'Volt',
+      symbol: 'BTC/USD',
+      period: '3d',
+      timeframe: '5m',
+      initialCapital: 1000.0,
+      strategyConfig: {
+        driftThreshold: 0.002,
+        minEdge: 0.03,
+        lotSize: 5.0,
+      },
+    });
+
+    expect(result.totalTrades).toBeGreaterThan(0);
+    expect(result.totalFeesPaid).toBeGreaterThan(0);
+
+    // Each trade fee must include both exchange taker fee and on-chain gas hurdle
+    for (const trade of result.trades) {
+      expect(trade.fee).toBeGreaterThan(0);
+      // Net PnL must be grossPnl minus fee
+      expect(trade.pnl).toBeCloseTo(Number((trade.grossPnl - trade.fee).toFixed(2)), 2);
+    }
+  });
 });

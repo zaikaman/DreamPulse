@@ -267,13 +267,23 @@ export function calculateDepthVWAP(
 }
 
 /**
+ * Default live fee & execution friction hurdle constants.
+ * Taker fee: 0.30% (30 bps) on Somnia CLOB
+ * Gas hurdle: 0.40% (40 bps) equivalent on-chain settlement & sequencer cost
+ * Total minimum execution hurdle = 0.70% (70 bps)
+ */
+export const DEFAULT_TAKER_FEE_RATE = 0.003; // 0.30% (30 bps) taker fee
+export const DEFAULT_GAS_HURDLE = 0.004;      // 0.40% (40 bps) equivalent gas hurdle
+export const DEFAULT_TOTAL_LIVE_HURDLE = 0.007; // 0.70% (70 bps) total execution friction hurdle
+
+/**
  * Calculates net executable edge after accounting for exchange taker fees and gas friction.
  */
 export function calculateNetExecutableEdge(
   fairValue: number,
   executionPrice: number,
-  takerFeeRate: number = 0.003, // 0.30% taker fee
-  gasHurdle: number = 0.004,    // 0.40% equivalent gas hurdle
+  takerFeeRate: number = DEFAULT_TAKER_FEE_RATE, // 0.30% taker fee
+  gasHurdle: number = DEFAULT_GAS_HURDLE,        // 0.40% equivalent gas hurdle
 ): number {
   if (executionPrice <= 0 || fairValue <= 0) return -1;
   const rawEdge = fairValue - executionPrice;

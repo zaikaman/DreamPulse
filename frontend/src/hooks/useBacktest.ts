@@ -5,6 +5,7 @@ import { apiClient } from '../services/api.js';
 export interface FrictionParams {
   slippageBps?: number;
   feeBps?: number;
+  gasHurdleBps?: number;
   latencyMs?: number;
 }
 

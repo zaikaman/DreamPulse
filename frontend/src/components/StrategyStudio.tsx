@@ -175,9 +175,10 @@ export const StrategyStudio: React.FC<StrategyStudioProps> = ({
   const [inventoryAversion, setInventoryAversion] = useState<number>(0.015);
 
   const [showFrictionSettings, setShowFrictionSettings] = useState<boolean>(false);
-  const [slippageBps, setSlippageBps] = useState<number>(4.0);
-  const [feeBps, setFeeBps] = useState<number>(2.5);
-  const [latencyMs, setLatencyMs] = useState<number>(25.0);
+  const [slippageBps, setSlippageBps] = useState<number>(10.0);
+  const [feeBps, setFeeBps] = useState<number>(30.0);
+  const [gasHurdleBps, setGasHurdleBps] = useState<number>(40.0);
+  const [latencyMs, setLatencyMs] = useState<number>(80.0);
 
   const [chartView, setChartView] = useState<'equity' | 'drawdown'>('equity');
 
@@ -200,7 +201,7 @@ export const StrategyStudio: React.FC<StrategyStudioProps> = ({
         endDate: period === 'custom' ? new Date(customEndDate).toISOString() : undefined,
         initialCapital,
         strategyConfig: { lotSize },
-        frictionConfig: { slippageBps, feeBps, latencyMs },
+        frictionConfig: { slippageBps, feeBps, gasHurdleBps, latencyMs },
         customRules: activeCustomAgent.rules,
         customAgentId: activeCustomAgent.id,
       });
@@ -214,7 +215,7 @@ export const StrategyStudio: React.FC<StrategyStudioProps> = ({
         endDate: period === 'custom' ? new Date(customEndDate).toISOString() : undefined,
         initialCapital,
         strategyConfig: { driftThreshold, minEdge, confidenceThreshold, targetSpread, inventoryAversion, lotSize },
-        frictionConfig: { slippageBps, feeBps, latencyMs },
+        frictionConfig: { slippageBps, feeBps, gasHurdleBps, latencyMs },
       });
     }
   }, [
@@ -236,6 +237,7 @@ export const StrategyStudio: React.FC<StrategyStudioProps> = ({
     lotSize,
     slippageBps,
     feeBps,
+    gasHurdleBps,
     latencyMs,
   ]);
 
@@ -856,16 +858,19 @@ export const StrategyStudio: React.FC<StrategyStudioProps> = ({
             <button type="button" onClick={() => setShowFrictionSettings(!showFrictionSettings)} className="inline-flex items-center gap-1.5 text-[11px] font-mono text-muted-foreground hover:text-foreground transition-colors">
               <ShieldExclamationIcon className="w-3.5 h-3.5 text-muted-foreground" />
               <span className="font-semibold text-foreground">Execution Microstructure & Friction Controls</span>
-              <span className="text-[10px]">({slippageBps} bps slippage, {feeBps} bps fee, {latencyMs}ms latency)</span>
+              <span className="text-[10px]">({slippageBps} bps slippage, {feeBps} bps fee, {gasHurdleBps} bps gas, {latencyMs}ms latency)</span>
               {showFrictionSettings ? <ChevronUpIcon className="w-3 h-3" /> : <ChevronDownIcon className="w-3 h-3" />}
             </button>
             {showFrictionSettings && (
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mt-3 p-3.5 rounded-xl border bg-secondary/20 border-border/50">
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mt-3 p-3.5 rounded-xl border bg-secondary/20 border-border/50">
                 <SliderMini label="Simulated Taker Slippage" value={`${slippageBps} bps`} color="#2dd4bf">
-                  <input type="range" min={0} max={40} step={1} value={slippageBps} onChange={(e) => setSlippageBps(parseFloat(e.target.value))} style={{ width: '100%', accentColor: '#2dd4bf' }} />
+                  <input type="range" min={0} max={50} step={1} value={slippageBps} onChange={(e) => setSlippageBps(parseFloat(e.target.value))} style={{ width: '100%', accentColor: '#2dd4bf' }} />
                 </SliderMini>
-                <SliderMini label="Somnia CLOB Exchange Fee" value={`${feeBps} bps`} color="#2dd4bf">
-                  <input type="range" min={0} max={15} step={0.5} value={feeBps} onChange={(e) => setFeeBps(parseFloat(e.target.value))} style={{ width: '100%', accentColor: '#2dd4bf' }} />
+                <SliderMini label="Somnia CLOB Taker Fee" value={`${feeBps} bps`} color="#2dd4bf">
+                  <input type="range" min={0} max={60} step={1} value={feeBps} onChange={(e) => setFeeBps(parseFloat(e.target.value))} style={{ width: '100%', accentColor: '#2dd4bf' }} />
+                </SliderMini>
+                <SliderMini label="On-Chain Gas Hurdle" value={`${gasHurdleBps} bps`} color="#2dd4bf">
+                  <input type="range" min={0} max={100} step={5} value={gasHurdleBps} onChange={(e) => setGasHurdleBps(parseFloat(e.target.value))} style={{ width: '100%', accentColor: '#2dd4bf' }} />
                 </SliderMini>
                 <SliderMini label="Network Latency Penalty" value={`${latencyMs} ms`} color="#2dd4bf">
                   <input type="range" min={0} max={250} step={10} value={latencyMs} onChange={(e) => setLatencyMs(parseFloat(e.target.value))} style={{ width: '100%', accentColor: '#2dd4bf' }} />

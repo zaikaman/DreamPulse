@@ -9,14 +9,17 @@ import {
   calculateEdgeProportionalLots,
   calculateNetExecutableEdge,
   calculateDepthVWAP,
+  DEFAULT_TAKER_FEE_RATE,
+  DEFAULT_GAS_HURDLE,
 } from '../quantitative/pricing.js';
 import { quantizePrice, quantizeLotSize } from '../quantitative/quantizer.js';
 import { env } from '../config/env.js';
 
 export interface FrictionConfig {
-  slippageBps?: number; // Simulated taker slippage in basis points (e.g. 4 bps = 0.04%)
-  feeBps?: number;      // Exchange maker/taker fee in basis points (e.g. 2.5 bps = 0.025%)
-  latencyMs?: number;   // Artificial network execution latency delay in ms (e.g. 25ms)
+  slippageBps?: number;   // Simulated taker slippage in basis points (e.g. 10 bps = 0.10%)
+  feeBps?: number;        // Exchange maker/taker fee in basis points (e.g. 30 bps = 0.30%, matching live DEFAULT_TAKER_FEE_RATE 0.003)
+  gasHurdleBps?: number;  // On-chain gas & execution hurdle in basis points (e.g. 40 bps = 0.40%, matching live DEFAULT_GAS_HURDLE 0.004)
+  latencyMs?: number;     // Artificial network execution latency delay in ms (e.g. 80ms)
 }
 
 export interface BacktestRunRequest {
@@ -454,11 +457,15 @@ export class BacktestService {
     const targetSpread = req.strategyConfig?.targetSpread ?? 0.04;
     const inventoryAversion = req.strategyConfig?.inventoryAversion ?? 0.015;
 
-    // Execution & market microstructure friction config - realistic Somnia CLOB defaults
-    // Previous defaults (4bps/2.5bps/25ms) were unrealistically low and inflated win-rate/PnL
+    // Execution & market microstructure friction config - calibrated to live trading invariants
+    // Live hurdle = 30 bps taker fee (0.30%) + 40 bps gas hurdle (0.40%) = 70 bps (0.70%) total hurdle
     const slippageBps = req.frictionConfig?.slippageBps ?? 10.0; // 10 bps realistic taker slippage (1 tick ≈ 100-200bps at 0.50)
-    const feeBps = req.frictionConfig?.feeBps ?? 8.0;           // 8 bps taker fee (maker ~3.2bps after rebate)
+    const feeBps = req.frictionConfig?.feeBps ?? (DEFAULT_TAKER_FEE_RATE * 10000); // 30 bps taker fee (matches live 0.30%)
+    const gasHurdleBps = req.frictionConfig?.gasHurdleBps ?? (DEFAULT_GAS_HURDLE * 10000); // 40 bps gas hurdle (matches live 0.40%)
     const latencyMs = req.frictionConfig?.latencyMs ?? 80.0;     // 80ms realistic cross-region latency
+
+    const takerFeeRate = feeBps * 0.0001;
+    const gasHurdleRate = gasHurdleBps * 0.0001;
 
     const now = Date.now();
     let durationMs = 3 * 86400000;
@@ -602,7 +609,7 @@ export class BacktestService {
                   const priceDiscovery = 0.40; // 40% discovery reflects lagging resting maker quotes during high-frequency snipe
                   const partialLagYes = lagFairYes + (fairYes - lagFairYes) * priceDiscovery;
                   const lagAskYes = quantizePrice(Math.min(0.99, Math.max(0.01, partialLagYes + halfSpread)));
-                  const netEdge = calculateNetExecutableEdge(fairYes, lagAskYes) - latencyEdgePenalty;
+                  const netEdge = calculateNetExecutableEdge(fairYes, lagAskYes, takerFeeRate, gasHurdleRate) - latencyEdgePenalty;
                   const roiEdge = lagAskYes > 0 ? netEdge / lagAskYes : 0;
                   if (netEdge >= minEdge && roiEdge >= minRoiHurdle && lagAskYes <= 0.68 && lagAskYes >= 0.25) {
                     tradeExecuted = true;
@@ -615,7 +622,7 @@ export class BacktestService {
                   const priceDiscovery = 0.40;
                   const partialLagNo = lagFairNo + (fairNo - lagFairNo) * priceDiscovery;
                   const lagAskNo = quantizePrice(Math.min(0.99, Math.max(0.01, partialLagNo + halfSpread)));
-                  const netEdge = calculateNetExecutableEdge(fairNo, lagAskNo) - latencyEdgePenalty;
+                  const netEdge = calculateNetExecutableEdge(fairNo, lagAskNo, takerFeeRate, gasHurdleRate) - latencyEdgePenalty;
                   const roiEdge = lagAskNo > 0 ? netEdge / lagAskNo : 0;
                   if (netEdge >= minEdge && roiEdge >= minRoiHurdle && lagAskNo <= 0.68 && lagAskNo >= 0.25) {
                     tradeExecuted = true;
@@ -650,8 +657,8 @@ export class BacktestService {
             const marketAskYes = quantizePrice(Math.min(0.98, marketImpliedYes + halfSpread));
             const marketAskNo = quantizePrice(Math.min(0.98, (1.0 - marketImpliedYes) + halfSpread));
 
-            const netEdgeYes = calculateNetExecutableEdge(fairYes, marketAskYes);
-            const netEdgeNo = calculateNetExecutableEdge(fairNo, marketAskNo);
+            const netEdgeYes = calculateNetExecutableEdge(fairYes, marketAskYes, takerFeeRate, gasHurdleRate);
+            const netEdgeNo = calculateNetExecutableEdge(fairNo, marketAskNo, takerFeeRate, gasHurdleRate);
             const roiEdgeYes = marketAskYes > 0 ? netEdgeYes / marketAskYes : 0;
             const roiEdgeNo = marketAskNo > 0 ? netEdgeNo / marketAskNo : 0;
 
@@ -781,21 +788,27 @@ export class BacktestService {
           }
         }
 
-        // 4. Contract Expiration & Settlement Payoff with Execution Friction (Slippage & Fees)
+        // 4. Contract Expiration & Settlement Payoff with Execution Friction (Slippage, Fees & Gas Hurdle)
         if (tradeExecuted) {
           windowExecutedTrades++;
           const isWin = tradeOutcome === winningOutcome;
 
-          // Execution friction: takers pay full slippage + fee, makers get reduced slippage/fees but still pay
-          const isMaker = tradeAction === 'MM_SPREAD_CAPTURE';
+          // Execution friction: takers pay full slippage + fee + gas hurdle, makers get reduced slippage/fees but still pay
+          const isMaker = tradeAction === 'MM_SPREAD_CAPTURE' || tradeAction === 'MM_INVENTORY_FILL';
           const effectivePrice = isMaker
             ? quantizePrice(Math.min(0.99, Math.max(0.01, tradePrice + (slippageBps * 0.00005)))) // makers slip half
             : quantizePrice(Math.min(0.99, Math.max(0.01, tradePrice + (slippageBps * 0.0001))));
 
-          const makerFeeBps = Math.max(1.0, feeBps * 0.4); // maker rebate ~60%
-          const tradeFee = isMaker
-            ? Number((effectivePrice * tradeLots * (makerFeeBps * 0.0001)).toFixed(3))
-            : Number((effectivePrice * tradeLots * (feeBps * 0.0001)).toFixed(3));
+          // Maker rebate: ~60% reduction in fee rate
+          const makerFeeBps = Math.max(1.0, feeBps * 0.4);
+          const effectiveFeeBps = isMaker ? makerFeeBps : feeBps;
+          const effectiveGasBps = isMaker ? Math.max(0, gasHurdleBps * 0.5) : gasHurdleBps; // makers amortize / batch gas
+
+          // Total cost friction per trade = exchange fee (effectivePrice * lots * feeRate) + gas/settlement hurdle (lots * gasHurdleRate)
+          // Live default: 30 bps taker fee + 40 bps gas hurdle = 70 bps (0.70%) total hurdle
+          const tradeFee = Number((effectivePrice * tradeLots * (effectiveFeeBps * 0.0001)).toFixed(3));
+          const tradeGasFriction = Number((tradeLots * (effectiveGasBps * 0.0001)).toFixed(3));
+          const totalTradeFriction = Number((tradeFee + tradeGasFriction).toFixed(3));
 
           // Realistic PnL: ALL trades settle as binary contracts (win $1 - cost or lose cost)
           let grossPnl = isWin
@@ -813,7 +826,7 @@ export class BacktestService {
             grossPnl = Math.max(-5 * tradeLots, Math.min(5 * tradeLots, grossPnl));
           }
 
-          const netPnlPerTrade = Number((grossPnl - tradeFee).toFixed(2));
+          const netPnlPerTrade = Number((grossPnl - totalTradeFriction).toFixed(2));
           currentEquity = Number((currentEquity + netPnlPerTrade).toFixed(2));
 
           if (currentEquity > peakEquity) {
@@ -836,7 +849,7 @@ export class BacktestService {
             price: Number(effectivePrice.toFixed(2)),
             lots: tradeLots,
             grossPnl,
-            fee: tradeFee,
+            fee: totalTradeFriction,
             pnl: netPnlPerTrade,
             cumulativePnl: Number((currentEquity - initialCapital).toFixed(2)),
           });
