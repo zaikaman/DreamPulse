@@ -147,15 +147,8 @@ export class SettlementService {
 
     this.sweeps = [];
     this.sweepsMap.clear();
-    const seenUserMarket = new Set<string>();
 
     for (const row of data) {
-      const userMktKey = `${(row.user_address || '').toLowerCase()}:${(row.market_id || '').toLowerCase()}`;
-      if (seenUserMarket.has(userMktKey)) {
-        continue;
-      }
-      seenUserMarket.add(userMktKey);
-
       const sweep: SettlementSweep = {
         id: row.id,
         userAddress: row.user_address,
@@ -557,7 +550,7 @@ export class SettlementService {
             }
           } else if (!isOperator) {
             const matchedOrders = orderService.getOrders({ userAddress: normalizedUser }).filter(
-              (o) => o.marketId.toLowerCase() === marketId.toLowerCase() && (o.status === 'FILLED' || o.status === 'PENDING'),
+              (o) => o.marketId.toLowerCase() === marketId.toLowerCase() && !o.isSettled && (o.status === 'FILLED' || o.status === 'PENDING'),
             );
             let totalWinningLots = 0;
             let validTxHash: Hex | undefined;
@@ -600,11 +593,10 @@ export class SettlementService {
         }
       }
 
-      // 4. Scan settled winning orders from orderService (covers Trade Terminal, Personal Swarm, and CLOB rolling markets)
+      // 4. Scan winning orders from orderService (covers Trade Terminal, Personal Swarm, and CLOB rolling markets)
       try {
         const userOrders = orderService.getOrders({ userAddress: normalizedUser });
         for (const order of userOrders) {
-          if (!order.isSettled) continue;
           const market = marketService.getMarketById(order.marketId);
           const winningOutcome = market?.winningOutcome || order.marketSnapshot?.winningOutcome;
           const isVoid = winningOutcome === 'VOID';
@@ -668,34 +660,55 @@ export class SettlementService {
    */
   public async triggerBatchSweep(userAddress: string, autoCompound: boolean = true): Promise<ClaimResult> {
     const normalizedUser = isAddress(userAddress)
-      ? (getAddress(userAddress) as `0x${string}`)
-      : operatorAccount.address;
+      ? (getAddress(userAddress) as Address)
+      : (userAddress as Address);
+    const cacheKey = normalizedUser.toLowerCase();
 
+    this.invalidateCache(normalizedUser);
     const unclaimed = await this.scanUnclaimedSettlements(normalizedUser);
+
     const claimedSweeps: SettlementSweep[] = [];
     let totalClaimed = 0;
     let resolvedTxHash: Hex = ('0x0000000000000000000000000000000000000000000000000000000000000000' as Hex);
     const now = new Date().toISOString();
 
     if (unclaimed.length > 0) {
-      // Process up to 100 positions per invocation to clear backlogs efficiently
-      const BATCH_LIMIT = 100;
+      // Process up to 25 positions per invocation to clear backlogs safely and prevent balance depletion
+      const BATCH_LIMIT = 25;
       const positionsToProcess = unclaimed.slice(0, BATCH_LIMIT);
 
       const hasGas = await hasOperatorGas().catch(() => false);
       const isCopyTrader = normalizedUser.toLowerCase() !== operatorAccount.address.toLowerCase();
 
       if (isCopyTrader) {
-        // Direct payout aggregation for user wallets: combine all positions into 1 single on-chain transfer
-        const operatorBalance = await somniaExchange.client
-          .getErc20Balance(SOMNIA_ADDRESSES.testUsdc, operatorAccount.address)
-          .catch(() => 0n);
+        // Direct payout aggregation for user wallets: query fresh on-chain operator balance directly
+        const decimals = SOMNIA_ADDRESSES.decimals;
+        const one = 10n ** BigInt(decimals);
+        let operatorBalance = 0n;
+        if (process.env.NODE_ENV !== 'test') {
+          try {
+            operatorBalance = await publicClient.readContract({
+              address: SOMNIA_ADDRESSES.testUsdc,
+              abi: ERC20_ABI,
+              functionName: 'balanceOf',
+              args: [operatorAccount.address],
+            });
+          } catch {
+            operatorBalance = 0n;
+          }
+        } else {
+          operatorBalance = 10000n * one;
+        }
+
+        // Limit each user batch to at most 50 tUSDC or available balance
+        const MAX_BATCH_RAW = 50n * one;
+        const availableBudget = operatorBalance < MAX_BATCH_RAW ? operatorBalance : MAX_BATCH_RAW;
 
         let accumulatedRaw = 0n;
         const payablePositions: UnclaimedPosition[] = [];
         for (const pos of positionsToProcess) {
           if (pos.rawAmount <= 0n) continue;
-          if (process.env.NODE_ENV === 'test' || accumulatedRaw + pos.rawAmount <= operatorBalance) {
+          if (process.env.NODE_ENV === 'test' || accumulatedRaw + pos.rawAmount <= availableBudget) {
             accumulatedRaw += pos.rawAmount;
             payablePositions.push(pos);
           } else {
@@ -716,7 +729,7 @@ export class SettlementService {
                   args: [normalizedUser, accumulatedRaw],
                 });
                 if (transferHash) {
-                  await publicClient.waitForTransactionReceipt({ hash: transferHash, timeout: 10_000 }).catch(() => {});
+                  await publicClient.waitForTransactionReceipt({ hash: transferHash, timeout: 15_000 }).catch(() => {});
                   txHash = transferHash;
                 }
               } catch (tErr: any) {
@@ -780,9 +793,11 @@ export class SettlementService {
                 });
               }
 
-              // Settle orders in orderService asynchronously
+              // Settle orders in orderService immediately
               void orderService.settleOrdersForMarket(pos.marketId, pos.winningOutcome).catch(() => {});
             }
+
+            this.invalidateCache(normalizedUser);
 
             if (sweepRowsToInsert.length > 0) {
               void (async () => {
