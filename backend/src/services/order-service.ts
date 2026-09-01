@@ -439,7 +439,7 @@ export class OrderService {
    * Inserts into bounded cache, evicting oldest when cap is hit.
    * Caller must have already persisted to Supabase (or is about to) — evicted rows remain in DB for history queries.
    */
-  private insertIntoCache(order: OrderExecution): void {
+  public insertIntoCache(order: OrderExecution): void {
     this.orderMap.set(order.id, order);
     this.orders.unshift(order);
     if (this.orders.length > OrderService.MAX_CACHE_SIZE) {
@@ -449,6 +449,15 @@ export class OrderService {
         this.restingMakerQuotes.delete(evicted.id);
       }
     }
+  }
+
+  /**
+   * Clears in-memory orders cache (useful for testing).
+   */
+  public clearCache(): void {
+    this.orders = [];
+    this.orderMap.clear();
+    this.restingMakerQuotes.clear();
   }
 
   /**
@@ -1309,6 +1318,11 @@ export class OrderService {
         }
       }
 
+      // Dispatch social copy-trades to active followers mirroring this forecaster
+      void import('./social-copy-service.js')
+        .then(({ socialCopyService }) => socialCopyService.executeSocialCopiesForOrder(orderExecution))
+        .catch((err) => console.warn('[OrderService] Social copy dispatch notice:', err?.message || err));
+
       return orderExecution;
     }
 
@@ -1479,6 +1493,11 @@ export class OrderService {
         }
       }
 
+      // Dispatch social copy-trades to active followers mirroring this forecaster
+      void import('./social-copy-service.js')
+        .then(({ socialCopyService }) => socialCopyService.executeSocialCopiesForOrder(orderExecution))
+        .catch((err) => console.warn('[OrderService] Social copy dispatch notice:', err?.message || err));
+
       return orderExecution;
     }
 
@@ -1498,6 +1517,11 @@ export class OrderService {
       const reason = this.lastExecutionFailureReason || 'Order placement could not be completed on-chain. Please verify market status and try again.';
       throw new Error(reason);
     }
+
+    // Dispatch social copy-trades to active followers mirroring this forecaster
+    void import('./social-copy-service.js')
+      .then(({ socialCopyService }) => socialCopyService.executeSocialCopiesForOrder(executed))
+      .catch((err) => console.warn('[OrderService] Social copy dispatch notice:', err?.message || err));
 
     return executed;
   }

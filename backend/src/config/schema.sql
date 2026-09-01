@@ -458,7 +458,61 @@ CREATE POLICY "daily_pnl_service_role" ON public.daily_pnl
 COMMENT ON TABLE public.daily_pnl IS 'Pre-aggregated daily PnL/volume/trades per user per source. Refreshed by backend on settlement; analytics reads this instead of scanning all orders.';
 
 -- ------------------------------------------------------------------------------
--- 12. Supabase Realtime CDC Publication Configuration
+-- 12. Social Forecaster Mirror Trading & Copy-Trade Relationships
+-- ------------------------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS public.social_copy_trades (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    copier_address VARCHAR(42) NOT NULL,
+    target_address VARCHAR(42) NOT NULL,
+    is_active BOOLEAN NOT NULL DEFAULT TRUE,
+    max_trade_size NUMERIC(18, 4),
+    daily_volume_cap NUMERIC(18, 4),
+    total_copied_trades INTEGER NOT NULL DEFAULT 0,
+    total_copied_volume NUMERIC(18, 4) NOT NULL DEFAULT 0,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    CONSTRAINT valid_copier_address CHECK (copier_address ~ '^0x[a-fA-F0-9]{40}$'),
+    CONSTRAINT valid_target_address CHECK (target_address ~ '^0x[a-fA-F0-9]{40}$'),
+    CONSTRAINT unique_copier_target UNIQUE (copier_address, target_address)
+);
+
+CREATE INDEX IF NOT EXISTS idx_social_copy_target_active ON public.social_copy_trades(target_address, is_active);
+CREATE INDEX IF NOT EXISTS idx_social_copy_copier ON public.social_copy_trades(copier_address);
+CREATE INDEX IF NOT EXISTS idx_social_copy_copier_lower ON public.social_copy_trades(lower(copier_address));
+CREATE INDEX IF NOT EXISTS idx_social_copy_target_lower ON public.social_copy_trades(lower(target_address));
+
+ALTER TABLE public.social_copy_trades ENABLE ROW LEVEL SECURITY;
+
+DROP POLICY IF EXISTS "social_copy_owner_select" ON public.social_copy_trades;
+DROP POLICY IF EXISTS "social_copy_owner_insert" ON public.social_copy_trades;
+DROP POLICY IF EXISTS "social_copy_owner_update" ON public.social_copy_trades;
+DROP POLICY IF EXISTS "social_copy_owner_delete" ON public.social_copy_trades;
+DROP POLICY IF EXISTS "social_copy_service_role" ON public.social_copy_trades;
+
+CREATE POLICY "social_copy_owner_select" ON public.social_copy_trades
+    FOR SELECT TO authenticated
+    USING (lower(auth.jwt() ->> 'user_address') = lower(copier_address) OR lower(auth.jwt() ->> 'user_address') = lower(target_address));
+
+CREATE POLICY "social_copy_owner_insert" ON public.social_copy_trades
+    FOR INSERT TO authenticated
+    WITH CHECK (lower(auth.jwt() ->> 'user_address') = lower(copier_address));
+
+CREATE POLICY "social_copy_owner_update" ON public.social_copy_trades
+    FOR UPDATE TO authenticated
+    USING (lower(auth.jwt() ->> 'user_address') = lower(copier_address))
+    WITH CHECK (lower(auth.jwt() ->> 'user_address') = lower(copier_address));
+
+CREATE POLICY "social_copy_owner_delete" ON public.social_copy_trades
+    FOR DELETE TO authenticated
+    USING (lower(auth.jwt() ->> 'user_address') = lower(copier_address));
+
+CREATE POLICY "social_copy_service_role" ON public.social_copy_trades
+    FOR ALL TO service_role
+    USING (true)
+    WITH CHECK (true);
+
+-- ------------------------------------------------------------------------------
+-- 13. Supabase Realtime CDC Publication Configuration
 -- ------------------------------------------------------------------------------
 DO $$
 BEGIN
@@ -482,7 +536,8 @@ DECLARE
     'public.user_swarm_configs',
     'public.custom_agents',
     'public.custom_swarms',
-    'public.daily_pnl'
+    'public.daily_pnl',
+    'public.social_copy_trades'
   ];
 BEGIN
   FOREACH tbl IN ARRAY tables
@@ -501,3 +556,4 @@ BEGIN
     END IF;
   END LOOP;
 END $$;
+

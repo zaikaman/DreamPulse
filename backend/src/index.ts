@@ -84,9 +84,6 @@ app.use(
 app.use(express.json());
 app.use(requestLogger);
 
-// Mount API v1 Routes
-app.use('/api/v1', apiRouter);
-
 // Root health check
 app.get('/api/health', (_req, res) => {
   res.json({
@@ -96,6 +93,10 @@ app.get('/api/health', (_req, res) => {
     timestamp: new Date().toISOString(),
   });
 });
+
+// Mount API v1 Routes
+app.use('/api/v1', apiRouter);
+app.use('/api', apiRouter);
 
 // Error Handler Middleware
 app.use(errorHandler);

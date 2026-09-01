@@ -41,8 +41,24 @@ export function useArenaLeaderboard(userAddress?: string | null) {
   const [copyTradingTarget, setCopyTradingTarget] = useState<string | null>(null);
   const [isCopyTradeLoading, setIsCopyTradeLoading] = useState<boolean>(false);
   const [copyTradeStatusMsg, setCopyTradeStatusMsg] = useState<string | null>(null);
+  const [mirroredTargets, setMirroredTargets] = useState<Set<string>>(new Set());
 
   const isMountedRef = useRef<boolean>(true);
+
+  // Fetch following list
+  const fetchFollowing = useCallback(async () => {
+    if (!userAddress) {
+      setMirroredTargets(new Set());
+      return;
+    }
+    try {
+      const res = await apiClient.getSocialCopyFollowing(userAddress);
+      if (isMountedRef.current && res.success && Array.isArray(res.data)) {
+        const set = new Set<string>(res.data.map((r: any) => (r.targetAddress || r.target_address || '').toLowerCase()).filter(Boolean));
+        setMirroredTargets(set);
+      }
+    } catch {}
+  }, [userAddress]);
 
   // Fetch Leaderboard Data
   const fetchLeaderboardData = useCallback(async (showRefreshingState = false) => {
@@ -54,12 +70,14 @@ export function useArenaLeaderboard(userAddress?: string | null) {
     setError(null);
 
     try {
-      // 1. Fetch Arena Stats in parallel
+      // 1. Fetch Arena Stats and Following in parallel
       apiClient.getArenaStats().then((res) => {
         if (isMountedRef.current && res.success && res.data) {
           setStats(res.data);
         }
       }).catch(() => {});
+
+      fetchFollowing();
 
       // 2. Fetch both Agents and Traders in parallel so both counts are always populated immediately
       const [agentsRes, tradersRes] = await Promise.all([
@@ -178,6 +196,15 @@ export function useArenaLeaderboard(userAddress?: string | null) {
       });
       if (res.success) {
         setCopyTradeStatusMsg(res.message);
+        setMirroredTargets((prev) => {
+          const next = new Set(prev);
+          if (enabled) {
+            next.add(targetAddress.toLowerCase());
+          } else {
+            next.delete(targetAddress.toLowerCase());
+          }
+          return next;
+        });
       }
     } catch (err: any) {
       setError(err.message || 'Failed to toggle copy-trading');
@@ -186,6 +213,11 @@ export function useArenaLeaderboard(userAddress?: string | null) {
       setCopyTradingTarget(null);
     }
   }, [userAddress]);
+
+  const isForecasterMirrored = useCallback((targetAddress: string): boolean => {
+    if (!targetAddress) return false;
+    return mirroredTargets.has(targetAddress.toLowerCase());
+  }, [mirroredTargets]);
 
   const clearMessages = useCallback(() => {
     setCloneSuccessMsg(null);
@@ -226,7 +258,10 @@ export function useArenaLeaderboard(userAddress?: string | null) {
     copyTradingTarget,
     isCopyTradeLoading,
     copyTradeStatusMsg,
+    mirroredTargets,
+    isForecasterMirrored,
     toggleSocialCopyTrading,
     clearMessages,
   };
 }
+

@@ -584,11 +584,26 @@ export const apiClient = {
     enabled: boolean;
     maxTradeSize?: number;
     dailyVolumeCap?: number;
-  }): Promise<{ success: boolean; config: any; message: string }> {
+  }): Promise<{ success: boolean; isCopying?: boolean; config: any; message: string }> {
     return fetchJson('/arena/copytrade/toggle', {
       method: 'POST',
       body: JSON.stringify(payload),
     });
+  },
+
+  async getSocialCopyTradeStatus(
+    userAddress: string,
+    targetAddress: string,
+  ): Promise<{ success: boolean; isCopying: boolean; config: any }> {
+    const params = new URLSearchParams({ userAddress, targetAddress });
+    return fetchJson(`/arena/copytrade/status?${params.toString()}`);
+  },
+
+  async getSocialCopyFollowing(
+    userAddress: string,
+  ): Promise<{ success: boolean; count: number; data: any[] }> {
+    const params = new URLSearchParams({ userAddress });
+    return fetchJson(`/arena/copytrade/following?${params.toString()}`);
   },
 
   async getArenaStats(): Promise<{ success: boolean; data: ArenaGlobalStats }> {

@@ -13,6 +13,7 @@ import {
   ArrowRightIcon,
   XMarkIcon,
   ArrowTopRightOnSquareIcon,
+  UserPlusIcon,
 } from '@heroicons/react/24/outline';
 import type {
   ArenaAgentEntry,
@@ -93,10 +94,11 @@ export const SwarmArenaView: React.FC<SwarmArenaViewProps> = ({
     cloneSuccessMsg,
     clonedAgentResult,
     cloneStrategy,
-    copyTradingTarget: _copyTradingTarget,
-    isCopyTradeLoading: _isCopyTradeLoading,
+    copyTradingTarget,
+    isCopyTradeLoading,
     copyTradeStatusMsg,
-    toggleSocialCopyTrading: _toggleSocialCopyTrading,
+    isForecasterMirrored,
+    toggleSocialCopyTrading,
     clearMessages,
   } = useArenaLeaderboard(wallet?.address || undefined);
 
@@ -935,6 +937,34 @@ export const SwarmArenaView: React.FC<SwarmArenaViewProps> = ({
                       {/* Actions */}
                       <td style={{ padding: '10px 16px', textAlign: 'right' }}>
                         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: '4px' }}>
+                          {wallet?.address && wallet.address.toLowerCase() !== trader.userAddress.toLowerCase() && (
+                            <Button
+                              variant={isForecasterMirrored(trader.userAddress) ? "outline" : "default"}
+                              size="sm"
+                              onClick={() => toggleSocialCopyTrading(trader.userAddress, !isForecasterMirrored(trader.userAddress))}
+                              disabled={isCopyTradeLoading && copyTradingTarget?.toLowerCase() === trader.userAddress.toLowerCase()}
+                              className={cn(
+                                "h-6 text-xs gap-1 font-mono px-2",
+                                isForecasterMirrored(trader.userAddress) && "border-[#ff3366]/40 text-[#ff3366] hover:bg-[#ff3366]/10"
+                              )}
+                              title={isForecasterMirrored(trader.userAddress) ? "Stop Mirroring" : "Mirror Forecaster"}
+                            >
+                              {isCopyTradeLoading && copyTradingTarget?.toLowerCase() === trader.userAddress.toLowerCase() ? (
+                                <Spinner size="sm" />
+                              ) : isForecasterMirrored(trader.userAddress) ? (
+                                <>
+                                  <CheckCircleIcon className="w-2.5 h-2.5 text-[#00e676]" />
+                                  <span>Mirroring</span>
+                                </>
+                              ) : (
+                                <>
+                                  <UserPlusIcon className="w-2.5 h-2.5" />
+                                  <span>Mirror</span>
+                                </>
+                              )}
+                            </Button>
+                          )}
+
                           <Button
                             variant="outline"
                             size="sm"

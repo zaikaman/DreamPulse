@@ -82,13 +82,13 @@ export const TraderProfileView: React.FC<TraderProfileViewProps> = ({
         if (isMounted) setIsLoading(false);
       });
 
-    // Also check current copy-trading config if user is connected
-    if (wallet?.address) {
+    // Check current social copy-trading status for this specific forecaster
+    if (wallet?.address && address) {
       apiClient
-        .getPersonalSwarmConfig(wallet.address)
+        .getSocialCopyTradeStatus(wallet.address, address)
         .then((res) => {
-          if (isMounted && res.success && res.config) {
-            setIsCopyTrading(Boolean(res.config.copyTradeEnabled));
+          if (isMounted && res.success) {
+            setIsCopyTrading(Boolean(res.isCopying));
           }
         })
         .catch(() => {});
@@ -114,6 +114,11 @@ export const TraderProfileView: React.FC<TraderProfileViewProps> = ({
       return;
     }
 
+    if (wallet?.address && address && wallet.address.toLowerCase() === address.toLowerCase()) {
+      setCopyTradeStatusMsg('Cannot mirror your own forecaster wallet.');
+      return;
+    }
+
     setIsCopyTradeLoading(true);
     setCopyTradeStatusMsg(null);
     try {
@@ -128,8 +133,8 @@ export const TraderProfileView: React.FC<TraderProfileViewProps> = ({
         setIsCopyTrading(nextEnabled);
         setCopyTradeStatusMsg(
           nextEnabled
-            ? `Autonomous copy-trading activated for Forecaster ${address.slice(0, 6)}...${address.slice(-4)}`
-            : 'Copy-trading paused for this forecaster.'
+            ? `Autonomous mirror active for Forecaster ${address.slice(0, 6)}...${address.slice(-4)}`
+            : `Mirror trading stopped for Forecaster ${address.slice(0, 6)}...${address.slice(-4)}`
         );
       } else {
         setCopyTradeStatusMsg(res.message || 'Failed to update copy-trading preferences.');

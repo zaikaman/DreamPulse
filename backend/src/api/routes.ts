@@ -13,6 +13,7 @@ import type { MarketStatus, AgentType, OrderStatus } from '../types/index.js';
 import { type Address, type Hex, isAddress, getAddress, parseAbi } from 'viem';
 import { analyticsService, type AnalyticsRange } from '../services/analytics-service.js';
 import { userSwarmService } from '../services/user-swarm-service.js';
+import { socialCopyService } from '../services/social-copy-service.js';
 import { leaderboardService, type ArenaTimeframe, type ArenaSortBy } from '../services/leaderboard-service.js';
 import { requireWalletAuth, optionalWalletAuth } from '../middleware/wallet-auth.js';
 import { telemetryWsGateway } from '../websocket/server.js';
@@ -1554,16 +1555,74 @@ apiRouter.post('/arena/copytrade/toggle', requireWalletAuth, async (req: Request
     if (typeof enabled !== 'boolean') {
       return res.status(400).json({ success: false, error: 'Missing enabled boolean' });
     }
+
+    if (targetAddress && isAddress(targetAddress)) {
+      const relation = await socialCopyService.toggleSocialCopy(
+        userAddress,
+        targetAddress,
+        enabled,
+        maxTradeSize !== undefined ? Number(maxTradeSize) : undefined,
+        dailyVolumeCap !== undefined ? Number(dailyVolumeCap) : undefined,
+      );
+
+      return res.json({
+        success: true,
+        isCopying: relation.isActive,
+        config: {
+          ...relation,
+          copyTradeEnabled: relation.isActive,
+        },
+        message: enabled
+          ? `Social Copy-Trading enabled mirroring ${targetAddress.slice(0, 6)}...${targetAddress.slice(-4)}`
+          : `Social Copy-Trading disabled for ${targetAddress.slice(0, 6)}...${targetAddress.slice(-4)}`,
+      });
+    }
+
     const updated = await userSwarmService.setCopyTradeEnabled(userAddress, enabled);
     return res.json({
       success: true,
       config: updated,
       message: enabled
-        ? `Social Copy-Trading enabled${targetAddress ? ` mirroring ${targetAddress.slice(0, 6)}...${targetAddress.slice(-4)}` : ''}`
+        ? 'Social Copy-Trading enabled'
         : 'Social Copy-Trading disabled',
     });
   } catch (err: any) {
     return res.status(500).json({ success: false, error: err.message || 'Failed to toggle copy-trade' });
+  }
+});
+
+apiRouter.get('/arena/copytrade/status', optionalWalletAuth, async (req: Request, res: Response) => {
+  try {
+    const { userAddress, targetAddress } = req.query;
+    if (!userAddress || !isAddress(userAddress as string) || !targetAddress || !isAddress(targetAddress as string)) {
+      return res.status(400).json({ success: false, error: 'Valid userAddress and targetAddress are required' });
+    }
+    const isCopying = socialCopyService.isUserCopyingTarget(userAddress as string, targetAddress as string);
+    const config = socialCopyService.getCopierConfig(userAddress as string, targetAddress as string);
+    return res.json({
+      success: true,
+      isCopying,
+      config,
+    });
+  } catch (err: any) {
+    return res.status(500).json({ success: false, error: err.message || 'Failed to get copy-trade status' });
+  }
+});
+
+apiRouter.get('/arena/copytrade/following', optionalWalletAuth, async (req: Request, res: Response) => {
+  try {
+    const { userAddress } = req.query;
+    if (!userAddress || !isAddress(userAddress as string)) {
+      return res.status(400).json({ success: false, error: 'Valid userAddress is required' });
+    }
+    const targets = socialCopyService.getTargetsForCopier(userAddress as string);
+    return res.json({
+      success: true,
+      count: targets.length,
+      data: targets,
+    });
+  } catch (err: any) {
+    return res.status(500).json({ success: false, error: err.message || 'Failed to get following targets' });
   }
 });
 
@@ -1575,6 +1634,7 @@ apiRouter.get('/arena/stats', async (_req: Request, res: Response) => {
     res.status(500).json({ success: false, error: err.message || 'Failed to fetch arena statistics' });
   }
 });
+
 
 
 
