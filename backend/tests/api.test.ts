@@ -35,6 +35,7 @@ describe('Express REST API Endpoints', () => {
       isSynthetic: false,
     };
     (marketService as any).markets.set(testOnchainMarket.id, testOnchainMarket);
+    (marketService as any).markets.set('test-market-id', { ...testOnchainMarket, id: 'test-market-id' });
   });
 
   it('GET /api/health returns ok status', async () => {
@@ -54,12 +55,19 @@ describe('Express REST API Endpoints', () => {
     expect(res.body.data[0]).toHaveProperty('fairValueYes');
   });
 
-  it('GET /api/v1/markets/:id/depth returns order book depth levels', async () => {
+  it('GET /api/v1/markets/:id/depth returns order book depth levels for known market', async () => {
     const res = await request(app).get('/api/v1/markets/test-market-id/depth');
     expect(res.status).toBe(200);
     expect(res.body.success).toBe(true);
     expect(res.body.depth).toHaveProperty('yesBids');
     expect(res.body.depth).toHaveProperty('yesAsks');
+  });
+
+  it('GET /api/v1/markets/:id/depth returns 404 for unknown market id', async () => {
+    const res = await request(app).get('/api/v1/markets/unknown-random-market-12345/depth');
+    expect(res.status).toBe(404);
+    expect(res.body.success).toBe(false);
+    expect(res.body.error).toContain('not found');
   });
 
   it('POST /api/v1/sessions/register creates a non-custodial session', async () => {

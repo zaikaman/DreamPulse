@@ -28,6 +28,7 @@ export interface OrderBookDepth {
   noBids: OrderBookLevel[];
   noAsks: OrderBookLevel[];
   updatedAt: number;
+  isSeedDepth?: boolean;
 }
 
 export class MarketService extends EventEmitter {
@@ -563,6 +564,7 @@ export class MarketService extends EventEmitter {
       noBids,
       noAsks,
       updatedAt: Date.now(),
+      isSeedDepth: market.isSeedDepth,
     };
 
     this.depthBooks.set(market.id, depth);
@@ -861,7 +863,17 @@ export class MarketService extends EventEmitter {
   }
 
   public getMarketDepth(id: string): OrderBookDepth | undefined {
-    return this.depthBooks.get(id);
+    if (!id) return undefined;
+    const direct = this.depthBooks.get(id);
+    if (direct) return direct;
+
+    const market = this.getMarketById(id);
+    if (market) {
+      const depth = this.depthBooks.get(market.id);
+      if (depth) return depth;
+      return this.buildDepthBookFromClob(market);
+    }
+    return undefined;
   }
 
   public getSpotTicker(symbol: string): SpotTicker | undefined {

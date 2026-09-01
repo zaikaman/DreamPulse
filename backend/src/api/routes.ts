@@ -75,45 +75,51 @@ apiRouter.get('/markets/anomalies', (req: Request, res: Response) => {
 
 apiRouter.get('/markets/:id/depth', (req: Request, res: Response) => {
   const { id } = req.params;
-  const depth = marketService.getMarketDepth(id);
-
-  if (!depth) {
-    // If exact ID not found, check if a market exists or return default levels
-    const market = marketService.getMarketById(id);
-    if (!market) {
-      // Fallback depth structure
-      return res.json({
-        success: true,
-        marketId: id,
-        depth: {
-          marketId: id,
-          symbol: 'BTC/USD',
-          bestBidYes: 0.49,
-          bestAskYes: 0.51,
-          bestBidNo: 0.49,
-          bestAskNo: 0.51,
-          yesBids: [
-            { price: 0.49, quantity: 200, total: 98.0 },
-            { price: 0.48, quantity: 450, total: 216.0 },
-            { price: 0.47, quantity: 800, total: 376.0 },
-          ],
-          yesAsks: [
-            { price: 0.51, quantity: 180, total: 91.8 },
-            { price: 0.52, quantity: 500, total: 260.0 },
-            { price: 0.53, quantity: 900, total: 477.0 },
-          ],
-          noBids: [],
-          noAsks: [],
-          updatedAt: Date.now(),
-        },
-      });
-    }
+  if (!id) {
+    return res.status(400).json({ success: false, error: 'Missing market id parameter' });
   }
 
-  res.json({
+  const market = marketService.getMarketById(id);
+  const depth = marketService.getMarketDepth(id);
+
+  if (!market && !depth) {
+    return res.status(404).json({
+      success: false,
+      error: `Market '${id}' not found`,
+      marketId: id,
+    });
+  }
+
+  if (!depth && market) {
+    return res.json({
+      success: true,
+      marketId: market.id,
+      isSeedDepth: true,
+      depth: {
+        marketId: market.id,
+        symbol: market.symbol,
+        bestBidYes: market.bestBidYes,
+        bestAskYes: market.bestAskYes,
+        bestBidNo: market.bestBidNo,
+        bestAskNo: market.bestAskNo,
+        yesBids: [],
+        yesAsks: [],
+        noBids: [],
+        noAsks: [],
+        updatedAt: Date.now(),
+        isSeedDepth: true,
+      },
+    });
+  }
+
+  return res.json({
     success: true,
-    marketId: id,
-    depth,
+    marketId: market?.id || depth?.marketId || id,
+    isSeedDepth: Boolean(market?.isSeedDepth || depth?.isSeedDepth),
+    depth: {
+      ...depth!,
+      isSeedDepth: Boolean(market?.isSeedDepth || depth?.isSeedDepth),
+    },
   });
 });
 
