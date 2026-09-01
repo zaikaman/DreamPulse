@@ -3,9 +3,9 @@
  */
 
 export const PROTOCOL_CONSTRAINTS = {
-  MIN_PRICE: 0.01,
-  MAX_PRICE: 0.99,
-  DEFAULT_TICK_SIZE: 0.01,
+  MIN_PRICE: 0.001,
+  MAX_PRICE: 0.999,
+  DEFAULT_TICK_SIZE: 0.001,
   DEFAULT_LOT_STEP: 1.0,
   MIN_LOT_SIZE: 1.0,
   DEFAULT_COLLATERAL_DECIMALS: 6, // Somnia TestUSDC
@@ -15,15 +15,15 @@ export const PROTOCOL_CONSTRAINTS = {
  * Snaps a price to the nearest tick increment and clamps within [minPrice, maxPrice].
  *
  * @param rawPrice Floating point probability (e.g. 0.4831)
- * @param tickSize Minimum price increment (default: 0.01)
- * @param minPrice Absolute floor price (default: 0.01)
- * @param maxPrice Absolute ceiling price (default: 0.99)
+ * @param tickSize Minimum price increment (default: 0.001)
+ * @param minPrice Absolute floor price (default: 0.001)
+ * @param maxPrice Absolute ceiling price (default: 0.999)
  */
 export function quantizePrice(
   rawPrice: number,
   tickSize: number = PROTOCOL_CONSTRAINTS.DEFAULT_TICK_SIZE,
-  minPrice: number = PROTOCOL_CONSTRAINTS.MIN_PRICE,
-  maxPrice: number = PROTOCOL_CONSTRAINTS.MAX_PRICE,
+  minPrice: number = Math.max(PROTOCOL_CONSTRAINTS.MIN_PRICE, tickSize),
+  maxPrice: number = Math.min(PROTOCOL_CONSTRAINTS.MAX_PRICE, Number((1.0 - tickSize).toFixed((tickSize.toString().split('.')[1] || '').length))),
 ): number {
   if (isNaN(rawPrice) || !isFinite(rawPrice)) {
     return minPrice;

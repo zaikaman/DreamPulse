@@ -200,6 +200,13 @@ describe('Quantizer & Protocol Increment Rules', () => {
     expect(quantizePrice(0.4879, 0.01)).toBe(0.49);
     expect(quantizePrice(0.001, 0.01)).toBe(0.01);
     expect(quantizePrice(1.05, 0.01)).toBe(0.99);
+
+    // Default tick size 0.001 (MM_TICK=1000 on 6 decimals)
+    expect(quantizePrice(0.015)).toBe(0.015);
+    expect(quantizePrice(0.4831)).toBe(0.483);
+    expect(quantizePrice(0.4839)).toBe(0.484);
+    expect(quantizePrice(0.0001)).toBe(0.001);
+    expect(quantizePrice(1.05)).toBe(0.999);
   });
 
   it('snaps lot sizes to step increments and enforces minimums', () => {
