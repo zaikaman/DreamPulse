@@ -1097,11 +1097,12 @@ apiRouter.post('/sweeper/trigger', requireWalletAuth, async (req: Request, res: 
   }
 });
 
-apiRouter.get('/sweeper/history', optionalWalletAuth, (req: Request, res: Response) => {
+apiRouter.get('/sweeper/history', optionalWalletAuth, async (req: Request, res: Response) => {
   const { userAddress } = req.query;
   const targetAddress = typeof userAddress === 'string' && userAddress.trim().length > 0
     ? userAddress.trim()
     : operatorAccount.address;
+  await settlementService.ensureUserSweepsLoaded(targetAddress);
   const history = settlementService.getSweepHistory(targetAddress);
   res.json({
     success: true,

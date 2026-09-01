@@ -91,6 +91,8 @@ export interface ClaimResult {
 export class SettlementService {
   private sweeps: SettlementSweep[] = [];
   private sweepsMap = new Map<string, SettlementSweep>();
+  private userSweptTotals = new Map<string, number>();
+  private loadedUsers = new Set<string>();
 
   // In-memory response caches with TTL and in-flight promise deduplication
   private summaryCache = new Map<string, { summary: SweeperSummary; expiresAt: number }>();
@@ -126,11 +128,122 @@ export class SettlementService {
   }
 
   /**
+   * Hydrates all historical sweeps for a specific user from Supabase on-demand.
+   */
+  public async ensureUserSweepsLoaded(userAddress?: string): Promise<void> {
+    if (!userAddress || !isAddress(userAddress) || process.env.NODE_ENV === 'test') {
+      return;
+    }
+    const normalized = getAddress(userAddress).toLowerCase();
+    if (this.loadedUsers.has(normalized)) {
+      return;
+    }
+    this.loadedUsers.add(normalized);
+
+    try {
+      const { data, error } = await supabase
+        .from('sweeps')
+        .select('*')
+        .ilike('user_address', normalized)
+        .order('claimed_at', { ascending: false })
+        .limit(20000);
+
+      if (!error && data && data.length > 0) {
+        for (const row of data) {
+          const sweep: SettlementSweep = {
+            id: row.id,
+            userAddress: row.user_address,
+            marketId: row.market_id,
+            winningOutcome: row.winning_outcome as OutcomeType,
+            claimableAmount: Number(row.claimable_amount),
+            payoutToken: row.payout_token || 'tUSDC',
+            isCompounded: row.is_compounded ?? false,
+            txHash: (row.tx_hash as Hex) || undefined,
+            status: row.status as 'PENDING' | 'CONFIRMED' | 'FAILED',
+            claimedAt: row.claimed_at,
+          };
+
+          if (!this.sweepsMap.has(sweep.id)) {
+            this.sweepsMap.set(sweep.id, sweep);
+            this.sweeps.push(sweep);
+          }
+
+          if (sweep.status === 'CONFIRMED') {
+            const key = `${normalized}:${sweep.marketId.toLowerCase()}`;
+            this.userSweptTotals.set(key, (this.userSweptTotals.get(key) || 0) + sweep.claimableAmount);
+          }
+
+          if (sweep.isCompounded && sweep.claimableAmount > 0) {
+            compounderService.recordHistoricalSweep(sweep.userAddress, sweep.claimableAmount, sweep.claimedAt);
+          }
+        }
+      }
+    } catch (err: any) {
+      console.warn(`[SettlementService] User sweeps load warning for ${normalized}:`, err.message);
+    }
+  }
+
+  /**
+   * Fast indexed lookup of total swept amount for a given user and market.
+   */
+  public getUserTotalSweptForMarket(userAddress: string, marketId: string, marketIdHex?: string): number {
+    const u = userAddress.toLowerCase();
+    const m = marketId.toLowerCase();
+    let sum = this.userSweptTotals.get(`${u}:${m}`) || 0;
+    if (marketIdHex) {
+      const mh = marketIdHex.toLowerCase();
+      if (mh !== m) {
+        sum += this.userSweptTotals.get(`${u}:${mh}`) || 0;
+      }
+    }
+    return sum;
+  }
+
+  /**
+   * Records a sweep in memory, indexes it, and persists to Supabase.
+   */
+  public recordSweep(sweep: SettlementSweep, persist: boolean = true): void {
+    this.sweepsMap.set(sweep.id, sweep);
+    this.sweeps.unshift(sweep);
+    if (this.sweeps.length > 50000) {
+      const evicted = this.sweeps.pop();
+      if (evicted) this.sweepsMap.delete(evicted.id);
+    }
+    if (sweep.status === 'CONFIRMED') {
+      const key = `${sweep.userAddress.toLowerCase()}:${sweep.marketId.toLowerCase()}`;
+      this.userSweptTotals.set(key, (this.userSweptTotals.get(key) || 0) + sweep.claimableAmount);
+    }
+    if (persist && isPersistenceEnabled() && isAddress(sweep.userAddress)) {
+      void (async () => {
+        try {
+          await marketService.ensureMarketPersisted(sweep.marketId, 'BTC/USD').catch(() => {});
+          await supabase.from('sweeps').insert({
+            id: sweep.id,
+            user_address: sweep.userAddress,
+            market_id: sweep.marketId,
+            winning_outcome: sweep.winningOutcome,
+            claimable_amount: sweep.claimableAmount,
+            payout_token: sweep.payoutToken,
+            is_compounded: sweep.isCompounded,
+            tx_hash: sweep.txHash,
+            status: sweep.status,
+            claimed_at: sweep.claimedAt,
+          });
+        } catch (err: any) {
+          console.warn('[SettlementService] Sweep DB persist note:', err?.message || err);
+        }
+      })();
+    }
+  }
+
+  /**
    * Loads recent settlement sweeps from Supabase on startup.
    */
   private async initializeFromDb(): Promise<void> {
     this.sweeps = [];
     this.sweepsMap.clear();
+    this.userSweptTotals.clear();
+    this.loadedUsers.clear();
     if (process.env.NODE_ENV === 'test') {
       return;
     }
@@ -139,7 +252,7 @@ export class SettlementService {
       .from('sweeps')
       .select('*')
       .order('claimed_at', { ascending: false })
-      .limit(5000);
+      .limit(10000);
 
     if (error || !data || data.length === 0) {
       return;
@@ -165,6 +278,11 @@ export class SettlementService {
       this.sweepsMap.set(sweep.id, sweep);
       this.sweeps.push(sweep);
 
+      if (sweep.status === 'CONFIRMED' && isAddress(sweep.userAddress)) {
+        const key = `${sweep.userAddress.toLowerCase()}:${sweep.marketId.toLowerCase()}`;
+        this.userSweptTotals.set(key, (this.userSweptTotals.get(key) || 0) + sweep.claimableAmount);
+      }
+
       if (sweep.isCompounded && sweep.claimableAmount > 0) {
         compounderService.recordHistoricalSweep(sweep.userAddress, sweep.claimableAmount, sweep.claimedAt);
       }
@@ -184,6 +302,8 @@ export class SettlementService {
 
     const cacheKey = normalizedUser.toLowerCase();
     const nowMs = Date.now();
+
+    await this.ensureUserSweepsLoaded(normalizedUser);
 
     if (!force) {
       const cached = this.scanCache.get(cacheKey);
@@ -660,13 +780,7 @@ export class SettlementService {
 
           const targetMarketHex = market?.marketIdHex ? market.marketIdHex.toLowerCase() : undefined;
           const totalExpectedPayout = isVoid ? order.lotSize * 0.5 : order.lotSize * 1.0;
-          const totalSweptForMarket = this.sweeps
-            .filter((s) => {
-              if (s.userAddress.toLowerCase() !== cacheKey || s.status !== 'CONFIRMED') return false;
-              const smLower = s.marketId.toLowerCase();
-              return smLower === order.marketId.toLowerCase() || (targetMarketHex && smLower === targetMarketHex);
-            })
-            .reduce((sum, s) => sum + (s.claimableAmount || 0), 0);
+          const totalSweptForMarket = this.getUserTotalSweptForMarket(cacheKey, order.marketId, targetMarketHex);
 
           const remainingClaimable = totalExpectedPayout - totalSweptForMarket;
           if (remainingClaimable > 0.0001) {
@@ -831,12 +945,7 @@ export class SettlementService {
               status: 'CONFIRMED',
               claimedAt: now,
             };
-            this.sweepsMap.set(sweepId, zeroSweep);
-            this.sweeps.unshift(zeroSweep);
-            if (this.sweeps.length > 5000) {
-              const evicted = this.sweeps.pop();
-              if (evicted) this.sweepsMap.delete(evicted.id);
-            }
+            this.recordSweep(zeroSweep, true);
           }
         }
 
@@ -882,7 +991,6 @@ export class SettlementService {
 
           if (txHash) {
             resolvedTxHash = txHash;
-            const sweepRowsToInsert: any[] = [];
 
             for (const pos of payablePositions) {
               const sweepId = crypto.randomUUID();
@@ -899,35 +1007,9 @@ export class SettlementService {
                 claimedAt: now,
               };
 
-              this.sweepsMap.set(sweepId, sweep);
-              this.sweeps.unshift(sweep);
-              if (this.sweeps.length > 5000) {
-                const evicted = this.sweeps.pop();
-                if (evicted) this.sweepsMap.delete(evicted.id);
-              }
+              this.recordSweep(sweep, true);
               claimedSweeps.push(sweep);
               totalClaimed += pos.claimableAmount;
-
-              if (
-                isPersistenceEnabled() &&
-                txHash &&
-                !txHash.startsWith('0x0000000000000000000000000000000000000000000000000000000000000000') &&
-                txHash !== '0x1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef' &&
-                isAddress(normalizedUser)
-              ) {
-                sweepRowsToInsert.push({
-                  id: sweepId,
-                  user_address: normalizedUser,
-                  market_id: pos.marketId,
-                  winning_outcome: pos.winningOutcome,
-                  claimable_amount: pos.claimableAmount,
-                  payout_token: 'tUSDC',
-                  is_compounded: false,
-                  tx_hash: txHash,
-                  status: 'CONFIRMED',
-                  claimed_at: now,
-                });
-              }
 
               // Settle orders in orderService immediately for both IDs
               void orderService.settleOrdersForMarket(pos.marketId, pos.winningOutcome).catch(() => {});
@@ -937,19 +1019,6 @@ export class SettlementService {
             }
 
             this.invalidateCache(normalizedUser);
-
-            if (sweepRowsToInsert.length > 0) {
-              void (async () => {
-                try {
-                  for (const row of sweepRowsToInsert) {
-                    await marketService.ensureMarketPersisted(row.market_id, 'BTC/USD').catch(() => {});
-                  }
-                  await supabase.from('sweeps').insert(sweepRowsToInsert);
-                } catch (err: any) {
-                  console.warn('[SettlementService] Bulk DB persist note:', err?.message || err);
-                }
-              })();
-            }
           }
         }
       } else {
@@ -1341,7 +1410,7 @@ export class SettlementService {
         unclaimedPositions.reduce((acc, p) => acc + p.claimableAmount, 0).toFixed(4),
       );
 
-      const userSweeps = this.getSweepHistory(normalized);
+      const userSweeps = await this.getSweepHistory(normalized);
       const totalClaimedAllTime = Number(
         userSweeps.reduce((acc, s) => acc + s.claimableAmount, 0).toFixed(4),
       );
