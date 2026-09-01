@@ -165,22 +165,37 @@ export function calculateEWMARealizedVolatility(
     return fallback;
   }
 
-  const avgDtSeconds = timeDeltas.reduce((sum, dt) => sum + dt, 0) / timeDeltas.length;
-  if (avgDtSeconds <= 0) return fallback;
-
-  // Compute EWMA variance with reverse exponential weighting
-  let weightedVariance = 0;
+  // Compute EWMA weighted return and weighted time delta
+  let weightedReturn = 0;
+  let weightedDt = 0;
   let weightSum = 0;
   let currentWeight = 1.0;
 
   for (let i = logReturns.length - 1; i >= 0; i--) {
     const r = logReturns[i];
-    weightedVariance += currentWeight * Math.pow(r, 2);
+    const dt = timeDeltas[i];
+    weightedReturn += currentWeight * r;
+    weightedDt += currentWeight * dt;
     weightSum += currentWeight;
     currentWeight *= lambda;
   }
 
-  const ewmaVariance = weightSum > 0 ? weightedVariance / weightSum : 0;
+  if (weightSum <= 0) return fallback;
+
+  const ewmaMean = weightedReturn / weightSum;
+  const avgDtSeconds = weightedDt / weightSum;
+  if (avgDtSeconds <= 0) return fallback;
+
+  // Compute EWMA variance with de-meaned returns normalized by total weight
+  let weightedVariance = 0;
+  currentWeight = 1.0;
+  for (let i = logReturns.length - 1; i >= 0; i--) {
+    const r = logReturns[i];
+    weightedVariance += currentWeight * Math.pow(r - ewmaMean, 2);
+    currentWeight *= lambda;
+  }
+
+  const ewmaVariance = weightedVariance / weightSum;
   const annualizedVariance = (ewmaVariance / avgDtSeconds) * SECONDS_PER_YEAR;
   const rawVol = Math.sqrt(Math.max(0, annualizedVariance));
 
@@ -333,6 +348,13 @@ export interface PriceActionMetrics {
   isSurging: boolean; // Aggressive upward breakout momentum
 }
 
+function findLastItem<T>(arr: T[], predicate: (item: T) => boolean): T | undefined {
+  for (let i = arr.length - 1; i >= 0; i--) {
+    if (predicate(arr[i])) return arr[i];
+  }
+  return undefined;
+}
+
 /**
  * Calculates high-frequency technical price action indicators from rolling price observations.
  */
@@ -372,8 +394,12 @@ export function calculatePriceActionMetrics(
   // 2. Multi-timeframe deltas (1m and 5m)
   const cutoff1m = now - 60000;
   const cutoff5m = now - 300000;
-  const p1m = priceHistory.find((p) => p.timestamp >= cutoff1m)?.price || prices[0];
-  const p5m = priceHistory.find((p) => p.timestamp >= cutoff5m)?.price || prices[0];
+  const p1m = findLastItem(priceHistory, (p) => p.timestamp <= cutoff1m)?.price
+    || priceHistory.find((p) => p.timestamp >= cutoff1m)?.price
+    || prices[0];
+  const p5m = findLastItem(priceHistory, (p) => p.timestamp <= cutoff5m)?.price
+    || priceHistory.find((p) => p.timestamp >= cutoff5m)?.price
+    || prices[0];
   const change1m = p1m > 0 ? (currentSpot - p1m) / p1m : 0;
   const change5m = p5m > 0 ? (currentSpot - p5m) / p5m : 0;
 
@@ -393,7 +419,8 @@ export function calculatePriceActionMetrics(
 
   // 4. Instantaneous Velocity (USD/sec over last 15 seconds)
   const cutoff15s = now - 15000;
-  const p15sObj = priceHistory.find((p) => p.timestamp >= cutoff15s);
+  const p15sObj = findLastItem(priceHistory, (p) => p.timestamp <= cutoff15s)
+    || priceHistory.find((p) => p.timestamp >= cutoff15s);
   const p15s = p15sObj?.price || prices[Math.max(0, prices.length - 4)];
   const dtSeconds = Math.max(1, (now - (p15sObj?.timestamp || (now - 15000))) / 1000);
   const velocity = Number(((currentSpot - p15s) / dtSeconds).toFixed(4));

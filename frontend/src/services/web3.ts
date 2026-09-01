@@ -303,7 +303,7 @@ export const ERC20_BALANCE_ABI = ERC20_ABI;
  */
 export const publicClient: PublicClient = createPublicClient({
   chain: somniaShannonTestnet,
-  transport: http('https://dream-rpc.somnia.network'),
+  transport: http(import.meta.env.VITE_SOMNIA_RPC_URL || 'https://dream-rpc.somnia.network'),
 });
 
 declare global {

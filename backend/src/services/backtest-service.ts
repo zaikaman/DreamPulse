@@ -513,6 +513,7 @@ export class BacktestService {
     }
 
     const totalWindows = Math.max(1, Math.floor(candles.length / windowBars));
+    let processedBars = 0;
 
     for (let w = 0; w < totalWindows; w++) {
       const windowStartIdx = w * windowBars;
@@ -531,6 +532,11 @@ export class BacktestService {
 
       // Bar-by-bar intra-window evaluation
       for (let step = 0; step < windowBars; step++) {
+        processedBars++;
+        if (processedBars % 1000 === 0) {
+          await new Promise<void>((resolve) => setImmediate(resolve));
+        }
+
         const currentIdx = windowStartIdx + step;
         const currentCandle = candles[currentIdx];
         if (!currentCandle) continue;
