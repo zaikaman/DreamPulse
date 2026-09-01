@@ -159,7 +159,7 @@ export const Shell: React.FC<ShellProps> = ({
 
         <main
           className={cn(
-            "flex-1 min-w-0 transition-all duration-200",
+            "flex-1 min-w-0 transition-all duration-200 relative z-10",
             currentView === 'Trade Terminal'
               ? "overflow-y-auto lg:overflow-hidden p-1.5 sm:p-2 md:p-2.5"
               : "overflow-y-auto p-2.5 sm:p-4 md:p-6"
@@ -168,8 +168,8 @@ export const Shell: React.FC<ShellProps> = ({
           <div
             className={
               currentView === 'Trade Terminal'
-                ? "w-full h-full flex flex-col min-h-0"
-                : "mx-auto max-w-7xl min-h-0 flex flex-col"
+                ? "w-full h-full flex flex-col min-h-0 relative z-10"
+                : "mx-auto max-w-7xl min-h-0 flex flex-col relative z-10"
             }
           >
             {children}

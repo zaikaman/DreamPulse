@@ -1117,7 +1117,7 @@ export const StrategyStudioView: React.FC<StrategyStudioViewProps> = ({
             </div>
 
             {/* Visual Logic Execution Flow Diagram */}
-            <div className="p-3.5 rounded-xl border border-border/50 bg-secondary/15 flex flex-col gap-2">
+            <div className="p-3 rounded-xl border border-border/50 bg-secondary/15 flex flex-col gap-2">
               <div className="flex items-center justify-between">
                 <span className="text-[10px] font-mono font-bold tracking-wider text-muted-foreground uppercase flex items-center gap-1.5">
                   <CodeBracketIcon className="w-3.5 h-3.5 text-primary" />
@@ -1128,42 +1128,59 @@ export const StrategyStudioView: React.FC<StrategyStudioViewProps> = ({
                 </span>
               </div>
 
-              <div className="flex items-center gap-2 overflow-x-auto py-1 scrollbar-thin">
+              {/* Single-Line Fluid Pipeline (No Scrollbar, No Multi-Line Break) */}
+              <div className="flex items-center gap-1.5 w-full min-w-0 overflow-x-auto no-scrollbar py-0.5 select-none">
                 {/* Step 1: Market Node */}
-                <div className="px-2.5 py-1.5 rounded-lg bg-background/80 border border-border/60 flex items-center gap-1.5 flex-shrink-0 text-xs font-mono">
+                <div
+                  onClick={() => document.getElementById('section-market')?.scrollIntoView({ behavior: 'smooth' })}
+                  className="px-2.5 py-1.5 rounded-lg bg-background/80 hover:bg-background border border-border/60 hover:border-primary/40 flex items-center gap-1.5 flex-shrink-0 text-xs font-mono transition-colors cursor-pointer"
+                  title="Click to configure Market & Timeframe"
+                >
                   <span className="w-2 h-2 rounded-full bg-primary" />
                   <span className="font-bold text-foreground">{draftSymbol}</span>
                   <span className="text-muted-foreground text-[10px]">({draftTimeframe})</span>
                 </div>
 
-                <span className="text-muted-foreground font-mono text-xs">➔</span>
+                <span className="text-muted-foreground/60 font-mono text-xs select-none flex-shrink-0">➔</span>
 
                 {/* Step 2: Trigger Conditions Summary */}
-                <div className="px-2.5 py-1.5 rounded-lg bg-secondary/30 border border-border/60 flex items-center gap-1.5 flex-shrink-0 text-xs font-mono">
-                  <span className="text-cyan-400 font-bold">IF:</span>
-                  <span className="text-foreground max-w-[200px] truncate">
+                <div
+                  onClick={() => document.getElementById('section-conditions')?.scrollIntoView({ behavior: 'smooth' })}
+                  className="px-2.5 py-1.5 rounded-lg bg-secondary/30 hover:bg-secondary/50 border border-border/60 hover:border-primary/40 flex items-center gap-1.5 min-w-0 flex-1 text-xs font-mono transition-colors cursor-pointer"
+                  title="Click to configure Trigger Conditions"
+                >
+                  <span className="text-cyan-400 font-bold flex-shrink-0">IF:</span>
+                  <span className="text-foreground truncate text-[11px]">
                     {conditions.map((c) => `${c.indicator} ${c.operator === 'LESS_THAN' ? '<' : c.operator === 'GREATER_THAN' ? '>' : 'cross'} ${c.value}`).join(` ${draftOperator} `)}
                   </span>
                 </div>
 
-                <span className="text-muted-foreground font-mono text-xs">➔</span>
+                <span className="text-muted-foreground/60 font-mono text-xs select-none flex-shrink-0">➔</span>
 
                 {/* Step 3: Binary Action */}
-                <div className={cn(
-                  "px-2.5 py-1.5 rounded-lg border flex items-center gap-1.5 flex-shrink-0 text-xs font-mono font-bold",
-                  actionDirection === 'CALL'
-                    ? "bg-emerald-500/10 border-emerald-500/30 text-emerald-400"
-                    : "bg-rose-500/10 border-rose-500/30 text-rose-400"
-                )}>
+                <div
+                  onClick={() => document.getElementById('section-action')?.scrollIntoView({ behavior: 'smooth' })}
+                  className={cn(
+                    "px-2.5 py-1.5 rounded-lg border flex items-center gap-1.5 flex-shrink-0 text-xs font-mono font-bold transition-colors cursor-pointer",
+                    actionDirection === 'CALL'
+                      ? "bg-emerald-500/10 hover:bg-emerald-500/20 border-emerald-500/30 text-emerald-400"
+                      : "bg-rose-500/10 hover:bg-rose-500/20 border-rose-500/30 text-rose-400"
+                  )}
+                  title="Click to configure Binary Action & Stake"
+                >
                   <span>EXEC: {actionDirection}</span>
-                  <span className="text-[10px] font-normal">({actionDurationSec}s @ ${actionStakeAmount})</span>
+                  <span className="text-[10px] font-normal opacity-90">({actionDurationSec}s @ ${actionStakeAmount})</span>
                 </div>
 
-                <span className="text-muted-foreground font-mono text-xs">➔</span>
+                <span className="text-muted-foreground/60 font-mono text-xs select-none flex-shrink-0">➔</span>
 
                 {/* Step 4: Risk Guard */}
-                <div className="px-2.5 py-1.5 rounded-lg bg-background/80 border border-border/60 flex items-center gap-1.5 flex-shrink-0 text-xs font-mono text-muted-foreground">
-                  <ShieldCheckIcon className="w-3.5 h-3.5 text-emerald-400" />
+                <div
+                  onClick={() => document.getElementById('section-risk')?.scrollIntoView({ behavior: 'smooth' })}
+                  className="px-2.5 py-1.5 rounded-lg bg-background/80 hover:bg-background border border-border/60 hover:border-primary/40 flex items-center gap-1.5 flex-shrink-0 text-xs font-mono text-muted-foreground hover:text-foreground transition-colors cursor-pointer"
+                  title="Click to configure Risk Leash & Allowance"
+                >
+                  <ShieldCheckIcon className="w-3.5 h-3.5 text-emerald-400 flex-shrink-0" />
                   <span>Max {riskMaxLosses} Losses · ${draftAllowance} Cap</span>
                 </div>
               </div>
@@ -1210,7 +1227,7 @@ export const StrategyStudioView: React.FC<StrategyStudioViewProps> = ({
               </div>
 
               {/* SENTENCE SECTION 1: WHEN / MARKET DISCOVERY */}
-              <div className="flex flex-col gap-2">
+              <div id="section-market" className="flex flex-col gap-2">
                 <span className="text-[11px] font-mono font-bold tracking-wider text-muted-foreground uppercase flex items-center gap-1.5">
                   <span className="w-5 h-5 rounded-md bg-primary/10 border border-primary/30 text-primary grid place-items-center text-[10px]">1</span>
                   Market & Timeframe Peg
@@ -1240,7 +1257,7 @@ export const StrategyStudioView: React.FC<StrategyStudioViewProps> = ({
               </div>
 
               {/* SENTENCE SECTION 2: TRIGGER CONDITIONS DECK */}
-              <div className="flex flex-col gap-3">
+              <div id="section-conditions" className="flex flex-col gap-3">
                 <div className="flex items-center justify-between flex-wrap gap-2">
                   <span className="text-[11px] font-mono font-bold tracking-wider text-muted-foreground uppercase flex items-center gap-1.5">
                     <span className="w-5 h-5 rounded-md bg-primary/10 border border-primary/30 text-primary grid place-items-center text-[10px]">2</span>
@@ -1416,7 +1433,7 @@ export const StrategyStudioView: React.FC<StrategyStudioViewProps> = ({
               </div>
 
               {/* SENTENCE SECTION 3: THEN EXECUTE (BINARY CONTRACT SPEC) */}
-              <div className="flex flex-col gap-2">
+              <div id="section-action" className="flex flex-col gap-2">
                 <span className="text-[11px] font-mono font-bold tracking-wider text-muted-foreground uppercase flex items-center gap-1.5">
                   <span className="w-5 h-5 rounded-md bg-primary/10 border border-primary/30 text-primary grid place-items-center text-[10px]">3</span>
                   Binary Action & Expiry
@@ -1484,7 +1501,7 @@ export const StrategyStudioView: React.FC<StrategyStudioViewProps> = ({
               </div>
 
               {/* SENTENCE SECTION 4: RISK LEASH */}
-              <div className="flex flex-col gap-2">
+              <div id="section-risk" className="flex flex-col gap-2">
                 <span className="text-[11px] font-mono font-bold tracking-wider text-muted-foreground uppercase flex items-center gap-1.5">
                   <span className="w-5 h-5 rounded-md bg-primary/10 border border-primary/30 text-primary grid place-items-center text-[10px]">4</span>
                   Autonomous Risk Leash & Guardrails
