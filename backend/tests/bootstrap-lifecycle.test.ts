@@ -31,4 +31,15 @@ describe('Bootstrap Lifecycle & HTTP Server Harness', () => {
     const resNoOrigin = await request(app).get('/api/health');
     expect(resNoOrigin.status).toBe(200);
   });
+
+  it('correctly normalizes OPERATOR_PRIVATE_KEY without 0x prefix or with quotes', () => {
+    const rawKey = 'd260f7f062a3dc553803e20e440ebebd96993b87ab564cee8ce9c2873974b251';
+    let cleaned = rawKey.trim().replace(/^["']|["']$/g, '');
+    if (/^[a-fA-F0-9]{64}$/.test(cleaned)) {
+      cleaned = `0x${cleaned}`;
+    }
+    expect(cleaned).toBe(`0x${rawKey}`);
+    expect(env.OPERATOR_PRIVATE_KEY.startsWith('0x')).toBe(true);
+    expect(env.OPERATOR_PRIVATE_KEY.length).toBe(66);
+  });
 });
