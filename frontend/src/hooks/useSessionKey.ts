@@ -855,7 +855,9 @@ export function useSessionKey(): UseSessionKeyReturn {
     if (!wallet.address) return;
     const targetAddr = wallet.address;
     // Immediate re-validation on mount (covers remount, tab restore, and XSS-forged localStorage)
-    void fetchActiveSession(targetAddr).catch(() => {});
+    if (shouldPoll()) {
+      void fetchActiveSession(targetAddr).catch(() => {});
+    }
     const poll = () => {
       if (!shouldPoll()) return;
       void fetchActiveSession(targetAddr).catch(() => {});
@@ -883,6 +885,7 @@ export function useSessionKey(): UseSessionKeyReturn {
     const scheduleRefresh = (delay = 400) => {
       if (debounceTimer) window.clearTimeout(debounceTimer);
       debounceTimer = window.setTimeout(() => {
+        if (!shouldPoll()) return;
         refreshBalances(targetAddr).catch(() => {});
       }, delay);
     };
@@ -890,6 +893,7 @@ export function useSessionKey(): UseSessionKeyReturn {
     const scheduleSessionRefresh = (delay = 400) => {
       if (sessionDebounce) window.clearTimeout(sessionDebounce);
       sessionDebounce = window.setTimeout(() => {
+        if (!shouldPoll()) return;
         fetchActiveSession(targetAddr).catch(() => {});
       }, delay);
     };
@@ -931,7 +935,9 @@ export function useSessionKey(): UseSessionKeyReturn {
   // Keep allowance status fresh while wallet is connected — visibility-aware
   useEffect(() => {
     if (!wallet.isConnected || !wallet.address || !wallet.isCorrectNetwork) return;
-    refreshAllowanceStatus().catch(() => {});
+    if (shouldPoll()) {
+      refreshAllowanceStatus().catch(() => {});
+    }
     const id = window.setInterval(() => {
       if (!shouldPoll()) return;
       refreshAllowanceStatus().catch(() => {});
@@ -939,10 +945,15 @@ export function useSessionKey(): UseSessionKeyReturn {
     const onVis = () => {
       if (document.visibilityState === 'visible') refreshAllowanceStatus().catch(() => {});
     };
+    const onFocus = () => {
+      if (shouldPoll()) refreshAllowanceStatus().catch(() => {});
+    };
     document.addEventListener('visibilitychange', onVis);
+    window.addEventListener('focus', onFocus);
     return () => {
       window.clearInterval(id);
       document.removeEventListener('visibilitychange', onVis);
+      window.removeEventListener('focus', onFocus);
     };
   }, [wallet.isConnected, wallet.address, wallet.isCorrectNetwork, refreshAllowanceStatus]);
 

@@ -98,7 +98,9 @@ export function useMarkets(options?: UseMarketsOptions) {
   // Heartbeat respects staleTime-like throttling: if data is fresh via WS, interval is the fallback only.
   useEffect(() => {
     isMountedRef.current = true;
-    fetchMarkets();
+    if (shouldPoll()) {
+      fetchMarkets();
+    }
 
     const pollMs = options?.pollIntervalMs || STALE_TIMES.markets;
     const interval = window.setInterval(() => {
@@ -168,7 +170,7 @@ export function useMarkets(options?: UseMarketsOptions) {
     const remainingMs = closeMs - Date.now();
     if (remainingMs > 0) {
       const timeout = setTimeout(() => {
-        if (isMountedRef.current) {
+        if (isMountedRef.current && shouldPoll()) {
           fetchMarkets();
         }
       }, remainingMs + 500);

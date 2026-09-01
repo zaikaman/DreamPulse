@@ -13,6 +13,7 @@ import type { WalletState } from '../../hooks/useSessionKey.js';
 import { apiClient } from '../../services/api.js';
 import { Badge } from '../ui/badge.js';
 import { cn } from '../../lib/utils.js';
+import { shouldPoll } from '../../lib/polling.js';
 
 interface ActivePositionsDrawerProps {
   wallet: WalletState;
@@ -139,9 +140,27 @@ export const ActivePositionsDrawer: React.FC<ActivePositionsDrawerProps> = ({
   };
 
   useEffect(() => {
-    fetchOrders();
-    const interval = setInterval(fetchOrders, 6000);
-    return () => clearInterval(interval);
+    if (!wallet.isConnected || !wallet.address) return;
+    if (shouldPoll()) {
+      fetchOrders();
+    }
+    const interval = setInterval(() => {
+      if (!shouldPoll()) return;
+      fetchOrders();
+    }, 6000);
+    const onVisible = () => {
+      if (document.visibilityState === 'visible') fetchOrders();
+    };
+    const onFocus = () => {
+      if (shouldPoll()) fetchOrders();
+    };
+    document.addEventListener('visibilitychange', onVisible);
+    window.addEventListener('focus', onFocus);
+    return () => {
+      clearInterval(interval);
+      document.removeEventListener('visibilitychange', onVisible);
+      window.removeEventListener('focus', onFocus);
+    };
   }, [wallet.address, wallet.isConnected]);
 
   // Derive categories

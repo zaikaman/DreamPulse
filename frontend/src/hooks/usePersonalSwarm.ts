@@ -4,6 +4,7 @@ import type { AgentType, PersonalSwarmConfig, PersonalSwarmStatus } from '../typ
 import { subscribeToPrivateTable } from '../services/supabase.js';
 import { ensureSupabaseAuthForWallet } from '../services/supabase-auth.js';
 import type { RealtimeChannel } from '@supabase/supabase-js';
+import { shouldPoll, STALE_TIMES } from '../lib/polling.js';
 
 export interface UsePersonalSwarmReturn {
   config: PersonalSwarmConfig | null;
@@ -119,11 +120,19 @@ export const usePersonalSwarm = (userAddress?: string): UsePersonalSwarmReturn =
   // Light polling restores cross-tab near-realtime without Supabase realtime
   useEffect(() => {
     if (!userAddress) return;
-    const interval = setInterval(() => {
+    if (shouldPoll()) {
       fetchAll().catch(() => {});
-    }, 15000);
-    const onFocus = () => fetchAll().catch(() => {});
-    const onVis = () => { if (document.visibilityState === 'visible') fetchAll().catch(() => {}); };
+    }
+    const interval = setInterval(() => {
+      if (!shouldPoll()) return;
+      fetchAll().catch(() => {});
+    }, STALE_TIMES.swarm);
+    const onFocus = () => {
+      if (shouldPoll()) fetchAll().catch(() => {});
+    };
+    const onVis = () => {
+      if (document.visibilityState === 'visible') fetchAll().catch(() => {});
+    };
     window.addEventListener('focus', onFocus);
     document.addEventListener('visibilitychange', onVis);
     return () => {

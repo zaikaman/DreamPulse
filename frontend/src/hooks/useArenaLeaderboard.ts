@@ -10,6 +10,7 @@ import type {
   CustomAgentDefinition,
   SocialCopyConfig,
 } from '../types/index.js';
+import { shouldPoll } from '../lib/polling.js';
 
 export type ArenaTrackType = 'AGENTS' | 'TRADERS';
 
@@ -20,6 +21,15 @@ export function useArenaLeaderboard(userAddress?: string | null) {
   const [strategyFilter, setStrategyFilter] = useState<string>('ALL');
   const [sortBy, setSortBy] = useState<ArenaSortBy>('pnl');
   const [searchQuery, setSearchQuery] = useState<string>('');
+  const [debouncedSearchQuery, setDebouncedSearchQuery] = useState<string>('');
+
+  // Debounce search query to prevent request storms on every keystroke
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setDebouncedSearchQuery(searchQuery);
+    }, 300);
+    return () => clearTimeout(timer);
+  }, [searchQuery]);
 
   const [agents, setAgents] = useState<ArenaAgentEntry[]>([]);
   const [traders, setTraders] = useState<ArenaTraderEntry[]>([]);
@@ -89,18 +99,19 @@ export function useArenaLeaderboard(userAddress?: string | null) {
       fetchFollowing();
 
       // 2. Fetch both Agents and Traders in parallel so both counts are always populated immediately
+      const effectiveSearch = debouncedSearchQuery.trim() || undefined;
       const [agentsRes, tradersRes] = await Promise.all([
         apiClient.getArenaAgents({
           timeframe,
           symbol: symbolFilter,
           strategyType: strategyFilter,
           sortBy: activeTrack === 'AGENTS' ? sortBy : 'pnl',
-          search: searchQuery,
+          search: effectiveSearch,
         }).catch(() => null),
         apiClient.getArenaTraders({
           range: timeframe,
           sortBy: activeTrack === 'TRADERS' ? sortBy : 'pnl',
-          search: searchQuery,
+          search: effectiveSearch,
         }).catch(() => null),
       ]);
 
@@ -122,13 +133,29 @@ export function useArenaLeaderboard(userAddress?: string | null) {
         setIsRefreshing(false);
       }
     }
-  }, [activeTrack, timeframe, symbolFilter, strategyFilter, sortBy, searchQuery]);
+  }, [activeTrack, timeframe, symbolFilter, strategyFilter, sortBy, debouncedSearchQuery, fetchFollowing]);
 
   useEffect(() => {
     isMountedRef.current = true;
-    fetchLeaderboardData();
+    if (shouldPoll()) {
+      fetchLeaderboardData();
+    }
+    const onVisible = () => {
+      if (document.visibilityState === 'visible') {
+        fetchLeaderboardData();
+      }
+    };
+    const onFocus = () => {
+      if (shouldPoll()) {
+        fetchLeaderboardData();
+      }
+    };
+    document.addEventListener('visibilitychange', onVisible);
+    window.addEventListener('focus', onFocus);
     return () => {
       isMountedRef.current = false;
+      document.removeEventListener('visibilitychange', onVisible);
+      window.removeEventListener('focus', onFocus);
     };
   }, [fetchLeaderboardData]);
 

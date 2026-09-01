@@ -3,6 +3,7 @@ import { apiClient } from '../services/api.js';
 import type { PortfolioSummary } from '../types/index.js';
 import type { WalletState } from './useSessionKey.js';
 import { telemetryClient, type OrderFillData, type SweepCompleteData, type PnlUpdateData } from '../services/telemetry-client.js';
+import { shouldPoll } from '../lib/polling.js';
 
 export interface UseUserPortfolioReturn {
   portfolio: PortfolioSummary | null;
@@ -91,13 +92,31 @@ export function useUserPortfolio(wallet?: WalletState): UseUserPortfolioReturn {
     if (!address) return;
 
     // Initial fetch on mount / address change
-    fetchPortfolio(true);
+    if (shouldPoll()) {
+      fetchPortfolio(true);
+    }
 
     // Dynamic user address subscription on multiplexed client
     telemetryClient.setUserAddress(address);
 
     // Periodic 30-second polling fallback (heartbeat only, instant pushes handle real-time)
-    const interval = setInterval(() => fetchPortfolio(false), 30000);
+    const interval = setInterval(() => {
+      if (!shouldPoll()) return;
+      fetchPortfolio(false);
+    }, 30000);
+
+    const onVisible = () => {
+      if (document.visibilityState === 'visible') {
+        fetchPortfolio(true);
+      }
+    };
+    const onFocus = () => {
+      if (shouldPoll()) {
+        fetchPortfolio(true);
+      }
+    };
+    document.addEventListener('visibilitychange', onVisible);
+    window.addEventListener('focus', onFocus);
 
     // Subscribe to real-time user events via shared telemetry bus
     const unsubOrder = telemetryClient.on('order_filled', (order: OrderFillData) => {
@@ -118,6 +137,8 @@ export function useUserPortfolio(wallet?: WalletState): UseUserPortfolioReturn {
 
     return () => {
       clearInterval(interval);
+      document.removeEventListener('visibilitychange', onVisible);
+      window.removeEventListener('focus', onFocus);
       if (debounceTimerRef.current) clearTimeout(debounceTimerRef.current);
       unsubOrder();
       unsubPnl();
