@@ -742,88 +742,83 @@ export class SettlementService {
         const decimals = SOMNIA_ADDRESSES.decimals;
         const one = 10n ** BigInt(decimals);
 
-        const payablePositions: UnclaimedPosition[] = [];
-        let accumulatedRaw = 0n;
+        // Step 1: Pre-sweep on-chain redemption if operator still holds unredeemed outcome tokens
+        if (hasGas) {
+          for (const pos of positionsToProcess) {
+            if (pos.marketIdHex && pos.rawAmount > 0n) {
+              try {
+                let outcomeToken = pos.outcomeToken;
+                let onchain = await somniaExchange.client.getMarketOnchain(pos.marketIdHex).catch(() => null);
+                if (!outcomeToken && onchain?.outcomeToken) {
+                  outcomeToken = onchain.outcomeToken as Address;
+                }
+                if (outcomeToken && onchain && (onchain.isResolved || onchain.finalized)) {
+                  const winId = pos.outcomeIdx === 0 ? onchain.yesId : onchain.noId;
+                  if (winId !== undefined) {
+                    const opBal = await somniaExchange.client.getOutcomeBalance({
+                      outcomeToken,
+                      account: operatorAccount.address,
+                      id: BigInt(winId),
+                    }).catch(() => 0n);
 
-        for (const pos of positionsToProcess) {
-          if (pos.rawAmount <= 0n) continue;
-
-          let redeemedCollateralRaw = 0n;
-          if (process.env.NODE_ENV === 'test') {
-            redeemedCollateralRaw = pos.rawAmount;
-          } else if (hasGas && pos.marketIdHex) {
-            try {
-              let outcomeToken = pos.outcomeToken;
-              let onchain = await somniaExchange.client.getMarketOnchain(pos.marketIdHex).catch(() => null);
-              if (!outcomeToken && onchain?.outcomeToken) {
-                outcomeToken = onchain.outcomeToken as Address;
-              }
-              if (outcomeToken && onchain) {
-                const winId = pos.outcomeIdx === 0 ? onchain.yesId : onchain.noId;
-                if (winId !== undefined) {
-                  const opBal = await somniaExchange.client.getOutcomeBalance({
-                    outcomeToken,
-                    account: operatorAccount.address,
-                    id: BigInt(winId),
-                  }).catch(() => 0n);
-
-                  // STRICT INVARIANT: ONLY execute on-chain redeem if operator actually holds > 0n outcome tokens
-                  if (opBal > 0n) {
-                    const redeemAmount = opBal < pos.rawAmount ? opBal : pos.rawAmount;
-                    const rRes = await executeOperatorTx(() =>
-                      somniaExchange.trader.redeem({
-                        marketId: pos.marketIdHex!,
-                        outcomeIdx: pos.outcomeIdx,
-                        amount: redeemAmount,
-                        outcomeToken,
-                      }),
-                    ).catch((rErr: any) => {
-                      console.warn(`[SettlementService] Pre-sweep redeem note for market ${pos.marketId}:`, rErr.message);
-                      return null;
-                    });
-
-                    if (rRes?.hash) {
-                      redeemedCollateralRaw = redeemAmount;
+                    if (opBal > 0n) {
+                      const redeemAmount = opBal < pos.rawAmount ? opBal : pos.rawAmount;
+                      await executeOperatorTx(() =>
+                        somniaExchange.trader.redeem({
+                          marketId: pos.marketIdHex!,
+                          outcomeIdx: pos.outcomeIdx,
+                          amount: redeemAmount,
+                          outcomeToken,
+                        }),
+                      ).catch((rErr: any) => {
+                        console.warn(`[SettlementService] Pre-sweep redeem note for market ${pos.marketId}:`, rErr.message);
+                      });
                     }
                   }
                 }
+              } catch (err: any) {
+                console.warn(`[SettlementService] Pre-sweep check error:`, err?.message);
               }
-            } catch (err: any) {
-              console.warn(`[SettlementService] Pre-sweep check error:`, err?.message);
             }
           }
+        }
 
-          if (redeemedCollateralRaw > 0n) {
-            accumulatedRaw += redeemedCollateralRaw;
-            payablePositions.push({
-              ...pos,
-              rawAmount: redeemedCollateralRaw,
-              claimableAmount: Number((Number(redeemedCollateralRaw) / Number(one)).toFixed(4)),
+        // Step 2: Query operator balance
+        let operatorBalance = 0n;
+        if (process.env.NODE_ENV !== 'test') {
+          try {
+            operatorBalance = await publicClient.readContract({
+              address: SOMNIA_ADDRESSES.testUsdc,
+              abi: ERC20_ABI,
+              functionName: 'balanceOf',
+              args: [operatorAccount.address],
             });
+          } catch {
+            operatorBalance = 0n;
+          }
+        } else {
+          operatorBalance = 10000n * one;
+        }
+
+        // Limit each user batch to at most 50 tUSDC or available balance
+        const MAX_BATCH_RAW = 50n * one;
+        const availableBudget = operatorBalance < MAX_BATCH_RAW ? operatorBalance : MAX_BATCH_RAW;
+
+        let accumulatedRaw = 0n;
+        const payablePositions: UnclaimedPosition[] = [];
+        for (const pos of positionsToProcess) {
+          if (pos.rawAmount <= 0n) continue;
+          if (process.env.NODE_ENV === 'test' || accumulatedRaw + pos.rawAmount <= availableBudget) {
+            accumulatedRaw += pos.rawAmount;
+            payablePositions.push(pos);
           } else {
-            // Settle locally so the scanner never loops on un-redeemable or already-handled positions
-            void orderService.settleOrdersForMarket(pos.marketId, pos.winningOutcome).catch(() => {});
-            if (pos.marketIdHex && pos.marketIdHex.toLowerCase() !== pos.marketId.toLowerCase()) {
-              void orderService.settleOrdersForMarket(pos.marketIdHex, pos.winningOutcome).catch(() => {});
-            }
+            break;
           }
         }
 
         if (payablePositions.length > 0 && accumulatedRaw > 0n) {
           let txHash: Hex | undefined;
           if (process.env.NODE_ENV !== 'test') {
-            let operatorBalance = 0n;
-            try {
-              operatorBalance = await publicClient.readContract({
-                address: SOMNIA_ADDRESSES.testUsdc,
-                abi: ERC20_ABI,
-                functionName: 'balanceOf',
-                args: [operatorAccount.address],
-              });
-            } catch {
-              operatorBalance = 0n;
-            }
-
             const canPayout = hasGas && operatorBalance >= accumulatedRaw;
             if (canPayout) {
               try {
