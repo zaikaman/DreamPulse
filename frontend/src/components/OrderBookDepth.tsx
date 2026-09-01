@@ -94,9 +94,9 @@ export const OrderBookDepth: React.FC<OrderBookDepthProps> = ({
 
   // Spot price & market computations — synthetic/seed markets are forced to 0 edge (no alpha)
   const isSyntheticOrSeedDepth = Boolean(selectedMarket.isSynthetic || selectedMarket.isSeedDepth);
-  const spot = currentSpotPrice || liveTick?.spotPrice || selectedMarket.strikePrice || 79664.46;
-  const isITM = spot >= selectedMarket.strikePrice;
-  const strikeDelta = spot - selectedMarket.strikePrice;
+  const spot = currentSpotPrice || liveTick?.spotPrice || selectedMarket.strikePrice || 0;
+  const isITM = selectedMarket.strikePrice > 0 && spot > 0 ? spot >= selectedMarket.strikePrice : false;
+  const strikeDelta = selectedMarket.strikePrice > 0 && spot > 0 ? spot - selectedMarket.strikePrice : 0;
   const fairValue = liveTick?.fairValue ?? selectedMarket.fairValueYes;
   const rawEdge = liveTick?.edge ?? selectedMarket.edgePercentage;
   const edge = isSyntheticOrSeedDepth ? 0 : rawEdge;

@@ -105,9 +105,9 @@ export const EventContractChart: React.FC<EventContractChartProps> = ({
   const [hoverPoint, setHoverPoint] = useState<{ x: number; y: number; price: number; time: string; delta: number } | null>(null);
 
   // Derive active prices and parameters
-  const strike = market.strikePrice || 79613.4;
-  const spot = currentSpotPrice || liveTick?.spotPrice || market.strikePrice || 79664.46;
-  const isITM = spot >= strike;
+  const strike = market.strikePrice || 0;
+  const spot = currentSpotPrice || liveTick?.spotPrice || market.strikePrice || 0;
+  const isITM = strike > 0 && spot > 0 ? spot >= strike : false;
 
   // Local price history trail based on active timeRange
   const [priceHistory, setPriceHistory] = useState<PricePoint[]>(() => {

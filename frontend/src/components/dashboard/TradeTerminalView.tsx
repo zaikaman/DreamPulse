@@ -61,8 +61,8 @@ export const TradeTerminalView: React.FC<TradeTerminalViewProps> = ({
   // Active contract telemetry
   const market = selectedMarket || markets[0] || null;
   const tick = market ? liveTicks.get(market.id) : undefined;
-  const spot = currentSpotPrices[market?.symbol || 'BTC/USD'] || tick?.spotPrice || market?.strikePrice || 79664.46;
-  const strike = market?.strikePrice || 79613.4;
+  const spot = (market?.symbol && currentSpotPrices[market.symbol]) || tick?.spotPrice || market?.strikePrice || 0;
+  const strike = market?.strikePrice || 0;
 
   const activeCustomForSymbol = useMemo(() => {
     if (!market) return [];
@@ -82,7 +82,7 @@ export const TradeTerminalView: React.FC<TradeTerminalViewProps> = ({
   }, [market, tick, spot, agentThoughts]);
 
   // Continuous smooth fallback probability centered on strike
-  const smoothFallbackProb = strike > 0 
+  const smoothFallbackProb = strike > 0 && spot > 0
     ? 1 / (1 + Math.exp(-Math.max(-4, Math.min(4, ((spot - strike) / (strike * 0.005)) * 2))))
     : 0.50;
 

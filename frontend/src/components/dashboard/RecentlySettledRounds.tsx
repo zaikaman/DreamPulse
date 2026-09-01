@@ -61,25 +61,7 @@ export const RecentlySettledRounds: React.FC<RecentlySettledRoundsProps> = ({
         }
       }
 
-      // Fallback dynamic settled rounds in local time if backend is freshly initialized
-      const now = Date.now();
-      const fallbackRounds: SettledRoundItem[] = [15, 30, 45, 60, 75, 90].map((minsAgo, idx) => {
-        const d = new Date(now - minsAgo * 60 * 1000);
-        const timeStr = d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false });
-        const prices = [79606.46, 79654.65, 79935.50, 79986.10, 80245.15, 80482.65];
-        const isUp = idx === 0;
-        return {
-          id: `settled-${idx + 1}`,
-          symbol: 'BTC/USD',
-          windowDuration: '15m',
-          strikePrice: 79610.0 + idx * 50,
-          settlementPrice: prices[idx] || 79600,
-          settledAt: timeStr,
-          winningOutcome: isUp ? 'YES' : 'NO',
-          isUp,
-        };
-      });
-      setRounds(fallbackRounds);
+      setRounds([]);
     } catch {
       // non-fatal
     } finally {
@@ -126,8 +108,13 @@ export const RecentlySettledRounds: React.FC<RecentlySettledRoundsProps> = ({
       </div>
 
       {/* Horizontal Scrolling Strip */}
-      <div className="flex items-center gap-2 overflow-x-auto pb-1 scrollbar-none font-mono">
-        {rounds.map((round) => (
+      <div className="flex items-center gap-2 overflow-x-auto pb-1 scrollbar-none font-mono min-h-[42px]">
+        {rounds.length === 0 ? (
+          <div className="text-[11px] text-muted-foreground/60 italic px-2 py-1 flex items-center gap-1.5">
+            <span>No historical rounds resolved yet in this session.</span>
+          </div>
+        ) : (
+          rounds.map((round) => (
           <div
             key={round.id}
             onClick={() => onSelectMarket?.(round.id)}
@@ -177,7 +164,7 @@ export const RecentlySettledRounds: React.FC<RecentlySettledRoundsProps> = ({
               )}
             </div>
           </div>
-        ))}
+        )))}
       </div>
     </div>
   );

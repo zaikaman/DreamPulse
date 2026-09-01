@@ -112,12 +112,52 @@ export function evaluateTradeConfluence(
   priceHistory?: Array<{ timestamp?: number; time?: number; price: number }>,
   agentReasoningOverride?: string,
 ): ConfluenceEvaluation {
-  const strike = market.strikePrice || 79613.4;
-  const spot = currentSpot || liveTick?.spotPrice || market.strikePrice || 79664.46;
+  const strike = market.strikePrice || 0;
+  const spot = (currentSpot && currentSpot > 0)
+    ? currentSpot
+    : (liveTick?.spotPrice && liveTick.spotPrice > 0)
+    ? liveTick.spotPrice
+    : (market.strikePrice && market.strikePrice > 0)
+    ? market.strikePrice
+    : 0;
+
+  if (strike <= 0 || spot <= 0) {
+    return {
+      convictionState: 'NEUTRAL',
+      recommendedAction: 'WAIT',
+      recommendedOutcome: 'NONE',
+      winProbability: 50,
+      confidenceScore: 50,
+      fairValueYes: 0.50,
+      impliedProbYes: 0.50,
+      edgePercentage: 0,
+      signedEdgeLabel: '+0.0%',
+      priceActionTrend: 'RANGE_BOUND',
+      priceActionLabel: 'Awaiting Telemetry',
+      priceActionScore: 0,
+      strikeRunwayZ: 0,
+      spotDiff: 0,
+      spotDiffPct: 0,
+      diffText: 'Awaiting price telemetry',
+      isCounterTrendConflict: false,
+      isYesEdge: false,
+      isNoEdge: false,
+      rationale: `Live telemetry for ${market.symbol || 'contract'} is initializing. AI Copilot is observing for live spot and strike prices before generating signals.`,
+      badgeStyle: {
+        bg: 'bg-secondary/40',
+        border: 'border-border/40',
+        text: 'text-muted-foreground',
+        iconColor: 'text-muted-foreground',
+        glow: '',
+        label: 'NEUTRAL • AWAITING DATA',
+      },
+    };
+  }
+
   const isSyntheticOrSeed = Boolean(market.isSynthetic || market.isSeedDepth);
 
   const spotDiff = spot - strike;
-  const spotDiffPct = strike > 0 ? (spotDiff / strike) * 100 : 0;
+  const spotDiffPct = (spotDiff / strike) * 100;
   const pctDiffFormatted = Math.abs(spotDiffPct).toFixed(2);
   const diffText = spotDiff >= 0
     ? `+$${spotDiff < 1 ? spotDiff.toFixed(4) : spotDiff.toFixed(2)} (+${pctDiffFormatted}%) above strike`

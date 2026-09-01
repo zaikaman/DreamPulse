@@ -90,14 +90,14 @@ export const TraderCockpitTicket: React.FC<TraderCockpitTicketProps> = ({
   const [isFauceting, setIsFauceting] = useState<boolean>(false);
 
   // Derive active live prices
-  const currentBestBid = bestBidYes ?? market.bestBidYes ?? 0.84;
-  const currentBestAsk = bestAskYes ?? market.bestAskYes ?? 0.85;
-  const spotPrice = currentSpotPrice || liveTick?.spotPrice || market.strikePrice || 79664.46;
-  const strike = market.strikePrice || 79613.4;
+  const currentBestBid = bestBidYes ?? market.bestBidYes ?? 0.50;
+  const currentBestAsk = bestAskYes ?? market.bestAskYes ?? 0.50;
+  const spotPrice = currentSpotPrice || liveTick?.spotPrice || market.strikePrice || 0;
+  const strike = market.strikePrice || 0;
 
   // Continuous regularized sigmoid probability centered on strike (prevents pin-risk step collapse)
   const smoothFallbackProb = useMemo(() => {
-    if (!strike || strike <= 0) return 0.50;
+    if (!strike || strike <= 0 || !spotPrice || spotPrice <= 0) return 0.50;
     const relOffset = (spotPrice - strike) / (strike * 0.005);
     const sigmoid = 1 / (1 + Math.exp(-Math.max(-4, Math.min(4, relOffset * 2))));
     return Number(sigmoid.toFixed(4));
