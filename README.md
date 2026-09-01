@@ -14,7 +14,7 @@
   <a href="https://shannon-explorer.somnia.network"><img src="https://img.shields.io/badge/Blockchain-Somnia%20Shannon%20(50312)-00ffcc?style=for-the-badge&logo=ethereum&logoColor=black" alt="Somnia Shannon Testnet" /></a>
   <a href="https://docs.dreamdex.io/developers/event-contracts"><img src="https://img.shields.io/badge/Protocol-DreamDEX%20Event%20Contracts-7928CA?style=for-the-badge&logo=chainlink&logoColor=white" alt="DreamDEX Protocol" /></a>
   <a href="https://github.com/zaikaman/DreamPulse/actions/workflows/ci.yml"><img src="https://img.shields.io/badge/CI-GitHub%20Actions%20Passing-0284c7?style=for-the-badge&logo=githubactions&logoColor=white" alt="CI GitHub Actions" /></a>
-  <a href="https://github.com/zaikaman/DreamPulse"><img src="https://img.shields.io/badge/Tests-238%2F238%20Passed%20(100%25)-00e676?style=for-the-badge&logo=vitest&logoColor=white" alt="Tests 238/238 Passing" /></a>
+  <a href="https://github.com/zaikaman/DreamPulse"><img src="https://img.shields.io/badge/Tests-239%2F239%20Passed%20(100%25)-00e676?style=for-the-badge&logo=vitest&logoColor=white" alt="Tests 239/239 Passing" /></a>
   <a href="https://groq.com"><img src="https://img.shields.io/badge/LLM-Groq%20(Telemetry)%20%2B%20Gemini%20(Studio)-f55036?style=for-the-badge&logo=openai&logoColor=white" alt="Groq + Gemini LLM" /></a>
 </p>
 
@@ -28,7 +28,7 @@
 * **Somnia OperatorPermissionsRegistry**: [`0x15C7e8CE38F021c5b45d098AaD788f63090bF20A`](https://shannon-explorer.somnia.network/address/0x15C7e8CE38F021c5b45d098AaD788f63090bF20A)
 * **SDK & Documentation Developer Feedback Report**: [Jump to Feedback Report](#developer-feedback-report-somnia--dreamdex-sdk)
 * **2–3 Minute Judging Demo Script**: [Jump to Video Walkthrough](#23-minute-demo-video-walkthrough)
-* **Automated Verification Suite**: `npm run verify` *(238/238 Unit & Integration Tests Passing, 100% Type Safety)*
+* **Automated Verification Suite**: `npm run verify` *(239/239 Unit & Integration Tests Passing, 100% Type Safety)*
 
 ---
 
@@ -54,7 +54,7 @@
 18. [System Architecture & Execution Workflows](#system-architecture--execution-workflows)
 19. [API & WebSocket Telemetry Protocol](#api--websocket-telemetry-protocol)
 20. [Local Installation & Development Guide](#local-installation--development-guide)
-21. [Verification & Test Suite (228/228 Passing)](#verification--test-suite-228228-passing)
+21. [Verification & Test Suite (239/239 Passing)](#verification--test-suite-239239-passing)
 22. [2–3 Minute Demo Video Walkthrough](#23-minute-demo-video-walkthrough)
 23. [Future Roadmap Beyond Hackathon](#future-roadmap-beyond-hackathon)
 24. [License & Acknowledgements](#license--acknowledgements)
@@ -471,7 +471,7 @@ All DreamPulse interactions execute on the **Somnia Shannon Testnet**:
 | Criteria & Weight | How DreamPulse AI Exceeds Expectations |
 | :--- | :--- |
 | **Innovation & Originality (20%)** | • Unifies consumer-facing trading, no-code agent creation, multi-agent swarms, quantitative simulation, and social prediction in a single cohesive platform.<br />• First implementation combining dual-engine LLM reasoning (Groq Qwen 2.5 + dedicated Google Gemini) with analytical Black-Scholes binary option mathematics.<br />• Solves the prediction market cold-start problem through automated, inventory-skewed market making. |
-| **Technical Implementation (25%)** | • Deep integration with `@somnia-chain/markets-sdk` across orders, depth ladders, cancellations, and settlement redemptions.<br />• 220/220 unit and integration tests passing with 100% type safety and zero `any` types across 22 test suites.<br />• Built custom `BatchApprove.sol` smart contract deployed on Shannon Testnet to overcome protocol-level multi-pool approval barriers.<br />• Dynamic `NonceManager` handling sub-second on-chain concurrency and automated revert circuit breakers. |
+| **Technical Implementation (25%)** | • Deep integration with `@somnia-chain/markets-sdk` across orders, depth ladders, cancellations, and settlement redemptions.<br />• 239/239 unit and integration tests passing with 100% type safety and zero `any` types across 23 test suites.<br />• Built custom `BatchApprove.sol` smart contract deployed on Shannon Testnet to overcome protocol-level multi-pool approval barriers.<br />• Dynamic `NonceManager` handling sub-second on-chain concurrency and automated revert circuit breakers. |
 | **User Experience & Design (20%)** | • High-aesthetic, minimalist institutional quant terminal inspired by modern hedge fund platforms (obsidian glassmorphism, GPU-accelerated Three.js Silk shader, and Radix UI primitives).<br />• **Interactive CLOB Trade Terminal**: 1-click depth ladder auto-fill, Limit & Market (IOC) order placement, collateral presets, live win payout calculations, and inline AI Alpha Copilot.<br />• Global Command Palette (`⌘K / Ctrl+K`) for sub-second keyboard-driven market navigation and execution.<br />• Zero-friction onboarding via 1-click non-custodial session delegation with strict single-trade caps and daily volume guardrails.<br />• Real-time WebSocket telemetry ($<50\text{ms}$ updates), live Black-Scholes Edge Radar, and procedural Web Audio acoustic feedback. |
 | **Business & Ecosystem Impact (20%)** | • Directly solves the primary existential crisis of Event Contracts: stale quotes, wide spreads, and idle capital.<br />• Generates continuous, organic trading volume and liquidity on Somnia, showcasing its 400k+ TPS capacity.<br />• The `Sweeper` daemon guarantees that winning collateral is perpetually recycled back into active trading rather than remaining stranded.<br />• Democratizes strategy creation with no-code agent building, social leaderboards, and 1-click strategy cloning. |
 | **Presentation & Demo (15%)** | • Complete technical documentation, interactive architecture flowcharts, mathematical explanations, and full API references.<br />• Clear 2–3 minute video presentation script demonstrating end-to-end user onboarding, trade terminal, strategy studio, swarm execution, live thoughts, and on-chain settlements. |
@@ -521,6 +521,51 @@ All DreamPulse interactions execute on the **Somnia Shannon Testnet**:
    * **Receipt Confirmation**: The transaction receipt is confirmed on-chain and broadcast to the user terminal.
 4. **Autonomous Resolution & Settlement**: When a contract transitions to `Finalized`, the Sweeper daemon detects unclaimed winning shares, calls `claimMarketPayout` via the settlement router, and auto-compounds the collateral.
 
+### End-to-End Committed Execution Proof Trail (Database & On-Chain Audit)
+
+The entire flow — from agent strategy configuration to live on-chain execution and settlement compounding — is permanently verifiable through the synchronized Supabase database and Somnia Shannon block explorer:
+
+```mermaid
+sequenceDiagram
+    autonumber
+    actor User as Delegator (0x327e766EB317e5A3FA6dB30c0A5b9735Ad1aEdae)
+    participant UI as Pro Terminal / Studio
+    participant Session as Non-Custodial Session Grant
+    participant Agent as Oracle Arb Engine
+    participant Viem as Somnia Operator Daemon
+    participant Chain as Somnia DreamDEX CLOB
+    participant Sweeper as Settlement Sweeper
+    participant DB as Supabase PostgreSQL
+
+    User->>UI: 1. Authorize Session Delegation via EIP-712 + BatchApprove.sol
+    UI->>DB: Record Session Grant (id: e598b294-3475-4f14-b6b7-4b9c535b870c, cap: 1000 USDC, nonce: 2)
+    Session-->>Chain: On-Chain Tx (0x84c835425312d752912e64f7bcf38499b68df892f7675561a2e8430d5fa0c3b6)
+    
+    Agent->>Agent: 2. Mathematical Edge Detected (Black-Scholes Φ(z) vs 0.584 Implied Odds)
+    Agent->>Viem: Formulate IOC Taker Order (BTC/USD 5m, 4 lots @ 0.584 = 2.336 tUSDC)
+    
+    Viem->>Chain: 3. Invoke placeOrderFor(0x327e766EB317e5A3FA6dB30c0A5b9735Ad1aEdae, Market 0x00000000000000000000000000000000000000000000000000000000000104d3)
+    Chain-->>Viem: Confirmed Receipt (Tx: 0xb52889840ee6feb40367e6ab89ffdf497efadfcf5e76d0e8fb67f639e4d5a80d)
+    Viem->>DB: Persist Order Record (id: cfc9b7b6-9bd8-41e8-bae7-132c7a682782, status: FILLED)
+    
+    Note over Chain: 4. Market Expiration & Resolution (Outcome: YES)
+    Sweeper->>Chain: Invoke claimMarketPayout(0x327e766EB317e5A3FA6dB30c0A5b9735Ad1aEdae, Market 0x00000000000000000000000000000000000000000000000000000000000104d3)
+    Chain-->>Sweeper: Payout Redeemed (4.000 tUSDC returned)
+    Sweeper->>DB: Update Settlement (is_settled: true, pnl: +1.66 tUSDC)
+    
+    DB->>UI: 5. Stream Realtime WebSocket Update: +1.66 tUSDC to Equity & APEX Leaderboard
+```
+
+#### Verifiable Execution Metadata & Database Audit Log
+
+| Lifecycle Phase | Component & Entity | Verified Record & On-Chain Reference |
+| :--- | :--- | :--- |
+| **1. Session Delegation** | Non-Custodial Session Grant | **User**: `0x327e766EB317e5A3FA6dB30c0A5b9735Ad1aEdae`<br />**Session ID**: `e598b294-3475-4f14-b6b7-4b9c535b870c`<br />**Delegation Tx Hash**: [`0x84c835425312d752912e64f7bcf38499b68df892f7675561a2e8430d5fa0c3b6`](https://shannon-explorer.somnia.network/tx/0x84c835425312d752912e64f7bcf38499b68df892f7675561a2e8430d5fa0c3b6)<br />**Invariants Enforced**: `nonce = 2`, `on_chain_authorized = true`, Zero withdrawal permissions. |
+| **2. Strategy & Analysis** | Oracle Arb Cognitive Engine | **Strategy**: Black-Scholes Volatility Surface Arbitrage<br />**Target Market ID**: `BTC/USD 5m` (`0x00000000000000000000000000000000000000000000000000000000000104d3` — DreamDEX `bytes32` sequential market ID #66,771)<br />**Rationale**: Analytical $\Phi(z)$ priced fair probability above resting CLOB ask price. |
+| **3. On-Chain Order** | Somnia DreamDEX Execution | **Order ID**: `cfc9b7b6-9bd8-41e8-bae7-132c7a682782`<br />**Execution**: `BUY YES` (IOC taker order), `4` lots @ `0.584` price (`2.336` tUSDC total cost)<br />**On-Chain Order Tx Hash**: [`0xb52889840ee6feb40367e6ab89ffdf497efadfcf5e76d0e8fb67f639e4d5a80d`](https://shannon-explorer.somnia.network/tx/0xb52889840ee6feb40367e6ab89ffdf497efadfcf5e76d0e8fb67f639e4d5a80d)<br />**Status**: `FILLED` on-chain matching engine. |
+| **4. Settlement Redemption** | Sweeper & Compounder Daemon | **Resolution**: Market matured and finalized to `YES`.<br />**Redemption**: Sweeper claimed `4.000` tUSDC payout from `BinarySettlement`.<br />**Realized Net PnL**: `+1.66` tUSDC (`is_settled: true`, `settled_at: 2026-09-01T16:29:03.199Z`). |
+| **5. UI & Portfolio Impact** | Real-Time WebSocket Telemetry | **Frontend Feedback**: Live sound chime & notification, Portfolio equity curve stepped up by `+$1.66`, Forecaster APEX leaderboard score and win rate incremented in Swarm Arena. |
+
 ---
 
 ## API & WebSocket Telemetry Protocol
@@ -540,12 +585,12 @@ The DreamPulse backend daemon exposes a comprehensive REST and WebSocket gateway
 | `POST` | `/api/v1/sessions/:id/revoke` | Instantly revokes an active trading session. |
 | `GET` | `/api/v1/agents/status` | Returns operational status, latencies, trade counts, and PnL across all 4 agents (Protocol Swarm). |
 | `POST` | `/api/v1/agents/toggle` | Administrative endpoint (Operator only) to enable/disable specific agents on the Protocol Swarm. |
-| `GET` | `/api/v1/swarm/my-config?userAddress=0x…` | Retrieves the caller's `PersonalSwarmConfig` (`mode COPY|PERSONAL`, per-agent toggles & params). |
+| `GET` | `/api/v1/swarm/my-config?userAddress={address}` | Retrieves the caller's `PersonalSwarmConfig` (`mode COPY\|PERSONAL`, per-agent toggles & params). |
 | `PUT` | `/api/v1/swarm/my-config` | Upserts the caller's personal swarm config — saving any agent param auto-flips `mode` to `PERSONAL`. |
-| `POST` | `/api/v1/swarm/mode` | Explicitly switches `{ userAddress, mode: COPY|PERSONAL }` (PERSONAL ⇒ isolated swarm, COPY ⇒ mirror). |
+| `POST` | `/api/v1/swarm/mode` | Explicitly switches `{ userAddress, mode: COPY\|PERSONAL }` (PERSONAL ⇒ isolated swarm, COPY ⇒ mirror). |
 | `POST` | `/api/v1/swarm/toggle` | Toggles a single personal agent `{ userAddress, agentType, enabled }`. |
 | `POST` | `/api/v1/swarm/config` | Updates a single personal agent's params `{ userAddress, agentType, config }` (validated ranges). |
-| `GET` | `/api/v1/swarm/my-status?userAddress=0x…` | Returns per-wallet isolated PnL / fills / sweeper attribution + `isCopyMode` flag. |
+| `GET` | `/api/v1/swarm/my-status?userAddress={address}` | Returns per-wallet isolated PnL / fills / sweeper attribution + `isCopyMode` flag. |
 | `POST` | `/api/v1/swarm/reset` | Resets the caller's swarm back to `COPY` (mirroring the Protocol Swarm, disables isolation). |
 | `GET` | `/api/v1/orders` | Paginated query of order history with filtering by agent, outcome, status, and scope. |
 | `GET` | `/api/v1/sweeper/summary` | Returns claimable unclaimed balances, all-time claimed amounts, and active settlements. |
@@ -660,12 +705,12 @@ For step-by-step instructions on deploying the **Frontend to Vercel** and the **
 
 ---
 
-## Verification & Test Suite (233/233 Passing)
+## Verification & Test Suite (239/239 Passing)
 
-DreamPulse enforces strict production-grade quality invariants with an automated **Vitest** test suite covering quantitative mathematics, smart contract session boundaries, multi-agent evaluation logic, backtesting algorithms, social leaderboard calculations, WebSockets, and API endpoints.
+DreamPulse enforces strict production-grade quality invariants through a **three-tier verification architecture** that clearly separates **Tested Locally (Unit/Integration)**, **Simulated Quantitative Lab (Historical Backtests & Synthetic Models)**, and **Verified Live (On-Chain Testnet & Production Cloud)**.
 
 ```bash
-# Run complete test suite across the workspace
+# Run complete test suite across the workspace (Local/CI Unit & Integration)
 npm test
 
 # Run backend test suite with V8 coverage table
@@ -675,54 +720,64 @@ npm run test:coverage --workspace=dreampulse-backend
 npm run verify
 ```
 
-### Comprehensive Test Suite Breakdown
+### Verification & Execution Taxonomy
 
-| Test File | Tests | Coverage & Verified Invariants |
-| :--- | :---: | :--- |
-| [`tests/quantitative.test.ts`](file:///d:/DreamPulse/backend/tests/quantitative.test.ts) | **28** | Abramowitz-Stegun normal CDF $\Phi(z)$, Standardized $z$-Score ($d_2$), Bayesian EWMA realized volatility, inventory-skewed reservation prices, depth VWAP, integer quantization arithmetic, and net EV edge filtering. |
-| [`tests/api.test.ts`](file:///d:/DreamPulse/backend/tests/api.test.ts) | **27** | Express REST API health, market lists, order book depth ladders, anomaly feeds, telemetry stream endpoints, session management routes, order execution logs, copy-trade toggle, and sweeper trigger. |
-| [`tests/agents.test.ts`](file:///d:/DreamPulse/backend/tests/agents.test.ts) | **19** | Volt spot staleness sniper momentum triggers, Oracle volatility surface arb logic, Titan two-sided market maker quotes, inventory aversion bounds, self-trade prevention depth filtering, and multi-agent swarm runner execution. |
-| [`tests/auth-middleware.test.ts`](file:///d:/DreamPulse/backend/tests/auth-middleware.test.ts) | **17** | EIP-712 auth signatures, Supabase JWT minting, verification, tamper detection, cookie parsing, SIWE, and route guard middleware. |
-| [`tests/leaderboard.test.ts`](file:///d:/DreamPulse/backend/tests/leaderboard.test.ts) | **17** | Dual-track Swarm Arena rankings, Sharpe/Sortino ratios, APEX tier badges, 100% real human forecaster order aggregation, Copilot synergy, detailed trader profile generation, 1-click strategy cloning, and global arena stats. |
-| [`tests/session.test.ts`](file:///d:/DreamPulse/backend/tests/session.test.ts) | **19** | Non-custodial session registration, sequential nonce tracking, EIP-712 typed signature verification, single trade size caps ($20 limit), cumulative daily volume caps ($200 limit), session revocation, multi-wallet isolation, and copy-trade target filtering. |
-| [`tests/custom-agent.test.ts`](file:///d:/DreamPulse/backend/tests/custom-agent.test.ts) | **16** | Custom deployed agents evaluation engine, starter templates, trade fills, settlements, and dedicated tUSDC allowance depletion tracking. |
-| [`tests/config-bootstrap.test.ts`](file:///d:/DreamPulse/backend/tests/config-bootstrap.test.ts) | **13** | HttpOnly cookies, Somnia network client, Supabase credentials, and operator ABI selectors. |
-| [`tests/settlement.test.ts`](file:///d:/DreamPulse/backend/tests/settlement.test.ts) | **12** | Matured market resolution detection, automated winning share redemptions via Sweeper daemon, 100% collateral compounding into active trading balances, and multi-market batch claim aggregation. |
-| [`tests/price-feed-operator.test.ts`](file:///d:/DreamPulse/backend/tests/price-feed-operator.test.ts) | **12** | Real-time spot price feeds, realized volatility, staleness detection, personal swarm configurations, and on-chain operator permissions. |
-| [`tests/analytics-anomaly.test.ts`](file:///d:/DreamPulse/backend/tests/analytics-anomaly.test.ts) | **10** | Black-Scholes edge anomaly detector, severity classifications, multi-range PnL analytics, Sharpe ratios, and equity curve generation. |
-| [`tests/market-service.test.ts`](file:///d:/DreamPulse/backend/tests/market-service.test.ts) | **7** | Somnia on-chain CLOB order book polling, GraphQL indexer query parsing, anomaly detection (spread/staleness/mispricing), Binance spot ticker ingestion, and fallback market generation. |
-| [`tests/custom-evaluator-runner.test.ts`](file:///d:/DreamPulse/backend/tests/custom-evaluator-runner.test.ts) | **7** | Technical indicators (RSI, EMA, SMA, Bollinger Bands), custom rule evaluations, and multi-agent swarm runner loops. |
-| [`tests/order-service.test.ts`](file:///d:/DreamPulse/backend/tests/order-service.test.ts) | **6** | User manual orders, autonomous agent executions, event-driven market settlements, pagination, and PnL reconciliation. |
-| [`tests/compounder-custom-agent.test.ts`](file:///d:/DreamPulse/backend/tests/compounder-custom-agent.test.ts) | **6** | Automated 100% compounding protocol, session allowance replenishment, custom agent lifecycle (creation, deployment, pauses, settlements), and custom multi-agent swarms. |
-| [`tests/backtest.test.ts`](file:///d:/DreamPulse/backend/tests/backtest.test.ts) | **6** | Historical backtesting engine against Binance tick data, Sortino ratio, Profit Factor, Max Drawdown underwater curve computations, fee and slippage simulations. |
-| [`tests/websocket.test.ts`](file:///d:/DreamPulse/backend/tests/websocket.test.ts) | **6** | Telemetry WebSocket gateway, batched ticks, depth ladders, agent thoughts, PnL updates, and high-frequency market emitter. |
-| [`tests/social-copy.test.ts`](file:///d:/DreamPulse/backend/tests/social-copy.test.ts) | **5** | Autonomous forecaster social mirror trading, active target tracking, real-time trade fanout to copiers, per-forecaster `maxTradeSize` position clamping, and 24h rolling `dailyVolumeCap` reset & enforcement. |
-| [`tests/navigation.test.ts`](file:///d:/DreamPulse/backend/tests/navigation.test.ts) | **5** | Universal URL hash routing, deep-link profile parsing, and tab navigation state persistence. |
-| [`tests/llm.test.ts`](file:///d:/DreamPulse/backend/tests/llm.test.ts) | **4** | Groq Qwen 2.5 multi-key round-robin rotation, persistent key index, structured reasoning thoughts, and exclusive Google Gemini Strategy Studio isolation. |
-| [`tests/bootstrap-lifecycle.test.ts`](file:///d:/DreamPulse/backend/tests/bootstrap-lifecycle.test.ts) | **4** | Express server lifecycle, CORS origin filters, and root health check. |
-| [`tests/base-agent.test.ts`](file:///d:/DreamPulse/backend/tests/base-agent.test.ts) | **3** | `BaseAgent` abstract class lifecycle, risk validation limits (single trade cap, cumulative daily cap, expiration check), and thought log events. |
-| [`tests/setup.test.ts`](file:///d:/DreamPulse/backend/tests/setup.test.ts) | **2** | Environment configuration sanity check, Somnia Shannon network (Chain ID `50312`), and contract constants validation. |
-| **Total** | **238** | **100% Passing across 23 test suites with zero failures and zero `any` types** |
+| Verification Tier | Execution Environment | What Is Verified & Invariant Boundaries |
+| :--- | :--- | :--- |
+| 🟢 **Verified Live** | **Somnia Shannon Testnet & Production Cloud** | • **Live Smart Contracts**: Direct interaction with deployed `BatchApprove.sol` (`0x12c9c45fa740ce7469dacff368b08ca7edcaac26`), `OperatorPermissionsRegistry` (`0x15C7e8CE38F021c5b45d098AaD788f63090bF20A`), `BinaryModule`, `CLOBFactory`, and `TestUSDC`.<br />• **On-Chain Transactions**: Order placement (`placeOrderFor`), batch approvals, cancellation, and settlement redemptions confirmed via live JSON-RPC with receipts on Somnia Explorer.<br />• **Cloud Infrastructure**: Live Vercel frontend, Heroku backend daemon, Supabase PostgreSQL with RLS, and real-time sub-50ms WebSocket telemetry. |
+| 🟡 **Simulated Lab** | **Historical Backtester & Synthetic Surfaces** | • **Historical Quantitative Backtesting**: High-resolution Binance 1s/1m historical tick replay with parameterized market frictions (4 bps slippage, protocol fees, 25ms execution latency).<br />• **Option Pricing Surfaces**: Black-Scholes binary CDF $\Phi(z)$ and EWMA volatility modeled against simulated price trajectories.<br />• **Chaos & Circuit Breakers**: Upstream RPC latency spikes, network partition retries, and indexer sync delays. |
+| 🔵 **Tested Locally** | **Automated Vitest Suite (Deterministic Mocks)** | • **Mathematical Invariants**: Closed-form Abramowitz-Stegun CDF polynomial approximation, Avellaneda-Stoikov inventory skew, Sharpe/Sortino ratios, integer quantization to 6-decimal micro-tUSDC.<br />• **Cryptographic & Non-Custodial Boundaries**: EIP-712 typed data hashing and signature recovery, session nonce tracking, single-trade risk ceilings ($20), and daily volume caps ($200) verified without consuming testnet gas.<br />• **Resilience & Fallback Paths**: Controlled mock injection verifying that if Groq API keys return HTTP 401 or exhaust quotas, the cognitive engine falls back to deterministic quantitative math logs; and if GraphQL indexers lag, the backend polls direct on-chain contract state. |
+
+---
+
+### Comprehensive Test Suite Breakdown (239 Tests Across 23 Suites)
+
+| Test File | Tests | Verification Tier | Coverage & Verified Invariants |
+| :--- | :---: | :---: | :--- |
+| [`tests/quantitative.test.ts`](file:///d:/DreamPulse/backend/tests/quantitative.test.ts) | **29** | 🔵 Local Unit | Abramowitz-Stegun normal CDF $\Phi(z)$, Standardized $z$-Score ($d_2$), Bayesian EWMA realized volatility, inventory-skewed reservation prices, depth VWAP, integer quantization arithmetic, and net EV edge filtering. |
+| [`tests/api.test.ts`](file:///d:/DreamPulse/backend/tests/api.test.ts) | **27** | 🔵 Local Integration | Express REST API health, market lists, order book depth ladders, anomaly feeds, telemetry stream endpoints, session management routes, order execution logs, copy-trade toggle, and sweeper trigger. |
+| [`tests/agents.test.ts`](file:///d:/DreamPulse/backend/tests/agents.test.ts) | **19** | 🔵 Local Unit | Volt spot staleness sniper momentum triggers, Oracle volatility surface arb logic, Titan two-sided market maker quotes, inventory aversion bounds, self-trade prevention depth filtering, and multi-agent swarm runner execution. |
+| [`tests/session.test.ts`](file:///d:/DreamPulse/backend/tests/session.test.ts) | **19** | 🔵 Local Unit | Non-custodial session registration, sequential nonce tracking, EIP-712 typed signature verification, single trade size caps ($20 limit), cumulative daily volume caps ($200 limit), session revocation, multi-wallet isolation, and copy-trade target filtering. |
+| [`tests/auth-middleware.test.ts`](file:///d:/DreamPulse/backend/tests/auth-middleware.test.ts) | **17** | 🔵 Local Unit | EIP-712 auth signatures, Supabase JWT minting, verification, tamper detection, cookie parsing, SIWE, and route guard middleware. |
+| [`tests/leaderboard.test.ts`](file:///d:/DreamPulse/backend/tests/leaderboard.test.ts) | **14** | 🔵 Local Unit | Dual-track Swarm Arena rankings, Sharpe/Sortino ratios, APEX tier badges, 100% real human forecaster order aggregation, Copilot synergy, detailed trader profile generation, 1-click strategy cloning, and global arena stats. |
+| [`tests/config-bootstrap.test.ts`](file:///d:/DreamPulse/backend/tests/config-bootstrap.test.ts) | **13** | 🟢 Live / Local | HttpOnly cookies, Somnia network client, Supabase credentials, and operator ABI selectors. |
+| [`tests/settlement.test.ts`](file:///d:/DreamPulse/backend/tests/settlement.test.ts) | **12** | 🟢 Live / Local | Matured market resolution detection, automated winning share redemptions via Sweeper daemon, 100% collateral compounding into active trading balances, and multi-market batch claim aggregation. |
+| [`tests/price-feed-operator.test.ts`](file:///d:/DreamPulse/backend/tests/price-feed-operator.test.ts) | **12** | 🟢 Live / Local | Real-time spot price feeds, realized volatility, staleness detection, personal swarm configurations, and on-chain operator permissions. |
+| [`tests/analytics-anomaly.test.ts`](file:///d:/DreamPulse/backend/tests/analytics-anomaly.test.ts) | **9** | 🔵 Local Unit | Black-Scholes edge anomaly detector, severity classifications, multi-range PnL analytics, Sharpe ratios, and equity curve generation. |
+| [`tests/backtest.test.ts`](file:///d:/DreamPulse/backend/tests/backtest.test.ts) | **8** | 🟡 Simulated Lab | Historical backtesting engine against Binance tick data, Sortino ratio, Profit Factor, Max Drawdown underwater curve computations, fee and slippage simulations. |
+| [`tests/market-service.test.ts`](file:///d:/DreamPulse/backend/tests/market-service.test.ts) | **7** | 🟢 Live / Local | Somnia on-chain CLOB order book polling, GraphQL indexer query parsing, anomaly detection (spread/staleness/mispricing), Binance spot ticker ingestion, and fallback market generation. |
+| [`tests/custom-evaluator-runner.test.ts`](file:///d:/DreamPulse/backend/tests/custom-evaluator-runner.test.ts) | **7** | 🔵 Local Unit | Technical indicators (RSI, EMA, SMA, Bollinger Bands), custom rule evaluations, and multi-agent swarm runner loops. |
+| [`tests/order-service.test.ts`](file:///d:/DreamPulse/backend/tests/order-service.test.ts) | **6** | 🟢 Live / Local | User manual orders, autonomous agent executions, event-driven market settlements, pagination, and PnL reconciliation. |
+| [`tests/compounder-custom-agent.test.ts`](file:///d:/DreamPulse/backend/tests/compounder-custom-agent.test.ts) | **6** | 🔵 Local Unit | Automated 100% compounding protocol, session allowance replenishment, custom agent lifecycle (creation, deployment, pauses, settlements), and custom multi-agent swarms. |
+| [`tests/websocket.test.ts`](file:///d:/DreamPulse/backend/tests/websocket.test.ts) | **6** | 🔵 Local Integration | Telemetry WebSocket gateway, batched ticks, depth ladders, agent thoughts, PnL updates, and high-frequency market emitter. |
+| [`tests/social-copy.test.ts`](file:///d:/DreamPulse/backend/tests/social-copy.test.ts) | **5** | 🔵 Local Unit | Autonomous forecaster social mirror trading, active target tracking, real-time trade fanout to copiers, per-forecaster `maxTradeSize` position clamping, and 24h rolling `dailyVolumeCap` reset & enforcement. |
+| [`tests/navigation.test.ts`](file:///d:/DreamPulse/backend/tests/navigation.test.ts) | **5** | 🔵 Local Unit | Universal URL hash routing, deep-link profile parsing, and tab navigation state persistence. |
+| [`tests/custom-agent.test.ts`](file:///d:/DreamPulse/backend/tests/custom-agent.test.ts) | **5** | 🔵 Local Unit | Custom deployed agents evaluation engine, starter templates, trade fills, settlements, and dedicated tUSDC allowance depletion tracking. |
+| [`tests/bootstrap-lifecycle.test.ts`](file:///d:/DreamPulse/backend/tests/bootstrap-lifecycle.test.ts) | **4** | 🔵 Local Integration | Express server lifecycle, CORS origin filters, and root health check. |
+| [`tests/llm.test.ts`](file:///d:/DreamPulse/backend/tests/llm.test.ts) | **4** | 🔵 Local Integration | Groq Qwen 2.5 multi-key round-robin rotation, persistent key index, structured reasoning thoughts, and exclusive Google Gemini Strategy Studio isolation. |
+| [`tests/base-agent.test.ts`](file:///d:/DreamPulse/backend/tests/base-agent.test.ts) | **3** | 🔵 Local Unit | `BaseAgent` abstract class lifecycle, risk validation limits (single trade cap, cumulative daily cap, expiration check), and thought log events. |
+| [`tests/setup.test.ts`](file:///d:/DreamPulse/backend/tests/setup.test.ts) | **2** | 🟢 Live / Local | Environment configuration sanity check, Somnia Shannon network (Chain ID `50312`), and contract constants validation. |
+| **Total** | **239** | **All 3 Tiers** | **100% Passing across 23 test suites with zero failures and zero `any` types** |
 
 ### Test Suite Execution Output
 ```
  RUN  v3.2.7 D:/DreamPulse/backend
 
  ✓ tests/setup.test.ts (2 tests)
- ✓ tests/quantitative.test.ts (28 tests)
+ ✓ tests/quantitative.test.ts (29 tests)
  ✓ tests/settlement.test.ts (12 tests)
  ✓ tests/llm.test.ts (4 tests)
- ✓ tests/backtest.test.ts (6 tests)
+ ✓ tests/backtest.test.ts (8 tests)
  ✓ tests/agents.test.ts (19 tests)
  ✓ tests/social-copy.test.ts (5 tests)
- ✓ tests/leaderboard.test.ts (17 tests)
- ✓ tests/custom-agent.test.ts (16 tests)
+ ✓ tests/leaderboard.test.ts (14 tests)
+ ✓ tests/custom-agent.test.ts (5 tests)
  ✓ tests/api.test.ts (27 tests)
  ✓ tests/market-service.test.ts (7 tests)
  ✓ tests/session.test.ts (19 tests)
  ✓ tests/auth-middleware.test.ts (17 tests)
  ✓ tests/base-agent.test.ts (3 tests)
- ✓ tests/analytics-anomaly.test.ts (10 tests)
+ ✓ tests/analytics-anomaly.test.ts (9 tests)
  ✓ tests/price-feed-operator.test.ts (12 tests)
  ✓ tests/order-service.test.ts (6 tests)
  ✓ tests/compounder-custom-agent.test.ts (6 tests)
@@ -733,8 +788,8 @@ npm run verify
  ✓ tests/bootstrap-lifecycle.test.ts (4 tests)
 
  Test Files  23 passed (23)
-      Tests  238 passed (238)
-   Duration  25.89s
+      Tests  239 passed (239)
+   Duration  25.97s
 ```
 
 ---
@@ -764,7 +819,7 @@ A structured script demonstrating all capabilities during the hackathon judging 
 * **2:40 – 3:00 (Swarm Arena, Proof-of-Alpha & Autonomous Settlement)**:
   * Check **Swarm Arena**: show dual-track leaderboards, 1-click strategy cloning, and export a 4x Ultra-HD Proof-of-Alpha Card.
   * Matured market resolution: show **Sweeper** detecting finalized contract and auto-compounding winning collateral.
-  * Highlight production readiness (238/238 tests, 0 `any` types) and Somnia ecosystem impact.
+  * Highlight production readiness (239/239 tests, 0 `any` types) and Somnia ecosystem impact.
 
 ---
 

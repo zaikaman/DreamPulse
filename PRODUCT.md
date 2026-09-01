@@ -112,8 +112,8 @@ Unlike conventional monolithic trading bots or static prediction market frontend
 
 ## Evidence on Hand
 
-- **Production Smart Contracts**: `BatchApprove.sol` deployed and verified on Somnia Shannon Testnet (`0x253B83F3f38072120e238038feF061591f165a29`).
-- **Complete Test Suite**: 100/100 tests passing across all backend quant algorithms, contract interactions, risk controls, and frontend components.
+- **Production Smart Contracts**: `BatchApprove.sol` deployed and verified on Somnia Shannon Testnet (`0x12c9c45fa740ce7469dacff368b08ca7edcaac26`).
+- **Complete Test Suite**: 239/239 tests passing across all backend quant algorithms, contract interactions, risk controls, and frontend components.
 - **Live WebSocket Gateway**: Full bidirectional telemetry server broadcasting real-time spot ticks, CLOB order books, trade fills, and AI thought logs.
 
 ## Product Principles

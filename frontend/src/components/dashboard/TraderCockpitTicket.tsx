@@ -231,7 +231,7 @@ export const TraderCockpitTicket: React.FC<TraderCockpitTicketProps> = ({
           marketId: market.id,
           outcome,
           direction: 'BUY',
-          orderType: 'IOC',
+          orderType: 'LIMIT',
           price,
           lotSize: calculations.lotSize,
         });
@@ -256,7 +256,7 @@ export const TraderCockpitTicket: React.FC<TraderCockpitTicketProps> = ({
           userAddress: wallet.address,
           poolAddress: poolAddr,
           outcome,
-          orderType: 'IOC',
+          orderType: 'LIMIT',
           price,
           lotSize: calculations.lotSize,
         });
@@ -266,7 +266,7 @@ export const TraderCockpitTicket: React.FC<TraderCockpitTicketProps> = ({
           marketId: market.id,
           outcome,
           direction: 'BUY',
-          orderType: 'IOC',
+          orderType: 'LIMIT',
           price,
           lotSize: calculations.lotSize,
           txHash: walletRes.hash,

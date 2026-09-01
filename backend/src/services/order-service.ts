@@ -1053,6 +1053,7 @@ export class OrderService {
           poolFailureUntil.set(onchain.pool.toLowerCase(), Date.now() + POOL_FAILURE_COOLDOWN_MS);
         }
         if (msg.includes('ImmediateOrCancelNoFill')) {
+          this.lastExecutionFailureReason = 'No matching counterparty liquidity found on the order book at this price (Immediate-Or-Cancel unfilled). Please place a Limit order or adjust price.';
           if (shouldLog) console.info(`[OrderService] IOC trade skipped: no crossing liquidity on CLOB book at tick ${quantizedPrice}`);
         } else if (isCollateralError) {
           if (shouldLog) console.warn(`[OrderService] Insufficient ERC20 collateral balance for ${targetTrader}: ${msg}`);
@@ -1440,7 +1441,7 @@ export class OrderService {
 
     const decision: IAgentDecision = {
       agentType: 'Manual',
-      action: direction === 'SELL' ? 'TAKER_SELL' : (orderType === 'LIMIT' ? 'LIMIT_QUOTE' : 'TAKER_BUY'),
+      action: orderType === 'LIMIT' ? 'LIMIT_QUOTE' : (direction === 'SELL' ? 'TAKER_SELL' : 'TAKER_BUY'),
       targetMarketId: params.marketId,
       targetOutcome: outcome,
       price: quantizedPrice,

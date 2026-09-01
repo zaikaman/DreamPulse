@@ -1160,7 +1160,8 @@ export class Web3Service {
     const rawPrice = BigInt(Math.floor(params.price * 1_000_000));
     const priceYes = params.outcome === 'YES' ? rawPrice : one - rawPrice;
     const kind = params.outcome === 'YES' ? 0 : 1;
-    const orderTypeEnum = params.orderType === 'IOC' ? 1 : 0;
+    // 0 = LIMIT (NormalOrder: fill or rest), 2 = MARKET (ImmediateOrCancel: fill or cancel)
+    const orderTypeEnum = params.orderType === 'IOC' ? 2 : 0;
     const expireTimestampNs = BigInt(Math.floor(Date.now() / 1000) + 3600) * 1_000_000_000n;
 
     // Check TestUSDC allowance for the pool
@@ -1183,25 +1184,33 @@ export class Web3Service {
       await publicClient.waitForTransactionReceipt({ hash: approveTx });
     }
 
-    const hash = await wallet.writeContract({
-      address: params.poolAddress,
-      abi: BINARY_POOL_ABI,
-      functionName: 'placeBinaryOrder',
-      args: [
-        kind,
-        priceYes,
-        rawQuantity,
-        expireTimestampNs,
-        orderTypeEnum,
-        0, // selfMatchingOption
-        '0x0000000000000000000000000000000000000000', // builder
-        0n, // builderFee
-        0n, // userData
-      ],
-    });
+    try {
+      const hash = await wallet.writeContract({
+        address: params.poolAddress,
+        abi: BINARY_POOL_ABI,
+        functionName: 'placeBinaryOrder',
+        args: [
+          kind,
+          priceYes,
+          rawQuantity,
+          expireTimestampNs,
+          orderTypeEnum,
+          0, // selfMatchingOption
+          '0x0000000000000000000000000000000000000000', // builder
+          0n, // builderFee
+          0n, // userData
+        ],
+      });
 
-    await publicClient.waitForTransactionReceipt({ hash });
-    return { hash };
+      await publicClient.waitForTransactionReceipt({ hash });
+      return { hash };
+    } catch (err: any) {
+      const msg = err?.message || String(err);
+      if (msg.includes('ImmediateOrCancelNoFill')) {
+        throw new Error('No matching counterparty liquidity found on the order book at this price (Immediate-Or-Cancel unfilled). Please place a Limit order or adjust price.');
+      }
+      throw err;
+    }
   }
 
   /**
