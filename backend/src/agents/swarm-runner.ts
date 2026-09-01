@@ -241,8 +241,8 @@ export class MultiAgentSwarmRunner {
             const operatorAddr = operatorAccount.address;
             // Cross-agent swarm portfolio delta tracking: aggregate open unsettled fills across Volt, Oracle, and Titan
             const activeSwarmOrders = orderService
-              .getOrders({ marketId: market.id, userAddress: operatorAddr, status: 'FILLED' })
-              .filter((o) => !o.isSettled);
+              .getOrders({ marketId: market.id, userAddress: operatorAddr })
+              .filter((o) => (o.status === 'FILLED' || o.status === 'PARTIALLY_FILLED') && !o.isSettled);
             const netSwarmDelta = activeSwarmOrders.reduce(
               (acc, o) => acc + (o.outcome === 'YES' ? o.lotSize : -o.lotSize),
               0,
@@ -578,7 +578,7 @@ export class MultiAgentSwarmRunner {
 
       for (const market of openMarkets) {
         // Per-user single-market guard: one active position per market across entire personal portfolio
-        const hasPositionOnMarket = orderService.getOrders({ userAddress: userAddr, status: 'FILLED' }).some((o) => o.marketId.toLowerCase() === market.id.toLowerCase() && !o.isSettled) ||
+        const hasPositionOnMarket = orderService.getOrders({ userAddress: userAddr }).some((o) => (o.status === 'FILLED' || o.status === 'PARTIALLY_FILLED') && o.marketId.toLowerCase() === market.id.toLowerCase() && !o.isSettled) ||
           orderService.getOrders({ userAddress: userAddr, status: 'PENDING' }).some((o) => o.marketId.toLowerCase() === market.id.toLowerCase());
         // Use lighter check: if any unsettled fill exists for this user+market, skip
         if (hasPositionOnMarket) {
@@ -621,7 +621,7 @@ export class MultiAgentSwarmRunner {
               lotSize: personal.titanConfig.lotSize,
             });
             // Personal inventory: aggregate user's own unsettled fills on this market
-            const userSwarmOrders = orderService.getOrders({ marketId: market.id, userAddress: userAddr, status: 'FILLED' }).filter((o) => !o.isSettled);
+            const userSwarmOrders = orderService.getOrders({ marketId: market.id, userAddress: userAddr }).filter((o) => (o.status === 'FILLED' || o.status === 'PARTIALLY_FILLED') && !o.isSettled);
             const netDelta = userSwarmOrders.reduce((acc, o) => acc + (o.outcome === 'YES' ? o.lotSize : -o.lotSize), 0);
             (agentInstance as TitanMMAgent).setInventory(market.id, netDelta);
           }
@@ -754,8 +754,8 @@ export class MultiAgentSwarmRunner {
 
       for (const market of matchingMarkets) {
         // Per-user single-market position guard: avoid duplicate open positions on same market
-        const hasPosition = orderService.getOrders({ userAddress: userAddr, status: 'FILLED' })
-          .some((o) => o.marketId.toLowerCase() === market.id.toLowerCase() && !o.isSettled) ||
+        const hasPosition = orderService.getOrders({ userAddress: userAddr })
+          .some((o) => (o.status === 'FILLED' || o.status === 'PARTIALLY_FILLED') && o.marketId.toLowerCase() === market.id.toLowerCase() && !o.isSettled) ||
           orderService.getOrders({ userAddress: userAddr, status: 'PENDING' })
           .some((o) => o.marketId.toLowerCase() === market.id.toLowerCase());
         if (hasPosition) continue;

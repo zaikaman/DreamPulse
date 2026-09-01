@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach, vi } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { OrderService, orderService } from '../src/services/order-service.js';
 import { marketService } from '../src/services/market-service.js';
 import { sessionService } from '../src/services/session-service.js';
@@ -55,6 +55,10 @@ describe('OrderService Comprehensive Suite', () => {
     vi.spyOn(sessionService, 'getSessionById').mockReturnValue(mockSession);
     vi.spyOn(sessionService, 'getUserActiveSession').mockResolvedValue(mockSession);
     vi.spyOn(sessionService, 'validateTradeAllowance').mockReturnValue({ allowed: true });
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
   });
 
   it('records user manual order placed through terminal via submitUserOrder', async () => {
@@ -274,6 +278,144 @@ describe('OrderService Comprehensive Suite', () => {
     // reconcileSettledOrdersWithOnChain
     const count = await service.reconcileSettledOrdersWithOnChain();
     expect(typeof count).toBe('number');
+  });
+
+  it('records zero-fill resting limit order as PENDING status with full lotSize and undefined filledAt', async () => {
+    const { somniaExchange } = await import('../src/config/somnia.js');
+    vi.spyOn(somniaExchange.client, 'getMarketOnchain').mockResolvedValue({
+      pool: mockMarket.poolAddress as Address,
+      status: 1,
+      finalized: false,
+      isResolved: false,
+      isVoided: false,
+      expiry: Math.floor(Date.now() / 1000) + 300,
+      outcomeToken: '0x3333333333333333333333333333333333333333' as Address,
+      yesId: 1n,
+      noId: 2n,
+      collateral: '0x4444444444444444444444444444444444444444' as Address,
+    } as any);
+    vi.spyOn(somniaExchange.trader, 'placeOrder').mockResolvedValue({
+      hash: '0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
+      orderId: 999n,
+      fills: [],
+      receipt: { status: 'success' },
+    } as any);
+
+    const decision: IAgentDecision = {
+      agentType: 'Titan',
+      targetMarketId: mockMarket.id,
+      action: 'LIMIT_QUOTE',
+      targetOutcome: 'YES',
+      price: 0.45,
+      lotSize: 4.0,
+      confidence: 0.9,
+      rationale: 'Maker quote placement resting on book',
+    };
+
+    const order = await service.executeAgentDecision(decision, mockSession);
+    expect(order).not.toBeNull();
+    expect(order?.status).toBe('PENDING');
+    expect(order?.lotSize).toBe(4.0);
+    expect(order?.filledAt).toBeUndefined();
+  });
+
+  it('records partial fill order as PARTIALLY_FILLED status with exact filled lot size', async () => {
+    const { somniaExchange } = await import('../src/config/somnia.js');
+    vi.spyOn(somniaExchange.client, 'getMarketOnchain').mockResolvedValue({
+      pool: mockMarket.poolAddress as Address,
+      status: 1,
+      finalized: false,
+      isResolved: false,
+      isVoided: false,
+      expiry: Math.floor(Date.now() / 1000) + 300,
+      outcomeToken: '0x3333333333333333333333333333333333333333' as Address,
+      yesId: 1n,
+      noId: 2n,
+      collateral: '0x4444444444444444444444444444444444444444' as Address,
+    } as any);
+    vi.spyOn(somniaExchange.trader, 'placeOrder').mockResolvedValue({
+      hash: '0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb',
+      orderId: 1000n,
+      fills: [{ quantityFilled: 2_500_000n }], // 2.5 lots filled out of 5.0 requested
+      receipt: { status: 'success' },
+    } as any);
+
+    const decision: IAgentDecision = {
+      agentType: 'Volt',
+      targetMarketId: mockMarket.id,
+      action: 'TAKER_BUY',
+      targetOutcome: 'YES',
+      price: 0.50,
+      lotSize: 5.0,
+      confidence: 0.88,
+      rationale: 'Taker sweep crossing partial depth',
+    };
+
+    const order = await service.executeAgentDecision(decision, mockSession);
+    expect(order).not.toBeNull();
+    expect(order?.status).toBe('PARTIALLY_FILLED');
+    expect(order?.lotSize).toBe(2.5);
+    expect(order?.totalCost).toBe(1.25);
+    expect(order?.filledAt).toBeDefined();
+  });
+
+  it('rejects user-submitted order with malformed transaction hash format', async () => {
+    await expect(
+      service.submitUserOrder({
+        userAddress,
+        marketId: mockMarket.id,
+        outcome: 'YES',
+        direction: 'BUY',
+        orderType: 'LIMIT',
+        price: 0.50,
+        lotSize: 1.0,
+        txHash: '0xinvalid_short_hash' as Hex,
+      }),
+    ).rejects.toThrow('Invalid transaction hash format');
+  });
+
+  it('rejects user-submitted order when on-chain transaction receipt status is reverted', async () => {
+    const { publicClient } = await import('../src/config/somnia.js');
+    vi.spyOn(publicClient, 'getTransactionReceipt').mockResolvedValue({
+      status: 'reverted',
+      from: userAddress,
+      to: mockMarket.poolAddress as Address,
+    } as any);
+
+    await expect(
+      service.submitUserOrder({
+        userAddress,
+        marketId: mockMarket.id,
+        outcome: 'YES',
+        direction: 'BUY',
+        orderType: 'LIMIT',
+        price: 0.50,
+        lotSize: 1.0,
+        txHash: '0xcccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc',
+      }),
+    ).rejects.toThrow('Transaction reverted on-chain');
+  });
+
+  it('rejects user-submitted order when transaction sender does not match authenticated user', async () => {
+    const { publicClient } = await import('../src/config/somnia.js');
+    vi.spyOn(publicClient, 'getTransactionReceipt').mockResolvedValue({
+      status: 'success',
+      from: '0x0000000000000000000000000000000000000001' as Address,
+      to: mockMarket.poolAddress as Address,
+    } as any);
+
+    await expect(
+      service.submitUserOrder({
+        userAddress,
+        marketId: mockMarket.id,
+        outcome: 'YES',
+        direction: 'BUY',
+        orderType: 'LIMIT',
+        price: 0.50,
+        lotSize: 1.0,
+        txHash: '0xdddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd',
+      }),
+    ).rejects.toThrow('Transaction sender');
   });
 });
 

@@ -165,7 +165,7 @@ export const ActivePositionsDrawer: React.FC<ActivePositionsDrawerProps> = ({
 
   // Derive categories
   const openPositions = userOrders.filter(
-    (o) => o.status === 'FILLED' && !o.isSettled,
+    (o) => (o.status === 'FILLED' || o.status === 'PARTIALLY_FILLED') && !o.isSettled,
   );
   const restingOrders = userOrders.filter((o) => o.status === 'PENDING');
   const settledHistory = userOrders.filter((o) => o.isSettled);

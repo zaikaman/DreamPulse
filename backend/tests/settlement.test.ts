@@ -479,6 +479,33 @@ describe('Phase 6 Settlement Sweeper & Collateral Compounder Tests', () => {
 
       await settlementService.ensureUserSweepsLoaded(testUser);
     });
+
+    it('records failed sweeps with FAILED status and does not inflate userSweptTotals', () => {
+      const settlementService = new SettlementService();
+      const testUser = '0x1111222233334444555566667777888899990000';
+      const testMarketId = '0xmarket-failed-sweep-1';
+
+      settlementService.recordSweep({
+        id: 'sweep-failed-1',
+        marketId: testMarketId,
+        userAddress: testUser as `0x${string}`,
+        winningOutcome: 'YES',
+        claimableAmount: 25.0,
+        payoutToken: 'tUSDC',
+        isCompounded: false,
+        txHash: undefined,
+        status: 'FAILED',
+        claimedAt: new Date().toISOString(),
+      });
+
+      const history = settlementService.getSweepHistory(testUser);
+      const failedSweep = history.find((s) => s.id === 'sweep-failed-1');
+      expect(failedSweep).toBeDefined();
+      expect(failedSweep?.status).toBe('FAILED');
+
+      const totalSwept = settlementService.getUserTotalSweptForMarket(testUser, testMarketId);
+      expect(totalSwept).toBe(0); // Must not add to total swept payout
+    });
   });
 });
 

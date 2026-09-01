@@ -14,7 +14,7 @@
   <a href="https://shannon-explorer.somnia.network"><img src="https://img.shields.io/badge/Blockchain-Somnia%20Shannon%20(50312)-00ffcc?style=for-the-badge&logo=ethereum&logoColor=black" alt="Somnia Shannon Testnet" /></a>
   <a href="https://docs.dreamdex.io/developers/event-contracts"><img src="https://img.shields.io/badge/Protocol-DreamDEX%20Event%20Contracts-7928CA?style=for-the-badge&logo=chainlink&logoColor=white" alt="DreamDEX Protocol" /></a>
   <a href="https://github.com/zaikaman/DreamPulse/actions/workflows/ci.yml"><img src="https://img.shields.io/badge/CI-GitHub%20Actions%20Passing-0284c7?style=for-the-badge&logo=githubactions&logoColor=white" alt="CI GitHub Actions" /></a>
-  <a href="https://github.com/zaikaman/DreamPulse"><img src="https://img.shields.io/badge/Tests-264%2F264%20Passed%20(100%25)-00e676?style=for-the-badge&logo=vitest&logoColor=white" alt="Tests 264/264 Passing" /></a>
+  <a href="https://github.com/zaikaman/DreamPulse"><img src="https://img.shields.io/badge/Tests-270%2F270%20Passed%20(100%25)-00e676?style=for-the-badge&logo=vitest&logoColor=white" alt="Tests 270/270 Passing" /></a>
   <a href="https://groq.com"><img src="https://img.shields.io/badge/LLM-Groq%20(Telemetry)%20%2B%20Gemini%20(Studio)-f55036?style=for-the-badge&logo=openai&logoColor=white" alt="Groq + Gemini LLM" /></a>
 </p>
 
@@ -29,7 +29,7 @@
 * **Machine-Readable Evidence Artifact**: [`evidence.json`](./evidence.json) *(Full audit trail, on-chain tx hashes, and JSON schemas)*
 * **SDK & Documentation Developer Feedback Report**: [Jump to Feedback Report](#developer-feedback-report-somnia--dreamdex-sdk)
 * **2–3 Minute Judging Demo Script**: [Jump to Video Walkthrough](#23-minute-demo-video-walkthrough)
-* **Automated Verification Suite**: `npm run verify` *(264/264 Unit & Integration Tests Passing, 100% Type Safety)*
+* **Automated Verification Suite**: `npm run verify` *(270/270 Unit & Integration Tests Passing, 100% Type Safety)*
 
 ---
 
@@ -55,7 +55,7 @@
 18. [System Architecture & Execution Workflows](#system-architecture--execution-workflows)
 19. [API & WebSocket Telemetry Protocol](#api--websocket-telemetry-protocol)
 20. [Local Installation & Development Guide](#local-installation--development-guide)
-21. [Verification & Test Suite (264/264 Passing)](#verification--test-suite-264264-passing)
+21. [Verification & Test Suite (270/270 Passing)](#verification--test-suite-270270-passing)
 22. [2–3 Minute Demo Video Walkthrough](#23-minute-demo-video-walkthrough)
 23. [Future Roadmap Beyond Hackathon](#future-roadmap-beyond-hackathon)
 24. [License & Acknowledgements](#license--acknowledgements)
@@ -713,7 +713,7 @@ For step-by-step instructions on deploying the **Frontend to Vercel** and the **
 
 ---
 
-## Verification & Test Suite (264/264 Passing)
+## Verification & Test Suite (270/270 Passing)
 
 DreamPulse enforces strict production-grade quality invariants through a **three-tier verification architecture** that clearly separates **Tested Locally (Unit/Integration)**, **Simulated Quantitative Lab (Historical Backtests & Synthetic Models)**, and **Verified Live (On-Chain Testnet & Production Cloud)**.
 
@@ -738,7 +738,7 @@ npm run verify
 
 ---
 
-### Comprehensive Test Suite Breakdown (264 Tests Across 23 Suites)
+### Comprehensive Test Suite Breakdown (270 Tests Across 23 Suites)
 
 | Test File | Tests | Verification Tier | Coverage & Verified Invariants |
 | :--- | :---: | :---: | :--- |
@@ -749,12 +749,12 @@ npm run verify
 | [`tests/auth-middleware.test.ts`](file:///d:/DreamPulse/backend/tests/auth-middleware.test.ts) | **19** | 🔵 Local Unit | EIP-712 auth signatures, Supabase JWT minting, verification, tamper detection, cookie parsing, SIWE, and route guard middleware. |
 | [`tests/config-bootstrap.test.ts`](file:///d:/DreamPulse/backend/tests/config-bootstrap.test.ts) | **14** | 🟢 Live / Local | HttpOnly cookies, Somnia network client, Supabase credentials, and operator ABI selectors. |
 | [`tests/leaderboard.test.ts`](file:///d:/DreamPulse/backend/tests/leaderboard.test.ts) | **14** | 🔵 Local Unit | Dual-track Swarm Arena rankings, Sharpe/Sortino ratios, APEX tier badges, 100% real human forecaster order aggregation, Copilot synergy, detailed trader profile generation, 1-click strategy cloning, and global arena stats. |
-| [`tests/settlement.test.ts`](file:///d:/DreamPulse/backend/tests/settlement.test.ts) | **13** | 🟢 Live / Local | Matured market resolution detection, automated winning share redemptions via Sweeper daemon, 100% collateral compounding into active trading balances, and multi-market batch claim aggregation. |
+| [`tests/settlement.test.ts`](file:///d:/DreamPulse/backend/tests/settlement.test.ts) | **14** | 🟢 Live / Local | Matured market resolution detection, automated winning share redemptions via Sweeper daemon, 100% collateral compounding into active trading balances, multi-market batch claim aggregation, and failed sweep accounting. |
 | [`tests/price-feed-operator.test.ts`](file:///d:/DreamPulse/backend/tests/price-feed-operator.test.ts) | **12** | 🟢 Live / Local | Real-time spot price feeds, realized volatility, staleness detection, personal swarm configurations, and on-chain operator permissions. |
+| [`tests/order-service.test.ts`](file:///d:/DreamPulse/backend/tests/order-service.test.ts) | **13** | 🟢 Live / Local | User manual orders, autonomous agent executions, resting limit order lifecycle, partial fill accounting, direct user on-chain tx receipt verification, event-driven market settlements, pagination, and PnL reconciliation. |
 | [`tests/analytics-anomaly.test.ts`](file:///d:/DreamPulse/backend/tests/analytics-anomaly.test.ts) | **9** | 🔵 Local Unit | Black-Scholes edge anomaly detector, severity classifications, multi-range PnL analytics, Sharpe ratios, and equity curve generation. |
 | [`tests/backtest.test.ts`](file:///d:/DreamPulse/backend/tests/backtest.test.ts) | **8** | 🟡 Simulated Lab | Historical backtesting engine against Binance tick data, Sortino ratio, Profit Factor, Max Drawdown underwater curve computations, fee and slippage simulations. |
 | [`tests/market-service.test.ts`](file:///d:/DreamPulse/backend/tests/market-service.test.ts) | **8** | 🟢 Live / Local | Somnia on-chain CLOB order book polling, GraphQL indexer query parsing, anomaly detection (spread/staleness/mispricing), Binance spot ticker ingestion, and fallback market generation. |
-| [`tests/order-service.test.ts`](file:///d:/DreamPulse/backend/tests/order-service.test.ts) | **8** | 🟢 Live / Local | User manual orders, autonomous agent executions, event-driven market settlements, pagination, and PnL reconciliation. |
 | [`tests/websocket.test.ts`](file:///d:/DreamPulse/backend/tests/websocket.test.ts) | **8** | 🔵 Local Integration | Telemetry WebSocket gateway, batched ticks, depth ladders, agent thoughts, PnL updates, and high-frequency market emitter. |
 | [`tests/custom-evaluator-runner.test.ts`](file:///d:/DreamPulse/backend/tests/custom-evaluator-runner.test.ts) | **7** | 🔵 Local Unit | Technical indicators (RSI, EMA, SMA, Bollinger Bands), custom rule evaluations, and multi-agent swarm runner loops. |
 | [`tests/compounder-custom-agent.test.ts`](file:///d:/DreamPulse/backend/tests/compounder-custom-agent.test.ts) | **7** | 🔵 Local Unit | Automated 100% compounding protocol, session allowance replenishment, custom agent lifecycle (creation, deployment, pauses, settlements), and custom multi-agent swarms. |
@@ -765,7 +765,7 @@ npm run verify
 | [`tests/bootstrap-lifecycle.test.ts`](file:///d:/DreamPulse/backend/tests/bootstrap-lifecycle.test.ts) | **5** | 🔵 Local Integration | Express server lifecycle, CORS origin filters, and root health check. |
 | [`tests/base-agent.test.ts`](file:///d:/DreamPulse/backend/tests/base-agent.test.ts) | **3** | 🔵 Local Unit | `BaseAgent` abstract class lifecycle, risk validation limits (single trade cap, cumulative daily cap, expiration check), and thought log events. |
 | [`tests/setup.test.ts`](file:///d:/DreamPulse/backend/tests/setup.test.ts) | **2** | 🟢 Live / Local | Environment configuration sanity check, Somnia Shannon network (Chain ID `50312`), and contract constants validation. |
-| **Total** | **264** | **All 3 Tiers** | **100% Passing across 23 test suites with zero failures and zero `any` types** |
+| **Total** | **270** | **All 3 Tiers** | **100% Passing across 23 test suites with zero failures and zero `any` types** |
 
 ### Test Suite Execution Output
 ```
@@ -773,7 +773,7 @@ npm run verify
 
  ✓ tests/setup.test.ts (2 tests)
  ✓ tests/quantitative.test.ts (33 tests)
- ✓ tests/settlement.test.ts (13 tests)
+ ✓ tests/settlement.test.ts (14 tests)
  ✓ tests/llm.test.ts (7 tests)
  ✓ tests/backtest.test.ts (8 tests)
  ✓ tests/agents.test.ts (20 tests)
@@ -787,7 +787,7 @@ npm run verify
  ✓ tests/base-agent.test.ts (3 tests)
  ✓ tests/analytics-anomaly.test.ts (9 tests)
  ✓ tests/price-feed-operator.test.ts (12 tests)
- ✓ tests/order-service.test.ts (8 tests)
+ ✓ tests/order-service.test.ts (13 tests)
  ✓ tests/compounder-custom-agent.test.ts (7 tests)
  ✓ tests/custom-evaluator-runner.test.ts (7 tests)
  ✓ tests/websocket.test.ts (8 tests)
@@ -796,8 +796,8 @@ npm run verify
  ✓ tests/bootstrap-lifecycle.test.ts (5 tests)
 
  Test Files  23 passed (23)
-      Tests  264 passed (264)
-   Duration  25.14s
+      Tests  270 passed (270)
+   Duration  25.07s
 ```
 
 ---
@@ -827,7 +827,7 @@ A structured script demonstrating all capabilities during the hackathon judging 
 * **2:40 – 3:00 (Swarm Arena, Proof-of-Alpha & Autonomous Settlement)**:
   * Check **Swarm Arena**: show dual-track leaderboards, 1-click strategy cloning, and export a 4x Ultra-HD Proof-of-Alpha Card.
   * Matured market resolution: show **Sweeper** detecting finalized contract and auto-compounding winning collateral.
-  * Highlight production readiness (264/264 tests, 0 `any` types) and Somnia ecosystem impact.
+  * Highlight production readiness (270/270 tests, 0 `any` types) and Somnia ecosystem impact.
 
 ---
 

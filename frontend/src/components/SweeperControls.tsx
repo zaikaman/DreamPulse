@@ -13,6 +13,8 @@ import {
   UserIcon,
   MagnifyingGlassIcon,
   XMarkIcon,
+  ExclamationCircleIcon,
+  ClockIcon,
 } from '@heroicons/react/24/outline';
 import { apiClient } from '../services/api.js';
 import { SOMNIA_ADDRESSES } from '../services/web3.js';
@@ -448,17 +450,31 @@ export const SweeperControls: React.FC<SweeperControlsProps> = ({
                           {sweep.winningOutcome}
                         </span>
                       </td>
-                      <td className="px-3 py-2.5 text-right font-mono font-bold text-xs" style={{ color: '#00e676' }}>
-                        +{sweep.claimableAmount.toFixed(2)} tUSDC
+                      <td className="px-3 py-2.5 text-right font-mono font-bold text-xs" style={{ color: sweep.status === 'FAILED' ? 'var(--muted-foreground)' : '#00e676' }}>
+                        {sweep.status === 'FAILED' ? `0.00 tUSDC` : `+${sweep.claimableAmount.toFixed(2)} tUSDC`}
                       </td>
                       <td className="px-3 py-2.5 text-center">
-                        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-semibold border bg-secondary/30 border-border/50 text-muted-foreground">
-                          <WalletIcon className="w-3 h-3" />
-                          <span>Direct Payout</span>
-                        </span>
+                        {sweep.status === 'FAILED' ? (
+                          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-semibold border bg-rose-500/10 border-rose-500/30 text-rose-400">
+                            <ExclamationCircleIcon className="w-3 h-3 text-rose-400" />
+                            <span>Failed Redemption</span>
+                          </span>
+                        ) : sweep.status === 'PENDING' ? (
+                          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-semibold border bg-amber-500/10 border-amber-500/30 text-amber-400">
+                            <ClockIcon className="w-3 h-3 text-amber-400" />
+                            <span>Pending Payout</span>
+                          </span>
+                        ) : (
+                          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-semibold border bg-secondary/30 border-border/50 text-muted-foreground">
+                            <WalletIcon className="w-3 h-3" />
+                            <span>Direct Payout</span>
+                          </span>
+                        )}
                       </td>
                       <td className="px-3 py-2.5 text-right">
-                        {sweep.txHash && sweep.txHash.startsWith('0x') && sweep.txHash.length === 66 ? (
+                        {sweep.status === 'FAILED' ? (
+                          <span className="text-[11px] font-mono text-rose-400/80">Unredeemed</span>
+                        ) : sweep.txHash && sweep.txHash.startsWith('0x') && sweep.txHash.length === 66 ? (
                           <a href={`https://shannon-explorer.somnia.network/tx/${sweep.txHash}`} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 text-[11px] font-mono text-[#00ffcc] hover:underline">
                             <span>{`${sweep.txHash.slice(0, 6)}...${sweep.txHash.slice(-4)}`}</span>
                             <ArrowTopRightOnSquareIcon className="w-3 h-3" />

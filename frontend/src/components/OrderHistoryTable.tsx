@@ -803,14 +803,14 @@ const OrderRowItem = React.memo<{
     } else {
       settlementSubText = pnl > 0 ? 'Settled (Win)' : 'Settled (Loss)';
     }
-  } else if (order.status !== 'FILLED') {
+  } else if (order.status !== 'FILLED' && order.status !== 'PARTIALLY_FILLED') {
     pnlMainText = '— PENDING';
     pnlColor = 'var(--muted-foreground)';
     settlementSubText = 'Awaiting Fill';
   } else if (isOpen) {
     pnlMainText = '— OPEN';
     pnlColor = 'var(--muted-foreground)';
-    settlementSubText = 'Active (In Play)';
+    settlementSubText = order.status === 'PARTIALLY_FILLED' ? 'Partial (In Play)' : 'Active (In Play)';
   } else {
     pnlMainText = '0.00 tUSDC';
     pnlColor = 'var(--muted-foreground)';
@@ -848,6 +848,38 @@ Settlement: ${marketInfo.settlementPrice ? `Settled @ ${formatCurrencyAmount(mar
 Realized PnL: ${pnl !== 0 ? (pnl > 0 ? `+${pnl.toFixed(2)} tUSDC (Win)` : `${pnl.toFixed(2)} tUSDC (Loss)`) : (isOpen ? 'Open in progress' : '0.00 tUSDC')}
 Agent: ${agentDisplayName} (${agentSubtitle})
 Tx Hash: ${order.txHash || 'N/A'}`;
+
+  const statusBg = order.status === 'FILLED'
+    ? 'rgba(0, 255, 102, 0.1)'
+    : order.status === 'PARTIALLY_FILLED'
+    ? 'rgba(0, 240, 255, 0.1)'
+    : (order.status === 'CANCELLED' || order.status === 'REJECTED')
+    ? 'rgba(255, 51, 102, 0.1)'
+    : 'rgba(255, 170, 0, 0.1)';
+
+  const statusBorder = order.status === 'FILLED'
+    ? '1px solid rgba(0, 255, 102, 0.25)'
+    : order.status === 'PARTIALLY_FILLED'
+    ? '1px solid rgba(0, 240, 255, 0.25)'
+    : (order.status === 'CANCELLED' || order.status === 'REJECTED')
+    ? '1px solid rgba(255, 51, 102, 0.25)'
+    : '1px solid rgba(255, 170, 0, 0.25)';
+
+  const statusColor = order.status === 'FILLED'
+    ? 'var(--trade-buy)'
+    : order.status === 'PARTIALLY_FILLED'
+    ? 'var(--brand-cyan)'
+    : (order.status === 'CANCELLED' || order.status === 'REJECTED')
+    ? 'var(--trade-sell)'
+    : 'var(--trade-anomaly)';
+
+  const statusSubLabel = order.status === 'FILLED'
+    ? 'Matched'
+    : order.status === 'PARTIALLY_FILLED'
+    ? 'Partial Fill'
+    : order.status === 'PENDING'
+    ? 'Resting Book'
+    : order.status;
 
   return (
     <tr
@@ -974,12 +1006,12 @@ Tx Hash: ${order.txHash || 'N/A'}`;
       {/* 9. STATUS */}
       <td style={{ padding: '10px 16px', textAlign: 'center' }}>
         <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '3px' }}>
-          <span style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', padding: '2px 6px', borderRadius: '4px', background: order.status === 'FILLED' ? 'rgba(0, 255, 102, 0.1)' : 'rgba(255, 170, 0, 0.1)', border: order.status === 'FILLED' ? '1px solid rgba(0, 255, 102, 0.25)' : '1px solid rgba(255, 170, 0, 0.25)', color: order.status === 'FILLED' ? 'var(--trade-buy)' : 'var(--trade-anomaly)', fontSize: '10px', fontWeight: 700 }}>
+          <span style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', padding: '2px 6px', borderRadius: '4px', background: statusBg, border: statusBorder, color: statusColor, fontSize: '10px', fontWeight: 700 }}>
             <CheckCircleIcon className="w-2.5 h-2.5" />
             <span>{order.status}</span>
           </span>
           <span style={{ fontSize: '9.5px', color: 'var(--muted-foreground)', fontFamily: 'var(--font-mono)' }}>
-            Matched
+            {statusSubLabel}
           </span>
         </div>
       </td>

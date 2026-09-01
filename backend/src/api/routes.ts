@@ -425,7 +425,7 @@ apiRouter.get('/sessions/:userAddress', optionalWalletAuth, async (req: Request,
       const userOrders = orderService.getOrders({ userAddress }).filter((o) => o.sessionId === activeSession.id);
       if (userOrders.length > 0) {
         const realSpend = userOrders
-          .filter((o) => o.status === 'FILLED' || o.status === 'PENDING')
+          .filter((o) => o.status === 'FILLED' || o.status === 'PARTIALLY_FILLED' || o.status === 'PENDING')
           .reduce((sum, o) => sum + (o.totalCost || 0), 0);
 
         if (activeSession.spentToday > realSpend) {
@@ -1035,7 +1035,7 @@ apiRouter.get('/portfolio/summary', optionalWalletAuth, async (req: Request, res
       const sessionOrders = userOrders.filter((o) => o.sessionId === session.id);
       if (sessionOrders.length > 0) {
         const realSpend = sessionOrders
-          .filter((o) => o.status === 'FILLED' || o.status === 'PENDING')
+          .filter((o) => o.status === 'FILLED' || o.status === 'PARTIALLY_FILLED' || o.status === 'PENDING')
           .reduce((sum, o) => sum + (o.totalCost || 0), 0);
 
         if (session.spentToday > realSpend) {
