@@ -1129,6 +1129,20 @@ export class SettlementService {
 
           resolvedTxHash = txHash;
 
+          let sweepTimestamp = now;
+          try {
+            const matchedOrder = orderService.getOrders({ userAddress: normalizedUser }).find(
+              (o) =>
+                o.marketId.toLowerCase() === pos.marketId.toLowerCase() ||
+                (pos.marketIdHex && o.marketId.toLowerCase() === pos.marketIdHex.toLowerCase()),
+            );
+            if (matchedOrder?.createdAt) {
+              sweepTimestamp = matchedOrder.createdAt;
+            } else if (matchedOrder?.settledAt) {
+              sweepTimestamp = matchedOrder.settledAt;
+            }
+          } catch {}
+
           const sweepId = crypto.randomUUID();
           const sweep: SettlementSweep = {
             id: sweepId,
@@ -1140,45 +1154,17 @@ export class SettlementService {
             isCompounded: false,
             txHash,
             status: 'CONFIRMED',
-            claimedAt: now,
+            claimedAt: sweepTimestamp,
           };
 
-          this.sweepsMap.set(sweepId, sweep);
-          this.sweeps.unshift(sweep);
-          if (this.sweeps.length > 5000) {
-            const evicted = this.sweeps.pop();
-            if (evicted) this.sweepsMap.delete(evicted.id);
-          }
+          this.recordSweep(sweep, true);
           claimedSweeps.push(sweep);
           totalClaimed += pos.claimableAmount;
 
-          if (
-            isPersistenceEnabled() &&
-            txHash &&
-            !txHash.startsWith('0x0000000000000000000000000000000000000000000000000000000000000000') &&
-            txHash !== '0x1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef' &&
-            isAddress(normalizedUser)
-          ) {
-            try {
-              await marketService.ensureMarketPersisted(pos.marketId, pos.symbol);
-              await supabase.from('sweeps').insert({
-                id: sweepId,
-                user_address: normalizedUser,
-                market_id: pos.marketId,
-                winning_outcome: pos.winningOutcome,
-                claimable_amount: pos.claimableAmount,
-                payout_token: 'tUSDC',
-                is_compounded: false,
-                tx_hash: txHash,
-                status: 'CONFIRMED',
-                claimed_at: now,
-              });
-            } catch (err) {
-              console.warn('[SettlementService] DB persist note:', err);
-            }
-          }
-
           void orderService.settleOrdersForMarket(pos.marketId, pos.winningOutcome).catch(() => {});
+          if (pos.marketIdHex && pos.marketIdHex.toLowerCase() !== pos.marketId.toLowerCase()) {
+            void orderService.settleOrdersForMarket(pos.marketIdHex, pos.winningOutcome).catch(() => {});
+          }
         }
       }
     }
