@@ -437,6 +437,45 @@ describe('Task T038 & T040: Session Management Service & Risk Guardrails', () =>
     expect(session.isActive).toBe(true);
     expect(session.onChainAuthorized).toBe(false);
   });
+
+  it('enforces strict 24h rolling window for daily cap and does NOT reset at UTC midnight when < 24h elapsed', async () => {
+    const user = privateKeyToAccount(generatePrivateKey());
+    const session = await sessionService.registerSession({
+      userAddress: user.address,
+      operatorAddress: liveOperator.address,
+      maxTradeSize: 50,
+      dailyVolumeCap: 50,
+    });
+
+    // Spend 50 USDC to hit daily cap
+    expect(sessionService.validateTradeAllowance(session.id, 50).allowed).toBe(true);
+    await sessionService.recordTradeSpend(session.id, 50);
+    expect(session.spentToday).toBe(50);
+
+    // Overspend should be rejected
+    expect(sessionService.validateTradeAllowance(session.id, 10).allowed).toBe(false);
+
+    // Simulate crossing UTC midnight after only 2 hours (e.g. spent at 23:00 UTC, now is 01:00 UTC next calendar day)
+    // Both lastSpendResetTimestamp was set 2 hours ago.
+    const twoHoursAgo = Date.now() - 2 * 3600 * 1000;
+    session.lastSpendResetTimestamp = twoHoursAgo;
+
+    // Validate allowance - should still be blocked because 24h have NOT elapsed
+    const checkAfterMidnight = sessionService.validateTradeAllowance(session.id, 10);
+    expect(checkAfterMidnight.allowed).toBe(false);
+    expect(checkAfterMidnight.reason).toContain('exceeds remaining daily volume cap');
+    expect(session.spentToday).toBe(50);
+
+    // Simulate 24.1 hours elapsed
+    const twentyFiveHoursAgo = Date.now() - 24.1 * 3600 * 1000;
+    session.lastSpendResetTimestamp = twentyFiveHoursAgo;
+
+    // Validate allowance - should now reset spentToday to 0 and allow trade
+    const checkAfter24h = sessionService.validateTradeAllowance(session.id, 50);
+    expect(checkAfter24h.allowed).toBe(true);
+    expect(session.spentToday).toBe(0);
+  });
 });
+
 
 

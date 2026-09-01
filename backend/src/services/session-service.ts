@@ -170,7 +170,7 @@ export class SessionService {
       const isActive = row.is_active && expiresTimestamp > now;
 
       const updatedAtTimestamp = new Date(row.updated_at || row.created_at).getTime();
-      const isPastDay = now - updatedAtTimestamp > 24 * 3600 * 1000 || new Date(updatedAtTimestamp).getUTCDate() !== new Date(now).getUTCDate();
+      const isPastDay = now - updatedAtTimestamp > 24 * 3600 * 1000;
       const spentToday = isPastDay ? 0 : Number(row.spent_today || 0);
       const lastSpendResetTimestamp = isPastDay ? now : updatedAtTimestamp;
 
@@ -435,9 +435,7 @@ export class SessionService {
           const expiresTimestamp = new Date(row.expires_at).getTime();
           if (expiresTimestamp > Date.now()) {
             const updatedAtTimestamp = new Date(row.updated_at || row.created_at).getTime();
-            const isPastDay =
-              Date.now() - updatedAtTimestamp > 24 * 3600 * 1000 ||
-              new Date(updatedAtTimestamp).getUTCDate() !== new Date().getUTCDate();
+            const isPastDay = Date.now() - updatedAtTimestamp > 24 * 3600 * 1000;
             const spentToday = isPastDay ? 0 : Number(row.spent_today || 0);
             const lastSpendResetTimestamp = isPastDay ? Date.now() : updatedAtTimestamp;
 
@@ -670,9 +668,8 @@ export class SessionService {
       };
     }
 
-    // Reset 24-hour window if day passed or new calendar day started
-    const isDifferentDay = new Date(session.lastSpendResetTimestamp).getUTCDate() !== new Date(now).getUTCDate();
-    if (now - session.lastSpendResetTimestamp > 24 * 3600 * 1000 || isDifferentDay) {
+    // Reset 24-hour window if 24 hours have elapsed since last reset
+    if (now - session.lastSpendResetTimestamp > 24 * 3600 * 1000) {
       session.spentToday = 0;
       session.lastSpendResetTimestamp = now;
       session.updatedAt = new Date().toISOString();
