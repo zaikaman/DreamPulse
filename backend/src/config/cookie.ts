@@ -47,6 +47,12 @@ function appendSetCookie(res: Response, cookieStr: string): void {
  * Production: Secure + HttpOnly + SameSite=None (cross-site Vercel ↔ Heroku) + Partitioned where supported.
  * SameSite=None requires Secure (https) — Heroku/Vercel are https in prod, http in local dev.
  * In local dev (http) we degrade to SameSite=Lax without Secure so the cookie still works over http://localhost.
+ *
+ * NOTE ON SAFARI / WEBKIT COMPATIBILITY:
+ * Safari / WebKit does not currently implement CHIPS (Cookies Having Independent Partitioned State) and
+ * silently ignores the `Partitioned` attribute. However, Safari still honors `SameSite=None; Secure`.
+ * Because DreamPulse implements dual-mode authentication (cookies + Authorization bearer header / EIP-712 /
+ * localStorage session tokens), Safari ignoring `Partitioned` is non-fatal and authentication falls back gracefully.
  */
 function buildCookieString(
   name: string,
@@ -57,7 +63,8 @@ function buildCookieString(
   // For cross-site to work, SameSite=None + Secure is required. For same-site dev, Lax is sufficient.
   const sameSite = isHttps ? 'None' : 'Lax';
   const secure = isHttps ? '; Secure' : '';
-  // Partitioned (CHIPS) improves cross-site isolation when browser supports it — harmless if ignored
+  // Partitioned (CHIPS) improves cross-site isolation when supported (Chrome, Edge, Firefox).
+  // Note: Safari ignores Partitioned, which is non-fatal due to bearer token / dual-mode auth fallback.
   const partitioned = isHttps && sameSite === 'None' ? '; Partitioned' : '';
   const parts = [
     `${name}=${encodeURIComponent(value)}`,

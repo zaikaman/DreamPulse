@@ -49,8 +49,10 @@ The backend runs an Express HTTP server, WebSocket telemetry stream, and autonom
 | `NPM_CONFIG_PRODUCTION` | `false` | Ensures `typescript` compiles during `heroku-postbuild` |
 | `FRONTEND_ORIGIN` | `*` (or `https://dreampulse-ai.vercel.app`) | Allowed CORS origin(s) for frontend dashboard |
 | `SUPABASE_URL` | `https://<your-project>.supabase.co` | Your Supabase project URL |
-| `SUPABASE_SERVICE_ROLE_KEY` | `eyJhbGciOi...` | Supabase Service Role Key (Backend writes) |
-| `SUPABASE_ANON_KEY` | `eyJhbGciOi...` | Supabase Anon Key |
+| `SUPABASE_SERVICE_ROLE_KEY` | `eyJhbGciOi...` | Supabase Service Role Key (Backend writes & RLS bypass) |
+| `SUPABASE_ANON_KEY` | `eyJhbGciOi...` | Supabase Anon Key (Public discovery reads) |
+| `SUPABASE_JWT_SECRET` | `your-supabase-jwt-secret` | Supabase JWT Secret (Dashboard > Settings > API > JWT Secret, HS256) — required for wallet EIP-712 auth and minting user JWTs for Supabase Realtime RLS subscriptions |
+| `SUPABASE_JWT_EXPIRY_SECONDS` | `86400` | (Optional) Supabase wallet-JWT lifetime in seconds (default: 86400 = 24h) |
 | `OPERATOR_PRIVATE_KEY` | `0x...` | Somnia Operator Wallet Private Key (Funded with STT) |
 | `OPERATOR_ADMIN_SECRET` | `your-secure-secret-token` | Secret for protected admin management endpoints |
 | `GROQ_API_KEY` | `gsk_...` | Primary Groq LLM API Key (Fast 27B inference) |
@@ -91,6 +93,8 @@ heroku config:set NPM_CONFIG_PRODUCTION=false
 heroku config:set SUPABASE_URL=https://<your-project>.supabase.co
 heroku config:set SUPABASE_SERVICE_ROLE_KEY=<your-service-role-key>
 heroku config:set SUPABASE_ANON_KEY=<your-anon-key>
+heroku config:set SUPABASE_JWT_SECRET=<your-supabase-jwt-secret>
+heroku config:set SUPABASE_JWT_EXPIRY_SECONDS=86400
 heroku config:set OPERATOR_PRIVATE_KEY=0x<your-private-key>
 heroku config:set OPERATOR_ADMIN_SECRET=<your-admin-secret>
 heroku config:set GROQ_API_KEY=gsk_<your-groq-key>

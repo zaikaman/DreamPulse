@@ -840,8 +840,12 @@ export class OrderService {
         if (blockedUntil && Date.now() < blockedUntil) {
           return null;
         }
-        // Use LIMIT (0) so orders match any crossing book liquidity immediately and rest remaining, avoiding ImmediateOrCancelNoFill reverts
-        const orderTypeEnum = ORDER_TYPE.LIMIT;
+        // Differentiate maker (LIMIT_QUOTE) and taker (TAKER_BUY, TAKER_SELL, BATCH_SWEEP, etc.):
+        // - LIMIT_QUOTE (0): NormalOrder — fills crossing book liquidity and rests remaining on the order book.
+        // - TAKER (2 / MARKET / IOC): ImmediateOrCancel — fills available crossing liquidity and immediately cancels any unfilled residual,
+        //   preventing unintended lingering resting orders from skewing CLOB orderbook depth and self-trade sanitization.
+        const isMaker = decision.action === 'LIMIT_QUOTE';
+        const orderTypeEnum = isMaker ? ORDER_TYPE.LIMIT : ORDER_TYPE.MARKET;
         const one = 10n ** BigInt(SOMNIA_ADDRESSES.decimals);
         const priceYes = outcome === 'YES' ? rawPriceOwn : one - rawPriceOwn;
         const nowSec = Math.floor(Date.now() / 1000);
@@ -890,8 +894,10 @@ export class OrderService {
             }
 
             const filledRaw = (placeRes?.fills ?? []).reduce((acc, f) => acc + f.quantityFilled, 0n);
-            if (placeRes?.orderId !== undefined && filledRaw < rawQuantity) {
+            if (isMaker && placeRes?.orderId !== undefined && filledRaw < rawQuantity) {
               orderStatus = filledRaw > 0n ? 'FILLED' : 'PENDING';
+              fillsQuantity = Number(filledRaw) / Number(one);
+            } else if (!isMaker && filledRaw > 0n) {
               fillsQuantity = Number(filledRaw) / Number(one);
             }
           } else {
@@ -976,9 +982,31 @@ export class OrderService {
               (acc: bigint, f: { quantityFilled: bigint }) => acc + f.quantityFilled,
               0n,
             );
-            if (placeRes?.orderId !== undefined && filledRaw < rawQuantity) {
+            if (isMaker && placeRes?.orderId !== undefined && filledRaw < rawQuantity) {
               orderStatus = filledRaw > 0n ? 'FILLED' : 'PENDING';
               fillsQuantity = Number(filledRaw) / Number(one);
+            } else if (!isMaker && filledRaw > 0n) {
+              fillsQuantity = Number(filledRaw) / Number(one);
+            }
+
+            // For taker IOC BUY copy-trades where partial fill occurred, refund unfilled collateral
+            if (!isMaker && direction === 'BUY' && collateralPulled && filledRaw < rawQuantity && process.env.NODE_ENV !== 'test') {
+              const actualCost = (rawPriceOwn * filledRaw) / one;
+              const refundAmount = tradeCost > actualCost ? tradeCost - actualCost : 0n;
+              if (refundAmount > 0n) {
+                try {
+                  const refHash = await executeOperatorWriteContract({
+                    address: SOMNIA_ADDRESSES.testUsdc,
+                    abi: ERC20_ABI,
+                    functionName: 'transfer',
+                    args: [targetTrader, refundAmount],
+                  });
+                  await publicClient.waitForTransactionReceipt({ hash: refHash, timeout: 60_000 });
+                  console.info(`[OrderService] Unfilled IOC collateral of ${refundAmount} tUSDC refunded to ${targetTrader} (tx: ${refHash})`);
+                } catch (refErr: any) {
+                  console.error(`[OrderService] Collateral refund for unfilled IOC to ${targetTrader} failed:`, refErr.message);
+                }
+              }
             }
 
             // For SELL copy-trades, return proceeds to user
@@ -1115,8 +1143,8 @@ export class OrderService {
     // Store in-memory with bounded capacity (evict oldest; history remains in Supabase for analytics/pagination)
     this.insertIntoCache(orderExecution);
 
-    // Register resting limit quote for swarm cross-agent self-trade protection
-    if (orderExecution.orderType === 'LIMIT' || decision.action === 'LIMIT_QUOTE') {
+    // Register resting limit quote for swarm cross-agent self-trade protection (maker quotes only)
+    if (decision.action === 'LIMIT_QUOTE' && orderExecution.orderType === 'LIMIT') {
       this.registerRestingMakerQuote({
         orderId,
         marketId: decision.targetMarketId,

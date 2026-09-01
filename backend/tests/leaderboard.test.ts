@@ -1,4 +1,5 @@
 import { describe, it, expect, beforeAll } from 'vitest';
+import { randomUUID } from 'crypto';
 import request from 'supertest';
 import express from 'express';
 import { apiRouter } from '../src/api/routes.js';
@@ -156,6 +157,7 @@ describe('Swarm Arena & Strategy Leaderboard Tests', () => {
       const agent1m = await customAgentService.createCustomAgent({
         userAddress: user,
         name: 'Fast EMA Momentum Rider ETH 1m Test',
+        description: 'Fast EMA strategy testing 1m resolution isolation',
         symbol: 'ETH/USD',
         timeframe: '1m',
         strategyType: 'MOMENTUM',
@@ -163,7 +165,10 @@ describe('Swarm Arena & Strategy Leaderboard Tests', () => {
           operator: 'AND',
           conditions: [{ id: 'c-1', indicator: 'EMA', period: 9, secondaryPeriod: 21, operator: 'CROSS_ABOVE', value: 0 }],
           action: { direction: 'CALL', durationSec: 60, stakeType: 'FIXED', stakeAmount: 20 },
+          risk: { maxConsecutiveLosses: 2, cooldownMinutes: 3, minPoolPayoutPct: 75 },
         },
+        color: '#6366f1',
+        icon: 'BoltIcon',
         isActive: true,
         isDeployed: true,
         allocatedAllowance: 500000,
@@ -173,6 +178,7 @@ describe('Swarm Arena & Strategy Leaderboard Tests', () => {
       const agent5m = await customAgentService.createCustomAgent({
         userAddress: user,
         name: 'Fast EMA Momentum Rider ETH 5m Test',
+        description: 'Fast EMA strategy testing 5m resolution isolation',
         symbol: 'ETH/USD',
         timeframe: '5m',
         strategyType: 'MOMENTUM',
@@ -180,16 +186,55 @@ describe('Swarm Arena & Strategy Leaderboard Tests', () => {
           operator: 'AND',
           conditions: [{ id: 'c-1', indicator: 'EMA', period: 9, secondaryPeriod: 21, operator: 'CROSS_ABOVE', value: 0 }],
           action: { direction: 'CALL', durationSec: 300, stakeType: 'FIXED', stakeAmount: 20 },
+          risk: { maxConsecutiveLosses: 2, cooldownMinutes: 3, minPoolPayoutPct: 75 },
         },
+        color: '#10b981',
+        icon: 'CpuChipIcon',
         isActive: true,
         isDeployed: true,
         allocatedAllowance: 99999,
         spentAllowance: 1178.68,
       });
 
-      // Update individual agent stats directly to simulate realistic distinct performance
-      await customAgentService.updateCustomAgent(agent1m.id, { pnl: 370.15, winRate: 62.0, tradesCount: 60 }, user);
-      await customAgentService.updateCustomAgent(agent5m.id, { pnl: 102.85, winRate: 71.0, tradesCount: 60 }, user);
+      const nowIso = new Date().toISOString();
+      const injectAgentOrder = (agentId: string, pnl: number, symbol: string, windowDuration: string) => {
+        const id = randomUUID();
+        const order: any = {
+          id,
+          userAddress: user as `0x${string}`,
+          customAgentId: agentId,
+          marketId: '0x3333333333333333333333333333333333333333',
+          agentType: 'CUSTOM',
+          source: 'SWARM' as const,
+          outcome: 'YES' as const,
+          direction: 'BUY' as const,
+          orderType: 'IOC' as const,
+          price: 0.5,
+          lotSize: 10,
+          totalCost: 5.0,
+          status: 'FILLED' as const,
+          txHash: `0x${'c'.repeat(64)}` as `0x${string}`,
+          pnl,
+          isSettled: true,
+          settledAt: nowIso,
+          createdAt: nowIso,
+          filledAt: nowIso,
+          marketSnapshot: {
+            symbol,
+            strikePrice: 3200,
+            closeTimestamp: new Date(Date.now() + 300000).toISOString(),
+            windowDuration,
+          },
+        };
+        (orderService as any).orders.unshift(order);
+        (orderService as any).orderMap.set(id, order);
+      };
+
+      injectAgentOrder(agent1m.id, 200.0, 'ETH/USD', '1m');
+      injectAgentOrder(agent1m.id, 170.15, 'ETH/USD', '1m');
+      injectAgentOrder(agent5m.id, 60.0, 'ETH/USD', '5m');
+      injectAgentOrder(agent5m.id, 42.85, 'ETH/USD', '5m');
+      (orderService as any).notifyStateChange?.();
 
       const allAgents = await leaderboardService.getAgentLeaderboard({ timeframe: 'ALL' });
       const entry1m = allAgents.data.find((a) => a.id === agent1m.id);
@@ -200,15 +245,17 @@ describe('Swarm Arena & Strategy Leaderboard Tests', () => {
 
       // Ensure metrics are isolated and not duplicate/cross-contaminated
       expect(entry1m!.pnl).toBe(370.15);
-      expect(entry1m!.winRate).toBe(62.0);
+      expect(entry1m!.winRate).toBe(100);
       expect(entry1m!.timeframe).toBe('1m');
+      expect(entry1m!.sparkline.length).toBe(8);
 
       expect(entry5m!.pnl).toBe(102.85);
-      expect(entry5m!.winRate).toBe(71.0);
+      expect(entry5m!.winRate).toBe(100);
       expect(entry5m!.timeframe).toBe('5m');
+      expect(entry5m!.sparkline.length).toBe(8);
 
       expect(entry1m!.pnl).not.toBe(entry5m!.pnl);
-      expect(entry1m!.winRate).not.toBe(entry5m!.winRate);
+      expect(entry1m!.sparkline).not.toEqual(entry5m!.sparkline);
 
       // Cleanup
       await customAgentService.deleteCustomAgent(agent1m.id, user);
