@@ -186,5 +186,52 @@ describe('CompounderService & CustomAgentService Comprehensive Suite', () => {
       expect(agent.allocatedAllowance).toBe(500);
       expect(agent.pnl).toBe(75.0);
     });
+
+    it('covers getCustomAgentById, updateCustomAgent, setAgentAllowance, and permission checks', async () => {
+      const template = STARTER_TEMPLATES[0];
+      const found = await service.getCustomAgentById(template.id);
+      expect(found).toBeDefined();
+
+      const notFound = await service.getCustomAgentById('non-existent-agent-id');
+      expect(notFound).toBeNull();
+
+      // Set allowance
+      const updatedAllow = await service.setAgentAllowance(template.id, template.userAddress, 250);
+      expect(updatedAllow?.allocatedAllowance).toBe(250);
+
+      // Update custom agent
+      const updatedAgent = await service.updateCustomAgent(template.id, {
+        name: 'Renamed Template Agent',
+      }, template.userAddress);
+      expect(updatedAgent?.name).toBe('Renamed Template Agent');
+
+      // Update with wrong user address on a user-owned agent (throws Forbidden error)
+      const userAgent = await service.createCustomAgent({
+        userAddress,
+        name: 'My Protected Alpha',
+        symbol: 'BTC/USD',
+        timeframe: '5m',
+        strategyType: 'MOMENTUM',
+        rules: {},
+        isActive: true,
+      } as any);
+
+      const otherUser = '0x1111222233334444555566667777888899990000' as Address;
+      await expect(service.updateCustomAgent(userAgent.id, { name: 'Hack' }, otherUser)).rejects.toThrow('Forbidden');
+
+      // Delete with wrong user address throws Forbidden
+      await expect(service.deleteCustomAgent(userAgent.id, otherUser)).rejects.toThrow('Forbidden');
+
+      // Delete with correct user address returns true
+      const validDelete = await service.deleteCustomAgent(userAgent.id, userAddress);
+      expect(validDelete).toBe(true);
+
+      // getActiveDeployedAgents
+      const deployed = await service.getActiveDeployedAgents();
+      expect(Array.isArray(deployed)).toBe(true);
+    });
   });
 });
+
+
+

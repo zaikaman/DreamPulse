@@ -36,7 +36,7 @@ const envSchema = z.object({
 
   // Groq LLM (Primary Pool with Round-Robin Rotation - optional with deterministic agent fallback)
   GROQ_BASE_URL: z.string().default('https://api.groq.com/openai/v1'),
-  GROQ_MODEL: z.string().default('qwen/qwen3.6-27b'),
+  GROQ_MODEL: z.string().default('qwen/qwen3.8-27b'),
   GROQ_KEYS: z.array(z.string()).default(finalGroqKeys),
 
   // Gemini LLM (Exclusively for Strategy Studio Builder - optional)

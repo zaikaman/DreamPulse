@@ -137,8 +137,50 @@ describe('PriceFeedService, UserSwarmService & OperatorApprovalService Suite', (
 
       const all = service.getAllPersonalConfigs();
       expect(Array.isArray(all)).toBe(true);
+
+      // Test helper methods
+      await service.setMode(testUser, 'COPY');
+      expect(service.isCopyMode(testUser)).toBe(false);
+
+      await service.setCopyTradeEnabled(testUser, true);
+      expect(service.isCopyMode(testUser)).toBe(true);
+
+      // Test toggleAgent for all types
+      await service.toggleAgent(testUser, 'Volt', true);
+      await service.toggleAgent(testUser, 'Oracle', false);
+      await service.toggleAgent(testUser, 'Titan', true);
+      await service.toggleAgent(testUser, 'Sweeper', false);
+
+      const afterToggles = service.getConfig(testUser);
+      expect(afterToggles.oracleEnabled).toBe(false);
+      expect(afterToggles.sweeperEnabled).toBe(false);
+
+      // Test updateAgentConfig for all types
+      await service.updateAgentConfig(testUser, 'Oracle', { minEdge: 0.04, lotSize: 8, maxTradeSize: 40 });
+      await service.updateAgentConfig(testUser, 'Titan', { targetSpread: 0.05, inventoryAversion: 0.02, lotSize: 4 });
+      const afterConfigUpdate = service.getConfig(testUser);
+      expect(afterConfigUpdate.oracleConfig.minEdge).toBe(0.04);
+      expect(afterConfigUpdate.titanConfig.targetSpread).toBe(0.05);
+
+      // Test resetToCopy
+      const reset = await service.resetToCopy(testUser);
+      expect(reset.mode).toBe('COPY');
+
+      // Validation error throws
+      await expect(service.upsertConfig(testUser, { mode: 'INVALID_MODE' as any })).rejects.toThrow('Invalid mode');
+      await expect(service.upsertConfig(testUser, { voltConfig: { driftThreshold: 0.05 } })).rejects.toThrow();
+      await expect(service.upsertConfig(testUser, { voltConfig: { minEdge: 0.001 } })).rejects.toThrow();
+      await expect(service.upsertConfig(testUser, { voltConfig: { lotSize: 100 } })).rejects.toThrow();
+      await expect(service.upsertConfig(testUser, { oracleConfig: { minEdge: 0.5 } })).rejects.toThrow();
+      await expect(service.upsertConfig(testUser, { oracleConfig: { lotSize: 0 } })).rejects.toThrow();
+      await expect(service.upsertConfig(testUser, { titanConfig: { targetSpread: 0.5 } })).rejects.toThrow();
+      await expect(service.upsertConfig(testUser, { titanConfig: { inventoryAversion: 0.5 } })).rejects.toThrow();
+      await expect(service.upsertConfig(testUser, { titanConfig: { lotSize: 0 } })).rejects.toThrow();
+      await expect(service.toggleAgent(testUser, 'UNKNOWN_AGENT' as any, true)).rejects.toThrow();
+      await expect(service.updateAgentConfig(testUser, 'UNKNOWN_AGENT' as any, {})).rejects.toThrow();
     });
   });
+
 
   describe('operator-approval-service.ts', () => {
     const owner = '0x70997970C51812dc3A010C7d01b50e0d17dc79C8';

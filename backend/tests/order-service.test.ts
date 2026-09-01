@@ -197,4 +197,83 @@ describe('OrderService Comprehensive Suite', () => {
     const pnl = await service.getTotalRealizedPnlAsync(undefined, userAddress);
     expect(typeof pnl).toBe('number');
   });
+
+  it('handles resting maker quotes, self-trade sanitization, and state change listeners', () => {
+    let notified = false;
+    const unsubscribe = service.onStateChange(() => {
+      notified = true;
+    });
+
+    service.notifyStateChange();
+    expect(notified).toBe(true);
+    unsubscribe();
+
+    // Register maker quote
+    service.registerRestingMakerQuote({
+      orderId: 'quote-1',
+      userAddress,
+      marketId: mockMarket.id,
+      direction: 'BUY',
+      outcome: 'YES',
+      price: 0.45,
+      lotSize: 10,
+      timestamp: Date.now(),
+    } as any);
+
+    const quotes = service.getRestingMakerQuotes(mockMarket.id, userAddress);
+    expect(quotes.length).toBe(1);
+
+
+    // Sanitize depth for self trade
+    const sanitized = service.sanitizeDepthForSelfTrade(
+      {
+        yesBids: [
+          { price: 0.45, quantity: 10 },
+          { price: 0.44, quantity: 20 },
+        ],
+        yesAsks: [],
+      } as any,
+      mockMarket.id,
+      userAddress,
+    );
+    expect(sanitized.yesBids.length).toBe(1);
+    expect(sanitized.yesBids[0].price).toBe(0.44);
+
+    // Remove maker quote
+    service.removeRestingMakerQuote('quote-1');
+    expect(service.getRestingMakerQuotes(mockMarket.id, userAddress).length).toBe(0);
+  });
+
+  it('handles async order queries, stats, custom agent orders, and aggregates', async () => {
+    const stats = service.getOrderStats({ userAddress });
+    expect(stats).toBeDefined();
+    expect(typeof stats.totalCount).toBe('number');
+    expect(typeof stats.totalFills).toBe('number');
+    expect(typeof stats.totalVolume).toBe('number');
+
+    const asyncOrders = await service.getOrdersAsync({ userAddress });
+    expect(Array.isArray(asyncOrders)).toBe(true);
+
+
+    const paginatedAsync = await service.queryOrdersPaginatedAsync({ userAddress, limit: 5 });
+    expect(Array.isArray(paginatedAsync.orders)).toBe(true);
+
+    const customAgentOrders = await service.getOrdersForCustomAgent('custom-agent-1', userAddress);
+    expect(Array.isArray(customAgentOrders)).toBe(true);
+
+    // Swarm aggregates & telemetry
+    const aggregates = service.getSwarmAggregates();
+    expect(aggregates).toBeDefined();
+
+    service.broadcastSwarmTelemetry();
+
+    // syncResolvedOrdersPnL & async
+    service.syncResolvedOrdersPnL();
+    await service.syncResolvedOrdersPnLAsync();
+
+    // reconcileSettledOrdersWithOnChain
+    const count = await service.reconcileSettledOrdersWithOnChain();
+    expect(typeof count).toBe('number');
+  });
 });
+

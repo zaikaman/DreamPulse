@@ -427,5 +427,239 @@ describe('Express REST API Endpoints', () => {
     expect(res.body.success).toBe(true);
     expect(Array.isArray(res.body.logs)).toBe(true);
   });
+
+  it('GET /api/v1/markets/historical, /spot, /anomalies, and /debug/market/:id', async () => {
+    const histRes = await request(app).get('/api/v1/markets/historical?limit=10');
+    expect(histRes.status).toBe(200);
+    expect(histRes.body.success).toBe(true);
+
+    const spotRes = await request(app).get('/api/v1/markets/spot');
+    expect(spotRes.status).toBe(200);
+    expect(spotRes.body.success).toBe(true);
+
+    const anomalyRes = await request(app).get('/api/v1/markets/anomalies');
+    expect(anomalyRes.status).toBe(200);
+    expect(anomalyRes.body.success).toBe(true);
+
+    const debugRes = await request(app).get('/api/v1/debug/market/test-market-id');
+    expect(debugRes.status).toBe(200);
+    expect(debugRes.body.found).toBe(true);
+
+    const debugNotFound = await request(app).get('/api/v1/debug/market/non-existent-market');
+    expect(debugNotFound.status).toBe(200);
+    expect(debugNotFound.body.found).toBe(false);
+  });
+
+  it('handles auth/wallet-verify, session nonces, reset-spend, and allowance-status', async () => {
+    const testUser = '0x70997970C51812dc3A010C7d01b50e0d17dc79C8';
+
+    // GET /sessions/:userAddress/nonce
+    const nonceRes = await request(app).get(`/api/v1/sessions/${testUser}/nonce`);
+    expect(nonceRes.status).toBe(200);
+    expect(nonceRes.body.success).toBe(true);
+    expect(typeof nonceRes.body.nextNonce).toBe('number');
+
+    // GET /sessions/:userAddress
+    const sessionRes = await request(app).get(`/api/v1/sessions/${testUser}`);
+    expect(sessionRes.status).toBe(200);
+    expect(sessionRes.body.success).toBe(true);
+
+    // POST /sessions/:userAddress/reset-spend on user without active session returns 404
+    const resetSpendNotFound = await request(app).post(`/api/v1/sessions/${testUser}/reset-spend`);
+    expect(resetSpendNotFound.status).toBe(404);
+
+    // POST /sessions/:id/revoke with non-existent session
+    const revokeRes = await request(app).post(`/api/v1/sessions/non-existent-uuid/revoke`);
+    expect(revokeRes.status).toBe(200);
+    expect(revokeRes.body.revoked).toBe(false);
+
+    // GET /sessions/:userAddress/allowance-status
+    const allowRes = await request(app).get(`/api/v1/sessions/${testUser}/allowance-status`);
+    expect(allowRes.status).toBe(200);
+    expect(allowRes.body.success).toBe(true);
+
+    // POST /auth/wallet-verify rejection on missing fields
+    const badVerify = await request(app).post('/api/v1/auth/wallet-verify').send({});
+    expect(badVerify.status).toBe(400);
+  });
+
+  it('manages agents/detailed, toggle, config, and swarm fine-grained routes', async () => {
+    const testUser = '0x70997970C51812dc3A010C7d01b50e0d17dc79C8';
+    const { operatorAccount } = await import('../src/config/somnia.js');
+
+    // GET /agents/detailed
+    const detailRes = await request(app).get('/api/v1/agents/detailed');
+    expect(detailRes.status).toBe(200);
+    expect(detailRes.body.success).toBe(true);
+
+    // POST /agents/toggle with operator address
+    const toggleRes = await request(app)
+      .post('/api/v1/agents/toggle')
+      .set('x-operator-address', operatorAccount.address)
+      .set('x-user-address', operatorAccount.address)
+      .send({
+        operatorAddress: operatorAccount.address,
+        userAddress: operatorAccount.address,
+        agentType: 'VOLT',
+        enabled: false,
+      });
+    expect([200, 403]).toContain(toggleRes.status);
+
+    // POST /agents/config with operator address
+    const agentCfgRes = await request(app)
+      .post('/api/v1/agents/config')
+      .set('x-operator-address', operatorAccount.address)
+      .set('x-user-address', operatorAccount.address)
+      .send({
+        operatorAddress: operatorAccount.address,
+        userAddress: operatorAccount.address,
+        agentType: 'VOLT',
+        config: { driftThreshold: 0.003 },
+      });
+    expect([200, 403]).toContain(agentCfgRes.status);
+
+
+    // PUT /swarm/my-config
+    const putCfg = await request(app).put('/api/v1/swarm/my-config').send({
+      userAddress: testUser,
+      updates: { mode: 'PERSONAL', voltEnabled: true },
+    });
+    expect(putCfg.status).toBe(200);
+
+    // POST /swarm/mode
+    const modeRes = await request(app).post('/api/v1/swarm/mode').send({
+      userAddress: testUser,
+      mode: 'PERSONAL',
+    });
+    expect(modeRes.status).toBe(200);
+
+    // POST /swarm/toggle
+    const swarmToggle = await request(app).post('/api/v1/swarm/toggle').send({
+      userAddress: testUser,
+      agentType: 'oracle',
+      enabled: true,
+    });
+    expect(swarmToggle.status).toBe(200);
+
+    // POST /swarm/config
+    const swarmCfg = await request(app).post('/api/v1/swarm/config').send({
+      userAddress: testUser,
+      agentType: 'titan',
+      config: { targetSpread: 0.04 },
+    });
+    expect(swarmCfg.status).toBe(200);
+  });
+
+  it('handles orders/:id, sweeper/history, and backtest/history', async () => {
+    // GET /orders/:id
+    const orderRes = await request(app).get('/api/v1/orders/random-missing-order-id');
+    expect(orderRes.status).toBe(404);
+
+    // GET /sweeper/history
+    const sweepHist = await request(app).get('/api/v1/sweeper/history?limit=5');
+    expect(sweepHist.status).toBe(200);
+    expect(sweepHist.body.success).toBe(true);
+
+    // GET /backtest/history
+    const btHist = await request(app).get('/api/v1/backtest/history?limit=5');
+    expect(btHist.status).toBe(200);
+    expect(btHist.body.success).toBe(true);
+  });
+
+  it('manages custom agent creation, lifecycle, and AI strategy generation', async () => {
+    const testUser = '0x70997970C51812dc3A010C7d01b50e0d17dc79C8';
+
+    // POST /agents/custom
+    const createRes = await request(app).post('/api/v1/agents/custom').send({
+      userAddress: testUser,
+      name: 'Custom Breakout Alpha',
+      role: 'SNIPER',
+      targetAsset: 'BTC/USD',
+      rules: {
+        entry: { condition: 'RSI_OVERSOLD', threshold: 30 },
+        action: { direction: 'CALL', lotSize: 5 },
+      },
+    });
+    expect(createRes.status).toBe(200);
+    expect(createRes.body.success).toBe(true);
+    const agentId = createRes.body.data.id;
+
+    // GET /agents/custom/:id
+    const getRes = await request(app).get(`/api/v1/agents/custom/${agentId}`);
+    expect(getRes.status).toBe(200);
+    expect(getRes.body.data.name).toBe('Custom Breakout Alpha');
+
+    // PUT /agents/custom/:id
+    const putRes = await request(app).put(`/api/v1/agents/custom/${agentId}`).send({
+      userAddress: testUser,
+      name: 'Updated Alpha Name',
+    });
+    expect(putRes.status).toBe(200);
+
+    // POST /agents/custom/:id/deploy
+    const deployRes = await request(app).post(`/api/v1/agents/custom/${agentId}/deploy`).send({
+      userAddress: testUser,
+    });
+    expect(deployRes.status).toBe(200);
+
+    // POST /agents/custom/:id/pause
+    const pauseRes = await request(app).post(`/api/v1/agents/custom/${agentId}/pause`).send({
+      userAddress: testUser,
+    });
+    expect(pauseRes.status).toBe(200);
+
+    // POST /agents/custom/:id/allowance
+    const allowRes = await request(app).post(`/api/v1/agents/custom/${agentId}/allowance`).send({
+      userAddress: testUser,
+      allowance: 50,
+    });
+    expect(allowRes.status).toBe(200);
+
+    // POST /agents/generate (Strategy Studio LLM synthesis)
+    const genRes = await request(app).post('/api/v1/agents/generate').send({
+      prompt: 'High-frequency momentum sniper on ETH breakouts',
+    });
+    expect(genRes.status).toBe(200);
+    expect(genRes.body.success).toBe(true);
+
+    // DELETE /agents/custom/:id
+    const delRes = await request(app).delete(`/api/v1/agents/custom/${agentId}?userAddress=${testUser}`);
+    expect(delRes.status).toBe(200);
+  });
+
+  it('handles arena social, analytics, copytrade, and profile endpoints', async () => {
+    const testUser = '0x70997970C51812dc3A010C7d01b50e0d17dc79C8';
+    const targetUser = '0x327e766EB317e5A3FA6dB30c0A5b9735Ad1aEdae';
+
+    // GET /arena/trader/:address/profile
+    const traderRes = await request(app).get(`/api/v1/arena/trader/${testUser}/profile`);
+    expect(traderRes.status).toBe(200);
+
+    // GET /arena/leaderboard/agents
+    const agentRes = await request(app).get('/api/v1/arena/leaderboard/agents');
+    expect(agentRes.status).toBe(200);
+
+    // GET /arena/stats
+    const statsRes = await request(app).get('/api/v1/arena/stats');
+    expect(statsRes.status).toBe(200);
+
+    // POST /arena/copytrade/toggle
+    const toggleCopyRes = await request(app).post('/api/v1/arena/copytrade/toggle').send({
+      userAddress: testUser,
+      targetAddress: targetUser,
+      enabled: true,
+    });
+    expect(toggleCopyRes.status).toBe(200);
+
+    // GET /arena/copytrade/status
+    const copyStatus = await request(app).get(`/api/v1/arena/copytrade/status?userAddress=${testUser}&targetAddress=${targetUser}`);
+    expect(copyStatus.status).toBe(200);
+
+    // GET /arena/copytrade/following
+    const followingRes = await request(app).get(`/api/v1/arena/copytrade/following?userAddress=${testUser}`);
+    expect(followingRes.status).toBe(200);
+  });
 });
+
+
 

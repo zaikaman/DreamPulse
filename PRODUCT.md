@@ -37,7 +37,7 @@ Unlike conventional monolithic trading bots or static prediction market frontend
 1. **Coordinated 4-Agent Micro-Architecture**: Four decoupled personas executing on a 100ms evaluation loop rather than a single generalized script.
 2. **Non-Custodial Session Delegation with 1-Click `BatchApprove.sol`**: Leverages Somnia's native `OperatorPermissionsRegistry` and custom smart contract `BatchApprove.sol` to allow 1-click approval across all rolling event pools while guaranteeing that users retain complete custody of funds with hardcoded single-trade caps, spend ceilings, and instant revocation.
 3. **Decoupled Execution Modes**: Full flexibility between **Global Swarm Copy-Trading** (passively mirroring institutional swarm execution) and **Isolated Personal Swarms** (custom parameterized per-wallet thresholds for drift, edge, target spread, lot sizes, and strategy forking).
-4. **Cognitive LLM Telemetry**: Dual-tier AI thought streaming (Groq Qwen 2.5 with Gemini fallback) articulating mathematical logic, volatility regime detection, and order decisions in real-time.
+4. **Cognitive LLM Telemetry**: Dual-tier AI thought streaming (Groq Qwen 3.8 with Gemini fallback) articulating mathematical logic, volatility regime detection, and order decisions in real-time.
 5. **Integrated Backtesting Studio**: Full quantitative backtester (Strategy Studio) allowing historical simulation across custom date ranges, assets, and execution friction models with direct "Deploy to Swarm" functionality.
 
 ## Operating Context

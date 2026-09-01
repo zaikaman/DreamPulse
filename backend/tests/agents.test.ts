@@ -578,6 +578,37 @@ describe('Phase 5 Swarm Strategy & Agent Unit Tests', () => {
       // Cleanup
       orderService.removeRestingMakerQuote('titan-maker-quote-002');
     });
+
+    it('covers getDetailedSwarmState, getPersonalSwarmStatus, and start/stop lifecycle', async () => {
+      const swarmRunner = new MultiAgentSwarmRunner();
+
+      const detailed = swarmRunner.getDetailedSwarmState();
+      expect(detailed).toBeDefined();
+
+      const detailedAsync = await swarmRunner.getDetailedSwarmStateAsync();
+      expect(detailedAsync).toBeDefined();
+
+      const swarmStatusAsync = await swarmRunner.getSwarmStatusAsync();
+      expect(swarmStatusAsync).toBeDefined();
+
+      const personal = swarmRunner.getPersonalSwarmStatus(operatorAccount.address);
+      expect(personal).toBeDefined();
+
+      const personalAsync = await swarmRunner.getPersonalSwarmStatusAsync(operatorAccount.address);
+      expect(personalAsync).toBeDefined();
+
+      // Lifecycle start/stop
+      swarmRunner.start(100);
+      // second start returns early
+      swarmRunner.start(100);
+
+      await new Promise((r) => setTimeout(r, 120));
+
+      swarmRunner.stop();
+      // second stop safe
+      swarmRunner.stop();
+    });
   });
 });
+
 

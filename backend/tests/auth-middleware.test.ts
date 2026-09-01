@@ -581,5 +581,68 @@ describe('AuthService & WalletAuth Middleware Comprehensive Suite', () => {
       );
       expect(next).not.toHaveBeenCalled();
     });
+
+    it('handles optionalWalletAuth address mismatch and invalid token downgrades gracefully', async () => {
+      const otherAccount = privateKeyToAccount(generatePrivateKey());
+      const mint = mintSupabaseJwt(userAddress);
+
+      // Mismatch between authenticated JWT and query param in optional auth
+      const reqMismatch = {
+        headers: {
+          authorization: `Bearer ${mint.token}`,
+        },
+        query: {
+          userAddress: otherAccount.address, // mismatch
+        },
+        params: {},
+      } as unknown as Request;
+
+      const { res: resMismatch } = createMockRes();
+      const nextMismatch = vi.fn();
+      await optionalWalletAuth(reqMismatch, resMismatch, nextMismatch);
+      expect(nextMismatch).toHaveBeenCalled();
+
+      // Invalid token in optional auth
+      const reqInvalid = {
+        headers: {
+          authorization: 'Bearer invalid.token.payload',
+        },
+        query: {},
+        params: {},
+      } as unknown as Request;
+
+      const { res: resInvalid } = createMockRes();
+      const nextInvalid = vi.fn();
+      await optionalWalletAuth(reqInvalid, resInvalid, nextInvalid);
+      expect(nextInvalid).toHaveBeenCalled();
+    });
+
+    it('covers auth-service nonce expiration, minting validation throws, and verification errors', async () => {
+      const { rememberNonce, isNonceReplay } = await import('../src/services/auth-service.js');
+      // Expired nonce
+      const pastSec = Math.floor(Date.now() / 1000) - 10;
+      rememberNonce('expired-nonce-12345', pastSec);
+      expect(isNonceReplay('expired-nonce-12345')).toBe(false);
+
+      // mintSupabaseJwt error throws
+      (env as any).SUPABASE_JWT_SECRET = '';
+      process.env.SUPABASE_JWT_SECRET = '';
+      expect(() => mintSupabaseJwt(userAddress)).toThrow('SUPABASE_JWT_SECRET not configured');
+
+      (env as any).SUPABASE_JWT_SECRET = mockJwtSecret;
+      process.env.SUPABASE_JWT_SECRET = mockJwtSecret;
+      expect(() => mintSupabaseJwt('invalid-address')).toThrow('Invalid userAddress');
+
+      // verifyAuthSignature throw catch branch
+      const res = await verifyAuthSignature({
+        userAddress,
+        signature: '0x1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef12345678',
+        nonce: 'valid-nonce-length-123',
+        issuedAt: Math.floor(Date.now() / 1000),
+        expiresAt: Math.floor(Date.now() / 1000) + 3600,
+      });
+      expect(res.valid).toBe(false);
+    });
   });
 });
+

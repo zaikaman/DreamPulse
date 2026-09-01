@@ -172,4 +172,47 @@ describe('MarketService Comprehensive Unit Suite', () => {
     expect(filtered.length).toBe(1);
     expect(filtered[0].marketId).toBe('0x1111111111111111111111111111111111111111111111111111111111111111');
   });
+
+  it('handles getUnifiedMarket, simulateSpotMicroTicks, refreshTimers, and db persistence', async () => {
+    (service as any).unifiedMarketsMap.set(mockMarket.id, {
+      id: mockMarket.id,
+      symbol: mockMarket.symbol,
+      type: 'binary',
+      base: 'ETH',
+      quote: 'USDC',
+      settle: 'USDC',
+      active: true,
+      contract: false,
+      precision: { price: 6, amount: 6 },
+      limits: { amount: { min: 1 } },
+      outcomes: [],
+      info: mockMarket,
+    });
+    const unified = service.getUnifiedMarket(mockMarket.id);
+    expect(unified).toBeDefined();
+    expect(unified?.id).toBe(mockMarket.id);
+    expect(unified?.symbol).toBe(mockMarket.symbol);
+
+    // simulateSpotMicroTicks
+    service.simulateSpotMicroTicks();
+
+
+    // refreshMarketTimersAndFairValues
+    service.refreshMarketTimersAndFairValues();
+
+    // ensureMarketPersisted
+    await service.ensureMarketPersisted(mockMarket.id, 'ETH/USD');
+
+    // syncActiveMarketsToDatabase
+    await service.syncActiveMarketsToDatabase();
+
+    // persistFinalizedMarket
+    await service.persistFinalizedMarket({
+      ...mockMarket,
+      status: 'Finalized',
+      winningOutcome: 'YES',
+    });
+  });
 });
+
+

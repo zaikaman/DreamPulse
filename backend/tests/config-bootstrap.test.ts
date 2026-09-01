@@ -27,7 +27,6 @@ import {
 } from '../src/config/supabase.js';
 import {
   OPERATOR_SELECTORS,
-  PLACE_SELECTORS,
   probeOnChainOperatorAuthorization,
   checkOnChainOperatorAuthorization,
   checkVaultWithdrawableBalance,
@@ -89,6 +88,36 @@ describe('Config, Cookies, Blockchain & System Bootstrap Suite', () => {
 
       clearSessionCookie(res);
       expect(String(headers['Set-Cookie'])).toContain('Max-Age=0');
+
+      // Default 24h when expiresAtIso is undefined or invalid
+      setSessionCookie(res, 'session-def-456', undefined);
+      expect(String(headers['Set-Cookie'])).toContain('Max-Age=86400');
+      setSessionCookie(res, 'session-def-789', 'invalid-date');
+      expect(String(headers['Set-Cookie'])).toContain('Max-Age=86400');
+    });
+
+    it('handles malformed URI components and multiple Set-Cookie headers gracefully', () => {
+      const req = {
+        headers: {
+          cookie: 'bad_uri=%E0%A4%A; good=valid_value',
+        },
+      } as unknown as Request;
+      const cookies = parseCookies(req);
+      expect(cookies.bad_uri).toBe('%E0%A4%A');
+      expect(cookies.good).toBe('valid_value');
+
+      // Test appendSetCookie when prev is array
+      const headers: Record<string, any> = { 'Set-Cookie': ['first_cookie=1', 'second_cookie=2'] };
+      const res = {
+        getHeader: (name: string) => headers[name],
+        setHeader: (name: string, val: any) => {
+          headers[name] = val;
+        },
+      } as unknown as Response;
+
+      setAuthCookie(res, 'token-multi', Math.floor(Date.now() / 1000) + 120);
+      expect(Array.isArray(headers['Set-Cookie'])).toBe(true);
+      expect(headers['Set-Cookie'].length).toBe(3);
     });
   });
 
@@ -139,6 +168,20 @@ describe('Config, Cookies, Blockchain & System Bootstrap Suite', () => {
       });
       expect(result).toBe('success-tx');
       expect(attempts).toBe(2);
+
+      // Throws non-nonce error immediately without useless retry
+      await expect(
+        executeOperatorTx(async () => {
+          throw new Error('insufficient funds for gas');
+        })
+      ).rejects.toThrow('insufficient funds for gas');
+
+      // Retries up to maxRetries on continuous nonce errors
+      await expect(
+        executeOperatorTx(async () => {
+          throw new Error('replacement transaction underpriced');
+        }, 2)
+      ).rejects.toThrow('replacement transaction underpriced');
     });
   });
 
@@ -165,12 +208,22 @@ describe('Config, Cookies, Blockchain & System Bootstrap Suite', () => {
       expect(OPERATOR_SELECTORS.cancelOrderFor).toBe('0xe37b444b');
     });
 
+
     it('probes on-chain authorization with graceful fallback', async () => {
       const authorized = await checkOnChainOperatorAuthorization(owner, operator);
       expect(typeof authorized).toBe('boolean');
+
+      const probeResult = await probeOnChainOperatorAuthorization(
+        owner,
+        operator,
+        '0x1111111111111111111111111111111111111111',
+        OPERATOR_SELECTORS.placeBinaryOrderFor,
+      );
+      expect(typeof probeResult === 'boolean' || probeResult === null).toBe(true);
 
       const balance = await checkVaultWithdrawableBalance(owner, SOMNIA_ADDRESSES.binaryModule);
       expect(typeof balance).toBe('bigint');
     });
   });
 });
+

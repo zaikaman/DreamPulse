@@ -74,4 +74,52 @@ describe('Groq Multi-Key Round-Robin & Fallback System', () => {
     expect(agent).toHaveProperty('rules');
     expect(agent.rules?.action?.direction).toBe('CALL');
   }, 45000);
+
+  it('extractJsonFromText handles fenced json, bare json, invalid json, and empty strings', async () => {
+    const { extractJsonFromText } = await import('../src/llm/client.js');
+    expect(extractJsonFromText('')).toBeNull();
+    expect(extractJsonFromText('No json here')).toBeNull();
+    expect(extractJsonFromText('{ "malformed": }')).toBeNull();
+    expect(extractJsonFromText('```json\n{"valid": true}\n```')).toBe('{"valid": true}');
+    expect(extractJsonFromText('Prefix text {"number": 42} suffix text')).toBe('{"number": 42}');
+  });
+
+  it('generates agent thought for all roles (Oracle, Titan, Sweeper) using deterministic fallback', async () => {
+    for (const role of ['Oracle', 'Titan', 'Sweeper'] as const) {
+      const thought = await generateAgentThought({
+        agentType: role,
+        symbol: 'ETH/USD',
+        spotPrice: 3200.0,
+        strikePrice: 3200.0,
+        timeLeftSeconds: 300,
+        bestBidYes: 0.49,
+        bestAskYes: 0.51,
+        impliedProbYes: 0.50,
+        fairValueYes: 0.55,
+        edgePercentage: 0.05,
+        driftPercentage: 0.001,
+        triggerEvent: 'TICK_EVAL',
+        actionPlanned: role === 'Sweeper' ? 'BATCH_CLAIM' : 'LIMIT_QUOTE',
+      });
+      expect(thought.agent).toBe(role);
+      expect(thought.thought.length).toBeGreaterThan(10);
+    }
+  });
+
+  it('generateStructuredReasoning falls back immediately when GROQ_KEYS is empty', async () => {
+    const { generateStructuredReasoning } = await import('../src/llm/client.js');
+    const { env } = await import('../src/config/env.js');
+    const savedKeys = (env as any).GROQ_KEYS;
+    (env as any).GROQ_KEYS = [];
+    try {
+      const res = await generateStructuredReasoning({
+        systemPrompt: 'System',
+        userPrompt: 'User',
+      });
+      expect(res).toContain('Evaluated quantitative edge on Somnia Shannon CLOB');
+    } finally {
+      (env as any).GROQ_KEYS = savedKeys;
+    }
+  });
 });
+

@@ -609,6 +609,111 @@ describe('Multi-Factor Confluence & High-Conviction AI Copilot Engine', () => {
 
     expect(Math.abs(result.edgePercentage)).toBe(0); // Deadband suppresses jitter
   });
+
+  it('covers cdf.ts error throwing on non-positive spot, strike, and volatility and expired contracts', () => {
+    expect(() => calculateZScore(0, 100, 0.5, 1)).toThrow('Spot (0) and Strike (100) must be strictly positive.');
+    expect(() => calculateZScore(100, 0, 0.5, 1)).toThrow('Spot (100) and Strike (0) must be strictly positive.');
+    expect(() => calculateZScore(100, 100, 0, 1)).toThrow('Volatility (0) must be strictly positive.');
+    expect(() => calculateZScore(100, 100, -0.2, 1)).toThrow('Volatility (-0.2) must be strictly positive.');
+
+    // Expired contract (timeToExpiryYears <= 0)
+    expect(calculateZScore(105, 100, 0.5, 0)).toBe(10.0);
+    expect(calculateZScore(95, 100, 0.5, -1)).toBe(-10.0);
+  });
+
+  it('covers quantizer.ts fallback and edge cases', () => {
+    expect(quantizePrice(NaN)).toBe(0.001);
+    expect(quantizePrice(Infinity)).toBe(0.001);
+    expect(quantizePrice(0.0001, 0.001)).toBe(0.001);
+    expect(quantizePrice(0.9999, 0.001)).toBe(0.999);
+
+    expect(quantizeLotSize(NaN)).toBe(1.0);
+    expect(quantizeLotSize(0)).toBe(1.0);
+    expect(quantizeLotSize(-5)).toBe(1.0);
+    expect(quantizeLotSize(0.5, 1.0, 1.0)).toBe(1.0);
+    expect(quantizeLotSize(10, 1.0, 1.0, 5)).toBe(5);
+
+    expect(toContractUnits(NaN)).toBe(0n);
+    expect(toContractUnits(0)).toBe(0n);
+    expect(toContractUnits(-10)).toBe(0n);
+    expect(toContractUnits(12.5, 6)).toBe(12500000n);
+    expect(fromContractUnits(12500000n, 6)).toBe(12.5);
+  });
+
+  it('covers pricing.ts parseWindowToSeconds, spotDrift, and realizedVolatility edge paths', () => {
+    expect(parseWindowToSeconds('1m')).toBe(60);
+    expect(parseWindowToSeconds('60s')).toBe(60);
+    expect(parseWindowToSeconds('5m')).toBe(300);
+    expect(parseWindowToSeconds('15m')).toBe(900);
+    expect(parseWindowToSeconds('1h')).toBe(3600);
+    expect(parseWindowToSeconds('4h')).toBe(14400);
+    expect(parseWindowToSeconds('24h')).toBe(86400);
+    expect(parseWindowToSeconds('1d')).toBe(86400);
+    expect(parseWindowToSeconds('7d')).toBe(604800);
+    expect(parseWindowToSeconds('unknown_window')).toBe(300);
+
+    expect(secondsToYears(-10)).toBe(0);
+    expect(calculateSpotDrift(100, 0)).toBe(0);
+    expect(calculateSpotDrift(105, 100)).toBeCloseTo(0.05, 4);
+
+    // realizedVolatility edge paths
+    expect(calculateRealizedVolatility(undefined, 'BTC/USD')).toBe(0.52);
+    expect(calculateRealizedVolatility([], 'ETH/USD')).toBe(0.68);
+    expect(calculateRealizedVolatility([{ timestamp: 1000, price: 100 }], 'UNKNOWN')).toBe(0.60);
+
+    const now = Date.now();
+    // filtered windowPrices < 4
+    const oldPrices = [
+      { timestamp: now - 1000000, price: 100 },
+      { timestamp: now - 800000, price: 101 },
+      { timestamp: now - 500, price: 102 },
+      { timestamp: now, price: 103 },
+    ];
+    expect(calculateRealizedVolatility(oldPrices, 'BTC/USD', 300)).toBe(0.52);
+
+
+    // logReturns < 3 (e.g. invalid <= 0 prices or same timestamps)
+    const invalidPrices = [
+      { timestamp: now - 2000, price: 0 },
+      { timestamp: now - 1500, price: 100 },
+      { timestamp: now - 1000, price: 0 },
+      { timestamp: now - 500, price: 100 },
+      { timestamp: now, price: 100 },
+    ];
+    expect(calculateRealizedVolatility(invalidPrices, 'BTC/USD', 300)).toBe(0.52);
+  });
+
+  it('covers calculateEdge and calculateEdgeProportionalLots branches', () => {
+    // Empty orderbook
+    const emptyEdge = calculateEdge(0.5, 0, 0);
+    expect(emptyEdge.edgePercentage).toBe(0);
+    expect(emptyEdge.actionRecommendation).toBe('NONE');
+
+    // Only bestBid > 0
+    const bidOnlyEdge = calculateEdge(0.6, 0.5, 0, 0.03);
+    expect(bidOnlyEdge.impliedProbYes).toBe(0.5);
+
+    // Only bestAsk > 0
+    const askOnlyEdge = calculateEdge(0.4, 0, 0.55, 0.03);
+    expect(askOnlyEdge.impliedProbYes).toBe(0.55);
+
+    // BUY_NO recommendation (overpriced YES)
+    const overEdge = calculateEdge(0.40, 0.55, 0.60, 0.03);
+    expect(overEdge.hasAnomaly).toBe(true);
+    expect(overEdge.actionRecommendation).toBe('BUY_NO');
+
+    // calculateVolatilityNormalizedDriftThreshold bounds
+    expect(calculateVolatilityNormalizedDriftThreshold(0.01, 2.5, 60, 0.0010, 0.0080)).toBe(0.0010);
+    expect(calculateVolatilityNormalizedDriftThreshold(5.0, 10.0, 600, 0.0010, 0.0080)).toBe(0.0080);
+
+    // calculateEdgeProportionalLots invalid bounds
+    expect(calculateEdgeProportionalLots(0, 0.05, 0.02, 100, 0.5)).toBe(0);
+    expect(calculateEdgeProportionalLots(10, 0.05, 0.02, 100, 0)).toBe(0);
+    // maxTradeSizeUsd <= 0 fallback to targetLots
+    const noCapLots = calculateEdgeProportionalLots(10, 0.08, 0.02, 0, 0.5);
+    expect(noCapLots).toBeGreaterThan(10);
+  });
 });
+
 
 

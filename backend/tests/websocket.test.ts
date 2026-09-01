@@ -254,6 +254,63 @@ describe('WebSocket Telemetry Server & Market Emitter Suite', () => {
       timestamp: Date.now(),
     });
 
+    wsServer.broadcastDebugThought({
+      agent: 'TITAN_MM',
+      marketId: 'm-1',
+      action: 'QUOTE',
+      thought: 'Rebalancing two-sided liquidity',
+      confidence: 0.95,
+      metadata: {
+        fairValue: 0.5,
+        spread: 0.04,
+        bid: 0.48,
+        ask: 0.52,
+        inventory: 10,
+      },
+      timestamp: Date.now(),
+    });
+
+    wsServer.broadcastMarketTicksBatch([
+      {
+        marketId: 'm-1',
+        symbol: 'BTC/USD',
+        spotPrice: 96000,
+        strikePrice: 96000,
+        timeLeftSeconds: 60,
+        impliedProb: 0.5,
+        fairValue: 0.5,
+        edge: 0,
+        hasAnomaly: false,
+      },
+    ]);
+
     expect(wsServer.getConnectedClientCount()).toBe(0);
   });
+
+  it('handles malformed JSON frames and error events gracefully', async () => {
+    const ws = new WebSocket(wsUrl);
+    await new Promise<void>((resolve) => ws.on('open', resolve));
+
+    // Send malformed non-JSON frame
+    ws.send('invalid non-json raw text');
+    await new Promise((r) => setTimeout(r, 50));
+
+    ws.close();
+  });
+
+  it('controls market emitter lifecycle and telemetry broadcast interval', async () => {
+    const { startMarketEmitter, stopMarketEmitter } = await import('../src/websocket/market-emitter.js');
+    startMarketEmitter(50);
+    // double start returns early
+    startMarketEmitter(50);
+
+    await new Promise((r) => setTimeout(r, 120));
+
+    stopMarketEmitter();
+    // double stop safe
+    stopMarketEmitter();
+  });
 });
+
+
+

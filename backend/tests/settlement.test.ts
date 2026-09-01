@@ -451,5 +451,34 @@ describe('Phase 6 Settlement Sweeper & Collateral Compounder Tests', () => {
       settlementService.invalidateCache();
       expect((settlementService as any).isKnownFinalizedZeroBalance(userB.toLowerCase(), marketId.toLowerCase())).toBe(false);
     });
+
+    it('records sweeps, queries sweep history, and computes user total swept amount', async () => {
+      const settlementService = new SettlementService();
+      const testUser = '0x1111222233334444555566667777888899990000';
+      const testMarketId = '0xmarket-test-sweep-1';
+
+      settlementService.recordSweep({
+        id: 'sweep-uuid-1',
+        marketId: testMarketId,
+        userAddress: testUser as `0x${string}`,
+        winningOutcome: 'YES',
+        claimableAmount: 15.5,
+        payoutToken: 'USDC',
+        isCompounded: false,
+        txHash: '0xsweeptxhash123' as `0x${string}`,
+        status: 'CONFIRMED',
+        claimedAt: new Date().toISOString(),
+      });
+
+
+      const history = settlementService.getSweepHistory(testUser);
+      expect(history.length).toBeGreaterThanOrEqual(1);
+
+      const totalSwept = settlementService.getUserTotalSweptForMarket(testUser, testMarketId);
+      expect(totalSwept).toBe(15.5);
+
+      await settlementService.ensureUserSweepsLoaded(testUser);
+    });
   });
 });
+
