@@ -285,12 +285,16 @@ export class SettlementService {
       const userOrders = orderService.getOrders({ userAddress: normalizedUser, limit: 100 });
       for (const o of userOrders) {
         pushTraded(o.marketId);
+        const m = marketService.getMarketById(o.marketId);
+        if (m?.marketIdHex) pushTraded(m.marketIdHex);
       }
 
       const isOperator = normalizedUser.toLowerCase() === operatorAccount.address.toLowerCase();
       if (tradedHexIds.length === 0 && isOperator) {
         for (const o of orderService.getOrders({ limit: 40 })) {
           pushTraded(o.marketId);
+          const m = marketService.getMarketById(o.marketId);
+          if (m?.marketIdHex) pushTraded(m.marketIdHex);
         }
       }
 
@@ -541,7 +545,11 @@ export class SettlementService {
               if (totalVoidLots > 0) {
                 const totalExpectedPayout = 0.5 * totalVoidLots;
                 const totalSweptForMarket = this.sweeps
-                  .filter((s) => s.userAddress.toLowerCase() === cacheKey && s.marketId.toLowerCase() === marketId.toLowerCase() && s.status === 'CONFIRMED')
+                  .filter((s) => {
+                    if (s.userAddress.toLowerCase() !== cacheKey || s.status !== 'CONFIRMED') return false;
+                    const sm = s.marketId.toLowerCase();
+                    return sm === marketId.toLowerCase() || (targetHex && sm === targetHex.toLowerCase());
+                  })
                   .reduce((sum, s) => sum + (s.claimableAmount || 0), 0);
                 const remainingClaimable = totalExpectedPayout - totalSweptForMarket;
                 if (remainingClaimable > 0.0001) {
@@ -569,9 +577,11 @@ export class SettlementService {
           const winningIdx: 0 | 1 = onchain.winningOutcome === 0 ? 0 : 1;
           const winBal = winningIdx === 0 ? yesBal : noBal;
           if (winBal > 0n) {
-            const alreadySwept = this.sweeps.some(
-              (s) => s.userAddress.toLowerCase() === cacheKey && s.marketId.toLowerCase() === marketId.toLowerCase(),
-            );
+            const alreadySwept = this.sweeps.some((s) => {
+              if (s.userAddress.toLowerCase() !== cacheKey || s.status !== 'CONFIRMED') return false;
+              const sm = s.marketId.toLowerCase();
+              return sm === marketId.toLowerCase() || (targetHex && sm === targetHex.toLowerCase());
+            });
             if (!alreadySwept) {
               addPosition({
                 marketId,
@@ -589,7 +599,7 @@ export class SettlementService {
             }
           } else if (!isOperator) {
             const matchedOrders = orderService.getOrders({ userAddress: normalizedUser }).filter(
-              (o) => o.marketId.toLowerCase() === marketId.toLowerCase() && !o.isSettled && (o.status === 'FILLED' || o.status === 'PENDING'),
+              (o) => (o.marketId.toLowerCase() === marketId.toLowerCase() || (targetHex && o.marketId.toLowerCase() === targetHex.toLowerCase())) && !o.isSettled && (o.status === 'FILLED' || o.status === 'PENDING'),
             );
             let totalWinningLots = 0;
             let validTxHash: Hex | undefined;
@@ -605,7 +615,11 @@ export class SettlementService {
             if (totalWinningLots > 0) {
               const totalExpectedPayout = onchain.isVoided ? 0.5 * totalWinningLots : totalWinningLots * 1.0;
               const totalSweptForMarket = this.sweeps
-                .filter((s) => s.userAddress.toLowerCase() === cacheKey && s.marketId.toLowerCase() === marketId.toLowerCase() && s.status === 'CONFIRMED')
+                .filter((s) => {
+                  if (s.userAddress.toLowerCase() !== cacheKey || s.status !== 'CONFIRMED') return false;
+                  const sm = s.marketId.toLowerCase();
+                  return sm === marketId.toLowerCase() || (targetHex && sm === targetHex.toLowerCase());
+                })
                 .reduce((sum, s) => sum + (s.claimableAmount || 0), 0);
               const remainingClaimable = totalExpectedPayout - totalSweptForMarket;
               if (remainingClaimable > 0.0001) {
