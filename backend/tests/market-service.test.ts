@@ -13,14 +13,15 @@ describe('MarketService Comprehensive Unit Suite', () => {
     strikePrice: 2800,
     openTimestamp: new Date(Date.now() - 60000).toISOString(),
     closeTimestamp: new Date(Date.now() + 240000).toISOString(),
+    resolutionTimestamp: new Date(Date.now() + 300000).toISOString(),
     status: 'Open',
     bestBidYes: 0.45,
     bestAskYes: 0.49,
     bestBidNo: 0.51,
     bestAskNo: 0.55,
+    impliedProbYes: 0.50,
     fairValueYes: 0.50,
     edgePercentage: 0.05,
-    tradeCount: 25,
     poolAddress: '0x3333333333333333333333333333333333333333',
   };
 
@@ -88,7 +89,11 @@ describe('MarketService Comprehensive Unit Suite', () => {
       price: 2850,
       change1m: 0.005,
       change5m: 0.01,
+      high24h: 2900,
+      low24h: 2750,
+      volume24h: 1500000,
       timestamp: Date.now(),
+      priceHistory: [{ timestamp: Date.now(), price: 2850 }],
     };
 
     (service as any).handleLiveSpotUpdate(ticker);

@@ -201,7 +201,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
       className={cn(
         "border-r border-border/50 text-sidebar-foreground flex flex-col justify-between p-3 font-sans select-none overflow-y-auto transition-all duration-200",
         isMobileOpen
-          ? "fixed inset-y-0 left-0 z-50 w-72 max-w-[85vw] bg-sidebar/95 backdrop-blur-2xl shadow-2xl animate-in slide-in-from-left duration-200"
+          ? "fixed inset-y-0 left-0 z-50 w-72 max-w-[85vw] h-[100dvh] bg-[#0b0f17] border-r border-border/80 shadow-2xl animate-in slide-in-from-left duration-200 pb-8 touch-pan-y"
           : cn(
               "hidden md:flex shrink-0 bg-sidebar/65 backdrop-blur-xl",
               effectiveCollapsed ? "w-16 items-center px-2" : "w-64"
@@ -210,7 +210,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
     >
       <div className="space-y-3 w-full">
         {/* Brand Header */}
-        <div className="flex items-center justify-between w-full">
+        <div className="flex items-center justify-between w-full pb-2 border-b border-border/30 md:border-b-0 md:pb-0">
           <button
             onClick={() => handleNavClick("Landing")}
             className={cn(
@@ -228,7 +228,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
           {isMobileOpen && (
             <button
               onClick={onCloseMobile}
-              className="p-1.5 rounded-lg text-muted-foreground hover:text-foreground hover:bg-secondary/60 transition-colors md:hidden cursor-pointer"
+              className="p-1.5 rounded-lg text-muted-foreground hover:text-foreground hover:bg-muted/80 transition-colors md:hidden cursor-pointer"
               title="Close Navigation Drawer"
             >
               <XMarkIcon className="w-5 h-5" />

@@ -61,6 +61,25 @@ export const Shell: React.FC<ShellProps> = ({
 }) => {
   const [isMobileDrawerOpen, setIsMobileDrawerOpen] = useState(false);
 
+  // Lock body scroll and handle Escape key when mobile drawer is open
+  React.useEffect(() => {
+    if (isMobileDrawerOpen) {
+      document.body.style.overflow = "hidden";
+      const handleKeyDown = (e: KeyboardEvent) => {
+        if (e.key === "Escape") {
+          setIsMobileDrawerOpen(false);
+        }
+      };
+      window.addEventListener("keydown", handleKeyDown);
+      return () => {
+        document.body.style.overflow = "";
+        window.removeEventListener("keydown", handleKeyDown);
+      };
+    } else {
+      document.body.style.overflow = "";
+    }
+  }, [isMobileDrawerOpen]);
+
   const handleToggleSidebar = () => {
     if (window.innerWidth < 768) {
       setIsMobileDrawerOpen((prev) => !prev);
@@ -91,6 +110,15 @@ export const Shell: React.FC<ShellProps> = ({
         <div className="absolute inset-0 bg-gradient-to-b from-background/20 via-background/40 to-background/70" />
       </div>
 
+      {/* Mobile Backdrop Overlay - Positioned globally above header (z-40) */}
+      {isMobileDrawerOpen && (
+        <div
+          className="fixed inset-0 z-40 bg-black/60 backdrop-blur-xs md:hidden transition-opacity duration-200"
+          onClick={() => setIsMobileDrawerOpen(false)}
+          aria-hidden="true"
+        />
+      )}
+
       {/* Top Header */}
       <Header
         activeView={currentView}
@@ -111,16 +139,7 @@ export const Shell: React.FC<ShellProps> = ({
       />
 
       {/* Main Workspace Layout */}
-      <div className="relative z-10 flex flex-1 min-h-0 overflow-hidden">
-        {/* Mobile Backdrop Overlay */}
-        {isMobileDrawerOpen && (
-          <div
-            className="fixed inset-0 z-40 bg-black/65 backdrop-blur-xs md:hidden"
-            onClick={() => setIsMobileDrawerOpen(false)}
-            aria-hidden="true"
-          />
-        )}
-
+      <div className="flex flex-1 min-h-0 overflow-hidden">
         <Sidebar
           currentView={currentView}
           onSelectView={handleSelectView}

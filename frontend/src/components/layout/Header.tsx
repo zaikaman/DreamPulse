@@ -71,7 +71,7 @@ export const Header: React.FC<HeaderProps> = ({
   const somniaPrice = spotPrices["SOMI/USD"] || spotPrices["STT/USD"] || spotPrices["SOMNIA"] || 1.25;
 
   return (
-    <header className="sticky top-0 z-40 w-full border-b border-border/50 bg-background/60 backdrop-blur-xl">
+    <header className="sticky top-0 z-20 w-full border-b border-border/50 bg-background/80 backdrop-blur-xl">
       <div className="flex h-12 items-center justify-between px-3 sm:px-4 lg:px-6">
         {/* Left: Sidebar toggle, separator & command palette trigger */}
         <div className="flex items-center gap-2">
@@ -87,11 +87,14 @@ export const Header: React.FC<HeaderProps> = ({
           <Separator orientation="vertical" className="h-4 mx-1 border-border/50" />
           <button
             onClick={onOpenCommandPalette}
-            className="flex items-center gap-2 rounded-lg border border-border/60 bg-muted/30 backdrop-blur-sm px-2.5 sm:px-3 py-1 text-xs text-muted-foreground hover:border-foreground/30 hover:text-foreground transition-colors w-32 sm:w-48 md:w-60 cursor-pointer"
+            className="flex items-center gap-2 rounded-lg border border-border/60 bg-muted/30 backdrop-blur-sm px-2.5 sm:px-3 py-1 text-xs text-muted-foreground hover:border-foreground/30 hover:text-foreground transition-colors w-28 sm:w-48 md:w-60 cursor-pointer"
             title="Quick search markets, navigation, commands (⌘K / Ctrl+K)"
           >
-            <MagnifyingGlassIcon className="w-3.5 h-3.5" />
-            <span className="flex-1 text-left truncate">Search markets, actions...</span>
+            <MagnifyingGlassIcon className="w-3.5 h-3.5 shrink-0" />
+            <span className="flex-1 text-left truncate">
+              <span className="sm:hidden">Search...</span>
+              <span className="hidden sm:inline">Search markets, actions...</span>
+            </span>
             <kbd className="pointer-events-none hidden sm:inline-flex h-4 items-center gap-0.5 rounded border border-border/60 bg-muted/60 px-1.5 font-mono text-[9px] font-medium text-muted-foreground">
               ⌘K
             </kbd>
