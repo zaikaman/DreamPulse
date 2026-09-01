@@ -201,11 +201,16 @@ export const apiClient = {
 
   async getAllowanceStatus(userAddress: string): Promise<{
     success: boolean;
-    hasActiveSession: boolean;
-    hasDelegated: boolean;
-    poolsChecked: number;
+    userAddress?: string;
+    hasActiveSession?: boolean;
+    hasDelegated?: boolean;
+    isGloballyApproved?: boolean;
+    hasOperatorAllowance?: boolean;
+    allowanceOperatorHuman?: number;
+    balanceHuman?: number;
+    poolsChecked?: number;
     allReady: boolean;
-    checks: Array<{ pool: string; allowanceHuman: number; balanceHuman: number; vaultHuman: number; ready: boolean }>;
+    checks?: Array<{ pool: string; allowanceHuman: number; balanceHuman: number; vaultHuman: number; ready: boolean }>;
     guidance: string;
   }> {
     return fetchJson(`/sessions/${encodeURIComponent(userAddress)}/allowance-status`);

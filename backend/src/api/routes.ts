@@ -547,6 +547,16 @@ apiRouter.get('/sessions/:userAddress/allowance-status', optionalWalletAuth, asy
       hasOperatorAllowance,
       allowanceOperatorHuman,
       balanceHuman,
+      poolsChecked: 1,
+      checks: [
+        {
+          pool: 'Global Operator & TestUSDC',
+          allowanceHuman: allowanceOperatorHuman,
+          balanceHuman,
+          vaultHuman: 0,
+          ready: allReady,
+        },
+      ],
       allReady,
       guidance: !hasOperatorAllowance
         ? 'TestUSDC allowance to operator required. Click Approve to grant 1-time session trading allowance.'

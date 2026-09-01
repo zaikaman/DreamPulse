@@ -23,7 +23,7 @@ import {
   ArrowsPointingOutIcon,
 } from '@heroicons/react/24/outline';
 import type { SessionGrant } from '../types/index.js';
-import type { WalletState } from '../hooks/useSessionKey.js';
+import type { WalletState, AllowanceStatus } from '../hooks/useSessionKey.js';
 import { SOMNIA_ADDRESSES } from '../services/web3.js';
 import { Spinner } from './ui/Spinner.js';
 import { parseWeb3Error } from '../lib/errorUtils.js';
@@ -48,7 +48,7 @@ interface SessionDelegationModalProps {
   isFixingAllowance?: boolean;
   stepState?: 'idle' | 'authorizing_onchain' | 'depositing_vault' | 'signing_eip712' | 'registering_backend';
   error: string | null;
-  allowanceStatus?: { allReady: boolean; checks: Array<{ pool: string; allowanceHuman: number; balanceHuman: number; vaultHuman: number; ready: boolean }>; guidance: string } | null;
+  allowanceStatus?: AllowanceStatus | null;
   onConnectWallet: () => Promise<void>;
   onDisconnectWallet?: () => void;
   onSwitchNetwork: () => Promise<void>;

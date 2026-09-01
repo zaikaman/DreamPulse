@@ -22,6 +22,28 @@ export interface WalletState {
   isCorrectNetwork: boolean;
 }
 
+export interface AllowanceStatusCheck {
+  pool: string;
+  allowanceHuman: number;
+  balanceHuman: number;
+  vaultHuman: number;
+  ready: boolean;
+}
+
+export interface AllowanceStatus {
+  allReady: boolean;
+  userAddress?: string;
+  hasActiveSession?: boolean;
+  hasDelegated?: boolean;
+  isGloballyApproved?: boolean;
+  hasOperatorAllowance?: boolean;
+  allowanceOperatorHuman?: number;
+  balanceHuman?: number;
+  poolsChecked?: number;
+  checks: AllowanceStatusCheck[];
+  guidance: string;
+}
+
 export interface UseSessionKeyReturn {
   wallet: WalletState;
   activeSession: SessionGrant | null;
@@ -30,7 +52,7 @@ export interface UseSessionKeyReturn {
   isFauceting: boolean;
   stepState: 'idle' | 'authorizing_onchain' | 'depositing_vault' | 'signing_eip712' | 'registering_backend';
   error: string | null;
-  allowanceStatus: { allReady: boolean; checks: Array<{ pool: string; allowanceHuman: number; balanceHuman: number; vaultHuman: number; ready: boolean }>; guidance: string } | null;
+  allowanceStatus: AllowanceStatus | null;
   isFixingAllowance: boolean;
   connectWallet: () => Promise<void>;
   disconnectWallet: () => void;
@@ -125,11 +147,7 @@ export function useSessionKey(): UseSessionKeyReturn {
     'idle' | 'authorizing_onchain' | 'depositing_vault' | 'signing_eip712' | 'registering_backend'
   >('idle');
   const [error, setError] = useState<string | null>(null);
-  const [allowanceStatus, setAllowanceStatus] = useState<{
-    allReady: boolean;
-    checks: Array<{ pool: string; allowanceHuman: number; balanceHuman: number; vaultHuman: number; ready: boolean }>;
-    guidance: string;
-  } | null>(null);
+  const [allowanceStatus, setAllowanceStatus] = useState<AllowanceStatus | null>(null);
 
   const clearError = useCallback(() => setError(null), []);
 
@@ -255,7 +273,31 @@ export function useSessionKey(): UseSessionKeyReturn {
     try {
       const res = await apiClient.getAllowanceStatus(wallet.address);
       if (res.success) {
-        setAllowanceStatus({ allReady: res.allReady, checks: res.checks as any, guidance: res.guidance });
+        const checks: AllowanceStatusCheck[] = Array.isArray(res.checks)
+          ? res.checks
+          : [
+              {
+                pool: 'Global Operator & TestUSDC',
+                allowanceHuman: res.allowanceOperatorHuman ?? 0,
+                balanceHuman: res.balanceHuman ?? 0,
+                vaultHuman: 0,
+                ready: Boolean(res.allReady),
+              },
+            ];
+
+        setAllowanceStatus({
+          allReady: Boolean(res.allReady),
+          userAddress: res.userAddress,
+          hasActiveSession: res.hasActiveSession,
+          hasDelegated: res.hasDelegated,
+          isGloballyApproved: res.isGloballyApproved,
+          hasOperatorAllowance: res.hasOperatorAllowance,
+          allowanceOperatorHuman: res.allowanceOperatorHuman,
+          balanceHuman: res.balanceHuman,
+          poolsChecked: res.poolsChecked ?? checks.length,
+          checks,
+          guidance: res.guidance || '',
+        });
       }
     } catch (err) {
       console.warn('[useSessionKey] Allowance status fetch error:', err);
