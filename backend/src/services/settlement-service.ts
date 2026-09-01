@@ -141,14 +141,20 @@ export class SettlementService {
     this.loadedUsers.add(normalized);
 
     try {
-      const { data, error } = await supabase
-        .from('sweeps')
-        .select('*')
-        .ilike('user_address', normalized)
-        .order('claimed_at', { ascending: false })
-        .limit(20000);
+      let page = 0;
+      const pageSize = 1000;
+      while (true) {
+        const { data, error } = await supabase
+          .from('sweeps')
+          .select('*')
+          .ilike('user_address', normalized)
+          .order('claimed_at', { ascending: false })
+          .range(page * pageSize, (page + 1) * pageSize - 1);
 
-      if (!error && data && data.length > 0) {
+        if (error || !data || data.length === 0) {
+          break;
+        }
+
         for (const row of data) {
           const sweep: SettlementSweep = {
             id: row.id,
@@ -177,6 +183,11 @@ export class SettlementService {
             compounderService.recordHistoricalSweep(sweep.userAddress, sweep.claimableAmount, sweep.claimedAt);
           }
         }
+
+        if (data.length < pageSize) {
+          break;
+        }
+        page++;
       }
     } catch (err: any) {
       console.warn(`[SettlementService] User sweeps load warning for ${normalized}:`, err.message);
@@ -248,44 +259,56 @@ export class SettlementService {
       return;
     }
 
-    const { data, error } = await supabase
-      .from('sweeps')
-      .select('*')
-      .order('claimed_at', { ascending: false })
-      .limit(10000);
+    try {
+      let page = 0;
+      const pageSize = 1000;
+      while (page < 10) {
+        const { data, error } = await supabase
+          .from('sweeps')
+          .select('*')
+          .order('claimed_at', { ascending: false })
+          .range(page * pageSize, (page + 1) * pageSize - 1);
 
-    if (error || !data || data.length === 0) {
-      return;
-    }
+        if (error || !data || data.length === 0) {
+          break;
+        }
 
-    this.sweeps = [];
-    this.sweepsMap.clear();
+        for (const row of data) {
+          const sweep: SettlementSweep = {
+            id: row.id,
+            userAddress: row.user_address,
+            marketId: row.market_id,
+            winningOutcome: row.winning_outcome as OutcomeType,
+            claimableAmount: Number(row.claimable_amount),
+            payoutToken: row.payout_token || 'tUSDC',
+            isCompounded: row.is_compounded ?? false,
+            txHash: (row.tx_hash as Hex) || undefined,
+            status: row.status as 'PENDING' | 'CONFIRMED' | 'FAILED',
+            claimedAt: row.claimed_at,
+          };
 
-    for (const row of data) {
-      const sweep: SettlementSweep = {
-        id: row.id,
-        userAddress: row.user_address,
-        marketId: row.market_id,
-        winningOutcome: row.winning_outcome as OutcomeType,
-        claimableAmount: Number(row.claimable_amount),
-        payoutToken: row.payout_token || 'tUSDC',
-        isCompounded: row.is_compounded ?? false,
-        txHash: (row.tx_hash as Hex) || undefined,
-        status: row.status as 'PENDING' | 'CONFIRMED' | 'FAILED',
-        claimedAt: row.claimed_at,
-      };
+          if (!this.sweepsMap.has(sweep.id)) {
+            this.sweepsMap.set(sweep.id, sweep);
+            this.sweeps.push(sweep);
+          }
 
-      this.sweepsMap.set(sweep.id, sweep);
-      this.sweeps.push(sweep);
+          if (sweep.status === 'CONFIRMED' && isAddress(sweep.userAddress)) {
+            const key = `${sweep.userAddress.toLowerCase()}:${sweep.marketId.toLowerCase()}`;
+            this.userSweptTotals.set(key, (this.userSweptTotals.get(key) || 0) + sweep.claimableAmount);
+          }
 
-      if (sweep.status === 'CONFIRMED' && isAddress(sweep.userAddress)) {
-        const key = `${sweep.userAddress.toLowerCase()}:${sweep.marketId.toLowerCase()}`;
-        this.userSweptTotals.set(key, (this.userSweptTotals.get(key) || 0) + sweep.claimableAmount);
+          if (sweep.isCompounded && sweep.claimableAmount > 0) {
+            compounderService.recordHistoricalSweep(sweep.userAddress, sweep.claimableAmount, sweep.claimedAt);
+          }
+        }
+
+        if (data.length < pageSize) {
+          break;
+        }
+        page++;
       }
-
-      if (sweep.isCompounded && sweep.claimableAmount > 0) {
-        compounderService.recordHistoricalSweep(sweep.userAddress, sweep.claimableAmount, sweep.claimedAt);
-      }
+    } catch (err: any) {
+      console.warn('[SettlementService] DB load note:', err?.message || err);
     }
   }
 
@@ -933,6 +956,21 @@ export class SettlementService {
             const fallbackTxHash: Hex | undefined = pos.txHash && pos.txHash.startsWith('0x') && pos.txHash.length === 66
               ? (pos.txHash as Hex)
               : undefined;
+
+            let sweepTimestamp = now;
+            try {
+              const matchedOrder = orderService.getOrders({ userAddress: normalizedUser }).find(
+                (o) =>
+                  o.marketId.toLowerCase() === pos.marketId.toLowerCase() ||
+                  (pos.marketIdHex && o.marketId.toLowerCase() === pos.marketIdHex.toLowerCase()),
+              );
+              if (matchedOrder?.settledAt) {
+                sweepTimestamp = matchedOrder.settledAt;
+              } else if (matchedOrder?.createdAt) {
+                sweepTimestamp = matchedOrder.createdAt;
+              }
+            } catch {}
+
             const zeroSweep: SettlementSweep = {
               id: sweepId,
               userAddress: normalizedUser,
@@ -943,7 +981,7 @@ export class SettlementService {
               isCompounded: false,
               txHash: fallbackTxHash,
               status: 'CONFIRMED',
-              claimedAt: now,
+              claimedAt: sweepTimestamp,
             };
             this.recordSweep(zeroSweep, true);
           }
@@ -1465,7 +1503,16 @@ export class SettlementService {
       ? []
       : this.sweeps.filter((s) => s.userAddress.toLowerCase() === getAddress(userAddress).toLowerCase());
 
-    return rawList.map((s) => {
+    const seenIds = new Set<string>();
+    const uniqueSweeps: SettlementSweep[] = [];
+    for (const s of rawList) {
+      if (!seenIds.has(s.id)) {
+        seenIds.add(s.id);
+        uniqueSweeps.push(s);
+      }
+    }
+
+    return uniqueSweeps.map((s) => {
       if (s.txHash && s.txHash.startsWith('0x') && s.txHash.length === 66) {
         return s;
       }

@@ -424,10 +424,22 @@ export const SweeperControls: React.FC<SweeperControlsProps> = ({
               ) : (
                 paginatedHistory.map((sweep) => {
                   const timeStr = new Date(sweep.claimedAt).toLocaleString();
+                  const formatMarketLabel = (mId: string) => {
+                    if (!mId) return '-';
+                    if (mId.startsWith('0x') && mId.length === 66) {
+                      const num = parseInt(mId, 16);
+                      if (!isNaN(num) && num > 0) {
+                        return `Market #${num} (${mId.slice(-4)})`;
+                      }
+                      return `${mId.slice(0, 6)}...${mId.slice(-4)}`;
+                    }
+                    return mId.length > 14 ? `${mId.slice(0, 8)}...${mId.slice(-4)}` : mId;
+                  };
+
                   return (
                     <tr key={sweep.id} className="hover:bg-secondary/20 transition-colors">
                       <td className="px-3 py-2.5 font-mono text-[11px] text-muted-foreground">{timeStr}</td>
-                      <td className="px-3 py-2.5 font-semibold text-foreground font-mono text-xs">{sweep.marketId.slice(0, 10)}...</td>
+                      <td className="px-3 py-2.5 font-semibold text-foreground font-mono text-xs" title={sweep.marketId}>{formatMarketLabel(sweep.marketId)}</td>
                       <td className="px-3 py-2.5">
                         <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[11px] font-bold font-mono border" style={{ background: sweep.winningOutcome === 'YES' ? 'rgba(0,230,118,0.08)' : 'rgba(255,51,102,0.08)', borderColor: sweep.winningOutcome === 'YES' ? 'rgba(0,230,118,0.18)' : 'rgba(255,51,102,0.18)', color: sweep.winningOutcome === 'YES' ? '#00e676' : '#ff3366' }}>
                           {sweep.winningOutcome === 'YES' ? <ArrowUpRightIcon className="w-3 h-3" /> : <ArrowDownRightIcon className="w-3 h-3" />}
