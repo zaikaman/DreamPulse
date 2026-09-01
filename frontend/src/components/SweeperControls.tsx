@@ -79,7 +79,7 @@ export const SweeperControls: React.FC<SweeperControlsProps> = ({
   const [pageSize, setPageSize] = useState<number>(10);
 
   const filteredHistory = useMemo(() => {
-    return history.filter((sweep) => {
+    const list = history.filter((sweep) => {
       if (selectedOutcome !== 'ALL' && sweep.winningOutcome !== selectedOutcome) return false;
       if (searchQuery.trim()) {
         const q = searchQuery.trim().toLowerCase();
@@ -90,6 +90,8 @@ export const SweeperControls: React.FC<SweeperControlsProps> = ({
       }
       return true;
     });
+
+    return list.sort((a, b) => new Date(b.claimedAt).getTime() - new Date(a.claimedAt).getTime());
   }, [history, selectedOutcome, searchQuery]);
 
   useEffect(() => {

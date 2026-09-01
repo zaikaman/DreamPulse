@@ -1517,7 +1517,7 @@ export class SettlementService {
       }
     }
 
-    return uniqueSweeps.map((s) => {
+    const mappedSweeps = uniqueSweeps.map((s) => {
       if (s.txHash && s.txHash.startsWith('0x') && s.txHash.length === 66) {
         return s;
       }
@@ -1543,6 +1543,8 @@ export class SettlementService {
       } catch {}
       return s;
     });
+
+    return mappedSweeps.sort((a, b) => new Date(b.claimedAt).getTime() - new Date(a.claimedAt).getTime());
   }
 
   /**
