@@ -14,7 +14,7 @@ import type { Market, PortfolioSummary, SwarmStatusSummary, SessionGrant } from 
 import type { MarketTickData } from '../../hooks/useTelemetry.js';
 import type { AgentDetail } from '../../hooks/useAgentSwarm.js';
 import type { WalletState } from '../../hooks/useSessionKey.js';
-import { SOMNIA_ADDRESSES } from '../../services/web3.js';
+import { SOMNIA_ADDRESSES, web3Service } from '../../services/web3.js';
 import { StatCardsGridSkeleton } from '../ui/Skeleton.js';
 import { Badge } from '../ui/badge.js';
 import { cn } from '../../lib/utils.js';
@@ -102,8 +102,43 @@ export const StatCardsGrid: React.FC<StatCardsGridProps> = ({
   const userCollateral = wallet?.balanceCollateral || '0.00';
   const userNativeGas = wallet?.balanceSTT || '0.000';
   const isCollateralZero = parseFloat(userCollateral) === 0;
-  const total24hVolume = (swarmDetailed as any)?.total24hVolume ?? (swarmSummary as any)?.total24hVolume ?? 0;
   const activeMarketsCount = markets.filter((m) => m.status === 'Open').length || markets.length;
+
+  // Operator on-chain balance calculations
+  const [operatorCollateral, setOperatorCollateral] = useState<string>('0.00');
+  const [operatorStt, setOperatorStt] = useState<string>('0.000');
+
+  useEffect(() => {
+    let isMounted = true;
+    const fetchOperatorBalance = async () => {
+      try {
+        const opAddr = SOMNIA_ADDRESSES.operatorAccount;
+        if (!opAddr) return;
+        if (isOperator && wallet) {
+          if (wallet.balanceCollateral) setOperatorCollateral(wallet.balanceCollateral);
+          if (wallet.balanceSTT) setOperatorStt(wallet.balanceSTT);
+          return;
+        }
+        const [stt, collateral] = await Promise.all([
+          web3Service.getSTTBalance(opAddr),
+          web3Service.getCollateralBalance(opAddr),
+        ]);
+        if (isMounted) {
+          setOperatorCollateral(parseFloat(collateral).toFixed(2));
+          setOperatorStt(parseFloat(stt).toFixed(3));
+        }
+      } catch (err) {
+        console.warn('[StatCardsGrid] Error fetching operator balance:', err);
+      }
+    };
+
+    fetchOperatorBalance();
+    const interval = setInterval(fetchOperatorBalance, 10000);
+    return () => {
+      isMounted = false;
+      clearInterval(interval);
+    };
+  }, [isOperator, wallet?.balanceCollateral, wallet?.balanceSTT]);
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
@@ -294,13 +329,14 @@ export const StatCardsGrid: React.FC<StatCardsGridProps> = ({
           </>
         ) : (
           <>
-            {/* Swarm Card 1: 24h Trading Volume */}
+            {/* Swarm Card 1: Operator Balance */}
             <div className="stat-card">
               <div className="stat-card-header">
-                <span className="stat-card-title truncate">24h Swarm Volume</span>
+                <span className="stat-card-title truncate">Operator Balance</span>
               </div>
               <div className="stat-card-value font-mono text-cyan-400 truncate">
-                ${total24hVolume.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                {Number(operatorCollateral).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}{' '}
+                <span className="text-xs font-normal text-muted-foreground">tUSDC</span>
               </div>
               <div className="stat-card-footer">
                 <span className="inline-flex items-center gap-1.5 font-mono text-[11px] text-muted-foreground whitespace-nowrap">
@@ -308,7 +344,7 @@ export const StatCardsGrid: React.FC<StatCardsGridProps> = ({
                   <span>{totalSwarmFills} on-chain trades</span>
                 </span>
                 <span className="font-mono text-[11px] text-muted-foreground whitespace-nowrap truncate">
-                  Somnia Shannon
+                  Gas: <span className="text-foreground font-medium">{operatorStt} STT</span>
                 </span>
               </div>
             </div>
