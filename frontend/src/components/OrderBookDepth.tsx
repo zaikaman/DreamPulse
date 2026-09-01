@@ -102,14 +102,14 @@ export const OrderBookDepth: React.FC<OrderBookDepthProps> = ({
   const edge = isSyntheticOrSeedDepth ? 0 : rawEdge;
 
   // Use live WebSocket depth if available, otherwise fall back to REST depth
-  const bids = liveDepth?.bids.length
+  const bids = liveDepth?.bids !== undefined
     ? liveDepth.bids.map(([price, quantity], idx, arr) => {
         const total = arr.slice(0, idx + 1).reduce((sum, [p, q]) => sum + p * q, 0);
         return { price, quantity, total: Number(total.toFixed(2)) };
       })
     : depthData.yesBids;
 
-  const asks = liveDepth?.asks.length
+  const asks = liveDepth?.asks !== undefined
     ? liveDepth.asks.map(([price, quantity], idx, arr) => {
         const total = arr.slice(0, idx + 1).reduce((sum, [p, q]) => sum + p * q, 0);
         return { price, quantity, total: Number(total.toFixed(2)) };
@@ -118,8 +118,15 @@ export const OrderBookDepth: React.FC<OrderBookDepthProps> = ({
 
   const bestBid = liveDepth?.bestBid ?? selectedMarket.bestBidYes;
   const bestAsk = liveDepth?.bestAsk ?? selectedMarket.bestAskYes;
-  const spread = Number(Math.max(0, bestAsk - bestBid).toFixed(2));
-  const midPrice = Number(((bestBid + bestAsk) / 2).toFixed(4));
+  const hasTwoSidedLiquidity = bestBid > 0 && bestAsk > 0 && bestAsk > bestBid;
+  const spread = hasTwoSidedLiquidity ? Number(Math.max(0, bestAsk - bestBid).toFixed(2)) : 0;
+  const midPrice = hasTwoSidedLiquidity
+    ? Number(((bestBid + bestAsk) / 2).toFixed(4))
+    : bestAsk > 0
+    ? bestAsk
+    : bestBid > 0
+    ? bestBid
+    : 0;
 
   // Calculate maximum cumulative total for depth visualization bar percentages
   const maxTotal = Math.max(
@@ -341,6 +348,10 @@ export const OrderBookDepth: React.FC<OrderBookDepthProps> = ({
                       <Skeleton variant="text" width={45} height={12} />
                     </div>
                   ))
+                ) : asks.length === 0 ? (
+                  <div className="text-center py-3.5 px-2 text-[11px] font-mono text-muted-foreground/60 border border-dashed border-border/30 rounded bg-secondary/10">
+                    No resting ask orders on CLOB
+                  </div>
                 ) : (
                   asks
                     .slice(0, 5)
@@ -379,12 +390,16 @@ export const OrderBookDepth: React.FC<OrderBookDepthProps> = ({
               <div className="grid grid-cols-3 p-2 my-2 rounded-lg bg-secondary/30 border border-border/40 text-xs font-mono flex-shrink-0">
                 <div className="flex flex-col">
                   <span className="text-[9px] text-muted-foreground uppercase font-semibold">SPREAD</span>
-                  <span className="font-bold text-foreground mt-0.5">{spread.toFixed(2)} USDC</span>
+                  <span className="font-bold text-foreground mt-0.5">
+                    {hasTwoSidedLiquidity ? `${spread.toFixed(2)} USDC` : 'NO SPREAD'}
+                  </span>
                 </div>
 
                 <div className="flex flex-col text-center">
                   <span className="text-[9px] text-muted-foreground uppercase font-semibold">MID PROB</span>
-                  <span className="font-bold text-foreground mt-0.5">{(midPrice * 100).toFixed(1)}%</span>
+                  <span className="font-bold text-foreground mt-0.5">
+                    {midPrice > 0 ? `${(midPrice * 100).toFixed(1)}%` : '--'}
+                  </span>
                 </div>
 
                 <div className="flex flex-col text-right">
@@ -403,6 +418,10 @@ export const OrderBookDepth: React.FC<OrderBookDepthProps> = ({
                       <Skeleton variant="text" width={45} height={12} />
                     </div>
                   ))
+                ) : bids.length === 0 ? (
+                  <div className="text-center py-3.5 px-2 text-[11px] font-mono text-muted-foreground/60 border border-dashed border-border/30 rounded bg-secondary/10">
+                    No resting bid orders on CLOB
+                  </div>
                 ) : (
                   bids.slice(0, 5).map((bid, idx) => {
                     const displayPrice = activeLeg === 'YES' ? bid.price : Number((1.0 - bid.price).toFixed(2));

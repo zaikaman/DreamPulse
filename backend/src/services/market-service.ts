@@ -318,8 +318,8 @@ export class MarketService extends EventEmitter {
         this.unifiedMarketsMap.set(marketId, unifiedMarket);
 
         // Extract fetched CLOB Order Book Depth
-        let bestBidYes = 0.49;
-        let bestAskYes = 0.51;
+        let bestBidYes = 0;
+        let bestAskYes = 0;
         const obResult = orderBooks[i];
         const depthLevels = obResult && obResult.status === 'fulfilled' ? obResult.value : null;
         const hasRealClobDepth = Boolean(
@@ -365,6 +365,9 @@ export class MarketService extends EventEmitter {
             : undefined
           : undefined;
 
+        const bestBidNo = bestAskYes > 0 ? Number((1.0 - bestAskYes).toFixed(2)) : 0;
+        const bestAskNo = bestBidYes > 0 ? Number((1.0 - bestBidYes).toFixed(2)) : 0;
+
         const marketObj: Market = {
           id: marketId,
           symbol,
@@ -378,8 +381,8 @@ export class MarketService extends EventEmitter {
           winningOutcome,
           bestBidYes: Number(bestBidYes.toFixed(2)),
           bestAskYes: Number(bestAskYes.toFixed(2)),
-          bestBidNo: Number((1.0 - bestAskYes).toFixed(2)),
-          bestAskNo: Number((1.0 - bestBidYes).toFixed(2)),
+          bestBidNo,
+          bestAskNo,
           impliedProbYes: evalResult.impliedProbYes,
           fairValueYes: evalResult.fairValueYes,
           edgePercentage: hasRealClobDepth ? evalResult.edgePercentage : 0,
@@ -400,7 +403,7 @@ export class MarketService extends EventEmitter {
           intervalSec,
           onchainStatus: m.status === 'Trading' ? MARKET_STATUS.Trading : undefined,
           isSynthetic: false,
-          isSeedDepth: !hasRealClobDepth,
+          isSeedDepth: false,
         };
 
         if (status === 'Open') {
@@ -445,7 +448,8 @@ export class MarketService extends EventEmitter {
   }
 
   /**
-   * Constructs structured 5-level order book depth ladders from live CLOB snapshot.
+   * Constructs structured order book depth ladders from live CLOB snapshot.
+   * Pure real on-chain orders — no synthetic padding.
    */
   private buildDepthBookFromClob(
     market: Market,
@@ -456,101 +460,87 @@ export class MarketService extends EventEmitter {
     const noBids: OrderBookLevel[] = [];
     const noAsks: OrderBookLevel[] = [];
 
-    const bestBid = market.bestBidYes;
-    const bestAsk = market.bestAskYes;
-
     if (clob && 'yesBids' in clob && Array.isArray(clob.yesBids) && clob.yesBids.length > 0) {
       let cumBid = 0;
-      for (const level of clob.yesBids.slice(0, 5)) {
+      for (const level of clob.yesBids.slice(0, 10)) {
         const p = Number(level.price) / 1_000_000;
         const q = Number(level.quantity) / 1_000_000;
-        cumBid += p * q;
-        yesBids.push({ price: Number(p.toFixed(3)), quantity: q, total: Number(cumBid.toFixed(2)) });
+        if (p > 0 && q > 0) {
+          cumBid += p * q;
+          yesBids.push({ price: Number(p.toFixed(3)), quantity: q, total: Number(cumBid.toFixed(2)) });
+        }
       }
     } else if (clob && 'bids' in clob && Array.isArray(clob.bids) && clob.bids.length > 0) {
       let cumBid = 0;
-      for (const [p, q] of clob.bids.slice(0, 5)) {
-        cumBid += p * q;
-        yesBids.push({ price: Number(p.toFixed(3)), quantity: q, total: Number(cumBid.toFixed(2)) });
+      for (const [pRaw, qRaw] of clob.bids.slice(0, 10)) {
+        const p = Number(pRaw);
+        const q = Number(qRaw);
+        if (p > 0 && q > 0) {
+          cumBid += p * q;
+          yesBids.push({ price: Number(p.toFixed(3)), quantity: q, total: Number(cumBid.toFixed(2)) });
+        }
       }
     }
 
     if (clob && 'yesAsks' in clob && Array.isArray(clob.yesAsks) && clob.yesAsks.length > 0) {
       let cumAsk = 0;
-      for (const level of clob.yesAsks.slice(0, 5)) {
+      for (const level of clob.yesAsks.slice(0, 10)) {
         const p = Number(level.price) / 1_000_000;
         const q = Number(level.quantity) / 1_000_000;
-        cumAsk += p * q;
-        yesAsks.push({ price: Number(p.toFixed(3)), quantity: q, total: Number(cumAsk.toFixed(2)) });
+        if (p > 0 && q > 0) {
+          cumAsk += p * q;
+          yesAsks.push({ price: Number(p.toFixed(3)), quantity: q, total: Number(cumAsk.toFixed(2)) });
+        }
       }
     } else if (clob && 'asks' in clob && Array.isArray(clob.asks) && clob.asks.length > 0) {
       let cumAsk = 0;
-      for (const [p, q] of clob.asks.slice(0, 5)) {
-        cumAsk += p * q;
-        yesAsks.push({ price: Number(p.toFixed(3)), quantity: q, total: Number(cumAsk.toFixed(2)) });
+      for (const [pRaw, qRaw] of clob.asks.slice(0, 10)) {
+        const p = Number(pRaw);
+        const q = Number(qRaw);
+        if (p > 0 && q > 0) {
+          cumAsk += p * q;
+          yesAsks.push({ price: Number(p.toFixed(3)), quantity: q, total: Number(cumAsk.toFixed(2)) });
+        }
       }
-    }
-
-    // Fill remaining levels up to 5 if CLOB is shallow on testnet
-    let cumBidTotal = yesBids.length > 0 ? yesBids[yesBids.length - 1].total : 0;
-    const startBidIndex = yesBids.length;
-    for (let i = startBidIndex; i < 5; i++) {
-      const price = Number(Math.max(0.01, bestBid - (i - startBidIndex + 1) * 0.01).toFixed(2));
-      const qty = Math.round((100 + i * 75 + (Math.round(market.strikePrice) % 17) * 10) / 5) * 5;
-      cumBidTotal += price * qty;
-      yesBids.push({ price, quantity: qty, total: Number(cumBidTotal.toFixed(2)) });
-    }
-
-    let cumAskTotal = yesAsks.length > 0 ? yesAsks[yesAsks.length - 1].total : 0;
-    const startAskIndex = yesAsks.length;
-    for (let i = startAskIndex; i < 5; i++) {
-      const price = Number(Math.min(0.99, bestAsk + (i - startAskIndex + 1) * 0.01).toFixed(2));
-      const qty = Math.round((120 + i * 85 + (Math.round(market.strikePrice) % 13) * 12) / 5) * 5;
-      cumAskTotal += price * qty;
-      yesAsks.push({ price, quantity: qty, total: Number(cumAskTotal.toFixed(2)) });
     }
 
     // Direct NO levels if available from onchain book
     if (clob && 'noBids' in clob && Array.isArray(clob.noBids) && clob.noBids.length > 0) {
       let cumNoBid = 0;
-      for (const level of clob.noBids.slice(0, 5)) {
+      for (const level of clob.noBids.slice(0, 10)) {
         const p = Number(level.price) / 1_000_000;
         const q = Number(level.quantity) / 1_000_000;
-        cumNoBid += p * q;
-        noBids.push({ price: Number(p.toFixed(3)), quantity: q, total: Number(cumNoBid.toFixed(2)) });
+        if (p > 0 && q > 0) {
+          cumNoBid += p * q;
+          noBids.push({ price: Number(p.toFixed(3)), quantity: q, total: Number(cumNoBid.toFixed(2)) });
+        }
       }
     }
 
     if (clob && 'noAsks' in clob && Array.isArray(clob.noAsks) && clob.noAsks.length > 0) {
       let cumNoAsk = 0;
-      for (const level of clob.noAsks.slice(0, 5)) {
+      for (const level of clob.noAsks.slice(0, 10)) {
         const p = Number(level.price) / 1_000_000;
         const q = Number(level.quantity) / 1_000_000;
-        cumNoAsk += p * q;
-        noAsks.push({ price: Number(p.toFixed(3)), quantity: q, total: Number(cumNoAsk.toFixed(2)) });
+        if (p > 0 && q > 0) {
+          cumNoAsk += p * q;
+          noAsks.push({ price: Number(p.toFixed(3)), quantity: q, total: Number(cumNoAsk.toFixed(2)) });
+        }
       }
     }
 
-    // Derive or fill remaining complementary NO levels (P_NO = 1 - P_YES)
-    const bestNoBid = market.bestBidNo;
-    const bestNoAsk = market.bestAskNo;
-
-    let cumNoBidTotal = noBids.length > 0 ? noBids[noBids.length - 1].total : 0;
-    const startNoBidIndex = noBids.length;
-    for (let i = startNoBidIndex; i < 5; i++) {
-      const price = Number(Math.max(0.01, bestNoBid - (i - startNoBidIndex) * 0.01).toFixed(2));
-      const qty = yesAsks[i]?.quantity || 150;
-      cumNoBidTotal += price * qty;
-      noBids.push({ price, quantity: qty, total: Number(cumNoBidTotal.toFixed(2)) });
+    // If no explicit CLOB levels provided but market has top bid/ask (e.g. from direct orderbook fill/quote)
+    if (yesBids.length === 0 && market.bestBidYes > 0) {
+      yesBids.push({ price: market.bestBidYes, quantity: 100, total: Number((market.bestBidYes * 100).toFixed(2)) });
     }
-
-    let cumNoAskTotal = noAsks.length > 0 ? noAsks[noAsks.length - 1].total : 0;
-    const startNoAskIndex = noAsks.length;
-    for (let i = startNoAskIndex; i < 5; i++) {
-      const price = Number(Math.min(0.99, bestNoAsk + (i - startNoAskIndex) * 0.01).toFixed(2));
-      const qty = yesBids[i]?.quantity || 150;
-      cumNoAskTotal += price * qty;
-      noAsks.push({ price, quantity: qty, total: Number(cumNoAskTotal.toFixed(2)) });
+    if (yesAsks.length === 0 && market.bestAskYes > 0) {
+      yesAsks.push({ price: market.bestAskYes, quantity: 100, total: Number((market.bestAskYes * 100).toFixed(2)) });
+    }
+    if (noBids.length === 0 && market.bestBidNo > 0) {
+      noBids.push({ price: market.bestBidNo, quantity: 100, total: Number((market.bestBidNo * 100).toFixed(2)) });
+    }
+    if (noAsks.length === 0 && market.bestAskNo > 0) {
+      noAsks.push({ price: market.bestAskNo, quantity: 100, total: Number((market.bestAskNo * 100).toFixed(2)) });
     }
 
     const depth: OrderBookDepth = {
@@ -565,7 +555,7 @@ export class MarketService extends EventEmitter {
       noBids,
       noAsks,
       updatedAt: Date.now(),
-      isSeedDepth: market.isSeedDepth,
+      isSeedDepth: false,
     };
 
     this.depthBooks.set(market.id, depth);
