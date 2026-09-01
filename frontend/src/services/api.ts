@@ -166,11 +166,15 @@ export const apiClient = {
   },
 
   // Sessions
+  async getSessionNonce(userAddress: string): Promise<{ success: boolean; userAddress: string; nextNonce: number }> {
+    return fetchJson<{ success: boolean; userAddress: string; nextNonce: number }>(`/sessions/${encodeURIComponent(userAddress)}/nonce`);
+  },
+
   async getActiveSession(userAddress: string): Promise<{ success: boolean; session: SessionGrant | null }> {
     return fetchJson<{ success: boolean; session: SessionGrant | null }>(`/sessions/${encodeURIComponent(userAddress)}?active=true`);
   },
 
-  async getUserSessions(userAddress: string): Promise<{ success: boolean; count: number; activeSession: SessionGrant | null; sessions: SessionGrant[] }> {
+  async getUserSessions(userAddress: string): Promise<{ success: boolean; count: number; activeSession: SessionGrant | null; sessions: SessionGrant[]; nextNonce?: number }> {
     return fetchJson(`/sessions/${encodeURIComponent(userAddress)}`);
   },
 
@@ -181,6 +185,7 @@ export const apiClient = {
     dailyVolumeCap: number;
     expiresAt?: string;
     signature?: string;
+    nonce?: number;
     onChainTxHash?: string;
     vaultDepositAmount?: number;
     targetPoolAddress?: string;

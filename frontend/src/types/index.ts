@@ -65,6 +65,7 @@ export interface SessionGrant {
   spentToday: number;
   expiresAt: string;
   isActive: boolean;
+  nonce?: number;
   onChainTxHash?: `0x${string}`;
   vaultDepositAmount?: number;
   targetPoolAddress?: `0x${string}`;

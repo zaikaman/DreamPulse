@@ -395,6 +395,26 @@ apiRouter.post('/sessions/register', requireWalletAuth, async (req: Request, res
   }
 });
 
+apiRouter.get('/sessions/:userAddress/nonce', optionalWalletAuth, async (req: Request, res: Response) => {
+  try {
+    const { userAddress } = req.params;
+    if (!userAddress || !isAddress(userAddress)) {
+      return res.status(400).json({ success: false, error: 'Invalid user address parameter' });
+    }
+    const nextNonce = await sessionService.getNextSessionNonce(userAddress);
+    return res.json({
+      success: true,
+      userAddress: getAddress(userAddress),
+      nextNonce,
+    });
+  } catch (err: any) {
+    return res.status(500).json({
+      success: false,
+      error: err.message || 'Failed to query session nonce',
+    });
+  }
+});
+
 apiRouter.get('/sessions/:userAddress', optionalWalletAuth, async (req: Request, res: Response) => {
   try {
     const { userAddress } = req.params;
@@ -422,13 +442,17 @@ apiRouter.get('/sessions/:userAddress', optionalWalletAuth, async (req: Request,
       });
     }
 
-    const sessions = sessionService.listUserSessions(userAddress);
+    const [sessions, nextNonce] = await Promise.all([
+      sessionService.listUserSessions(userAddress),
+      sessionService.getNextSessionNonce(userAddress),
+    ]);
 
     return res.json({
       success: true,
       count: sessions.length,
       activeSession,
       sessions,
+      nextNonce,
     });
   } catch (err: any) {
     return res.status(400).json({

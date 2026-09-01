@@ -475,7 +475,110 @@ describe('Task T038 & T040: Session Management Service & Risk Guardrails', () =>
     expect(checkAfter24h.allowed).toBe(true);
     expect(session.spentToday).toBe(0);
   });
+
+  it('increments session nonces sequentially for each user session and enforces uniqueness', async () => {
+    const user = privateKeyToAccount(generatePrivateKey());
+
+    // Initial nonce for user with no sessions should be 0
+    const initialNonce = await sessionService.getNextSessionNonce(user.address);
+    expect(initialNonce).toBe(0);
+
+    // Register first session without specifying nonce (auto-assigns nonce 0)
+    const session0 = await sessionService.registerSession({
+      userAddress: user.address,
+      operatorAddress: liveOperator.address,
+      maxTradeSize: 10,
+      dailyVolumeCap: 100,
+    });
+    expect(session0.nonce).toBe(0);
+
+    // Next nonce should now be 1
+    const nextNonce1 = await sessionService.getNextSessionNonce(user.address);
+    expect(nextNonce1).toBe(1);
+
+    // Register second session with nonce 1
+    const session1 = await sessionService.registerSession({
+      userAddress: user.address,
+      operatorAddress: liveOperator.address,
+      maxTradeSize: 20,
+      dailyVolumeCap: 200,
+      nonce: 1,
+    });
+    expect(session1.nonce).toBe(1);
+
+    // Next nonce should now be 2
+    const nextNonce2 = await sessionService.getNextSessionNonce(user.address);
+    expect(nextNonce2).toBe(2);
+
+    // Reusing nonce 0 or 1 should be strictly rejected for replay protection & uniqueness
+    await expect(
+      sessionService.registerSession({
+        userAddress: user.address,
+        operatorAddress: liveOperator.address,
+        maxTradeSize: 15,
+        dailyVolumeCap: 150,
+        nonce: 0,
+      })
+    ).rejects.toThrow('already been used');
+
+    await expect(
+      sessionService.registerSession({
+        userAddress: user.address,
+        operatorAddress: liveOperator.address,
+        maxTradeSize: 15,
+        dailyVolumeCap: 150,
+        nonce: 1,
+      })
+    ).rejects.toThrow('already been used');
+
+    // Register third session with auto-assigned nonce (should be 2)
+    const session2 = await sessionService.registerSession({
+      userAddress: user.address,
+      operatorAddress: liveOperator.address,
+      maxTradeSize: 30,
+      dailyVolumeCap: 300,
+    });
+    expect(session2.nonce).toBe(2);
+
+    const nextNonce3 = await sessionService.getNextSessionNonce(user.address);
+    expect(nextNonce3).toBe(3);
+  });
+
+  it('verifies EIP-712 signature with incremented nonces correctly', async () => {
+    const user = privateKeyToAccount(generatePrivateKey());
+    const nonce = 5;
+    const maxTradeSize = 25;
+    const dailyVolumeCap = 250;
+    const deadline = Math.floor(Date.now() / 1000) + 86400;
+
+    const signature = await user.signTypedData({
+      domain: SESSION_EIP712_DOMAIN,
+      types: SESSION_EIP712_TYPES,
+      primaryType: 'SessionDelegation',
+      message: {
+        delegator: user.address,
+        operator: liveOperator.address,
+        maxTradeSize: parseUnits(maxTradeSize.toString(), 6),
+        dailyVolumeCap: parseUnits(dailyVolumeCap.toString(), 6),
+        nonce: BigInt(nonce),
+        deadline: BigInt(deadline),
+      },
+    });
+
+    const session = await sessionService.registerSession({
+      userAddress: user.address,
+      operatorAddress: liveOperator.address,
+      maxTradeSize,
+      dailyVolumeCap,
+      nonce,
+      signature: signature as Hex,
+    });
+
+    expect(session.nonce).toBe(5);
+    expect(session.isActive).toBe(true);
+  });
 });
+
 
 
 

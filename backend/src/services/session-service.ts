@@ -185,7 +185,7 @@ export class SessionService {
         lastSpendResetTimestamp,
         expiresAt: row.expires_at,
         isActive,
-        nonce: 0,
+        nonce: typeof row.nonce === 'number' ? Number(row.nonce) : Number(row.nonce || 0),
         onChainTxHash: (row.on_chain_tx_hash as Hex) || undefined,
         vaultDepositAmount: row.vault_deposit_amount ? Number(row.vault_deposit_amount) : undefined,
         targetPoolAddress: row.target_pool_address ? (getAddress(row.target_pool_address) as Address) : undefined,
@@ -206,6 +206,51 @@ export class SessionService {
   }
 
   /**
+   * Returns the next available session nonce for a user address.
+   * Scans both in-memory sessions and Supabase DB to find highest used nonce.
+   */
+  public async getNextSessionNonce(userAddress: string): Promise<number> {
+    if (!userAddress || !isAddress(userAddress)) {
+      return 0;
+    }
+    const normalizedUser = getAddress(userAddress);
+    const userKey = normalizedUser.toLowerCase();
+
+    let maxNonce = -1;
+
+    // 1. Check in-memory sessions
+    for (const session of this.sessions.values()) {
+      if (session.userAddress.toLowerCase() === userKey) {
+        if (typeof session.nonce === 'number' && session.nonce > maxNonce) {
+          maxNonce = session.nonce;
+        }
+      }
+    }
+
+    // 2. Query Supabase if persistence is enabled
+    if (isSessionPersistenceEnabled()) {
+      try {
+        const { data, error } = await supabase
+          .from('sessions')
+          .select('nonce')
+          .ilike('user_address', normalizedUser)
+          .order('nonce', { ascending: false })
+          .limit(1);
+
+        if (!error && data && data.length > 0 && typeof data[0]?.nonce === 'number') {
+          if (data[0].nonce > maxNonce) {
+            maxNonce = Number(data[0].nonce);
+          }
+        }
+      } catch (err: any) {
+        console.warn('[SessionService] getNextSessionNonce DB lookup warning:', err?.message || err);
+      }
+    }
+
+    return maxNonce >= 0 ? maxNonce + 1 : 0;
+  }
+
+  /**
    * Registers a new non-custodial session grant.
    */
   public async registerSession(params: RegisterSessionParams): Promise<SessionRecord> {
@@ -214,6 +259,7 @@ export class SessionService {
     }
 
     const normalizedUser = getAddress(params.userAddress) as Address;
+    const userKey = normalizedUser.toLowerCase();
     const rawOperator = params.operatorAddress || SOMNIA_ADDRESSES.operatorAccount || SOMNIA_ADDRESSES.operatorPermissionsRegistry;
     if (!isAddress(rawOperator)) {
       throw new Error(`Invalid operatorAddress: ${rawOperator}`);
@@ -237,10 +283,45 @@ export class SessionService {
       );
     }
 
+    // Determine and validate session nonce
+    let nonce: number;
+    if (params.nonce !== undefined) {
+      const parsedNonce = Number(params.nonce);
+      if (isNaN(parsedNonce) || parsedNonce < 0 || !Number.isInteger(parsedNonce)) {
+        throw new Error(`Invalid nonce: must be a non-negative integer`);
+      }
+
+      // Check if nonce has already been used in memory
+      const isNonceUsedInMemory = Array.from(this.sessions.values()).some(
+        (s) => s.userAddress.toLowerCase() === userKey && s.nonce === parsedNonce
+      );
+
+      let isNonceUsedInDb = false;
+      if (isSessionPersistenceEnabled()) {
+        try {
+          const { data } = await supabase
+            .from('sessions')
+            .select('id')
+            .ilike('user_address', normalizedUser)
+            .eq('nonce', parsedNonce)
+            .limit(1);
+          if (data && data.length > 0) {
+            isNonceUsedInDb = true;
+          }
+        } catch {}
+      }
+
+      if (isNonceUsedInMemory || isNonceUsedInDb) {
+        throw new Error(`Session nonce ${parsedNonce} has already been used for address ${normalizedUser}`);
+      }
+      nonce = parsedNonce;
+    } else {
+      nonce = await this.getNextSessionNonce(normalizedUser);
+    }
+
     const now = Date.now();
     const expiresAt = params.expiresAt || new Date(now + 24 * 3600 * 1000).toISOString();
     const deadlineTimestamp = Math.floor(new Date(expiresAt).getTime() / 1000);
-    const nonce = params.nonce ?? 0;
 
     // Verify EIP-712 signature if provided
     if (params.signature && params.signature.startsWith('0x')) {
@@ -299,7 +380,6 @@ export class SessionService {
     }
 
     // Deactivate previous active sessions for this user
-    const userKey = normalizedUser.toLowerCase();
     const existingActiveId = this.userToActiveSessionId.get(userKey);
     if (existingActiveId) {
       const existing = this.sessions.get(existingActiveId);
@@ -374,6 +454,7 @@ export class SessionService {
           spent_today: 0,
           expires_at: expiresAt,
           is_active: isActive,
+          nonce: nonce,
           on_chain_tx_hash: onChainTxHash || null,
           on_chain_authorized: onChainAuthorized,
           vault_deposit_amount: params.vaultDepositAmount ?? null,
@@ -450,7 +531,7 @@ export class SessionService {
               lastSpendResetTimestamp,
               expiresAt: row.expires_at,
               isActive: true,
-              nonce: 0,
+              nonce: typeof row.nonce === 'number' ? Number(row.nonce) : Number(row.nonce || 0),
               onChainTxHash: (row.on_chain_tx_hash as Hex) || undefined,
               vaultDepositAmount: row.vault_deposit_amount ? Number(row.vault_deposit_amount) : undefined,
               targetPoolAddress: row.target_pool_address ? (getAddress(row.target_pool_address) as Address) : undefined,

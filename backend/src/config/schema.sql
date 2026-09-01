@@ -48,11 +48,14 @@ CREATE TABLE IF NOT EXISTS public.sessions (
     vault_deposit_amount NUMERIC(18, 4),
     target_pool_address VARCHAR(42),
     copy_trade_enabled BOOLEAN NOT NULL DEFAULT FALSE,
+    nonce BIGINT NOT NULL DEFAULT 0,
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     CONSTRAINT valid_user_address CHECK (user_address ~ '^0x[a-fA-F0-9]{40}$'),
     CONSTRAINT valid_operator_address CHECK (operator_address ~ '^0x[a-fA-F0-9]{40}$')
 );
+
+CREATE UNIQUE INDEX IF NOT EXISTS idx_sessions_user_nonce ON public.sessions(lower(user_address), nonce);
 
 -- ------------------------------------------------------------------------------
 -- 3. Agent Configurations & Strategies

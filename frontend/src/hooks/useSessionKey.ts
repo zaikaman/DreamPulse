@@ -515,12 +515,21 @@ export function useSessionKey(): UseSessionKeyReturn {
           });
         }
 
-        // Step 2: Sign EIP-712 structured data in user's wallet for risk ceilings
+        // Step 2: Fetch next session nonce & sign EIP-712 structured data in user's wallet for risk ceilings
         setStepState('signing_eip712');
+        let nonce = 0;
+        try {
+          const nonceRes = await apiClient.getSessionNonce(wallet.address);
+          if (typeof nonceRes?.nextNonce === 'number') {
+            nonce = nonceRes.nextNonce;
+          }
+        } catch (nonceErr) {
+          console.warn('[useSessionKey] Could not fetch next session nonce from backend, using fallback 0:', nonceErr);
+        }
+
         const now = Date.now();
         const expiresAt = new Date(now + params.durationHours * 3600 * 1000).toISOString();
         const deadline = Math.floor(new Date(expiresAt).getTime() / 1000);
-        const nonce = 0;
 
         const signature = await web3Service.signSessionDelegation({
           delegator: wallet.address,
@@ -540,6 +549,7 @@ export function useSessionKey(): UseSessionKeyReturn {
           dailyVolumeCap: params.dailyVolumeCap,
           expiresAt,
           signature,
+          nonce,
           onChainTxHash,
           vaultDepositAmount: params.depositAmount,
           targetPoolAddress: params.targetPool,
@@ -557,6 +567,7 @@ export function useSessionKey(): UseSessionKeyReturn {
           spentToday: 0,
           expiresAt,
           isActive: true,
+          nonce: res.session.nonce ?? nonce,
           onChainTxHash,
           vaultDepositAmount: params.depositAmount,
           targetPoolAddress: params.targetPool,
