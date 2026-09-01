@@ -524,6 +524,43 @@ export class SettlementService {
                 status: 'Voided',
               });
             }
+            if (!isOperator && yesBal === 0n && noBal === 0n) {
+              const matchedOrders = orderService.getOrders({ userAddress: normalizedUser }).filter(
+                (o) => o.marketId.toLowerCase() === marketId.toLowerCase() && !o.isSettled && (o.status === 'FILLED' || o.status === 'PENDING'),
+              );
+              let totalVoidLots = 0;
+              let validTxHash: Hex | undefined;
+              for (const uo of matchedOrders) {
+                totalVoidLots += uo.lotSize;
+                if (!validTxHash && uo.txHash?.startsWith('0x')) {
+                  validTxHash = uo.txHash as Hex;
+                }
+              }
+              if (totalVoidLots > 0) {
+                const totalExpectedPayout = 0.5 * totalVoidLots;
+                const totalSweptForMarket = this.sweeps
+                  .filter((s) => s.userAddress.toLowerCase() === cacheKey && s.marketId.toLowerCase() === marketId.toLowerCase() && s.status === 'CONFIRMED')
+                  .reduce((sum, s) => sum + (s.claimableAmount || 0), 0);
+                const remainingClaimable = totalExpectedPayout - totalSweptForMarket;
+                if (remainingClaimable > 0.0001) {
+                  const rawAmount = BigInt(Math.floor(remainingClaimable * Number(one)));
+                  addPosition({
+                    marketId,
+                    symbol,
+                    marketIdHex: targetHex,
+                    poolAddress: onchain.pool as Address,
+                    outcomeToken: onchain.outcomeToken as Address,
+                    winningOutcome: 'YES',
+                    outcomeIdx: 0,
+                    rawAmount,
+                    claimableAmount: Number(remainingClaimable.toFixed(4)),
+                    isVoided: true,
+                    status: 'Voided',
+                    txHash: validTxHash,
+                  });
+                }
+              }
+            }
             continue;
           }
 
@@ -681,7 +718,42 @@ export class SettlementService {
       const isCopyTrader = normalizedUser.toLowerCase() !== operatorAccount.address.toLowerCase();
 
       if (isCopyTrader) {
-        // Direct payout aggregation for user wallets: query fresh on-chain operator balance directly
+        // First: Redeem on-chain winning outcome tokens from DreamDEX using operator credentials.
+        // This burns the operator's held ERC-6909 outcome tokens and collects the tUSDC collateral from DreamDEX settlement into the operator wallet.
+        if (hasGas) {
+          for (const pos of positionsToProcess) {
+            if (pos.marketIdHex && pos.rawAmount > 0n) {
+              try {
+                let outcomeToken = pos.outcomeToken;
+                if (!outcomeToken) {
+                  const onchain = await somniaExchange.client.getMarketOnchain(pos.marketIdHex).catch(() => null);
+                  outcomeToken = onchain?.outcomeToken as Address | undefined;
+                }
+                if (outcomeToken) {
+                  await executeOperatorTx(() =>
+                    somniaExchange.trader.redeem({
+                      marketId: pos.marketIdHex!,
+                      outcomeIdx: pos.outcomeIdx,
+                      amount: pos.rawAmount,
+                      outcomeToken,
+                    }),
+                  ).catch((rErr: any) => {
+                    if (
+                      !rErr.message?.includes('Missing or invalid parameters') &&
+                      !rErr.message?.includes('account does not exist') &&
+                      !rErr.message?.includes('InsufficientBalance') &&
+                      !rErr.message?.includes('gas')
+                    ) {
+                      console.warn(`[SettlementService] Pre-sweep redeem note for market ${pos.marketId}:`, rErr.message);
+                    }
+                  });
+                }
+              } catch {}
+            }
+          }
+        }
+
+        // Direct payout aggregation for user wallets: query fresh on-chain operator balance directly (replenished by redemptions above)
         const decimals = SOMNIA_ADDRESSES.decimals;
         const one = 10n ** BigInt(decimals);
         let operatorBalance = 0n;
@@ -967,16 +1039,21 @@ export class SettlementService {
           winningOutcome = winIdx === 0 ? 'YES' : 'NO';
           const winId = winIdx === 0 ? onchain.yesId : onchain.noId;
 
+          const isCopyTrader = normalizedUser.toLowerCase() !== operatorAccount.address.toLowerCase();
+          const targetHolder = isCopyTrader ? operatorAccount.address : normalizedUser;
+
           const bal = await somniaExchange.client.getOutcomeBalance({
             outcomeToken: onchain.outcomeToken,
-            account: normalizedUser,
+            account: targetHolder,
             id: winId,
           });
 
           if (bal > 0n) {
             const decimals = SOMNIA_ADDRESSES.decimals;
             const one = 10n ** BigInt(decimals);
-            amount = Number(bal) / Number(one);
+            if (!isCopyTrader) {
+              amount = Number(bal) / Number(one);
+            }
 
             const hasGas = await hasOperatorGas();
             if (hasGas) {
@@ -992,7 +1069,9 @@ export class SettlementService {
                 txHash = res.hash.startsWith('0x') ? (res.hash as Hex) : (`0x${res.hash}` as Hex);
               }
             }
-          } else if (normalizedUser.toLowerCase() !== operatorAccount.address.toLowerCase()) {
+          }
+
+          if (isCopyTrader) {
             const userOrders = orderService.getOrders({ userAddress: normalizedUser }).filter(
               (o) => o.marketId.toLowerCase() === marketId.toLowerCase() && (o.status === 'FILLED' || o.status === 'PENDING'),
             );
