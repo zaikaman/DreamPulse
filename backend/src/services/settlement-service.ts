@@ -789,9 +789,11 @@ export class SettlementService {
         }
       }
 
-      // 4. Scan winning orders from orderService (covers Trade Terminal, Personal Swarm, and CLOB rolling markets)
+      // 4. Scan winning orders from orderService (grouped per market)
       try {
         const userOrders = orderService.getOrders({ userAddress: normalizedUser });
+        const winningOrdersByMarket = new Map<string, typeof userOrders>();
+
         for (const order of userOrders) {
           if (order.status !== 'FILLED' && order.status !== 'PENDING') continue;
 
@@ -801,20 +803,37 @@ export class SettlementService {
           const isWin = isVoid || (winningOutcome && order.outcome === winningOutcome) || ((order.pnl ?? 0) > 0);
           if (!isWin) continue;
 
-          const targetMarketHex = market?.marketIdHex ? market.marketIdHex.toLowerCase() : undefined;
-          const totalExpectedPayout = isVoid ? order.lotSize * 0.5 : order.lotSize * 1.0;
-          const totalSweptForMarket = this.getUserTotalSweptForMarket(cacheKey, order.marketId, targetMarketHex);
+          const mKey = order.marketId.toLowerCase();
+          const existing = winningOrdersByMarket.get(mKey) || [];
+          existing.push(order);
+          winningOrdersByMarket.set(mKey, existing);
+        }
 
+        for (const [mKey, orders] of winningOrdersByMarket.entries()) {
+          const firstOrder = orders[0];
+          const market = marketService.getMarketById(firstOrder.marketId);
+          const winningOutcome = market?.winningOutcome || firstOrder.marketSnapshot?.winningOutcome;
+          const isVoid = winningOutcome === 'VOID';
+
+          const targetMarketHex = market?.marketIdHex ? market.marketIdHex.toLowerCase() : undefined;
+          const totalExpectedPayout = orders.reduce((sum, o) => {
+            return sum + (isVoid ? o.lotSize * 0.5 : o.lotSize * 1.0);
+          }, 0);
+
+          const totalSweptForMarket = this.getUserTotalSweptForMarket(cacheKey, firstOrder.marketId, targetMarketHex);
           const remainingClaimable = totalExpectedPayout - totalSweptForMarket;
+
           if (remainingClaimable > 0.0001) {
             const rawAmount = BigInt(Math.floor(remainingClaimable * Number(one)));
-            const symbol = market?.symbol || order.marketSnapshot?.symbol || 'BTC/USD';
-            const isOnChainHex = isValidHexMarket(order.marketId);
-            const marketIdHex = isOnChainHex ? (order.marketId as Hex) : (market?.marketIdHex);
+            const symbol = market?.symbol || firstOrder.marketSnapshot?.symbol || 'BTC/USD';
+            const isOnChainHex = isValidHexMarket(firstOrder.marketId);
+            const marketIdHex = isOnChainHex ? (firstOrder.marketId as Hex) : (market?.marketIdHex);
             if (!isValidHexMarket(marketIdHex)) continue;
 
+            const bestTxHash = orders.find((o) => o.txHash?.startsWith('0x') && o.txHash.length === 66)?.txHash as Hex | undefined;
+
             addPosition({
-              marketId: order.marketId,
+              marketId: firstOrder.marketId,
               symbol,
               marketIdHex,
               poolAddress: (market?.poolAddress || (marketIdHex ? SOMNIA_ADDRESSES.marketsCore : undefined)) as Address | undefined,
@@ -824,7 +843,7 @@ export class SettlementService {
               claimableAmount: Number(remainingClaimable.toFixed(4)),
               isVoided: isVoid,
               status: market?.status || 'Finalized',
-              txHash: order.txHash?.startsWith('0x') ? (order.txHash as Hex) : undefined,
+              txHash: bestTxHash,
             });
           }
         }
