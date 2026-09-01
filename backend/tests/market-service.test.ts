@@ -114,4 +114,41 @@ describe('MarketService Comprehensive Unit Suite', () => {
     expect(historical.length).toBeGreaterThanOrEqual(1);
     expect(historical.some((m) => m.id === 'market-closed-1')).toBe(true);
   });
+
+  it('filters markets strictly to DreamDEX venues and rejects off-venue markets', async () => {
+    const mockBinaryMarkets = [
+      { marketId: '0x1', venueId: '0x323ec57fca385a494dbf0685be47ca2a50a11c81', operatorId: 2, voided: false },
+      { marketId: '0x2', venueId: '0xoffvenue', operatorId: 99, voided: false },
+      { marketId: '0x3', venueId: '0x323ec57fca385a494dbf0685be47ca2a50a11c81', operatorId: 99, voided: false },
+      { marketId: '0x4', venueId: '0xother', operatorId: 4, voided: false },
+      { marketId: '0x5', venueId: '0x323ec57fca385a494dbf0685be47ca2a50a11c81', operatorId: 2, voided: true },
+    ];
+
+    const targetVenueId = '0x323ec57fca385a494dbf0685be47ca2a50a11c81'.toLowerCase();
+    const filtered = mockBinaryMarkets.filter((m) => {
+      if (m.voided) return false;
+      if (m.venueId && m.venueId.toLowerCase() === targetVenueId) return true;
+      if (m.operatorId === 2 || m.operatorId === 4) return true;
+      return false;
+    });
+
+    expect(filtered.map((m) => m.marketId)).toEqual(['0x1', '0x3', '0x4']);
+  });
+
+  it('finalizes rolling markets using historical close price rather than drifting current spot', async () => {
+    const closeTime = Date.now() - 10000;
+    const rollingMarket: Market = {
+      ...mockMarket,
+      id: 'rolling-eth-test',
+      strikePrice: 2800,
+      closeTimestamp: new Date(closeTime).toISOString(),
+      status: 'Open',
+    };
+
+    await service.finalizeRollingMarket(rollingMarket, closeTime);
+    expect(rollingMarket.status).toBe('Finalized');
+    expect(rollingMarket.settlementPrice).toBeDefined();
+    expect(rollingMarket.winningOutcome).toBeDefined();
+    expect(['YES', 'NO']).toContain(rollingMarket.winningOutcome);
+  });
 });

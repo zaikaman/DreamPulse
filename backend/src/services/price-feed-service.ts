@@ -351,6 +351,29 @@ export class PriceFeedService extends EventEmitter {
       return this.historicalPriceCache.get(cacheKey)!;
     }
 
+    // Fast in-memory lookup from recent priceHistory ring buffer
+    const ticker = this.spotPrices.get(symbol);
+    if (ticker?.priceHistory && ticker.priceHistory.length > 0) {
+      let closestFromHistory: number | null = null;
+      let minHistoryDiff = Number.MAX_SAFE_INTEGER;
+      for (const pt of ticker.priceHistory) {
+        const diff = Math.abs(pt.timestamp - targetTimestampMs);
+        if (diff < minHistoryDiff) {
+          minHistoryDiff = diff;
+          closestFromHistory = pt.price;
+        }
+      }
+      // If we have a local price tick within 15 seconds of target timestamp, use it
+      if (closestFromHistory != null && minHistoryDiff <= 15000) {
+        if (this.historicalPriceCache.size > 2000) {
+          const firstKey = this.historicalPriceCache.keys().next().value;
+          if (firstKey) this.historicalPriceCache.delete(firstKey);
+        }
+        this.historicalPriceCache.set(cacheKey, closestFromHistory);
+        return closestFromHistory;
+      }
+    }
+
     try {
       const binanceSymbol = REVERSE_SYMBOL_MAPPINGS[symbol] || symbol.replace('/', '');
       // Binance klines are inclusive; fetch 1m candle containing target time
@@ -361,9 +384,9 @@ export class PriceFeedService extends EventEmitter {
       const timeout = setTimeout(() => controller.abort(), 2000);
       const res = await fetch(url, { signal: controller.signal });
       clearTimeout(timeout);
-      if (!res.ok) return null;
+      if (!res.ok) return ticker?.price ?? null;
       const klines = (await res.json()) as Array<Array<string | number>>;
-      if (!Array.isArray(klines) || klines.length === 0) return null;
+      if (!Array.isArray(klines) || klines.length === 0) return ticker?.price ?? null;
       // Find candle whose closeTime is closest to target
       let closest: number | null = null;
       let minDiff = Number.MAX_SAFE_INTEGER;
@@ -383,9 +406,9 @@ export class PriceFeedService extends EventEmitter {
         }
         this.historicalPriceCache.set(cacheKey, closest);
       }
-      return closest;
+      return closest ?? ticker?.price ?? null;
     } catch {
-      return null;
+      return ticker?.price ?? null;
     }
   }
 

@@ -176,7 +176,7 @@ export class MarketService extends EventEmitter {
         if (m.voided) return false;
         if (m.venueId && m.venueId.toLowerCase() === targetVenueId) return true;
         if (m.operatorId === 2 || m.operatorId === 4) return true;
-        return true;
+        return false;
       });
 
       const now = Date.now();
@@ -221,6 +221,7 @@ export class MarketService extends EventEmitter {
         } else {
           symbol = `${rawAsset}/USD`;
         }
+
         const spot = this.spotPrices.get(symbol)?.price || (symbol === 'BTC/USD' ? 77000 : 2400);
         const marketId = String(m.marketId || m.id || `${SOMNIA_ADDRESSES.binaryModule}-${m.id}`);
         discoveredIds.add(marketId);
@@ -248,7 +249,7 @@ export class MarketService extends EventEmitter {
         }
 
         const intervalSec = Number(m.intervalSec || 300);
-        let windowDuration: '1m' | '5m' | '15m' | '1h' | '4h' | '24h' | '7d' | string = '5m';
+        let windowDuration: '1m' | '5m' | '15m' | '1h' | '4h' | '7d' | string = '5m';
         if (intervalSec >= 604800) windowDuration = '7d';
         else if (intervalSec >= 86400) windowDuration = '24h';
         else if (intervalSec >= 14400) windowDuration = '4h';
@@ -268,23 +269,27 @@ export class MarketService extends EventEmitter {
         const timeLeftSeconds = Math.max(0, Math.floor((closeTimeMs - now) / 1000));
 
         const rawStatus = String(m.status || '');
-        let status: MarketStatus = 'Open';
-        if (
+        const isResolvedOnChain = Boolean(
           m.finalized ||
+          (m as any).isResolved ||
+          (m as any).isVoided ||
+          m.voided ||
           rawStatus === 'Finalized' ||
           rawStatus === 'Resolved' ||
           rawStatus === 'Voided' ||
           rawStatus === '4' ||
-          rawStatus === '5' ||
-          timeLeftSeconds <= 0
-        ) {
+          rawStatus === '5'
+        );
+
+        let status: MarketStatus = 'Open';
+        if (isResolvedOnChain) {
           status = 'Finalized';
-        } else if (rawStatus === 'Settling' || rawStatus === '3') {
+        } else if (rawStatus === 'Settling' || rawStatus === '3' || timeLeftSeconds <= 0) {
           status = 'Resolving';
         } else if (rawStatus === 'Trading' || rawStatus === '1' || (!m.status && timeLeftSeconds > 0)) {
           status = 'Open';
         } else {
-          status = 'Finalized';
+          status = 'Resolving';
         }
 
         // Populate unified representation
@@ -347,6 +352,19 @@ export class MarketService extends EventEmitter {
         );
         this.smoothedFairValues.set(marketId, evalResult.confluenceProbYes);
 
+        const isVoidedOnChain = Boolean(
+          (m as any).isVoided || (m as any).voided || rawStatus === 'Voided' || rawStatus === '5'
+        );
+        const winningOutcome: OutcomeType | undefined = status === 'Finalized'
+          ? isVoidedOnChain
+            ? 'VOID'
+            : (m as any).winningOutcome === 0 || (m as any).outcome === 0
+            ? 'YES'
+            : (m as any).winningOutcome === 1 || (m as any).outcome === 1
+            ? 'NO'
+            : undefined
+          : undefined;
+
         const marketObj: Market = {
           id: marketId,
           symbol,
@@ -357,16 +375,7 @@ export class MarketService extends EventEmitter {
           resolutionTimestamp: new Date(closeTimeMs + 60000).toISOString(),
           status,
           settlementPrice: status === 'Finalized' && (m as any).settlementPrice ? Number((m as any).settlementPrice) : undefined,
-          winningOutcome:
-            status === 'Finalized'
-              ? (m as any).isVoided
-                ? 'VOID'
-                : (m as any).winningOutcome === 0
-                ? 'YES'
-                : (m as any).winningOutcome === 1
-                ? 'NO'
-                : undefined
-              : undefined,
+          winningOutcome,
           bestBidYes: Number(bestBidYes.toFixed(2)),
           bestAskYes: Number(bestAskYes.toFixed(2)),
           bestBidNo: Number((1.0 - bestAskYes).toFixed(2)),
@@ -414,14 +423,7 @@ export class MarketService extends EventEmitter {
               const isHexMarket = stale.id.startsWith('0x') && stale.id.length === 66;
               if (Date.now() >= closeMs && stale.status !== 'Finalized') {
                 if (!isHexMarket) {
-                  const spot = this.spotPrices.get(stale.symbol)?.price || stale.strikePrice;
-                  stale.status = 'Finalized';
-                  stale.settlementPrice = spot;
-                  stale.winningOutcome = spot >= stale.strikePrice ? 'YES' : 'NO';
-                  void this.persistFinalizedMarket(stale).catch(() => {});
-                  void import('./order-service.js').then((mod) => {
-                    void mod.orderService.settleOrdersForMarket(stale.id, stale.winningOutcome!, stale.settlementPrice);
-                  }).catch(() => {});
+                  void this.finalizeRollingMarket(stale, closeMs);
                 } else {
                   stale.status = 'Resolving';
                 }
@@ -432,7 +434,6 @@ export class MarketService extends EventEmitter {
             }
           }
         }
-
       }
 
       this.emit('markets_synced', { count: this.markets.size });
@@ -598,20 +599,10 @@ export class MarketService extends EventEmitter {
       if (timeLeftSeconds <= 0 && market.status === 'Open') {
         const isHexMarket = market.id.startsWith('0x') && market.id.length === 66;
         if (!isHexMarket) {
-          market.status = 'Finalized';
-          const spot = this.spotPrices.get(market.symbol)?.price || market.strikePrice;
-          market.settlementPrice = spot;
-          market.winningOutcome = spot >= market.strikePrice ? 'YES' : 'NO';
-          this.archiveHistoricalMarket(market);
           this.markets.delete(id);
           this.depthBooks.delete(id);
           expiredCount++;
-
-          // Persist finalized state & settle orders for this market once
-          void this.persistFinalizedMarket(market).catch(() => {});
-          void import('./order-service.js').then((mod) => {
-            void mod.orderService.settleOrdersForMarket(market.id, market.winningOutcome!, market.settlementPrice);
-          }).catch(() => {});
+          void this.finalizeRollingMarket(market, closeTime);
         } else {
           market.status = 'Resolving';
           void import('./order-service.js').then((mod) => {
@@ -652,6 +643,34 @@ export class MarketService extends EventEmitter {
     if (expiredCount > 0) {
       this.emit('markets_expired', { expiredCount, timestamp: now });
     }
+  }
+
+  /**
+   * Finalizes an off-chain/rolling market deterministically using the historical price at exact close timestamp
+   * to avoid outcome flipping if spot price moved in the subsequent minute.
+   */
+  public async finalizeRollingMarket(market: Market, closeMs: number): Promise<void> {
+    market.status = 'Finalized';
+
+    // Deterministically fetch historical price at exact close timestamp
+    let histPrice: number | null = null;
+    try {
+      histPrice = await priceFeedService.getHistoricalPriceAt(market.symbol, closeMs);
+    } catch {
+      histPrice = null;
+    }
+
+    const settlementPrice = histPrice ?? this.spotPrices.get(market.symbol)?.price ?? market.strikePrice;
+    market.settlementPrice = settlementPrice;
+    market.winningOutcome = settlementPrice >= market.strikePrice ? 'YES' : 'NO';
+
+    this.archiveHistoricalMarket(market);
+    await this.persistFinalizedMarket(market).catch(() => {});
+
+    try {
+      const { orderService } = await import('./order-service.js');
+      await orderService.settleOrdersForMarket(market.id, market.winningOutcome, market.settlementPrice);
+    } catch {}
   }
 
   /**
