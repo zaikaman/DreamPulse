@@ -674,166 +674,232 @@ export class SettlementService {
     const unclaimed = await this.scanUnclaimedSettlements(normalizedUser);
     const claimedSweeps: SettlementSweep[] = [];
     let totalClaimed = 0;
-    let lastTxHash: Hex | undefined;
+    let resolvedTxHash: Hex = ('0x0000000000000000000000000000000000000000000000000000000000000000' as Hex);
     const now = new Date().toISOString();
 
     if (unclaimed.length > 0) {
-      // Process up to 10 positions per invocation to clear backlogs efficiently
-      const positionsToProcess = unclaimed.slice(0, 10);
+      // Process up to 100 positions per invocation to clear backlogs efficiently
+      const BATCH_LIMIT = 100;
+      const positionsToProcess = unclaimed.slice(0, BATCH_LIMIT);
 
       const hasGas = await hasOperatorGas().catch(() => false);
-      const operatorBalance = await somniaExchange.client
-        .getErc20Balance(SOMNIA_ADDRESSES.testUsdc, operatorAccount.address)
-        .catch(() => 0n);
-      let remainingOperatorBalance = operatorBalance;
+      const isCopyTrader = normalizedUser.toLowerCase() !== operatorAccount.address.toLowerCase();
 
-      for (const pos of positionsToProcess) {
-        let txHash: Hex | undefined;
-        let redeemSucceeded = false;
+      if (isCopyTrader) {
+        // Direct payout aggregation for user wallets: combine all positions into 1 single on-chain transfer
+        const operatorBalance = await somniaExchange.client
+          .getErc20Balance(SOMNIA_ADDRESSES.testUsdc, operatorAccount.address)
+          .catch(() => 0n);
 
-        // 1. Attempt on-chain redeem if operator holds ERC6909 outcome tokens for this market
-        try {
-          if (hasGas && pos.marketIdHex) {
-            let outcomeToken = pos.outcomeToken;
-            if (!outcomeToken) {
-              const onchain = await somniaExchange.client.getMarketOnchain(pos.marketIdHex).catch(() => null);
-              outcomeToken = onchain?.outcomeToken as Address | undefined;
-            }
-            if (outcomeToken) {
-              const res = await executeOperatorTx(() =>
-                somniaExchange.trader.redeem({
-                  marketId: pos.marketIdHex!,
-                  outcomeIdx: pos.outcomeIdx,
-                  amount: pos.rawAmount,
-                  outcomeToken,
-                }),
-              ).catch(() => null);
-              if (res?.hash) {
-                txHash = res.hash.startsWith('0x') ? (res.hash as Hex) : (`0x${res.hash}` as Hex);
-                redeemSucceeded = true;
-              }
-            }
-          }
-        } catch (err: any) {
-          if (
-            !err.message?.includes('Missing or invalid parameters') &&
-            !err.message?.includes('account does not exist') &&
-            !err.message?.includes('InsufficientBalance') &&
-            !err.message?.includes('gas')
-          ) {
-            console.warn(`[SettlementService] On-chain redeem note for market ${pos.marketId}:`, err.message);
+        let accumulatedRaw = 0n;
+        const payablePositions: UnclaimedPosition[] = [];
+        for (const pos of positionsToProcess) {
+          if (pos.rawAmount <= 0n) continue;
+          if (process.env.NODE_ENV === 'test' || accumulatedRaw + pos.rawAmount <= operatorBalance) {
+            accumulatedRaw += pos.rawAmount;
+            payablePositions.push(pos);
+          } else {
+            break;
           }
         }
 
-        const isCopyTrader = normalizedUser.toLowerCase() !== operatorAccount.address.toLowerCase();
-
-        // 2. If copy-trader, execute direct TestUSDC payout transfer from operator balance to user wallet
-        if (isCopyTrader && pos.rawAmount > 0n) {
-          const canPayout = (hasGas && remainingOperatorBalance >= pos.rawAmount) || process.env.NODE_ENV === 'test';
-          if (canPayout) {
-            try {
-              if (process.env.NODE_ENV !== 'test') {
+        if (payablePositions.length > 0) {
+          let txHash: Hex | undefined;
+          if (process.env.NODE_ENV !== 'test') {
+            const canPayout = hasGas && accumulatedRaw > 0n && operatorBalance >= accumulatedRaw;
+            if (canPayout) {
+              try {
                 const transferHash = await executeOperatorWriteContract({
                   address: SOMNIA_ADDRESSES.testUsdc,
                   abi: ERC20_ABI,
                   functionName: 'transfer',
-                  args: [normalizedUser, pos.rawAmount],
+                  args: [normalizedUser, accumulatedRaw],
                 });
                 if (transferHash) {
                   await publicClient.waitForTransactionReceipt({ hash: transferHash, timeout: 10_000 }).catch(() => {});
-                  if (remainingOperatorBalance >= pos.rawAmount) {
-                    remainingOperatorBalance -= pos.rawAmount;
-                  }
                   txHash = transferHash;
                 }
-              } else if (!txHash) {
-                txHash = pos.txHash || ('0x1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef' as Hex);
+              } catch (tErr: any) {
+                console.warn(`[SettlementService] Batched payout transfer of ${accumulatedRaw.toString()} to ${normalizedUser} failed:`, tErr.message);
               }
-            } catch (tErr: any) {
-              console.warn(`[SettlementService] Payout transfer to ${normalizedUser} failed:`, tErr.message);
+            } else {
+              console.warn(
+                `[SettlementService] Payout transfer skipped: operator balance (${operatorBalance.toString()}) or gas insufficient for batched amount ${accumulatedRaw.toString()}`,
+              );
             }
           } else {
-            console.warn(
-              `[SettlementService] Payout transfer skipped: operator balance (${remainingOperatorBalance.toString()}) or gas insufficient for ${pos.rawAmount.toString()}`,
-            );
-          }
-        }
-
-        // In test mode, fallback to pos.txHash if no txHash was generated
-        if (!txHash && pos.txHash && process.env.NODE_ENV === 'test') {
-          txHash = pos.txHash;
-        }
-
-        // If no on-chain transaction hash was obtained and not in test, skip creating confirmed sweep
-        if (!txHash) {
-          if (pos.txHash && pos.txHash.startsWith('0x') && pos.txHash.length === 66) {
-            txHash = pos.txHash as Hex;
-          } else if (process.env.NODE_ENV === 'test') {
             txHash = '0x1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef' as Hex;
-          } else {
-            // Cannot confirm sweep without on-chain execution
-            continue;
+          }
+
+          if (txHash) {
+            resolvedTxHash = txHash;
+            const sweepRowsToInsert: any[] = [];
+
+            for (const pos of payablePositions) {
+              const sweepId = crypto.randomUUID();
+              const sweep: SettlementSweep = {
+                id: sweepId,
+                userAddress: normalizedUser,
+                marketId: pos.marketId,
+                winningOutcome: pos.winningOutcome,
+                claimableAmount: pos.claimableAmount,
+                payoutToken: 'tUSDC',
+                isCompounded: false,
+                txHash,
+                status: 'CONFIRMED',
+                claimedAt: now,
+              };
+
+              this.sweepsMap.set(sweepId, sweep);
+              this.sweeps.unshift(sweep);
+              if (this.sweeps.length > 5000) {
+                const evicted = this.sweeps.pop();
+                if (evicted) this.sweepsMap.delete(evicted.id);
+              }
+              claimedSweeps.push(sweep);
+              totalClaimed += pos.claimableAmount;
+
+              if (
+                isPersistenceEnabled() &&
+                txHash &&
+                !txHash.startsWith('0x0000000000000000000000000000000000000000000000000000000000000000') &&
+                txHash !== '0x1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef' &&
+                isAddress(normalizedUser)
+              ) {
+                sweepRowsToInsert.push({
+                  id: sweepId,
+                  user_address: normalizedUser,
+                  market_id: pos.marketId,
+                  winning_outcome: pos.winningOutcome,
+                  claimable_amount: pos.claimableAmount,
+                  payout_token: 'tUSDC',
+                  is_compounded: false,
+                  tx_hash: txHash,
+                  status: 'CONFIRMED',
+                  claimed_at: now,
+                });
+              }
+
+              // Settle orders in orderService asynchronously
+              void orderService.settleOrdersForMarket(pos.marketId, pos.winningOutcome).catch(() => {});
+            }
+
+            if (sweepRowsToInsert.length > 0) {
+              void (async () => {
+                try {
+                  for (const row of sweepRowsToInsert) {
+                    await marketService.ensureMarketPersisted(row.market_id, 'BTC/USD').catch(() => {});
+                  }
+                  await supabase.from('sweeps').insert(sweepRowsToInsert);
+                } catch (err: any) {
+                  console.warn('[SettlementService] Bulk DB persist note:', err?.message || err);
+                }
+              })();
+            }
           }
         }
+      } else {
+        // Operator's own wallet: on-chain ERC6909 redeem from market contracts
+        for (const pos of positionsToProcess) {
+          let txHash: Hex | undefined;
 
-        lastTxHash = txHash;
-
-        const sweepId = crypto.randomUUID();
-        const sweep: SettlementSweep = {
-          id: sweepId,
-          userAddress: normalizedUser,
-          marketId: pos.marketId,
-          winningOutcome: pos.winningOutcome,
-          claimableAmount: pos.claimableAmount,
-          payoutToken: 'tUSDC',
-          isCompounded: false,
-          txHash,
-          status: 'CONFIRMED',
-          claimedAt: now,
-        };
-
-        this.sweepsMap.set(sweepId, sweep);
-        this.sweeps.unshift(sweep);
-        if (this.sweeps.length > 5000) {
-          const evicted = this.sweeps.pop();
-          if (evicted) this.sweepsMap.delete(evicted.id);
-        }
-        claimedSweeps.push(sweep);
-        totalClaimed += pos.claimableAmount;
-
-        // Persist to Supabase asynchronously
-        if (
-          isPersistenceEnabled() &&
-          txHash &&
-          !txHash.startsWith('0x0000000000000000000000000000000000000000000000000000000000000000') &&
-          txHash !== '0x1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef' &&
-          isAddress(normalizedUser)
-        ) {
-          try {
-            await marketService.ensureMarketPersisted(pos.marketId, pos.symbol);
-            await supabase.from('sweeps').insert({
-              id: sweepId,
-              user_address: normalizedUser,
-              market_id: pos.marketId,
-              winning_outcome: pos.winningOutcome,
-              claimable_amount: pos.claimableAmount,
-              payout_token: 'tUSDC',
-              is_compounded: false,
-              tx_hash: txHash,
-              status: 'CONFIRMED',
-              claimed_at: now,
-            });
-          } catch (err) {
-            console.warn('[SettlementService] DB persist note:', err);
+          if (hasGas && pos.marketIdHex) {
+            try {
+              let outcomeToken = pos.outcomeToken;
+              if (!outcomeToken) {
+                const onchain = await somniaExchange.client.getMarketOnchain(pos.marketIdHex).catch(() => null);
+                outcomeToken = onchain?.outcomeToken as Address | undefined;
+              }
+              if (outcomeToken) {
+                const res = await executeOperatorTx(() =>
+                  somniaExchange.trader.redeem({
+                    marketId: pos.marketIdHex!,
+                    outcomeIdx: pos.outcomeIdx,
+                    amount: pos.rawAmount,
+                    outcomeToken,
+                  }),
+                ).catch(() => null);
+                if (res?.hash) {
+                  txHash = res.hash.startsWith('0x') ? (res.hash as Hex) : (`0x${res.hash}` as Hex);
+                }
+              }
+            } catch (err: any) {
+              if (
+                !err.message?.includes('Missing or invalid parameters') &&
+                !err.message?.includes('account does not exist') &&
+                !err.message?.includes('InsufficientBalance') &&
+                !err.message?.includes('gas')
+              ) {
+                console.warn(`[SettlementService] On-chain redeem note for market ${pos.marketId}:`, err.message);
+              }
+            }
           }
-        }
 
-        // Settle orders in orderService and mark them settled
-        void orderService.settleOrdersForMarket(pos.marketId, pos.winningOutcome).catch(() => {});
+          if (!txHash) {
+            if (pos.txHash && pos.txHash.startsWith('0x') && pos.txHash.length === 66) {
+              txHash = pos.txHash as Hex;
+            } else if (process.env.NODE_ENV === 'test') {
+              txHash = '0x1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef' as Hex;
+            } else {
+              continue;
+            }
+          }
+
+          resolvedTxHash = txHash;
+
+          const sweepId = crypto.randomUUID();
+          const sweep: SettlementSweep = {
+            id: sweepId,
+            userAddress: normalizedUser,
+            marketId: pos.marketId,
+            winningOutcome: pos.winningOutcome,
+            claimableAmount: pos.claimableAmount,
+            payoutToken: 'tUSDC',
+            isCompounded: false,
+            txHash,
+            status: 'CONFIRMED',
+            claimedAt: now,
+          };
+
+          this.sweepsMap.set(sweepId, sweep);
+          this.sweeps.unshift(sweep);
+          if (this.sweeps.length > 5000) {
+            const evicted = this.sweeps.pop();
+            if (evicted) this.sweepsMap.delete(evicted.id);
+          }
+          claimedSweeps.push(sweep);
+          totalClaimed += pos.claimableAmount;
+
+          if (
+            isPersistenceEnabled() &&
+            txHash &&
+            !txHash.startsWith('0x0000000000000000000000000000000000000000000000000000000000000000') &&
+            txHash !== '0x1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef' &&
+            isAddress(normalizedUser)
+          ) {
+            try {
+              await marketService.ensureMarketPersisted(pos.marketId, pos.symbol);
+              await supabase.from('sweeps').insert({
+                id: sweepId,
+                user_address: normalizedUser,
+                market_id: pos.marketId,
+                winning_outcome: pos.winningOutcome,
+                claimable_amount: pos.claimableAmount,
+                payout_token: 'tUSDC',
+                is_compounded: false,
+                tx_hash: txHash,
+                status: 'CONFIRMED',
+                claimed_at: now,
+              });
+            } catch (err) {
+              console.warn('[SettlementService] DB persist note:', err);
+            }
+          }
+
+          void orderService.settleOrdersForMarket(pos.marketId, pos.winningOutcome).catch(() => {});
+        }
       }
     }
-
-    const resolvedTxHash: Hex = lastTxHash || ('0x0000000000000000000000000000000000000000000000000000000000000000' as Hex);
 
     // Invalidate cached summaries so subsequent reads reflect post-sweep state immediately
     this.invalidateCache(normalizedUser);
