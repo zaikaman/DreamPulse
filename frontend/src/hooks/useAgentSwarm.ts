@@ -34,60 +34,84 @@ export interface UseAgentSwarmReturn {
   refreshStatus: () => Promise<void>;
 }
 
-export const useAgentSwarm = (operatorAddress?: string): UseAgentSwarmReturn => {
-  const [summary, setSummary] = useState<SwarmStatusSummary>({
-    volt: { status: 'ACTIVE', evalLatencyMs: 0, tradesToday: 0, pnl: '+0.00 tUSDC' },
-    oracle: { status: 'ACTIVE', evalLatencyMs: 0, tradesToday: 0, pnl: '+0.00 tUSDC' },
-    titan: { status: 'ACTIVE', activeQuotes: 0, spreadCaptured: '+0.00 tUSDC' },
-    sweeper: { status: 'ACTIVE', lastSweep: new Date().toISOString(), totalClaimed: '0.00 tUSDC' },
-  });
+let sharedSummary: SwarmStatusSummary = {
+  volt: { status: 'ACTIVE', evalLatencyMs: 0, tradesToday: 0, pnl: '+0.00 tUSDC' },
+  oracle: { status: 'ACTIVE', evalLatencyMs: 0, tradesToday: 0, pnl: '+0.00 tUSDC' },
+  titan: { status: 'ACTIVE', activeQuotes: 0, spreadCaptured: '+0.00 tUSDC' },
+  sweeper: { status: 'ACTIVE', lastSweep: new Date().toISOString(), totalClaimed: '0.00 tUSDC' },
+};
 
-  const [detailed, setDetailed] = useState<Record<string, AgentDetail>>({
-    volt: {
-      agentType: 'Volt',
-      isEnabled: true,
-      status: 'ACTIVE',
-      evalLatencyMs: 0,
-      tradesToday: 0,
-      pnlAmount: 0.0,
-      lastAction: 'INITIALIZING',
-      lastActionTimestamp: Date.now(),
-      config: { driftThreshold: 0.002, minEdge: 0.03, lotSize: 5.0 },
-    },
-    oracle: {
-      agentType: 'Oracle',
-      isEnabled: true,
-      status: 'ACTIVE',
-      evalLatencyMs: 0,
-      tradesToday: 0,
-      pnlAmount: 0.0,
-      lastAction: 'INITIALIZING',
-      lastActionTimestamp: Date.now(),
-      config: { minEdge: 0.035, lotSize: 5.0 },
-    },
-    titan: {
-      agentType: 'Titan',
-      isEnabled: true,
-      status: 'ACTIVE',
-      evalLatencyMs: 0,
-      tradesToday: 0,
-      pnlAmount: 0.0,
-      lastAction: 'INITIALIZING',
-      lastActionTimestamp: Date.now(),
-      config: { targetSpread: 0.04, inventoryAversion: 0.015, lotSize: 2.0 },
-    },
-    sweeper: {
-      agentType: 'Sweeper',
-      isEnabled: true,
-      status: 'ACTIVE',
-      evalLatencyMs: 0,
-      tradesToday: 0,
-      pnlAmount: 0.0,
-      lastAction: 'INITIALIZING',
-      lastActionTimestamp: Date.now(),
-      config: {},
-    },
-  });
+let sharedDetailed: Record<string, AgentDetail> = {
+  volt: {
+    agentType: 'Volt',
+    isEnabled: true,
+    status: 'ACTIVE',
+    evalLatencyMs: 0,
+    tradesToday: 0,
+    pnlAmount: 0.0,
+    lastAction: 'INITIALIZING',
+    lastActionTimestamp: Date.now(),
+    config: { driftThreshold: 0.002, minEdge: 0.03, lotSize: 5.0 },
+  },
+  oracle: {
+    agentType: 'Oracle',
+    isEnabled: true,
+    status: 'ACTIVE',
+    evalLatencyMs: 0,
+    tradesToday: 0,
+    pnlAmount: 0.0,
+    lastAction: 'INITIALIZING',
+    lastActionTimestamp: Date.now(),
+    config: { minEdge: 0.035, lotSize: 5.0 },
+  },
+  titan: {
+    agentType: 'Titan',
+    isEnabled: true,
+    status: 'ACTIVE',
+    evalLatencyMs: 0,
+    tradesToday: 0,
+    pnlAmount: 0.0,
+    lastAction: 'INITIALIZING',
+    lastActionTimestamp: Date.now(),
+    config: { targetSpread: 0.04, inventoryAversion: 0.015, lotSize: 2.0 },
+  },
+  sweeper: {
+    agentType: 'Sweeper',
+    isEnabled: true,
+    status: 'ACTIVE',
+    evalLatencyMs: 0,
+    tradesToday: 0,
+    pnlAmount: 0.0,
+    lastAction: 'INITIALIZING',
+    lastActionTimestamp: Date.now(),
+    config: {},
+  },
+};
+
+const listeners = new Set<() => void>();
+
+function updateSharedState(updater: (prevDetailed: Record<string, AgentDetail>, prevSummary: SwarmStatusSummary) => { detailed?: Record<string, AgentDetail>; summary?: SwarmStatusSummary }) {
+  const result = updater(sharedDetailed, sharedSummary);
+  if (result.detailed) sharedDetailed = result.detailed;
+  if (result.summary) sharedSummary = result.summary;
+  listeners.forEach((fn) => fn());
+}
+
+export const useAgentSwarm = (operatorAddress?: string): UseAgentSwarmReturn => {
+  const [summary, setSummary] = useState<SwarmStatusSummary>(sharedSummary);
+  const [detailed, setDetailed] = useState<Record<string, AgentDetail>>(sharedDetailed);
+
+  // Subscribe to global shared updates
+  useEffect(() => {
+    const onUpdate = () => {
+      setSummary(sharedSummary);
+      setDetailed(sharedDetailed);
+    };
+    listeners.add(onUpdate);
+    return () => {
+      listeners.delete(onUpdate);
+    };
+  }, []);
 
   // Orders are now server-paginated inside OrderHistoryTable — this hook keeps a
   // deprecated empty array for backwards compat but no longer bulk-loads trades.
@@ -113,43 +137,47 @@ export const useAgentSwarm = (operatorAddress?: string): UseAgentSwarmReturn => 
       ]);
 
       if (statusRes?.agents) {
-        setSummary(statusRes.agents);
         const parseVal = (str?: string) => {
           if (!str) return 0;
           const n = parseFloat(str.replace(/[^0-9.-]/g, ''));
           return isNaN(n) ? 0 : n;
         };
-        setDetailed((prev) => ({
-          ...prev,
-          volt: {
-            ...prev.volt,
-            tradesToday: statusRes.agents.volt?.tradesToday ?? prev.volt.tradesToday,
-            pnlAmount: parseVal(statusRes.agents.volt?.pnl) || prev.volt.pnlAmount,
-            evalLatencyMs: statusRes.agents.volt?.evalLatencyMs ?? prev.volt.evalLatencyMs,
-            status: (statusRes.agents.volt?.status || prev.volt.status) as AgentDetail['status'],
-          },
-          oracle: {
-            ...prev.oracle,
-            tradesToday: statusRes.agents.oracle?.tradesToday ?? prev.oracle.tradesToday,
-            pnlAmount: parseVal(statusRes.agents.oracle?.pnl) || prev.oracle.pnlAmount,
-            evalLatencyMs: statusRes.agents.oracle?.evalLatencyMs ?? prev.oracle.evalLatencyMs,
-            status: (statusRes.agents.oracle?.status || prev.oracle.status) as AgentDetail['status'],
-          },
-          titan: {
-            ...prev.titan,
-            tradesToday: statusRes.agents.titan?.activeQuotes ?? prev.titan.tradesToday,
-            pnlAmount: parseVal(statusRes.agents.titan?.spreadCaptured) || prev.titan.pnlAmount,
-            status: (statusRes.agents.titan?.status || prev.titan.status) as AgentDetail['status'],
-          },
-          sweeper: {
-            ...prev.sweeper,
-            pnlAmount: parseVal(statusRes.agents.sweeper?.totalClaimed) || prev.sweeper.pnlAmount,
-            status: (statusRes.agents.sweeper?.status || prev.sweeper.status) as AgentDetail['status'],
+        updateSharedState((prevDetailed) => ({
+          summary: statusRes.agents,
+          detailed: {
+            ...prevDetailed,
+            volt: {
+              ...prevDetailed.volt,
+              tradesToday: statusRes.agents.volt?.tradesToday ?? prevDetailed.volt.tradesToday,
+              pnlAmount: parseVal(statusRes.agents.volt?.pnl) ?? prevDetailed.volt.pnlAmount,
+              evalLatencyMs: statusRes.agents.volt?.evalLatencyMs ?? prevDetailed.volt.evalLatencyMs,
+              status: (statusRes.agents.volt?.status || prevDetailed.volt.status) as AgentDetail['status'],
+            },
+            oracle: {
+              ...prevDetailed.oracle,
+              tradesToday: statusRes.agents.oracle?.tradesToday ?? prevDetailed.oracle.tradesToday,
+              pnlAmount: parseVal(statusRes.agents.oracle?.pnl) ?? prevDetailed.oracle.pnlAmount,
+              evalLatencyMs: statusRes.agents.oracle?.evalLatencyMs ?? prevDetailed.oracle.evalLatencyMs,
+              status: (statusRes.agents.oracle?.status || prevDetailed.oracle.status) as AgentDetail['status'],
+            },
+            titan: {
+              ...prevDetailed.titan,
+              tradesToday: statusRes.agents.titan?.activeQuotes ?? prevDetailed.titan.tradesToday,
+              pnlAmount: parseVal(statusRes.agents.titan?.spreadCaptured) ?? prevDetailed.titan.pnlAmount,
+              status: (statusRes.agents.titan?.status || prevDetailed.titan.status) as AgentDetail['status'],
+            },
+            sweeper: {
+              ...prevDetailed.sweeper,
+              pnlAmount: parseVal(statusRes.agents.sweeper?.totalClaimed) ?? prevDetailed.sweeper.pnlAmount,
+              status: (statusRes.agents.sweeper?.status || prevDetailed.sweeper.status) as AgentDetail['status'],
+            },
           },
         }));
       }
       if (detailedRes?.agents) {
-        setDetailed(detailedRes.agents);
+        updateSharedState(() => ({
+          detailed: detailedRes.agents,
+        }));
       }
       setError(null);
     } catch (err: any) {
@@ -183,31 +211,32 @@ export const useAgentSwarm = (operatorAddress?: string): UseAgentSwarmReturn => 
       const titanPnl = typeof payload.titan === 'number' ? payload.titan : undefined;
       const sweeperPnl = typeof payload.sweeper === 'number' ? payload.sweeper : undefined;
 
-      setDetailed((prev) => ({
-        ...prev,
-        volt: { ...prev.volt, pnlAmount: voltPnl !== undefined ? voltPnl : prev.volt.pnlAmount },
-        oracle: { ...prev.oracle, pnlAmount: oraclePnl !== undefined ? oraclePnl : prev.oracle.pnlAmount },
-        titan: { ...prev.titan, pnlAmount: titanPnl !== undefined ? titanPnl : prev.titan.pnlAmount },
-        sweeper: { ...prev.sweeper, pnlAmount: sweeperPnl !== undefined ? sweeperPnl : prev.sweeper.pnlAmount },
-      }));
-
-      setSummary((prev) => ({
-        ...prev,
-        volt: {
-          ...prev.volt,
-          pnl: voltPnl !== undefined ? `${voltPnl >= 0 ? '+' : ''}${voltPnl.toFixed(2)} tUSDC` : prev.volt.pnl,
+      updateSharedState((prevDetailed, prevSummary) => ({
+        detailed: {
+          ...prevDetailed,
+          volt: { ...prevDetailed.volt, pnlAmount: voltPnl !== undefined ? voltPnl : prevDetailed.volt.pnlAmount },
+          oracle: { ...prevDetailed.oracle, pnlAmount: oraclePnl !== undefined ? oraclePnl : prevDetailed.oracle.pnlAmount },
+          titan: { ...prevDetailed.titan, pnlAmount: titanPnl !== undefined ? titanPnl : prevDetailed.titan.pnlAmount },
+          sweeper: { ...prevDetailed.sweeper, pnlAmount: sweeperPnl !== undefined ? sweeperPnl : prevDetailed.sweeper.pnlAmount },
         },
-        oracle: {
-          ...prev.oracle,
-          pnl: oraclePnl !== undefined ? `${oraclePnl >= 0 ? '+' : ''}${oraclePnl.toFixed(2)} tUSDC` : prev.oracle.pnl,
-        },
-        titan: {
-          ...prev.titan,
-          spreadCaptured: titanPnl !== undefined ? `${titanPnl >= 0 ? '+' : ''}${titanPnl.toFixed(2)} tUSDC` : prev.titan.spreadCaptured,
-        },
-        sweeper: {
-          ...prev.sweeper,
-          totalClaimed: sweeperPnl !== undefined ? `+${sweeperPnl.toFixed(2)} tUSDC` : prev.sweeper.totalClaimed,
+        summary: {
+          ...prevSummary,
+          volt: {
+            ...prevSummary.volt,
+            pnl: voltPnl !== undefined ? `${voltPnl >= 0 ? '+' : ''}${voltPnl.toFixed(2)} tUSDC` : prevSummary.volt.pnl,
+          },
+          oracle: {
+            ...prevSummary.oracle,
+            pnl: oraclePnl !== undefined ? `${oraclePnl >= 0 ? '+' : ''}${oraclePnl.toFixed(2)} tUSDC` : prevSummary.oracle.pnl,
+          },
+          titan: {
+            ...prevSummary.titan,
+            spreadCaptured: titanPnl !== undefined ? `${titanPnl >= 0 ? '+' : ''}${titanPnl.toFixed(2)} tUSDC` : prevSummary.titan.spreadCaptured,
+          },
+          sweeper: {
+            ...prevSummary.sweeper,
+            totalClaimed: sweeperPnl !== undefined ? `+${sweeperPnl.toFixed(2)} tUSDC` : prevSummary.sweeper.totalClaimed,
+          },
         },
       }));
     });

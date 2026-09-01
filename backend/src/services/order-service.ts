@@ -2144,17 +2144,7 @@ export class OrderService {
       try {
         telemetryWsGateway.broadcastPnlUpdate({ updatedOrders: updatedEvents, timestamp: Date.now() });
         this.cachedPnlByKey.clear();
-        const voltPnl = this.getTotalRealizedPnl('Volt');
-        const oraclePnl = this.getTotalRealizedPnl('Oracle');
-        const titanPnl = this.getTotalRealizedPnl('Titan');
-        telemetryWsGateway.broadcastSwarmPnl({
-          volt: voltPnl,
-          oracle: oraclePnl,
-          titan: titanPnl,
-          sweeper: 0,
-          totalSwarm: Number((voltPnl + oraclePnl + titanPnl).toFixed(2)),
-          timestamp: Date.now(),
-        });
+        this.broadcastSwarmTelemetry();
       } catch {}
       this.notifyStateChange();
 
@@ -2541,18 +2531,7 @@ export class OrderService {
           telemetryWsGateway.broadcastPnlUpdate({ updatedOrders: updatedOrderPnlEvents, timestamp: Date.now() });
 
           this.cachedPnlByKey.clear();
-          const voltPnl = this.getTotalRealizedPnl('Volt');
-          const oraclePnl = this.getTotalRealizedPnl('Oracle');
-          const titanPnl = this.getTotalRealizedPnl('Titan');
-
-          telemetryWsGateway.broadcastSwarmPnl({
-            volt: voltPnl,
-            oracle: oraclePnl,
-            titan: titanPnl,
-            sweeper: 0,
-            totalSwarm: Number((voltPnl + oraclePnl + titanPnl).toFixed(2)),
-            timestamp: Date.now(),
-          });
+          this.broadcastSwarmTelemetry();
 
           void import('./settlement-service.js').then((m) => m.settlementService.invalidateCache()).catch(() => {});
           void import('./analytics-service.js').then((m) => m.analyticsService.invalidateCache()).catch(() => {});
@@ -2686,6 +2665,43 @@ export class OrderService {
           }
         } catch {}
       }
+    } catch {}
+  }
+
+  /**
+   * Broadcasts truthful, operator-scoped swarm PnL telemetry tick to WebSocket clients.
+   */
+  public broadcastSwarmTelemetry(): void {
+    try {
+      const opAddr = (operatorAccount?.address || SOMNIA_ADDRESSES.operatorAccount).toLowerCase();
+      const agg = this.getSwarmAggregates(opAddr);
+      import('./settlement-service.js').then(({ settlementService }) => {
+        let sweeperPnl = 0;
+        try {
+          const userSweeps = settlementService.getSweepHistory(opAddr);
+          const confirmed = userSweeps.filter(
+            (s) => s.status === 'CONFIRMED' && s.txHash && s.txHash !== '0x0000000000000000000000000000000000000000000000000000000000000000',
+          );
+          sweeperPnl = Number(confirmed.reduce((acc, s) => acc + (s.claimableAmount || 0), 0).toFixed(2));
+        } catch {}
+        telemetryWsGateway.broadcastSwarmPnl({
+          volt: agg.voltPnl,
+          oracle: agg.oraclePnl,
+          titan: agg.titanPnl,
+          sweeper: sweeperPnl,
+          totalSwarm: Number((agg.voltPnl + agg.oraclePnl + agg.titanPnl).toFixed(2)),
+          timestamp: Date.now(),
+        });
+      }).catch(() => {
+        telemetryWsGateway.broadcastSwarmPnl({
+          volt: agg.voltPnl,
+          oracle: agg.oraclePnl,
+          titan: agg.titanPnl,
+          sweeper: 0,
+          totalSwarm: Number((agg.voltPnl + agg.oraclePnl + agg.titanPnl).toFixed(2)),
+          timestamp: Date.now(),
+        });
+      });
     } catch {}
   }
 

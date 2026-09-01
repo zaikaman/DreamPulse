@@ -82,18 +82,18 @@ export const StatCardsGrid: React.FC<StatCardsGridProps> = ({
   };
 
   // Calculate dynamic swarm PnL and trade fills (Operator Swarm) — accurate realtime net PnL (payout - cost per trade, handles BUY/SELL/VOID)
-  const voltPnl = swarmDetailed?.volt?.pnlAmount || parsePnlNum(swarmSummary?.volt?.pnl);
-  const oraclePnl = swarmDetailed?.oracle?.pnlAmount || parsePnlNum(swarmSummary?.oracle?.pnl);
-  const titanPnl = swarmDetailed?.titan?.pnlAmount || parsePnlNum(swarmSummary?.titan?.spreadCaptured);
+  const voltPnl = swarmDetailed?.volt?.pnlAmount ?? parsePnlNum(swarmSummary?.volt?.pnl);
+  const oraclePnl = swarmDetailed?.oracle?.pnlAmount ?? parsePnlNum(swarmSummary?.oracle?.pnl);
+  const titanPnl = swarmDetailed?.titan?.pnlAmount ?? parsePnlNum(swarmSummary?.titan?.spreadCaptured);
   // Sweeper gross claimed tracked separately; excluded from net swarm PnL to avoid double counting (void sweeperPnl unused in total)
   void (swarmDetailed?.sweeper?.pnlAmount);
   const totalSwarmPnl = voltPnl + oraclePnl + titanPnl;
 
   // Total all-time trade order fills across swarm (Volt, Oracle & Titan execution agents)
   const agentFills =
-    (swarmDetailed?.volt?.tradesToday || swarmSummary?.volt?.tradesToday || 0) +
-    (swarmDetailed?.oracle?.tradesToday || swarmSummary?.oracle?.tradesToday || 0) +
-    (swarmDetailed?.titan?.tradesToday || (swarmSummary?.titan as any)?.tradesToday || 0);
+    (swarmDetailed?.volt?.tradesToday ?? swarmSummary?.volt?.tradesToday ?? 0) +
+    (swarmDetailed?.oracle?.tradesToday ?? swarmSummary?.oracle?.tradesToday ?? 0) +
+    (swarmDetailed?.titan?.tradesToday ?? (swarmSummary?.titan as any)?.tradesToday ?? 0);
   const totalSwarmFills = ordersCount !== undefined && ordersCount > 0 ? Math.max(ordersCount, agentFills) : agentFills;
 
   // Personal Portfolio calculations
