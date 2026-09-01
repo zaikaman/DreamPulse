@@ -816,6 +816,9 @@ export class SettlementService {
 
             // Suppress scanner from re-queueing by recording an idempotent sweep entry
             const sweepId = crypto.randomUUID();
+            const fallbackTxHash: Hex | undefined = pos.txHash && pos.txHash.startsWith('0x') && pos.txHash.length === 66
+              ? (pos.txHash as Hex)
+              : undefined;
             const zeroSweep: SettlementSweep = {
               id: sweepId,
               userAddress: normalizedUser,
@@ -824,7 +827,7 @@ export class SettlementService {
               claimableAmount: pos.claimableAmount,
               payoutToken: 'tUSDC',
               isCompounded: false,
-              txHash: undefined,
+              txHash: fallbackTxHash,
               status: 'CONFIRMED',
               claimedAt: now,
             };
@@ -1387,14 +1390,38 @@ export class SettlementService {
    * Lists historical settlement redemptions.
    */
   public getSweepHistory(userAddress?: string): SettlementSweep[] {
-    if (!userAddress) {
-      return [...this.sweeps];
-    }
-    if (!isAddress(userAddress)) {
-      return [];
-    }
-    const normalized = getAddress(userAddress).toLowerCase();
-    return this.sweeps.filter((s) => s.userAddress.toLowerCase() === normalized);
+    const rawList = !userAddress
+      ? [...this.sweeps]
+      : !isAddress(userAddress)
+      ? []
+      : this.sweeps.filter((s) => s.userAddress.toLowerCase() === getAddress(userAddress).toLowerCase());
+
+    return rawList.map((s) => {
+      if (s.txHash && s.txHash.startsWith('0x') && s.txHash.length === 66) {
+        return s;
+      }
+      try {
+        const userOrders = orderService.getOrders({
+          userAddress: (s.userAddress as Address) || undefined,
+          limit: 200,
+        });
+        const matched = userOrders.find(
+          (o) =>
+            o.txHash &&
+            o.txHash.startsWith('0x') &&
+            o.txHash.length === 66 &&
+            (o.marketId.toLowerCase() === s.marketId.toLowerCase() ||
+              marketService.getMarketById(o.marketId)?.marketIdHex?.toLowerCase() === s.marketId.toLowerCase()),
+        );
+        if (matched?.txHash) {
+          return {
+            ...s,
+            txHash: matched.txHash as Hex,
+          };
+        }
+      } catch {}
+      return s;
+    });
   }
 
   /**

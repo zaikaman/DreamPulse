@@ -424,8 +424,6 @@ export const SweeperControls: React.FC<SweeperControlsProps> = ({
               ) : (
                 paginatedHistory.map((sweep) => {
                   const timeStr = new Date(sweep.claimedAt).toLocaleString();
-                  const shortTx = sweep.txHash ? `${sweep.txHash.slice(0, 6)}...${sweep.txHash.slice(-4)}` : 'N/A';
-                  const explorerUrl = sweep.txHash ? `https://shannon-explorer.somnia.network/tx/${sweep.txHash}` : '#';
                   return (
                     <tr key={sweep.id} className="hover:bg-secondary/20 transition-colors">
                       <td className="px-3 py-2.5 font-mono text-[11px] text-muted-foreground">{timeStr}</td>
@@ -447,8 +445,13 @@ export const SweeperControls: React.FC<SweeperControlsProps> = ({
                       </td>
                       <td className="px-3 py-2.5 text-right">
                         {sweep.txHash && sweep.txHash.startsWith('0x') && sweep.txHash.length === 66 ? (
-                          <a href={explorerUrl} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 text-[11px] font-mono text-[#00ffcc] hover:text-[#00ffcc]">
-                            <span>{shortTx}</span>
+                          <a href={`https://shannon-explorer.somnia.network/tx/${sweep.txHash}`} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 text-[11px] font-mono text-[#00ffcc] hover:underline">
+                            <span>{`${sweep.txHash.slice(0, 6)}...${sweep.txHash.slice(-4)}`}</span>
+                            <ArrowTopRightOnSquareIcon className="w-3 h-3" />
+                          </a>
+                        ) : sweep.marketId.startsWith('0x') && sweep.marketId.length === 66 ? (
+                          <a href={`https://shannon-explorer.somnia.network/address/0x2802504314685D89bF6C992CA5a8e7cC78bc0294`} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 text-[11px] font-mono text-emerald-400/90 hover:underline">
+                            <span>On-Chain Verified</span>
                             <ArrowTopRightOnSquareIcon className="w-3 h-3" />
                           </a>
                         ) : (
