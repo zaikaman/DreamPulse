@@ -28,6 +28,7 @@ export interface AgentTelemetryState {
 
 export class MultiAgentSwarmRunner {
   private isRunning: boolean = false;
+  private isEvaluating: boolean = false; // Reentrancy & concurrency lock to prevent overlapping cycles
   private intervalHandle: NodeJS.Timeout | null = null;
   private intervalMs: number = 100;
   private lastTradeTimes = new Map<string, number>(); // Rate limiting per agent
@@ -159,6 +160,7 @@ export class MultiAgentSwarmRunner {
    */
   public stop(): void {
     this.isRunning = false;
+    this.isEvaluating = false;
     if (this.intervalHandle) {
       clearInterval(this.intervalHandle);
       this.intervalHandle = null;
@@ -183,19 +185,22 @@ export class MultiAgentSwarmRunner {
    * unleash a storm of reverting orders that burns the fresh gas.
    */
   private async evaluateCycle(): Promise<void> {
-    this.pruneStaleState();
-    orderService.syncResolvedOrdersPnL();
-    // Global circuit breaker: if recent orders reverted repeatedly, pause the whole swarm to preserve gas
-    if (isOnChainCircuitBroken()) {
-      return;
-    }
-    // If operator has no gas, skip evaluation entirely — all placements would revert anyway
+    if (this.isEvaluating) return;
+    this.isEvaluating = true;
     try {
-      const hasGas = await hasOperatorGas();
-      if (!hasGas) return;
-    } catch {
-      return;
-    }
+      this.pruneStaleState();
+      orderService.syncResolvedOrdersPnL();
+      // Global circuit breaker: if recent orders reverted repeatedly, pause the whole swarm to preserve gas
+      if (isOnChainCircuitBroken()) {
+        return;
+      }
+      // If operator has no gas, skip evaluation entirely — all placements would revert anyway
+      try {
+        const hasGas = await hasOperatorGas();
+        if (!hasGas) return;
+      } catch {
+        return;
+      }
     const nowMs = Date.now();
     const openMarkets = marketService.getActiveMarkets({ status: 'Open' }).filter((m) => {
       const expiryMs = new Date(m.closeTimestamp).getTime();
@@ -516,6 +521,9 @@ export class MultiAgentSwarmRunner {
 
     // 4. Custom Strategy Agents Evaluation — user-deployed AST agents (e.g. Fast EMA Momentum Rider)
     await this.evaluateCustomAgents(openMarkets, spotTickers);
+    } finally {
+      this.isEvaluating = false;
+    }
   }
 
   private async evaluatePersonalSwarms(

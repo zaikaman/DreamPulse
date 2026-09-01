@@ -157,7 +157,7 @@ export function useMarkets(options?: UseMarketsOptions) {
     };
   }, []);
 
-  const selectedMarket = markets.find((m) => m.id === selectedMarketId) || (markets.length > 0 ? markets[0] : null);
+  const selectedMarket = markets.find((m) => m.id === selectedMarketId) ?? null;
 
   // Auto-fetch fresh markets immediately when the active selected market passes its closeTimestamp
   useEffect(() => {

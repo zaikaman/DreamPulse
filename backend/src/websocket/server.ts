@@ -15,6 +15,22 @@ export interface ClientSubscription {
   invalidAttempts: number;
 }
 
+export interface AgentLogItem {
+  id: string;
+  agentType: string;
+  marketId?: string;
+  triggerEvent: string;
+  confidence: number;
+  actionTaken: string;
+  reasoningText: string;
+  txHash?: string;
+  price?: number;
+  lotSize?: number;
+  outcome?: string;
+  metadata?: Record<string, unknown>;
+  createdAt: string;
+}
+
 // ──────────────────────────────────────────────────────────────────────────────
 // Production hardening constants
 // ──────────────────────────────────────────────────────────────────────────────
@@ -130,6 +146,7 @@ export class TelemetryWebSocketServer {
   private lastSwarmPnlBroadcastAt = 0;
   private lastPnlBroadcastAt = 0;
   private lastSwarmPnlPayload: Record<string, any> | null = null;
+  private recentAgentLogs: AgentLogItem[] = [];
 
   /**
    * Initializes WebSocket server attached to the main Express HTTP server.
@@ -601,6 +618,25 @@ export class TelemetryWebSocketServer {
     isExecution?: boolean;
     timestamp?: number;
   }): void {
+    const logItem: AgentLogItem = {
+      id: thought.id || crypto.randomUUID(),
+      agentType: thought.agent,
+      marketId: thought.marketId,
+      triggerEvent: thought.isExecution ? 'ORDER_EXECUTION' : 'ALPHA_SIGNAL',
+      confidence: thought.confidence,
+      actionTaken: thought.action,
+      reasoningText: thought.thought,
+      txHash: thought.txHash,
+      price: thought.price,
+      lotSize: thought.lotSize,
+      outcome: thought.outcome,
+      createdAt: new Date(thought.timestamp || Date.now()).toISOString(),
+    };
+    this.recentAgentLogs.unshift(logItem);
+    if (this.recentAgentLogs.length > 500) {
+      this.recentAgentLogs.pop();
+    }
+
     const payloadString = JSON.stringify({
       event: 'agent_thought',
       timestamp: thought.timestamp || Date.now(),
@@ -634,6 +670,22 @@ export class TelemetryWebSocketServer {
     isExecution?: boolean;
     timestamp?: number;
   }): void {
+    const logItem: AgentLogItem = {
+      id: thought.id || crypto.randomUUID(),
+      agentType: thought.agent,
+      marketId: thought.marketId,
+      triggerEvent: thought.triggerEvent || 'ALPHA_SIGNAL',
+      confidence: thought.confidence,
+      actionTaken: thought.action,
+      reasoningText: thought.thought,
+      metadata: thought.metadata,
+      createdAt: new Date(thought.timestamp || Date.now()).toISOString(),
+    };
+    this.recentAgentLogs.unshift(logItem);
+    if (this.recentAgentLogs.length > 500) {
+      this.recentAgentLogs.pop();
+    }
+
     const payloadString = JSON.stringify({
       event: 'debug_thought',
       timestamp: thought.timestamp || Date.now(),
@@ -795,6 +847,13 @@ export class TelemetryWebSocketServer {
         // Ignore send errors — client may have disconnected
       }
     }
+  }
+
+  public getRecentAgentLogs(agentType?: string, limit: number = 50): AgentLogItem[] {
+    const logs = agentType
+      ? this.recentAgentLogs.filter((l) => l.agentType.toLowerCase() === agentType.toLowerCase())
+      : this.recentAgentLogs;
+    return logs.slice(0, Math.max(1, Math.min(limit, 200)));
   }
 
   public getConnectedClientCount(): number {

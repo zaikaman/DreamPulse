@@ -74,16 +74,21 @@ async function fetchJson<T>(endpoint: string, options?: RequestInit): Promise<T>
   const isGet = !options?.method || options.method.toUpperCase() === 'GET';
   const url = `${API_BASE_URL}${endpoint}`;
 
-  if (isGet && inFlightGetRequests.has(url)) {
-    return inFlightGetRequests.get(url)! as Promise<T>;
+  const authHeaders = getAuthHeadersForRequest();
+  const callerHeaders = (options?.headers as Record<string, string> | undefined) || {};
+  const walletFromHeader = callerHeaders['x-user-address'] || callerHeaders['X-User-Address'] || authHeaders['x-user-address'] || '';
+  const walletLower = walletFromHeader.toLowerCase();
+  const dedupKey = `${url}|${walletLower}`;
+
+  if (isGet && inFlightGetRequests.has(dedupKey)) {
+    return inFlightGetRequests.get(dedupKey)! as Promise<T>;
   }
 
-  const authHeaders = getAuthHeadersForRequest();
   // Merge: explicit caller headers win over cached auth (allows override for wallet-verify which must NOT send stale auth)
   const mergedHeaders: Record<string, string> = {
     'Content-Type': 'application/json',
     ...authHeaders,
-    ...(options?.headers as Record<string, string> | undefined),
+    ...callerHeaders,
   };
   // For /auth/wallet-verify we must not send stale Bearer that would be verified before mint — strip if present
   const isAuthVerify = endpoint.includes('/auth/wallet-verify');
@@ -118,9 +123,9 @@ async function fetchJson<T>(endpoint: string, options?: RequestInit): Promise<T>
 
   if (isGet) {
     const p = executeFetch().finally(() => {
-      inFlightGetRequests.delete(url);
+      inFlightGetRequests.delete(dedupKey);
     });
-    inFlightGetRequests.set(url, p);
+    inFlightGetRequests.set(dedupKey, p);
     return p;
   }
 

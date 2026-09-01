@@ -456,3 +456,48 @@ CREATE POLICY "daily_pnl_service_role" ON public.daily_pnl
   FOR ALL TO service_role USING (true) WITH CHECK (true);
 
 COMMENT ON TABLE public.daily_pnl IS 'Pre-aggregated daily PnL/volume/trades per user per source. Refreshed by backend on settlement; analytics reads this instead of scanning all orders.';
+
+-- ------------------------------------------------------------------------------
+-- 12. Supabase Realtime CDC Publication Configuration
+-- ------------------------------------------------------------------------------
+DO $$
+BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_publication WHERE pubname = 'supabase_realtime') THEN
+    CREATE PUBLICATION supabase_realtime;
+  END IF;
+END $$;
+
+DO $$
+DECLARE
+  tbl text;
+  tables text[] := ARRAY[
+    'public.markets',
+    'public.sessions',
+    'public.agent_strategies',
+    'public.orders',
+    'public.sweeps',
+    'public.agent_logs',
+    'public.backtests',
+    'public.system_state',
+    'public.user_swarm_configs',
+    'public.custom_agents',
+    'public.custom_swarms',
+    'public.daily_pnl'
+  ];
+BEGIN
+  FOREACH tbl IN ARRAY tables
+  LOOP
+    IF EXISTS (
+      SELECT 1 FROM pg_tables 
+      WHERE schemaname = split_part(tbl, '.', 1) 
+        AND tablename = split_part(tbl, '.', 2)
+    ) AND NOT EXISTS (
+      SELECT 1 FROM pg_publication_tables 
+      WHERE pubname = 'supabase_realtime' 
+        AND schemaname = split_part(tbl, '.', 1) 
+        AND tablename = split_part(tbl, '.', 2)
+    ) THEN
+      EXECUTE format('ALTER PUBLICATION supabase_realtime ADD TABLE %s', tbl);
+    END IF;
+  END LOOP;
+END $$;

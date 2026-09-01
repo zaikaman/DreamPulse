@@ -1007,7 +1007,6 @@ export class SettlementService {
         }
 
         if (payablePositions.length > 0 && accumulatedRaw > 0n) {
-          let txHash: Hex | undefined;
           if (process.env.NODE_ENV !== 'test') {
             let operatorBalance = 0n;
             try {
@@ -1021,8 +1020,10 @@ export class SettlementService {
               operatorBalance = 0n;
             }
 
-            const canPayout = hasGas && operatorBalance >= accumulatedRaw;
-            if (canPayout) {
+            const canPayoutBatch = hasGas && operatorBalance >= accumulatedRaw;
+            let batchTxHash: Hex | undefined;
+
+            if (canPayoutBatch) {
               try {
                 const transferHash = await executeOperatorWriteContract({
                   address: SOMNIA_ADDRESSES.testUsdc,
@@ -1032,22 +1033,100 @@ export class SettlementService {
                 });
                 if (transferHash) {
                   await publicClient.waitForTransactionReceipt({ hash: transferHash, timeout: 15_000 }).catch(() => {});
-                  txHash = transferHash;
+                  batchTxHash = transferHash;
                 }
               } catch (tErr: any) {
                 console.warn(`[SettlementService] Batched payout transfer of ${accumulatedRaw.toString()} to ${normalizedUser} failed:`, tErr.message);
               }
+            }
+
+            if (batchTxHash) {
+              resolvedTxHash = batchTxHash;
+              for (const pos of payablePositions) {
+                const sweepId = crypto.randomUUID();
+                const sweep: SettlementSweep = {
+                  id: sweepId,
+                  userAddress: normalizedUser,
+                  marketId: pos.marketId,
+                  winningOutcome: pos.winningOutcome,
+                  claimableAmount: pos.claimableAmount,
+                  payoutToken: 'tUSDC',
+                  isCompounded: false,
+                  txHash: batchTxHash,
+                  status: 'CONFIRMED',
+                  claimedAt: now,
+                };
+
+                this.recordSweep(sweep, true);
+                claimedSweeps.push(sweep);
+                totalClaimed += pos.claimableAmount;
+
+                // Settle orders in orderService immediately for both IDs
+                void orderService.settleOrdersForMarket(pos.marketId, pos.winningOutcome).catch(() => {});
+                if (pos.marketIdHex && pos.marketIdHex.toLowerCase() !== pos.marketId.toLowerCase()) {
+                  void orderService.settleOrdersForMarket(pos.marketIdHex, pos.winningOutcome).catch(() => {});
+                }
+              }
+              this.invalidateCache(normalizedUser);
             } else {
-              console.warn(
-                `[SettlementService] Payout transfer skipped: operator balance (${operatorBalance.toString()}) or gas insufficient for batched amount ${accumulatedRaw.toString()}`,
-              );
+              // Split per-market transfers: if operatorBalance cannot cover the entire batch, pay as many individual positions as possible
+              let remainingBalance = operatorBalance;
+              for (const pos of payablePositions) {
+                if (hasGas && remainingBalance >= pos.rawAmount && pos.rawAmount > 0n) {
+                  try {
+                    const singleHash = await executeOperatorWriteContract({
+                      address: SOMNIA_ADDRESSES.testUsdc,
+                      abi: ERC20_ABI,
+                      functionName: 'transfer',
+                      args: [normalizedUser, pos.rawAmount],
+                    });
+                    if (singleHash) {
+                      await publicClient.waitForTransactionReceipt({ hash: singleHash, timeout: 15_000 }).catch(() => {});
+                      remainingBalance -= pos.rawAmount;
+                      resolvedTxHash = singleHash;
+
+                      const sweepId = crypto.randomUUID();
+                      const sweep: SettlementSweep = {
+                        id: sweepId,
+                        userAddress: normalizedUser,
+                        marketId: pos.marketId,
+                        winningOutcome: pos.winningOutcome,
+                        claimableAmount: pos.claimableAmount,
+                        payoutToken: 'tUSDC',
+                        isCompounded: false,
+                        txHash: singleHash,
+                        status: 'CONFIRMED',
+                        claimedAt: now,
+                      };
+
+                      this.recordSweep(sweep, true);
+                      claimedSweeps.push(sweep);
+                      totalClaimed += pos.claimableAmount;
+
+                      // Only mark settled when the individual payout succeeds
+                      void orderService.settleOrdersForMarket(pos.marketId, pos.winningOutcome).catch(() => {});
+                      if (pos.marketIdHex && pos.marketIdHex.toLowerCase() !== pos.marketId.toLowerCase()) {
+                        void orderService.settleOrdersForMarket(pos.marketIdHex, pos.winningOutcome).catch(() => {});
+                      }
+                      continue;
+                    }
+                  } catch (sErr: any) {
+                    console.warn(`[SettlementService] Individual payout transfer of ${pos.rawAmount.toString()} for market ${pos.marketId} failed:`, sErr.message);
+                  }
+                }
+                // IMPORTANT: If transfer was skipped or failed, DO NOT settle orders or record CONFIRMED sweep.
+                // Keep position un-settled so scanner retries payout when operator balance/gas is topped up.
+                console.warn(
+                  `[SettlementService] Payout skipped for market ${pos.marketId}: insufficient operator balance (${remainingBalance.toString()}) or transfer failed. Preserving un-settled state for retry.`,
+                );
+              }
+              if (claimedSweeps.length > 0) {
+                this.invalidateCache(normalizedUser);
+              }
             }
           } else {
-            txHash = '0x1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef' as Hex;
-          }
-
-          if (txHash) {
-            resolvedTxHash = txHash;
+            const testTxHash = '0x1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef' as Hex;
+            resolvedTxHash = testTxHash;
 
             for (const pos of payablePositions) {
               const sweepId = crypto.randomUUID();
@@ -1059,7 +1138,7 @@ export class SettlementService {
                 claimableAmount: pos.claimableAmount,
                 payoutToken: 'tUSDC',
                 isCompounded: false,
-                txHash,
+                txHash: testTxHash,
                 status: 'CONFIRMED',
                 claimedAt: now,
               };
@@ -1068,7 +1147,6 @@ export class SettlementService {
               claimedSweeps.push(sweep);
               totalClaimed += pos.claimableAmount;
 
-              // Settle orders in orderService immediately for both IDs
               void orderService.settleOrdersForMarket(pos.marketId, pos.winningOutcome).catch(() => {});
               if (pos.marketIdHex && pos.marketIdHex.toLowerCase() !== pos.marketId.toLowerCase()) {
                 void orderService.settleOrdersForMarket(pos.marketIdHex, pos.winningOutcome).catch(() => {});

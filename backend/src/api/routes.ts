@@ -15,6 +15,8 @@ import { analyticsService, type AnalyticsRange } from '../services/analytics-ser
 import { userSwarmService } from '../services/user-swarm-service.js';
 import { leaderboardService, type ArenaTimeframe, type ArenaSortBy } from '../services/leaderboard-service.js';
 import { requireWalletAuth, optionalWalletAuth } from '../middleware/wallet-auth.js';
+import { telemetryWsGateway } from '../websocket/server.js';
+import { supabase, isPersistenceEnabled } from '../config/supabase.js';
 
 export const apiRouter = Router();
 
@@ -682,47 +684,78 @@ apiRouter.post('/agents/config', requireWalletAuth, (req: Request, res: Response
   }
 });
 
-apiRouter.get('/agents/logs', (req: Request, res: Response) => {
+apiRouter.get('/agents/logs', async (req: Request, res: Response) => {
   const agentType = req.query.agentType as string | undefined;
+  const limit = req.query.limit ? Math.min(200, Math.max(1, parseInt(req.query.limit as string, 10))) : 50;
 
-  const sampleLogs = [
-    {
-      id: 'log-001',
-      agentType: 'Volt',
-      triggerEvent: 'SPOT_DRIFT',
-      confidence: 0.94,
-      actionTaken: 'TAKER_SNIPE',
-      reasoningText: 'BTC spot surged +0.35% in 1m. Resting YES ask on 5m contract priced at 0.48 vs fair 0.58. Executed 5-lot IOC taker buy.',
-      createdAt: new Date(Date.now() - 15000).toISOString(),
-    },
-    {
-      id: 'log-002',
-      agentType: 'Oracle',
-      triggerEvent: 'VOLATILITY_SURFACE_DISCREPANCY',
-      confidence: 0.91,
-      actionTaken: 'TAKER_BUY_NO',
-      reasoningText: 'ETH 15m implied probability 62.0% deviates from Black-Scholes Φ(z) 48.5%. Buying underpriced NO outcome.',
-      createdAt: new Date(Date.now() - 45000).toISOString(),
-    },
-    {
-      id: 'log-003',
-      agentType: 'Titan',
-      triggerEvent: 'CONTINUOUS_MARKET_MAKING',
-      confidence: 0.88,
-      actionTaken: 'LIMIT_QUOTE_YES',
-      reasoningText: 'Providing two-sided liquidity around Φ(z) = 52.0%. Quoting Bid: 0.49 / Ask: 0.53 with inventory skew.',
-      createdAt: new Date(Date.now() - 75000).toISOString(),
-    },
-  ];
+  // 1. If Supabase persistence is active, attempt to fetch live persisted records from agent_logs
+  if (isPersistenceEnabled()) {
+    try {
+      let query = supabase
+        .from('agent_logs')
+        .select('*')
+        .order('created_at', { ascending: false })
+        .limit(limit);
 
-  const filtered = agentType
-    ? sampleLogs.filter((l) => l.agentType.toLowerCase() === agentType.toLowerCase())
-    : sampleLogs;
+      if (agentType) {
+        query = query.ilike('agent_type', agentType);
+      }
 
-  res.json({
+      const { data, error } = await query;
+      if (!error && data && data.length > 0) {
+        const mapped = data.map((d: any) => ({
+          id: d.id,
+          agentType: d.agent_type,
+          marketId: d.market_id,
+          triggerEvent: d.trigger_event,
+          confidence: Number(d.confidence),
+          actionTaken: d.action_taken,
+          reasoningText: d.reasoning_text,
+          metadata: d.metadata,
+          createdAt: d.created_at,
+        }));
+        return res.json({
+          success: true,
+          count: mapped.length,
+          logs: mapped,
+        });
+      }
+    } catch {
+      // Fall through to live in-memory telemetry stream
+    }
+  }
+
+  // 2. Fetch live thoughts from WebSocket telemetry gateway buffer
+  const liveLogs = telemetryWsGateway.getRecentAgentLogs(agentType, limit);
+  if (liveLogs.length > 0) {
+    return res.json({
+      success: true,
+      count: liveLogs.length,
+      logs: liveLogs,
+    });
+  }
+
+  // 3. Synthesize live log entries from recent swarm order executions if stream buffer is warming up
+  const recentOrders = orderService.getOrders({
+    agentType: agentType as AgentType,
+    swarmOnly: true,
+  }).slice(0, limit);
+
+  const fallbackLogs = recentOrders.map((o) => ({
+    id: `log-${o.id}`,
+    agentType: o.agentType || 'Swarm',
+    marketId: o.marketId,
+    triggerEvent: 'SWARM_EXECUTION',
+    confidence: 0.92,
+    actionTaken: `${o.direction}_${o.outcome}`,
+    reasoningText: `Executed ${o.direction} ${o.lotSize} lots on outcome ${o.outcome} @ $${o.price.toFixed(2)} with hash ${o.txHash ? o.txHash.slice(0, 10) + '...' : 'pending'}`,
+    createdAt: o.createdAt,
+  }));
+
+  return res.json({
     success: true,
-    count: filtered.length,
-    logs: filtered,
+    count: fallbackLogs.length,
+    logs: fallbackLogs,
   });
 });
 

@@ -58,8 +58,8 @@ export const TradeTerminalView: React.FC<TradeTerminalViewProps> = ({
 
   const { agents: customAgents } = useCustomAgents(wallet.address || undefined);
 
-  // Active contract telemetry
-  const market = selectedMarket || markets[0] || null;
+  // Active contract telemetry — strict selection (no silent fallback to wrong contract)
+  const market = selectedMarket ?? null;
   const tick = market ? liveTicks.get(market.id) : undefined;
   const spot = (market?.symbol && currentSpotPrices[market.symbol]) || tick?.spotPrice || market?.strikePrice || 0;
   const strike = market?.strikePrice || 0;
@@ -233,79 +233,112 @@ export const TradeTerminalView: React.FC<TradeTerminalViewProps> = ({
         </div>
       )}
 
-      {/* Main Dual-Column Pro Trading Layout (70% Left / 30% Right) */}
-      <div className="grid grid-cols-1 lg:grid-cols-12 gap-2 flex-1 min-h-0 lg:overflow-hidden">
-        {/* Left Column (8 cols = ~67%): Visual Settlement Chart or CLOB Orderbook */}
-        <div className="lg:col-span-8 flex flex-col gap-2 min-h-[380px] lg:min-h-0 lg:h-full lg:overflow-hidden">
-          {/* Main Visual Arena */}
-          <div className="flex-1 min-h-[320px] lg:min-h-0 overflow-hidden">
-            {isBookVisible ? (
-              <React.Suspense fallback={<div className="h-full grid place-items-center text-xs text-muted-foreground">Loading order book…</div>}>
-                <OrderBookDepth
-                  selectedMarket={market}
-                  liveDepth={depth}
+      {!market ? (
+        <div className="flex-1 flex flex-col items-center justify-center p-8 text-center rounded-xl border border-border/40 bg-background/60 backdrop-blur-md gap-4 min-h-[400px]">
+          <div className="w-12 h-12 rounded-2xl bg-brand-cyan/10 border border-brand-cyan/30 flex items-center justify-center text-brand-cyan shadow-sm">
+            <SparklesIcon className="w-6 h-6" />
+          </div>
+          <div className="flex flex-col items-center gap-1">
+            <h3 className="text-base font-bold text-foreground font-mono">Select a Market</h3>
+            <p className="text-xs text-muted-foreground max-w-md font-mono">
+              Choose an active prediction market contract below to view the live CLOB orderbook, volatility surface, and execute trades safely.
+            </p>
+          </div>
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2.5 max-w-2xl w-full mt-2">
+            {markets.map((m) => (
+              <button
+                key={m.id}
+                type="button"
+                onClick={() => onSelectMarket(m.id)}
+                className="p-3 rounded-xl border border-border/60 hover:border-brand-cyan/60 bg-secondary/30 hover:bg-secondary/60 transition-all text-left flex flex-col gap-1 cursor-pointer group"
+              >
+                <div className="flex items-center justify-between text-xs font-mono font-bold">
+                  <span className="text-foreground group-hover:text-brand-cyan">{m.symbol}</span>
+                  <span className="text-[10px] px-1.5 py-0.5 rounded bg-secondary/80 text-muted-foreground border border-border/40">{m.windowDuration}</span>
+                </div>
+                <div className="flex items-center justify-between text-[11px] font-mono text-muted-foreground">
+                  <span>Strike: ${m.strikePrice.toLocaleString()}</span>
+                  <span className="text-brand-cyan font-bold">{((m.impliedProbYes ?? 0.5) * 100).toFixed(0)}% YES</span>
+                </div>
+              </button>
+            ))}
+          </div>
+        </div>
+      ) : (
+        /* Main Dual-Column Pro Trading Layout (70% Left / 30% Right) */
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-2 flex-1 min-h-0 lg:overflow-hidden">
+          {/* Left Column (8 cols = ~67%): Visual Settlement Chart or CLOB Orderbook */}
+          <div className="lg:col-span-8 flex flex-col gap-2 min-h-[380px] lg:min-h-0 lg:h-full lg:overflow-hidden">
+            {/* Main Visual Arena */}
+            <div className="flex-1 min-h-[320px] lg:min-h-0 overflow-hidden">
+              {isBookVisible ? (
+                <React.Suspense fallback={<div className="h-full grid place-items-center text-xs text-muted-foreground">Loading order book…</div>}>
+                  <OrderBookDepth
+                    selectedMarket={market}
+                    liveDepth={depth}
+                    liveTick={tick}
+                    currentSpotPrice={spot}
+                    isLoading={isLoading}
+                    wallet={wallet}
+                    activeSession={activeSession}
+                    agentThoughts={agentThoughts}
+                    onOpenSessionModal={onOpenSessionModal}
+                    onConnectWallet={onConnectWallet}
+                    hideEmbeddedTicket={true}
+                    onPrefillOrder={(data) => setPrefillData(data)}
+                  />
+                </React.Suspense>
+              ) : market ? (
+                <EventContractChart
+                  market={market}
                   liveTick={tick}
                   currentSpotPrice={spot}
-                  isLoading={isLoading}
-                  wallet={wallet}
-                  activeSession={activeSession}
                   agentThoughts={agentThoughts}
-                  onOpenSessionModal={onOpenSessionModal}
-                  onConnectWallet={onConnectWallet}
-                  hideEmbeddedTicket={true}
-                  onPrefillOrder={(data) => setPrefillData(data)}
+                  onExpire={onRefreshMarkets}
                 />
-              </React.Suspense>
-            ) : market ? (
-              <EventContractChart
+              ) : null}
+            </div>
+
+            {/* "Recently Settled - 15m" Horizontal Carousel Strip (Exactly like DreamDEX) */}
+            <div className="rounded-xl border border-border/30 bg-background/70 backdrop-blur-md flex-shrink-0">
+              <RecentlySettledRounds
+                currentSymbol={market?.symbol || 'BTC/USD'}
+                onSelectMarket={(id) => {
+                  const match = markets.find((m) => m.id === id);
+                  if (match) onSelectMarket(match.id);
+                }}
+              />
+            </div>
+          </div>
+
+          {/* Right Column (4 cols = ~33%): DreamDEX Pro Order Ticket + AI Copilot */}
+          <div className="lg:col-span-4 lg:h-full min-h-0 flex flex-col overflow-hidden rounded-xl border border-border/40 bg-background/80 backdrop-blur-md">
+            {market && (
+              <TraderCockpitTicket
                 market={market}
                 liveTick={tick}
                 currentSpotPrice={spot}
+                prefillData={prefillData}
+                wallet={wallet}
+                activeSession={activeSession ?? null}
                 agentThoughts={agentThoughts}
-                onExpire={onRefreshMarkets}
+                onOpenSessionModal={onOpenSessionModal}
+                onConnectWallet={onConnectWallet}
+                bestBidYes={market.bestBidYes}
+                bestAskYes={market.bestAskYes}
+                availableDurations={markets
+                  .filter((m) => m.symbol === market.symbol && m.status === 'Open')
+                  .map((m) => m.windowDuration)}
+                onSelectDuration={(duration) => {
+                  // Find matching duration market if available
+                  const match = markets.find((m) => m.symbol === market.symbol && m.windowDuration === duration && m.status === 'Open');
+                  if (match) onSelectMarket(match.id);
+                }}
               />
-            ) : null}
-          </div>
-
-          {/* "Recently Settled - 15m" Horizontal Carousel Strip (Exactly like DreamDEX) */}
-          <div className="rounded-xl border border-border/30 bg-background/70 backdrop-blur-md flex-shrink-0">
-            <RecentlySettledRounds
-              currentSymbol={market?.symbol || 'BTC/USD'}
-              onSelectMarket={(id) => {
-                const match = markets.find((m) => m.id === id);
-                if (match) onSelectMarket(match.id);
-              }}
-            />
+            )}
           </div>
         </div>
-
-        {/* Right Column (4 cols = ~33%): DreamDEX Pro Order Ticket + AI Copilot */}
-        <div className="lg:col-span-4 lg:h-full min-h-0 flex flex-col overflow-hidden rounded-xl border border-border/40 bg-background/80 backdrop-blur-md">
-          {market && (
-            <TraderCockpitTicket
-              market={market}
-              liveTick={tick}
-              currentSpotPrice={spot}
-              prefillData={prefillData}
-              wallet={wallet}
-              activeSession={activeSession ?? null}
-              agentThoughts={agentThoughts}
-              onOpenSessionModal={onOpenSessionModal}
-              onConnectWallet={onConnectWallet}
-              bestBidYes={market.bestBidYes}
-              bestAskYes={market.bestAskYes}
-              availableDurations={markets
-                .filter((m) => m.symbol === market.symbol && m.status === 'Open')
-                .map((m) => m.windowDuration)}
-              onSelectDuration={(duration) => {
-                // Find matching duration market if available
-                const match = markets.find((m) => m.symbol === market.symbol && m.windowDuration === duration && m.status === 'Open');
-                if (match) onSelectMarket(match.id);
-              }}
-            />
-          )}
-        </div>
-      </div>
+      )}
 
       {/* Persistent Bottom Drawer: Active Positions, Open Orders & Trade History */}
       <div className="rounded-xl overflow-hidden border border-border/40 flex-shrink-0">

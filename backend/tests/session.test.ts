@@ -420,6 +420,23 @@ describe('Task T038 & T040: Session Management Service & Risk Guardrails', () =>
     const check3 = sessionService.validateTradeAllowance(session.id, 250_000);
     expect(check3.allowed).toBe(true);
   });
+
+  it('rejects fake/unverified onChainTxHash without valid on-chain authorization', async () => {
+    const user = privateKeyToAccount(generatePrivateKey());
+    const fakeTxHash = '0xdeadbeef'; // Invalid length/format
+
+    const session = await sessionService.registerSession({
+      userAddress: user.address,
+      operatorAddress: liveOperator.address,
+      maxTradeSize: 10,
+      dailyVolumeCap: 100,
+      onChainTxHash: fakeTxHash,
+      // onChainAuthorized omitted / false
+    });
+
+    expect(session.isActive).toBe(true);
+    expect(session.onChainAuthorized).toBe(false);
+  });
 });
 
 

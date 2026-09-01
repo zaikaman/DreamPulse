@@ -1,6 +1,6 @@
 import { isAddress, getAddress, type Address, type Hex } from 'viem';
 import { supabase, isPersistenceEnabled } from '../config/supabase.js';
-import { SOMNIA_ADDRESSES, operatorAccount } from '../config/somnia.js';
+import { SOMNIA_ADDRESSES, operatorAccount, publicClient } from '../config/somnia.js';
 import { userSwarmService } from './user-swarm-service.js';
 import {
   verifySessionDelegationSignature,
@@ -12,6 +12,34 @@ import {
 
 function isSessionPersistenceEnabled(): boolean {
   return isPersistenceEnabled();
+}
+
+/**
+ * Verify on-chain transaction status and provenance for session authorization proofs.
+ */
+export async function verifyTxHashOnChain(
+  txHash: string | undefined,
+  expectedUser: Address,
+): Promise<boolean> {
+  if (!txHash || typeof txHash !== 'string' || !txHash.startsWith('0x') || txHash.length !== 66) {
+    return false;
+  }
+  try {
+    const receipt = await publicClient.getTransactionReceipt({ hash: txHash as Hex });
+    if (!receipt || receipt.status !== 'success') {
+      return false;
+    }
+    if (receipt.from && receipt.from.toLowerCase() !== expectedUser.toLowerCase()) {
+      console.warn(`[SessionService] onChainTxHash sender ${receipt.from} does not match delegating user ${expectedUser}`);
+      return false;
+    }
+    return true;
+  } catch (err: any) {
+    if (process.env.NODE_ENV !== 'test') {
+      console.warn(`[SessionService] Could not verify on-chain tx receipt for ${txHash}:`, err?.message);
+    }
+    return false;
+  }
 }
 
 export const UNLIMITED_AMOUNT = 1_000_000_000;
@@ -248,12 +276,25 @@ export class SessionService {
       if (isAuthed) {
         onChainAuthorized = true;
       } else if (params.onChainTxHash) {
-        // Optimistically set to true if an on-chain transaction hash was provided
-        onChainAuthorized = true;
+        const isTxVerified = await verifyTxHashOnChain(params.onChainTxHash, normalizedUser);
+        if (isTxVerified) {
+          const recheckAuthed = await checkOnChainOperatorAuthorization(
+            normalizedUser,
+            normalizedOperator,
+            targetPoolAddress,
+            OPERATOR_SELECTORS.placeOrderFor,
+          ).catch(() => false);
+          onChainAuthorized = recheckAuthed || (params.onChainAuthorized ?? false);
+        } else {
+          if (params.onChainAuthorized !== true) {
+            onChainAuthorized = false;
+          }
+        }
       }
     } catch {
-      if (params.onChainTxHash) {
-        onChainAuthorized = true;
+      if (params.onChainTxHash && params.onChainAuthorized !== true) {
+        const isTxVerified = await verifyTxHashOnChain(params.onChainTxHash, normalizedUser);
+        onChainAuthorized = isTxVerified;
       }
     }
 

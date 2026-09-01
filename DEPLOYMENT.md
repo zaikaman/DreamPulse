@@ -221,4 +221,4 @@ The frontend client is engineered to automatically handle URLs resiliently:
 - **WebSocket fails to connect (`403 / Connection Refused`)**:
   Verify the protocol is `wss://` (secure WebSocket) on production URLs. Vercel runs exclusively on HTTPS, requiring `wss://`.
 - **Supabase Realtime not receiving events**:
-  Ensure Realtime is enabled for the `orders`, `sessions`, and `settlement_sweeps` tables in the Supabase Dashboard (`Database` > `Replication`).
+  Run migration `supabase/migrations/015_enable_supabase_realtime.sql` (or ensure `backend/src/config/schema.sql` Section 12 was executed). You can also verify that Realtime is enabled for tables in the Supabase Dashboard (`Database` > `Replication`).

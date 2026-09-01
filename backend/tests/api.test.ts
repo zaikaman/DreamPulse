@@ -420,5 +420,12 @@ describe('Express REST API Endpoints', () => {
       expect(blockedRes.body.error).toBe('Not allowed by CORS');
     });
   });
+
+  it('GET /api/v1/agents/logs returns live agent logs payload', async () => {
+    const res = await request(app).get('/api/v1/agents/logs');
+    expect(res.status).toBe(200);
+    expect(res.body.success).toBe(true);
+    expect(Array.isArray(res.body.logs)).toBe(true);
+  });
 });
 
