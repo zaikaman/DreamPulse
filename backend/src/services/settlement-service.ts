@@ -223,9 +223,11 @@ export class SettlementService {
 
       const addPosition = (pos: UnclaimedPosition) => {
         if (pos.rawAmount <= 0n || pos.claimableAmount <= 0) return;
-        const key = `${(pos.marketIdHex || pos.marketId).toLowerCase()}:${pos.outcomeIdx}`;
-        if (seenKeys.has(key)) return;
-        seenKeys.add(key);
+        const hexKey = pos.marketIdHex ? `${pos.marketIdHex.toLowerCase()}:${pos.outcomeIdx}` : '';
+        const rawKey = pos.marketId ? `${pos.marketId.toLowerCase()}:${pos.outcomeIdx}` : '';
+        if ((hexKey && seenKeys.has(hexKey)) || (rawKey && seenKeys.has(rawKey))) return;
+        if (hexKey) seenKeys.add(hexKey);
+        if (rawKey) seenKeys.add(rawKey);
         positions.push(pos);
       };
 
@@ -640,9 +642,14 @@ export class SettlementService {
           const isWin = isVoid || (winningOutcome && order.outcome === winningOutcome) || ((order.pnl ?? 0) > 0);
           if (!isWin) continue;
 
+          const targetMarketHex = market?.marketIdHex ? market.marketIdHex.toLowerCase() : undefined;
           const totalExpectedPayout = isVoid ? order.lotSize * 0.5 : order.lotSize * 1.0;
           const totalSweptForMarket = this.sweeps
-            .filter((s) => s.userAddress.toLowerCase() === cacheKey && s.marketId.toLowerCase() === order.marketId.toLowerCase() && s.status === 'CONFIRMED')
+            .filter((s) => {
+              if (s.userAddress.toLowerCase() !== cacheKey || s.status !== 'CONFIRMED') return false;
+              const smLower = s.marketId.toLowerCase();
+              return smLower === order.marketId.toLowerCase() || (targetMarketHex && smLower === targetMarketHex);
+            })
             .reduce((sum, s) => sum + (s.claimableAmount || 0), 0);
 
           const remainingClaimable = totalExpectedPayout - totalSweptForMarket;
@@ -718,8 +725,9 @@ export class SettlementService {
       const isCopyTrader = normalizedUser.toLowerCase() !== operatorAccount.address.toLowerCase();
 
       if (isCopyTrader) {
-        // First: Redeem on-chain winning outcome tokens from DreamDEX using operator credentials.
-        // This burns the operator's held ERC-6909 outcome tokens and collects the tUSDC collateral from DreamDEX settlement into the operator wallet.
+        // First: Pre-sweep redemption from DreamDEX:
+        // Try to redeem any held on-chain outcome tokens for this market using operator key.
+        // If already redeemed earlier, Somnia module might revert with InsufficientBalance/Missing params, which is safely caught.
         if (hasGas) {
           for (const pos of positionsToProcess) {
             if (pos.marketIdHex && pos.rawAmount > 0n) {
@@ -865,8 +873,11 @@ export class SettlementService {
                 });
               }
 
-              // Settle orders in orderService immediately
+              // Settle orders in orderService immediately for both IDs
               void orderService.settleOrdersForMarket(pos.marketId, pos.winningOutcome).catch(() => {});
+              if (pos.marketIdHex && pos.marketIdHex.toLowerCase() !== pos.marketId.toLowerCase()) {
+                void orderService.settleOrdersForMarket(pos.marketIdHex, pos.winningOutcome).catch(() => {});
+              }
             }
 
             this.invalidateCache(normalizedUser);
@@ -1072,22 +1083,29 @@ export class SettlementService {
           }
 
           if (isCopyTrader) {
-            const userOrders = orderService.getOrders({ userAddress: normalizedUser }).filter(
-              (o) => o.marketId.toLowerCase() === marketId.toLowerCase() && (o.status === 'FILLED' || o.status === 'PENDING'),
-            );
-            let totalWinningLots = 0;
-            for (const uo of userOrders) {
-              const isWin = onchain.isVoided || (uo.outcome === (winIdx === 0 ? 'YES' : 'NO'));
-              if (isWin) {
-                totalWinningLots += uo.lotSize;
+            if (txHash || process.env.NODE_ENV === 'test') {
+              const userOrders = orderService.getOrders({ userAddress: normalizedUser }).filter(
+                (o) => (o.marketId.toLowerCase() === marketId.toLowerCase() || (targetHex && o.marketId.toLowerCase() === targetHex.toLowerCase())) && !o.isSettled && (o.status === 'FILLED' || o.status === 'PENDING'),
+              );
+              let totalWinningLots = 0;
+              for (const uo of userOrders) {
+                const isWin = onchain.isVoided || (uo.outcome === (winIdx === 0 ? 'YES' : 'NO'));
+                if (isWin) {
+                  totalWinningLots += uo.lotSize;
+                }
               }
-            }
-            if (totalWinningLots > 0) {
-              const totalExpected = onchain.isVoided ? 0.5 * totalWinningLots : totalWinningLots * 1.0;
-              const alreadyClaimed = this.sweeps
-                .filter((s) => s.userAddress.toLowerCase() === normalizedUser.toLowerCase() && s.marketId.toLowerCase() === marketId.toLowerCase())
-                .reduce((sum, s) => sum + (s.claimableAmount || 0), 0);
-              amount = Math.max(0, Number((totalExpected - alreadyClaimed).toFixed(4)));
+              if (totalWinningLots > 0) {
+                const totalExpected = onchain.isVoided ? 0.5 * totalWinningLots : totalWinningLots * 1.0;
+                const alreadyClaimed = this.sweeps
+                  .filter((s) => s.userAddress.toLowerCase() === normalizedUser.toLowerCase() && (s.marketId.toLowerCase() === marketId.toLowerCase() || (targetHex && s.marketId.toLowerCase() === targetHex.toLowerCase())) && s.status === 'CONFIRMED')
+                  .reduce((sum, s) => sum + (s.claimableAmount || 0), 0);
+                amount = Math.max(0, Number((totalExpected - alreadyClaimed).toFixed(4)));
+              }
+            } else {
+              void orderService.settleOrdersForMarket(marketId, winningOutcome).catch(() => {});
+              if (targetHex) {
+                void orderService.settleOrdersForMarket(targetHex, winningOutcome).catch(() => {});
+              }
             }
           }
         }

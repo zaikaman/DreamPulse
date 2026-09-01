@@ -2050,9 +2050,13 @@ export class OrderService {
     isVoided = false,
   ): Promise<number> {
     const isVoid = isVoided || winningOutcome === 'VOID';
-    const targetOrders = this.orders.filter(
-      (o) => o.marketId.toLowerCase() === marketId.toLowerCase() && (o.status === 'FILLED' || o.status === 'PENDING' || !o.isSettled),
-    );
+    const knownMarket = marketService.getMarketById(marketId);
+    const altHex = knownMarket?.marketIdHex ? knownMarket.marketIdHex.toLowerCase() : undefined;
+    const targetOrders = this.orders.filter((o) => {
+      const oMid = o.marketId.toLowerCase();
+      const matches = oMid === marketId.toLowerCase() || (altHex && oMid === altHex);
+      return matches && (o.status === 'FILLED' || o.status === 'PENDING' || !o.isSettled);
+    });
     if (targetOrders.length === 0) return 0;
 
     const updatedEvents: Array<{ orderId: string; marketId: string; pnl: number; outcome: string; winningOutcome: string }> = [];
