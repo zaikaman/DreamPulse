@@ -524,64 +524,56 @@ All DreamPulse interactions execute on the **Somnia Shannon Testnet**:
 
 ### End-to-End Committed Execution Proof Trail (Database & On-Chain Audit)
 
-The platform supports two distinct execution modalities on Somnia Shannon Testnet: **Autonomous Swarm Execution (Sub-second IOC Taker)** and **Interactive Pro Trade Terminal (Resting LIMIT Maker & IOC Taker)**. 
+The platform supports two distinct execution modalities on Somnia Shannon Testnet: **Autonomous Swarm Execution (LIMIT / NormalOrder Quoting)** and **Interactive Pro Trade Terminal (Resting LIMIT Maker & Depth Autofill)**. 
 
-Both complete workflows are recorded in the PostgreSQL database and verified on Somnia block explorer. A dedicated machine-readable audit trail is provided in [`evidence.json`](./evidence.json):
+Both complete workflows — including winning contract resolution and automated settlement payout transfers — are recorded in the PostgreSQL database and verified on Somnia block explorer. A dedicated machine-readable audit trail is provided in [`evidence.json`](./evidence.json):
 
 ```mermaid
 sequenceDiagram
     autonumber
-    actor User as Delegator (0x46cC04De981E603958e4612f877D72427c5b6544)
-    participant UI as Pro Terminal / Studio
-    participant Session as Non-Custodial Session Grant
-    participant Agent as Oracle Arb Engine
+    actor Swarm as Protocol Swarm / Operator (0x93e300607c363E7D7a47e50f5c9fDf1723e859Cf)
+    participant Engine as Titan Market Maker
     participant Viem as Somnia Operator Daemon
     participant Chain as Somnia DreamDEX CLOB
     participant Sweeper as Settlement Sweeper
     participant DB as Supabase PostgreSQL
 
-    Note over User,DB: Path A: Autonomous Swarm Execution (Sub-Second IOC Taker)
-    User->>UI: 1. Authorize Session Delegation via EIP-712 + BatchApprove.sol
-    UI->>DB: Record Session Grant (id: 6e72fe0c-1e91-4a0b-96d4-03ccaedf7d67, cap: 1000 USDC, nonce: 6)
-    Session-->>Chain: On-Chain Delegation Tx (0xab2191086f101982e592e0fdd935f9a340db890b138f444cb2f99228a228d4aa)
+    Note over Swarm,DB: Path A: Autonomous Swarm Execution (LIMIT Order & Winning Settlement Sweep)
+    Engine->>Engine: 1. Mean-Reversion Edge Calculated within Volatility Band
+    Engine->>Viem: Formulate LIMIT Order (BTC/USD 5m, 2 lots @ 0.481 = 0.962 tUSDC)
     
-    Agent->>Agent: 2. Mathematical Edge Detected (Black-Scholes Φ(z) 68.2% vs 50.5c Implied Odds)
-    Agent->>Viem: Formulate IOC Taker Order (BTC/USD 5m, 4 lots @ 0.505 = 2.02 tUSDC)
+    Viem->>Chain: 2. Invoke placeOrder(Pool, Side: BUY YES, Price: 0.481, Type: LIMIT)
+    Chain-->>Viem: Confirmed Order Placement Receipt (Tx: 0x8afc4dbfb7dd19b4315d6e2e7adacfc9b45338e72d25ab113c8ee2a0aa7270fd)
+    Viem->>DB: Persist Order Record (id: bb03a77b-65cd-4781-9f02-f43a2019fce3, status: FILLED)
     
-    Viem->>Chain: 3. Invoke placeOrderFor(0x46cC...544, Market 0x00...10502)
-    Chain-->>Viem: Confirmed Order Placement Receipt (Tx: 0x8fcdd64ca37614976f2d3d38a4f676bf3c2f82fd9e57d0a066f48f0dd7262c69)
-    Viem->>DB: Persist Order Record (id: ae9f1f48-08cd-4a35-89c7-df49103b1039, status: FILLED)
-    
-    Note over Chain: 4. Market Finalization & Settlement (Outcome: YES)
-    Sweeper->>Chain: Invoke claimMarketPayout(0x46cC...544, Market 0x00...10502)
-    Chain-->>Sweeper: Separate Settlement Claim Redemption Tx (Tx: 0x57e92bd031b7a78fe849bc67d31abe5482de7d54395ecebefbf5a3dba0b9d997)
-    Sweeper->>DB: Update Settlement (id: be29a882-..., is_settled: true, pnl: +1.98 tUSDC)
-    
-    DB->>UI: 5. Stream Realtime WebSocket Update: +1.98 tUSDC to Equity & APEX Leaderboard
+    Note over Chain: 3. Market Expiration & Resolution (Outcome: YES Won)
+    Sweeper->>Chain: Claim Payout from BinarySettlement (414b1f4f-..., Amount: 2.000 tUSDC)
+    Chain-->>Sweeper: Payout Redeemed on-chain (Tx: 0xa8afe72e8cad7bfca6ae095c586446c5a7e43337586536d85e1b41bd155a06be)
+    Sweeper->>DB: Update Settlement (is_settled: true, pnl: +1.04 tUSDC)
+    DB->>Swarm: 4. Telemetry Broadcast: Equity Curve incremented by +1.04 tUSDC
 ```
 
 #### Verifiable Execution Metadata & Database Audit Log
 
 Full JSON schema and verifiable snapshots are available in [`evidence.json`](./evidence.json).
 
-##### Path A: Autonomous Swarm Execution (Sub-Second IOC Taker)
+##### Path A: Autonomous Swarm Execution (LIMIT Order & Settlement Redemption)
 
 | Lifecycle Phase | Component & Entity | Verified Record & On-Chain Reference |
 | :--- | :--- | :--- |
-| **1. Session Delegation** | Non-Custodial Session Grant | **User**: `0x46cC04De981E603958e4612f877D72427c5b6544`<br />**Session ID**: `6e72fe0c-1e91-4a0b-96d4-03ccaedf7d67`<br />**Delegation Tx Hash**: [`0xab2191086f101982e592e0fdd935f9a340db890b138f444cb2f99228a228d4aa`](https://shannon-explorer.somnia.network/tx/0xab2191086f101982e592e0fdd935f9a340db890b138f444cb2f99228a228d4aa)<br />**Invariants**: `nonce = 6`, `on_chain_authorized = true`, Zero withdrawal permissions. |
-| **2. Strategy & Analysis** | Oracle Arb Cognitive Engine | **Strategy**: Black-Scholes Volatility Surface Arbitrage<br />**Target Market ID**: `BTC/USD 5m` (`0x0000000000000000000000000000000000000000000000000000000000010502` — DreamDEX `bytes32` market ID #66,818)<br />**Rationale**: Analytical $\Phi(z)$ priced fair probability at 68.2% vs resting CLOB ask of 50.5c (+17.7% net edge). |
-| **3. On-Chain Order** | Somnia DreamDEX Execution | **Order ID**: `ae9f1f48-08cd-4a35-89c7-df49103b1039`<br />**Execution**: `BUY YES` (**IOC taker order**), `4` lots @ `0.505` price (`2.02` tUSDC total cost)<br />**Order Placement Tx Hash**: [`0x8fcdd64ca37614976f2d3d38a4f676bf3c2f82fd9e57d0a066f48f0dd7262c69`](https://shannon-explorer.somnia.network/tx/0x8fcdd64ca37614976f2d3d38a4f676bf3c2f82fd9e57d0a066f48f0dd7262c69)<br />**Status**: `FILLED` on-chain matching engine. |
-| **4. Settlement Redemption** | Sweeper & Compounder Daemon | **Resolution**: Market matured and finalized to `YES`.<br />**Sweep ID**: `be29a882-50f4-4be5-ae2b-c2a1e8f33f73`<br />**Settlement Claim Tx Hash**: [`0x57e92bd031b7a78fe849bc67d31abe5482de7d54395ecebefbf5a3dba0b9d997`](https://shannon-explorer.somnia.network/tx/0x57e92bd031b7a78fe849bc67d31abe5482de7d54395ecebefbf5a3dba0b9d997)<br />**Realized Net PnL**: `+1.98` tUSDC (`4.000` tUSDC returned, `is_settled: true`, `settled_at: 2026-09-01T16:50:15.169Z`). |
-| **5. UI & Portfolio Impact** | Real-Time WebSocket Telemetry | **Frontend Feedback**: Live sound chime & notification, Portfolio equity curve stepped up by `+$1.98`, Forecaster APEX leaderboard score and win rate incremented in Swarm Arena. |
+| **1. Swarm Strategy & Analysis** | Titan Mean Reversion Engine | **Operator**: `0x93e300607c363E7D7a47e50f5c9fDf1723e859Cf` (Protocol Swarm Operator)<br />**Strategy**: Bollinger Mean-Reversion & Volatility Band Market Making<br />**Target Market ID**: `BTC/USD 5m` (`0x00000000000000000000000000000000000000000000000000000000000103cd` — DreamDEX `bytes32` market ID #66,509)<br />**Rationale**: Analytical mean-reversion quote placed within theoretical volatility band. |
+| **2. On-Chain Order Placement** | Somnia DreamDEX Execution | **Order ID**: `bb03a77b-65cd-4781-9f02-f43a2019fce3`<br />**Execution**: `BUY YES` (**LIMIT order**), `2` lots @ `0.481` price (`0.962` tUSDC total cost)<br />**Order Placement Tx Hash**: [`0x8afc4dbfb7dd19b4315d6e2e7adacfc9b45338e72d25ab113c8ee2a0aa7270fd`](https://shannon-explorer.somnia.network/tx/0x8afc4dbfb7dd19b4315d6e2e7adacfc9b45338e72d25ab113c8ee2a0aa7270fd)<br />**Status**: `FILLED` on-chain matching engine. |
+| **3. Settlement Redemption** | Sweeper & Payout Daemon | **Resolution**: Market matured and finalized to `YES` (**In-The-Money Win**).<br />**Sweep ID**: `414b1f4f-ea71-4bf0-a40c-3fe48afcd8df`<br />**Settlement Claim Tx Hash**: [`0xa8afe72e8cad7bfca6ae095c586446c5a7e43337586536d85e1b41bd155a06be`](https://shannon-explorer.somnia.network/tx/0xa8afe72e8cad7bfca6ae095c586446c5a7e43337586536d85e1b41bd155a06be)<br />**Realized Net PnL**: `+1.04` tUSDC (`2.000` tUSDC returned, `is_settled: true`, `settled_at: 2026-09-01T16:00:15.505Z`). |
+| **4. UI & Portfolio Impact** | Real-Time WebSocket Telemetry | **Frontend Feedback**: Live sound chime & notification, Portfolio equity curve stepped up by `+$1.04`, Forecaster APEX leaderboard score and win rate incremented in Swarm Arena. |
 
-##### Path B: Interactive Pro Trade Terminal Execution (Resting LIMIT Maker)
+##### Path B: Interactive Pro Trade Terminal Execution (Resting LIMIT Maker & Settlement Redemption)
 
 | Lifecycle Phase | Component & Entity | Verified Record & On-Chain Reference |
 | :--- | :--- | :--- |
-| **1. Trader Intent** | Pro CLOB Terminal UI | **User**: `0x46cC04De981E603958e4612f877D72427c5b6544`<br />**Target Market ID**: `BTC/USD 5m` (`0x00000000000000000000000000000000000000000000000000000000000104dc` — Market ID #66,780)<br />**Action**: 1-click depth ladder selection with custom lots preset ($50 collateral allocation). |
-| **2. On-Chain Order** | Somnia DreamDEX Execution | **Order ID**: `14a127ab-b51f-4aa3-aa14-38052e6018ff`<br />**Execution**: `BUY YES` (**Resting LIMIT maker order**), `454` lots @ `0.11` price (`49.94` tUSDC total cost)<br />**Order Placement Tx Hash**: [`0x2d3ea83abf4d83a6f473059bdb53a90d54ec3a84332906b9c1da67f1f7523fff`](https://shannon-explorer.somnia.network/tx/0x2d3ea83abf4d83a6f473059bdb53a90d54ec3a84332906b9c1da67f1f7523fff)<br />**Status**: `FILLED` on matching engine. |
-| **3. Lifecycle & Portfolio** | Trade History & Settlement | **Settlement**: Reconciled into Forecaster Trading History (`is_settled: true`, `settled_at: 2026-09-01T16:35:05.431Z`).<br />**UI Feedback**: Resting book depth updated on WebSocket channel, fill confirmed via toast, and position logged in active user portfolio. |
-
+| **1. Session Delegation & Intent** | Pro CLOB Terminal UI | **User**: `0x46cC04De981E603958e4612f877D72427c5b6544`<br />**Session ID**: `6e72fe0c-1e91-4a0b-96d4-03ccaedf7d67` (Delegation Tx: [`0xab219108...`](https://shannon-explorer.somnia.network/tx/0xab2191086f101982e592e0fdd935f9a340db890b138f444cb2f99228a228d4aa))<br />**Target Market ID**: `BTC/USD 5m` (`0x0000000000000000000000000000000000000000000000000000000000010534` — Market ID #66,868)<br />**Action**: 1-click depth ladder selection with custom lots preset ($10 collateral allocation). |
+| **2. On-Chain Order Placement** | Somnia DreamDEX Execution | **Order ID**: `ca752b99-2a07-45f4-9d4c-ddfee75264b1`<br />**Execution**: `BUY NO` (**Resting LIMIT maker order**), `11` lots @ `0.87` price (`9.57` tUSDC total cost)<br />**Order Placement Tx Hash**: [`0x898903e346f926fe533d1eab18bc5c9522f6043054c2702650f470de43a1fcd8`](https://shannon-explorer.somnia.network/tx/0x898903e346f926fe533d1eab18bc5c9522f6043054c2702650f470de43a1fcd8)<br />**Status**: `FILLED` on matching engine. |
+| **3. Settlement Redemption** | Sweeper & Payout Daemon | **Resolution**: Market matured and finalized to `NO` (**In-The-Money Win**).<br />**Sweep ID**: `ad8ada64-ef98-4ab1-b001-b2e9de5b0c4c`<br />**Settlement Claim Tx Hash**: [`0x72c6030f25d1e147dad98393018dd80e66fc7747c04d55f21ce6c3d2e0ce19fc`](https://shannon-explorer.somnia.network/tx/0x72c6030f25d1e147dad98393018dd80e66fc7747c04d55f21ce6c3d2e0ce19fc)<br />**Realized Net PnL**: `+1.43` tUSDC (`11.000` tUSDC returned, `is_settled: true`, `settled_at: 2026-09-01T17:15:17.275Z`). |
+| **4. UI & Portfolio Impact** | Real-Time Telemetry & Toast | **UI Feedback**: Resting book depth updated on WebSocket channel, fill confirmed via toast, settlement payout credited to user equity curve. |
 ---
 
 ## API & WebSocket Telemetry Protocol
