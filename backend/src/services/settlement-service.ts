@@ -650,6 +650,8 @@ export class SettlementService {
       try {
         const userOrders = orderService.getOrders({ userAddress: normalizedUser });
         for (const order of userOrders) {
+          if (order.status !== 'FILLED' && order.status !== 'PENDING') continue;
+
           const market = marketService.getMarketById(order.marketId);
           const winningOutcome = market?.winningOutcome || order.marketSnapshot?.winningOutcome;
           const isVoid = winningOutcome === 'VOID';
@@ -759,7 +761,10 @@ export class SettlementService {
                 outcomeToken = onchain.outcomeToken as Address;
               }
               if (outcomeToken && onchain && (onchain.isResolved || onchain.finalized)) {
-                const winId = pos.outcomeIdx === 0 ? onchain.yesId : onchain.noId;
+                const actualWinIdx: 0 | 1 = typeof onchain.winningOutcome === 'number'
+                  ? (onchain.winningOutcome === 0 ? 0 : 1)
+                  : (pos.outcomeIdx === 0 ? 0 : 1);
+                const winId = actualWinIdx === 0 ? onchain.yesId : onchain.noId;
                 if (winId !== undefined) {
                   const opBal = await somniaExchange.client.getOutcomeBalance({
                     outcomeToken,
@@ -773,12 +778,14 @@ export class SettlementService {
                     const rRes = await executeOperatorTx(() =>
                       somniaExchange.trader.redeem({
                         marketId: pos.marketIdHex!,
-                        outcomeIdx: pos.outcomeIdx,
+                        outcomeIdx: actualWinIdx,
                         amount: redeemAmount,
                         outcomeToken,
                       }),
                     ).catch((rErr: any) => {
-                      console.warn(`[SettlementService] Pre-sweep redeem note for market ${pos.marketId}:`, rErr.message);
+                      if (!rErr.message?.includes('InsufficientBalance')) {
+                        console.warn(`[SettlementService] Pre-sweep redeem note for market ${pos.marketId}:`, rErr.message);
+                      }
                       return null;
                     });
 
@@ -805,6 +812,27 @@ export class SettlementService {
             void orderService.settleOrdersForMarket(pos.marketId, pos.winningOutcome).catch(() => {});
             if (pos.marketIdHex && pos.marketIdHex.toLowerCase() !== pos.marketId.toLowerCase()) {
               void orderService.settleOrdersForMarket(pos.marketIdHex, pos.winningOutcome).catch(() => {});
+            }
+
+            // Suppress scanner from re-queueing by recording an idempotent sweep entry
+            const sweepId = crypto.randomUUID();
+            const zeroSweep: SettlementSweep = {
+              id: sweepId,
+              userAddress: normalizedUser,
+              marketId: pos.marketId,
+              winningOutcome: pos.winningOutcome,
+              claimableAmount: pos.claimableAmount,
+              payoutToken: 'tUSDC',
+              isCompounded: false,
+              txHash: undefined,
+              status: 'CONFIRMED',
+              claimedAt: now,
+            };
+            this.sweepsMap.set(sweepId, zeroSweep);
+            this.sweeps.unshift(zeroSweep);
+            if (this.sweeps.length > 5000) {
+              const evicted = this.sweeps.pop();
+              if (evicted) this.sweepsMap.delete(evicted.id);
             }
           }
         }
@@ -934,7 +962,10 @@ export class SettlementService {
                 outcomeToken = onchain.outcomeToken as Address;
               }
               if (outcomeToken && onchain) {
-                const winId = pos.outcomeIdx === 0 ? onchain.yesId : onchain.noId;
+                const actualWinIdx: 0 | 1 = typeof onchain.winningOutcome === 'number'
+                  ? (onchain.winningOutcome === 0 ? 0 : 1)
+                  : (pos.outcomeIdx === 0 ? 0 : 1);
+                const winId = actualWinIdx === 0 ? onchain.yesId : onchain.noId;
                 if (winId !== undefined) {
                   const opBal = await somniaExchange.client.getOutcomeBalance({
                     outcomeToken,
@@ -948,7 +979,7 @@ export class SettlementService {
                     const res = await executeOperatorTx(() =>
                       somniaExchange.trader.redeem({
                         marketId: pos.marketIdHex!,
-                        outcomeIdx: pos.outcomeIdx,
+                        outcomeIdx: actualWinIdx,
                         amount: redeemAmount,
                         outcomeToken,
                       }),
