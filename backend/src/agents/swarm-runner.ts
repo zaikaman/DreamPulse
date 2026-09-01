@@ -218,10 +218,15 @@ export class MultiAgentSwarmRunner {
           continue;
         }
 
-        // Circuit breaker: pause agent if 5 consecutive errors occur
+        // Circuit breaker with self-healing cooldown (60s): auto-retry instead of permanent latch
         if (state.consecutiveErrors >= 5) {
-          state.status = 'ERROR';
-          continue;
+          if (nowMs - state.lastActionTimestamp > 60000) {
+            state.consecutiveErrors = 0;
+            state.status = 'ACTIVE';
+          } else {
+            state.status = 'ERROR';
+            continue;
+          }
         }
 
         state.status = 'ACTIVE';
@@ -430,74 +435,63 @@ export class MultiAgentSwarmRunner {
         }
       }
     }
-
     // 2. Autonomous Settlement Sweeper Daemon
     const sweeperState = this.telemetry['Sweeper'];
     if (!sweeperAgent.isEnabled) {
       sweeperState.status = 'PAUSED';
-    } else if (sweeperState.consecutiveErrors >= 5) {
-      sweeperState.status = 'ERROR';
     } else {
-      sweeperState.status = 'ACTIVE';
       const now = Date.now();
       const lastSweepTime = this.lastTradeTimes.get('Sweeper') || 0;
-      const sweepInterval = sweeperAgent.sweeperConfig.sweepIntervalMs || 30000;
+      // Auto-retry cooldown: if consecutive errors occurred, retry after 60s instead of permanent freeze
+      const sweepInterval = sweeperState.consecutiveErrors >= 5
+        ? 60000
+        : (sweeperAgent.sweeperConfig.sweepIntervalMs || 30000);
 
       if (now - lastSweepTime >= sweepInterval) {
         this.lastTradeTimes.set('Sweeper', now);
+        sweeperState.status = 'ACTIVE';
+
         try {
           const startEvalTime = performance.now();
           const candidateTargets = settlementService.getCandidateSweeperTargets();
-          const uniqueTargets = Array.from(new Set(candidateTargets.map((a) => a.toLowerCase()))).slice(0, 12);
+          const uniqueTargets = Array.from(new Set(candidateTargets.map((a) => a.toLowerCase()))).slice(0, 15);
 
           let totalClaimedAcrossUsers = 0;
           let totalMarketsClaimedAcrossUsers = 0;
 
-          const SWEEPER_CONCURRENCY = 2;
-          for (let i = 0; i < uniqueTargets.length; i += SWEEPER_CONCURRENCY) {
-            const batch = uniqueTargets.slice(i, i + SWEEPER_CONCURRENCY);
-            const batchResults = await Promise.allSettled(
-              batch.map(async (targetAddress) => {
-                try {
-                  const unclaimed = await settlementService.scanUnclaimedSettlements(targetAddress);
-                  const totalUnclaimed = unclaimed.reduce((sum, u) => sum + (u.claimableAmount || 0), 0);
-                  if (unclaimed.length > 0 && totalUnclaimed >= sweeperAgent.sweeperConfig.minClaimableAmount) {
-                    const sweepResult = await settlementService.triggerBatchSweep(
-                      targetAddress,
-                      sweeperAgent.sweeperConfig.autoCompound,
-                    );
-                    if (sweepResult.claimedMarketsCount > 0) {
-                      const claimedNum = parseFloat(sweepResult.totalClaimedAmount.replace(/[^0-9.]/g, '')) || 0;
-                      console.log(
-                        `[SwarmRunner] Autonomous sweep completed for ${targetAddress}: ${sweepResult.claimedMarketsCount} market(s) (${sweepResult.totalClaimedAmount}, tx: ${sweepResult.txHash})`,
-                      );
-                      telemetryWsGateway.broadcastAgentThought({
-                        id: `exec-sweep-${Date.now()}-${targetAddress.slice(0, 6)}`,
-                        agent: 'Sweeper',
-                        marketId: sweepResult.sweeps[0]?.marketId || 'BATCH_CLAIM',
-                        confidence: 0.99,
-                        action: 'BATCH_CLAIM_PAYOUTS',
-                        thought: `[AUTONOMOUS SWEEPER] Swept ${sweepResult.claimedMarketsCount} resolved market payout(s) (+${sweepResult.totalClaimedAmount}) for ${targetAddress.slice(0, 6)}...${targetAddress.slice(-4)} with 100% direct on-chain payout to user wallet.`,
-                        txHash: sweepResult.txHash,
-                        outcome: 'YES',
-                        isExecution: true,
-                        timestamp: Date.now(),
-                      });
-                      return { claimedNum, claimedCount: sweepResult.claimedMarketsCount };
-                    }
-                  }
-                  return { claimedNum: 0, claimedCount: 0 };
-                } catch (userSweepErr: any) {
-                  console.warn(`[SwarmRunner] User sweep error for ${targetAddress}:`, userSweepErr.message);
-                  return { claimedNum: 0, claimedCount: 0 };
+          // Process targets sequentially so on-chain transfers never race against operator nonce/balance
+          for (const targetAddress of uniqueTargets) {
+            try {
+              const unclaimed = await settlementService.scanUnclaimedSettlements(targetAddress);
+              const totalUnclaimed = unclaimed.reduce((sum, u) => sum + (u.claimableAmount || 0), 0);
+              if (unclaimed.length > 0 && totalUnclaimed >= sweeperAgent.sweeperConfig.minClaimableAmount) {
+                const sweepResult = await settlementService.triggerBatchSweep(
+                  targetAddress,
+                  sweeperAgent.sweeperConfig.autoCompound,
+                );
+                if (sweepResult.claimedMarketsCount > 0) {
+                  const claimedNum = parseFloat(sweepResult.totalClaimedAmount.replace(/[^0-9.]/g, '')) || 0;
+                  console.log(
+                    `[SwarmRunner] Autonomous sweep completed for ${targetAddress}: ${sweepResult.claimedMarketsCount} market(s) (${sweepResult.totalClaimedAmount}, tx: ${sweepResult.txHash})`,
+                  );
+                  telemetryWsGateway.broadcastAgentThought({
+                    id: `exec-sweep-${Date.now()}-${targetAddress.slice(0, 6)}`,
+                    agent: 'Sweeper',
+                    marketId: sweepResult.sweeps[0]?.marketId || 'BATCH_CLAIM',
+                    confidence: 0.99,
+                    action: 'BATCH_CLAIM_PAYOUTS',
+                    thought: `[AUTONOMOUS SWEEPER] Swept ${sweepResult.claimedMarketsCount} resolved market payout(s) (+${sweepResult.totalClaimedAmount}) for ${targetAddress.slice(0, 6)}...${targetAddress.slice(-4)} with 100% direct on-chain payout to user wallet.`,
+                    txHash: sweepResult.txHash,
+                    outcome: 'YES',
+                    isExecution: true,
+                    timestamp: Date.now(),
+                  });
+                  totalClaimedAcrossUsers += claimedNum;
+                  totalMarketsClaimedAcrossUsers += sweepResult.claimedMarketsCount;
                 }
-              }),
-            );
-            for (const r of batchResults) {
-              if (r.status === 'fulfilled') {
-                totalClaimedAcrossUsers += r.value.claimedNum;
-                totalMarketsClaimedAcrossUsers += r.value.claimedCount;
               }
+            } catch (userSweepErr: any) {
+              console.warn(`[SwarmRunner] User sweep error for ${targetAddress}:`, userSweepErr.message);
             }
           }
 
