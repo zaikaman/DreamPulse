@@ -25,7 +25,7 @@ export const BrandIcon: React.FC<{
   className?: string;
   glow?: boolean;
   interactive?: boolean;
-}> = ({ size = "md", theme = "auto", className, glow = false }) => {
+}> = ({ size = "md", theme = "auto", className, glow: _glow = false }) => {
   const sizeClasses = {
     xs: "w-4 h-4 min-w-4 min-h-4",
     sm: "w-5 h-5 min-w-5 min-h-5",
@@ -46,9 +46,6 @@ export const BrandIcon: React.FC<{
         className
       )}
     >
-      {glow && (
-        <div className="absolute inset-0 rounded-full bg-[#00ffcc]/20 blur-md pointer-events-none scale-150" />
-      )}
       <svg
         viewBox="0 0 512 512"
         fill="currentColor"
