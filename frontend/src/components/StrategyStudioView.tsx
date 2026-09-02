@@ -3,6 +3,7 @@ import {
   SparklesIcon,
   BoltIcon,
   AdjustmentsHorizontalIcon,
+  AdjustmentsVerticalIcon,
   PlayIcon,
   ArrowUpRightIcon,
   ArrowTrendingUpIcon,
@@ -35,6 +36,10 @@ import {
   ExclamationTriangleIcon,
   ClipboardIcon,
   CodeBracketIcon,
+  ChevronDownIcon,
+  ChevronUpIcon,
+  ChartBarIcon,
+  ScaleIcon,
 } from '@heroicons/react/24/outline';
 import type {
   CustomAgentDefinition,
@@ -60,12 +65,61 @@ export interface StrategyStudioViewProps {
   onNavigateToBacktester?: (agentId?: string, customDraft?: Partial<CustomAgentDefinition>) => void;
 }
 
+export function formatConditionRuleSummary(c: ConditionRule): string {
+  switch (c.indicator) {
+    case 'EMA':
+      if (c.operator === 'CROSS_ABOVE' || c.operator === 'CROSS_BELOW') {
+        return `EMA(${c.period || 9}) ${c.operator === 'CROSS_ABOVE' ? '↑ cross' : '↓ cross'} EMA(${c.secondaryPeriod || 21})`;
+      }
+      return `EMA(${c.period || 20}) ${c.operator === 'LESS_THAN' ? '<' : '>'} ${c.value}`;
+    case 'SMA':
+      return `SMA(${c.period || 20}) ${c.operator === 'LESS_THAN' ? '<' : '>'} ${c.value}`;
+    case 'BOLLINGER_LOWER':
+      return `BB Lower(${c.period || 20}, ${c.stdDev || 2.0}σ) touch`;
+    case 'BOLLINGER_UPPER':
+      return `BB Upper(${c.period || 20}, ${c.stdDev || 2.0}σ) ceiling`;
+    case 'MACD':
+      if (c.operator === 'CROSS_ABOVE') return `MACD(${c.period || 12}/${c.secondaryPeriod || 26}) ↑ Signal`;
+      if (c.operator === 'CROSS_BELOW') return `MACD(${c.period || 12}/${c.secondaryPeriod || 26}) ↓ Signal`;
+      return `MACD Hist ${c.operator === 'LESS_THAN' ? '<' : '>'} ${c.value}`;
+    case 'STOCHASTIC':
+      if (c.operator === 'CROSS_ABOVE') return `Stoch %K ↑ %D`;
+      if (c.operator === 'CROSS_BELOW') return `Stoch %K ↓ %D`;
+      return `Stoch %K(${c.period || 14}) ${c.operator === 'LESS_THAN' ? '<' : '>'} ${c.value}`;
+    case 'ATR':
+      return `ATR(${c.period || 14}) ${c.operator === 'GREATER_THAN' || c.operator === 'CROSS_ABOVE' ? '>' : '<'} ${c.value}`;
+    case 'VWAP':
+      return `Spot ${c.operator === 'CROSS_ABOVE' ? '↑ cross' : c.operator === 'CROSS_BELOW' ? '↓ cross' : c.operator === 'GREATER_THAN' ? '>' : '<'} VWAP`;
+    case 'VOLUME_SURGE':
+      return `Volume > ${c.multiplier || c.value || 1.5}x Avg`;
+    case 'ADX':
+      return `ADX(${c.period || 14}) ${c.operator === 'GREATER_THAN' || c.operator === 'CROSS_ABOVE' ? '>' : '<'} ${c.value}`;
+    case 'CCI':
+      return `CCI(${c.period || 20}) ${c.operator === 'LESS_THAN' ? '<' : '>'} ${c.value}`;
+    case 'WILLIAMS_R':
+      return `Williams %R(${c.period || 14}) ${c.operator === 'LESS_THAN' ? '<' : '>'} ${c.value}`;
+    case 'PRICE_DRIFT':
+      return `Drift(${c.period || 1}m) ${c.operator === 'LESS_THAN' ? '<' : '>'} ${(c.value * 100).toFixed(2)}%`;
+    case 'RSI':
+    default:
+      return `RSI(${c.period || 14}) ${c.operator === 'LESS_THAN' ? '<' : '>'} ${c.value}`;
+  }
+}
+
 const INDICATOR_OPTIONS: Array<{ value: IndicatorType; label: string; desc: string }> = [
   { value: 'RSI', label: 'Relative Strength Index (RSI)', desc: 'Identifies overbought (>70) and oversold (<30) momentum zones' },
   { value: 'BOLLINGER_LOWER', label: 'Bollinger Band Lower Band', desc: 'Detects downward price puncture and mean-reversion discount bounces' },
   { value: 'BOLLINGER_UPPER', label: 'Bollinger Band Upper Band', desc: 'Detects upward volatility exhaustion and overhead resistance fades' },
   { value: 'EMA', label: 'Exponential Moving Average (EMA)', desc: 'Trend-following directional bias and dynamic momentum cross' },
   { value: 'SMA', label: 'Simple Moving Average (SMA)', desc: 'Smooth baseline price trend filter' },
+  { value: 'MACD', label: 'MACD (12/26/9 Oscillator)', desc: 'Trend & momentum oscillator with fast/slow EMA signal line crossovers' },
+  { value: 'STOCHASTIC', label: 'Stochastic Oscillator (%K / %D)', desc: 'Fast momentum oscillator for cyclical oversold (<20) / overbought (>80) swings' },
+  { value: 'ATR', label: 'Average True Range (ATR)', desc: 'Measures market volatility expansion and breakout momentum' },
+  { value: 'VWAP', label: 'Volume-Weighted Average Price (VWAP)', desc: 'Institutional dynamic benchmark for trend bias and reversion anchors' },
+  { value: 'VOLUME_SURGE', label: 'Volume Surge / Spike Detector', desc: 'Flags abnormal trading volume surges relative to rolling volume average' },
+  { value: 'ADX', label: 'Average Directional Index (ADX)', desc: 'Quantifies trend strength (>25 strong trend, <20 choppy range)' },
+  { value: 'CCI', label: 'Commodity Channel Index (CCI)', desc: 'Detects extreme cyclical statistical deviation (<-100 oversold, >+100 overbought)' },
+  { value: 'WILLIAMS_R', label: 'Williams %R Momentum', desc: 'Ultra-responsive momentum oscillator (<-80 oversold, >-20 overbought)' },
   { value: 'PRICE_DRIFT', label: 'Rapid Price Velocity Drift', desc: 'High-frequency spot price displacement within the active contract window' },
 ];
 
@@ -77,10 +131,11 @@ const OPERATOR_OPTIONS: Array<{ value: ComparisonOperator; label: string }> = [
 ];
 
 const SUGGESTED_PROMPTS = [
-  'Aggressive BTC 60s Call sniper when RSI drops below 25 after a sharp dip',
-  'Contrarian ETH 5m Put fade when price punctures upper Bollinger band and RSI > 72',
-  'Fast ETH 5m Call rider on 9/21 EMA golden cross with rising velocity',
-  'Conservative BTC 15m Call mean-reversion when RSI is oversold and payout >= 80%',
+  'Aggressive BTC 60s Call sniper on MACD golden cross and RSI < 35 with 1.5x volume surge',
+  'Contrarian ETH 5m Put fade when price punctures upper Bollinger band and Stochastic %K > 85',
+  'Institutional BTC 15m Call rider when price reclaims VWAP with ADX > 25 strong trend',
+  'High-precision ETH 5m Call mean-reversion on CCI < -100 and Williams %R < -80 oversold extremes',
+  'Conservative BTC 15m Call on 9/21 EMA golden cross with payout >= 80% and limit order offset',
 ];
 
 const CONDITION_PRESETS: Array<{ label: string; desc: string; rule: Omit<ConditionRule, 'id'> }> = [
@@ -108,6 +163,41 @@ const CONDITION_PRESETS: Array<{ label: string; desc: string; rule: Omit<Conditi
     label: 'Fast 9/21 EMA Golden Cross',
     desc: 'Fast trend crossover',
     rule: { indicator: 'EMA', period: 9, secondaryPeriod: 21, operator: 'CROSS_ABOVE', value: 0 },
+  },
+  {
+    label: 'MACD Golden Cross (12/26/9)',
+    desc: 'Bullish momentum MACD cross above signal',
+    rule: { indicator: 'MACD', period: 12, secondaryPeriod: 26, signalPeriod: 9, operator: 'CROSS_ABOVE', value: 0 },
+  },
+  {
+    label: 'Stochastic Oversold Reversal (%K < 20)',
+    desc: 'Cyclical oscillator discount bounce',
+    rule: { indicator: 'STOCHASTIC', period: 14, secondaryPeriod: 3, operator: 'LESS_THAN', value: 20 },
+  },
+  {
+    label: 'Institutional VWAP Reclaim',
+    desc: 'Spot price crosses above volume-weighted benchmark',
+    rule: { indicator: 'VWAP', operator: 'CROSS_ABOVE', value: 0 },
+  },
+  {
+    label: 'Volume Surge Breakout (>1.5x)',
+    desc: 'Heavy institutional volume expansion',
+    rule: { indicator: 'VOLUME_SURGE', period: 20, multiplier: 1.5, operator: 'GREATER_THAN', value: 1.5 },
+  },
+  {
+    label: 'ADX Strong Trend (>25)',
+    desc: 'Trend strength regime filter',
+    rule: { indicator: 'ADX', period: 14, operator: 'GREATER_THAN', value: 25 },
+  },
+  {
+    label: 'CCI Oversold Extreme (< -100)',
+    desc: 'Statistical cyclical reversal',
+    rule: { indicator: 'CCI', period: 20, operator: 'LESS_THAN', value: -100 },
+  },
+  {
+    label: 'Williams %R Oversold (< -80)',
+    desc: 'Fast momentum oscillator bounce',
+    rule: { indicator: 'WILLIAMS_R', period: 14, operator: 'LESS_THAN', value: -80 },
   },
   {
     label: 'Spot Velocity Drift Spike (>0.2%)',
@@ -183,10 +273,19 @@ export const StrategyStudioView: React.FC<StrategyStudioViewProps> = ({
   const [actionDirection, setActionDirection] = useState<BinaryActionDirection>('CALL');
   const [actionDurationSec, setActionDurationSec] = useState<number>(60);
   const [actionStakeAmount, setActionStakeAmount] = useState<number>(10);
+  const [actionOrderType, setActionOrderType] = useState<'MARKET' | 'LIMIT'>('MARKET');
+  const [actionLimitPricing, setActionLimitPricing] = useState<'BEST_BID_ASK' | 'MIDPOINT' | 'DISCOUNT_OFFSET'>('BEST_BID_ASK');
+  const [actionLimitOffsetBps, setActionLimitOffsetBps] = useState<number>(10);
+  const [actionMaxSlippageBps, setActionMaxSlippageBps] = useState<number>(20);
 
   const [riskMaxLosses, setRiskMaxLosses] = useState<number>(2);
   const [riskCooldownMins, setRiskCooldownMins] = useState<number>(3);
   const [riskMinPayoutPct, setRiskMinPayoutPct] = useState<number>(78);
+  const [riskDailyDrawdownLimitPct, setRiskDailyDrawdownLimitPct] = useState<number>(15);
+  const [riskTakeProfitTargetPct, setRiskTakeProfitTargetPct] = useState<number>(25);
+  const [riskMartingaleMultiplier, setRiskMartingaleMultiplier] = useState<number>(1.0);
+  const [riskExpiryBufferSec, setRiskExpiryBufferSec] = useState<number>(15);
+  const [showAdvancedSettings, setShowAdvancedSettings] = useState<boolean>(false);
 
   const [saveSuccessMsg, setSaveSuccessMsg] = useState<string | null>(null);
 
@@ -285,9 +384,18 @@ export const StrategyStudioView: React.FC<StrategyStudioViewProps> = ({
     setActionDirection('CALL');
     setActionDurationSec(60);
     setActionStakeAmount(10);
+    setActionOrderType('MARKET');
+    setActionLimitPricing('BEST_BID_ASK');
+    setActionLimitOffsetBps(10);
+    setActionMaxSlippageBps(20);
     setRiskMaxLosses(2);
     setRiskCooldownMins(3);
     setRiskMinPayoutPct(78);
+    setRiskDailyDrawdownLimitPct(15);
+    setRiskTakeProfitTargetPct(25);
+    setRiskMartingaleMultiplier(1.0);
+    setRiskExpiryBufferSec(15);
+    setShowAdvancedSettings(false);
     setSaveSuccessMsg(null);
   };
 
@@ -311,7 +419,9 @@ export const StrategyStudioView: React.FC<StrategyStudioViewProps> = ({
               indicator: c.indicator || 'RSI',
               period: c.period || 14,
               secondaryPeriod: c.secondaryPeriod,
+              signalPeriod: c.signalPeriod,
               stdDev: c.stdDev,
+              multiplier: c.multiplier,
               operator: c.operator || 'LESS_THAN',
               value: c.value ?? 30,
             }))
@@ -321,11 +431,19 @@ export const StrategyStudioView: React.FC<StrategyStudioViewProps> = ({
           if (result.rules.action.direction) setActionDirection(result.rules.action.direction);
           if (result.rules.action.durationSec) setActionDurationSec(result.rules.action.durationSec);
           if (result.rules.action.stakeAmount) setActionStakeAmount(result.rules.action.stakeAmount);
+          if (result.rules.action.orderType) setActionOrderType(result.rules.action.orderType);
+          if (result.rules.action.limitPricing) setActionLimitPricing(result.rules.action.limitPricing);
+          if (result.rules.action.limitOffsetBps) setActionLimitOffsetBps(result.rules.action.limitOffsetBps);
+          if (result.rules.action.maxSlippageBps) setActionMaxSlippageBps(result.rules.action.maxSlippageBps);
         }
         if (result.rules.risk) {
           if (result.rules.risk.maxConsecutiveLosses) setRiskMaxLosses(result.rules.risk.maxConsecutiveLosses);
           if (result.rules.risk.cooldownMinutes) setRiskCooldownMins(result.rules.risk.cooldownMinutes);
           if (result.rules.risk.minPoolPayoutPct) setRiskMinPayoutPct(result.rules.risk.minPoolPayoutPct);
+          if (result.rules.risk.dailyDrawdownLimitPct) setRiskDailyDrawdownLimitPct(result.rules.risk.dailyDrawdownLimitPct);
+          if (result.rules.risk.takeProfitTargetPct) setRiskTakeProfitTargetPct(result.rules.risk.takeProfitTargetPct);
+          if (result.rules.risk.martingaleMultiplier) setRiskMartingaleMultiplier(result.rules.risk.martingaleMultiplier);
+          if (result.rules.risk.expiryBufferSec) setRiskExpiryBufferSec(result.rules.risk.expiryBufferSec);
         }
       }
       setAiStatusMsg('Strategy generated! Capsules updated below.');
@@ -351,11 +469,19 @@ export const StrategyStudioView: React.FC<StrategyStudioViewProps> = ({
         durationSec: actionDurationSec,
         stakeType: 'FIXED',
         stakeAmount: actionStakeAmount,
+        orderType: actionOrderType,
+        limitPricing: actionLimitPricing,
+        limitOffsetBps: actionLimitOffsetBps,
+        maxSlippageBps: actionMaxSlippageBps,
       },
       risk: {
         maxConsecutiveLosses: riskMaxLosses,
         cooldownMinutes: riskCooldownMins,
         minPoolPayoutPct: riskMinPayoutPct,
+        dailyDrawdownLimitPct: riskDailyDrawdownLimitPct,
+        takeProfitTargetPct: riskTakeProfitTargetPct,
+        martingaleMultiplier: riskMartingaleMultiplier,
+        expiryBufferSec: riskExpiryBufferSec,
       },
     },
     color: draftColor,
@@ -372,11 +498,19 @@ export const StrategyStudioView: React.FC<StrategyStudioViewProps> = ({
         durationSec: actionDurationSec,
         stakeType: 'FIXED',
         stakeAmount: actionStakeAmount,
+        orderType: actionOrderType,
+        limitPricing: actionLimitPricing,
+        limitOffsetBps: actionLimitOffsetBps,
+        maxSlippageBps: actionMaxSlippageBps,
       },
       risk: {
         maxConsecutiveLosses: riskMaxLosses,
         cooldownMinutes: riskCooldownMins,
         minPoolPayoutPct: riskMinPayoutPct,
+        dailyDrawdownLimitPct: riskDailyDrawdownLimitPct,
+        takeProfitTargetPct: riskTakeProfitTargetPct,
+        martingaleMultiplier: riskMartingaleMultiplier,
+        expiryBufferSec: riskExpiryBufferSec,
       },
     };
 
@@ -474,11 +608,19 @@ export const StrategyStudioView: React.FC<StrategyStudioViewProps> = ({
         setActionDirection(agent.rules.action.direction || 'CALL');
         setActionDurationSec(agent.rules.action.durationSec || 60);
         setActionStakeAmount(agent.rules.action.stakeAmount || 10);
+        setActionOrderType(agent.rules.action.orderType || 'MARKET');
+        setActionLimitPricing(agent.rules.action.limitPricing || 'BEST_BID_ASK');
+        setActionLimitOffsetBps(agent.rules.action.limitOffsetBps || 10);
+        setActionMaxSlippageBps(agent.rules.action.maxSlippageBps || 20);
       }
       if (agent.rules.risk) {
         setRiskMaxLosses(agent.rules.risk.maxConsecutiveLosses || 2);
         setRiskCooldownMins(agent.rules.risk.cooldownMinutes || 3);
         setRiskMinPayoutPct(agent.rules.risk.minPoolPayoutPct || 78);
+        setRiskDailyDrawdownLimitPct(agent.rules.risk.dailyDrawdownLimitPct || 15);
+        setRiskTakeProfitTargetPct(agent.rules.risk.takeProfitTargetPct || 25);
+        setRiskMartingaleMultiplier(agent.rules.risk.martingaleMultiplier || 1.0);
+        setRiskExpiryBufferSec(agent.rules.risk.expiryBufferSec || 15);
       }
     }
     setActiveTab('BUILDER');
@@ -579,7 +721,9 @@ export const StrategyStudioView: React.FC<StrategyStudioViewProps> = ({
               indicator: c.indicator || 'RSI',
               period: c.period || 14,
               secondaryPeriod: c.secondaryPeriod,
+              signalPeriod: c.signalPeriod,
               stdDev: c.stdDev,
+              multiplier: c.multiplier,
               operator: c.operator || 'LESS_THAN',
               value: c.value ?? 30,
             }))
@@ -589,11 +733,19 @@ export const StrategyStudioView: React.FC<StrategyStudioViewProps> = ({
           if (parsed.rules.action.direction) setActionDirection(parsed.rules.action.direction);
           if (parsed.rules.action.durationSec) setActionDurationSec(parsed.rules.action.durationSec);
           if (parsed.rules.action.stakeAmount) setActionStakeAmount(parsed.rules.action.stakeAmount);
+          if (parsed.rules.action.orderType) setActionOrderType(parsed.rules.action.orderType);
+          if (parsed.rules.action.limitPricing) setActionLimitPricing(parsed.rules.action.limitPricing);
+          if (parsed.rules.action.limitOffsetBps) setActionLimitOffsetBps(parsed.rules.action.limitOffsetBps);
+          if (parsed.rules.action.maxSlippageBps) setActionMaxSlippageBps(parsed.rules.action.maxSlippageBps);
         }
         if (parsed.rules.risk) {
           if (parsed.rules.risk.maxConsecutiveLosses) setRiskMaxLosses(parsed.rules.risk.maxConsecutiveLosses);
           if (parsed.rules.risk.cooldownMinutes) setRiskCooldownMins(parsed.rules.risk.cooldownMinutes);
           if (parsed.rules.risk.minPoolPayoutPct) setRiskMinPayoutPct(parsed.rules.risk.minPoolPayoutPct);
+          if (parsed.rules.risk.dailyDrawdownLimitPct) setRiskDailyDrawdownLimitPct(parsed.rules.risk.dailyDrawdownLimitPct);
+          if (parsed.rules.risk.takeProfitTargetPct) setRiskTakeProfitTargetPct(parsed.rules.risk.takeProfitTargetPct);
+          if (parsed.rules.risk.martingaleMultiplier) setRiskMartingaleMultiplier(parsed.rules.risk.martingaleMultiplier);
+          if (parsed.rules.risk.expiryBufferSec) setRiskExpiryBufferSec(parsed.rules.risk.expiryBufferSec);
         }
       }
 
@@ -686,11 +838,19 @@ export const StrategyStudioView: React.FC<StrategyStudioViewProps> = ({
               durationSec: actionDurationSec,
               stakeType: 'FIXED' as const,
               stakeAmount: actionStakeAmount,
+              orderType: actionOrderType,
+              limitPricing: actionLimitPricing,
+              limitOffsetBps: actionLimitOffsetBps,
+              maxSlippageBps: actionMaxSlippageBps,
             },
             risk: {
               maxConsecutiveLosses: riskMaxLosses,
               cooldownMinutes: riskCooldownMins,
               minPoolPayoutPct: riskMinPayoutPct,
+              dailyDrawdownLimitPct: riskDailyDrawdownLimitPct,
+              takeProfitTargetPct: riskTakeProfitTargetPct,
+              martingaleMultiplier: riskMartingaleMultiplier,
+              expiryBufferSec: riskExpiryBufferSec,
             },
           },
         };
@@ -734,9 +894,17 @@ export const StrategyStudioView: React.FC<StrategyStudioViewProps> = ({
     actionDirection,
     actionDurationSec,
     actionStakeAmount,
+    actionOrderType,
+    actionLimitPricing,
+    actionLimitOffsetBps,
+    actionMaxSlippageBps,
     riskMaxLosses,
     riskCooldownMins,
     riskMinPayoutPct,
+    riskDailyDrawdownLimitPct,
+    riskTakeProfitTargetPct,
+    riskMartingaleMultiplier,
+    riskExpiryBufferSec,
   ]);
 
   // Filtered and sorted agents list for Strategy Library
@@ -1151,7 +1319,7 @@ export const StrategyStudioView: React.FC<StrategyStudioViewProps> = ({
                 >
                   <span className="text-cyan-400 font-bold flex-shrink-0">IF:</span>
                   <span className="text-foreground truncate text-[11px]">
-                    {conditions.map((c) => `${c.indicator} ${c.operator === 'LESS_THAN' ? '<' : c.operator === 'GREATER_THAN' ? '>' : 'cross'} ${c.value}`).join(` ${draftOperator} `)}
+                    {conditions.map((c) => formatConditionRuleSummary(c)).join(` ${draftOperator} `)}
                   </span>
                 </div>
 
@@ -1169,7 +1337,7 @@ export const StrategyStudioView: React.FC<StrategyStudioViewProps> = ({
                   title="Click to configure Binary Action & Stake"
                 >
                   <span>EXEC: {actionDirection}</span>
-                  <span className="text-[10px] font-normal opacity-90">({actionDurationSec}s @ ${actionStakeAmount})</span>
+                  <span className="text-[10px] font-normal opacity-90">({actionDurationSec}s @ ${actionStakeAmount}{actionOrderType === 'LIMIT' ? ' · LIMIT' : ''})</span>
                 </div>
 
                 <span className="text-muted-foreground/60 font-mono text-xs select-none flex-shrink-0">➔</span>
@@ -1261,7 +1429,7 @@ export const StrategyStudioView: React.FC<StrategyStudioViewProps> = ({
                 <div className="flex items-center justify-between flex-wrap gap-2">
                   <span className="text-[11px] font-mono font-bold tracking-wider text-muted-foreground uppercase flex items-center gap-1.5">
                     <span className="w-5 h-5 rounded-md bg-primary/10 border border-primary/30 text-primary grid place-items-center text-[10px]">2</span>
-                    Indicator Trigger Capsules
+                    Indicator Trigger Capsules ({conditions.length})
                   </span>
                   <div className="flex items-center gap-1.5">
                     <span className="text-[10px] font-mono text-muted-foreground">Logic Gate:</span>
@@ -1318,7 +1486,7 @@ export const StrategyStudioView: React.FC<StrategyStudioViewProps> = ({
                             ))}
                           </select>
 
-                          {/* Period / Secondary Period / StdDev modifiers */}
+                          {/* Dynamic Parameters per Indicator Type */}
                           {cond.indicator === 'EMA' && (cond.operator === 'CROSS_ABOVE' || cond.operator === 'CROSS_BELOW') ? (
                             <div className="flex items-center gap-1 text-xs font-mono text-muted-foreground">
                               <span>Fast:</span>
@@ -1340,6 +1508,57 @@ export const StrategyStudioView: React.FC<StrategyStudioViewProps> = ({
                                 className="w-11 px-1.5 py-0.5 rounded bg-background border border-border/60 text-xs text-foreground font-mono"
                               />
                             </div>
+                          ) : cond.indicator === 'MACD' ? (
+                            <div className="flex items-center gap-1 text-xs font-mono text-muted-foreground">
+                              <span>Fast:</span>
+                              <input
+                                type="number"
+                                min={2}
+                                max={100}
+                                value={cond.period || 12}
+                                onChange={(e) => handleUpdateCondition(cond.id, { period: Number(e.target.value) })}
+                                className="w-11 px-1.5 py-0.5 rounded bg-background border border-border/60 text-xs text-foreground font-mono"
+                              />
+                              <span>Slow:</span>
+                              <input
+                                type="number"
+                                min={3}
+                                max={200}
+                                value={cond.secondaryPeriod || 26}
+                                onChange={(e) => handleUpdateCondition(cond.id, { secondaryPeriod: Number(e.target.value) })}
+                                className="w-11 px-1.5 py-0.5 rounded bg-background border border-border/60 text-xs text-foreground font-mono"
+                              />
+                              <span>Signal:</span>
+                              <input
+                                type="number"
+                                min={2}
+                                max={50}
+                                value={cond.signalPeriod || 9}
+                                onChange={(e) => handleUpdateCondition(cond.id, { signalPeriod: Number(e.target.value) })}
+                                className="w-11 px-1.5 py-0.5 rounded bg-background border border-border/60 text-xs text-foreground font-mono"
+                              />
+                            </div>
+                          ) : cond.indicator === 'STOCHASTIC' ? (
+                            <div className="flex items-center gap-1 text-xs font-mono text-muted-foreground">
+                              <span>%K:</span>
+                              <input
+                                type="number"
+                                min={2}
+                                max={100}
+                                value={cond.period || 14}
+                                onChange={(e) => handleUpdateCondition(cond.id, { period: Number(e.target.value) })}
+                                className="w-11 px-1.5 py-0.5 rounded bg-background border border-border/60 text-xs text-foreground font-mono"
+                              />
+                              <span>%D:</span>
+                              <input
+                                type="number"
+                                min={1}
+                                max={50}
+                                value={cond.secondaryPeriod || 3}
+                                onChange={(e) => handleUpdateCondition(cond.id, { secondaryPeriod: Number(e.target.value) })}
+                                className="w-11 px-1.5 py-0.5 rounded bg-background border border-border/60 text-xs text-foreground font-mono"
+                              />
+                            </div>
                           ) : (cond.indicator === 'BOLLINGER_LOWER' || cond.indicator === 'BOLLINGER_UPPER') ? (
                             <div className="flex items-center gap-1 text-xs font-mono text-muted-foreground">
                               <span>period</span>
@@ -1356,12 +1575,39 @@ export const StrategyStudioView: React.FC<StrategyStudioViewProps> = ({
                                 type="number"
                                 min={0.5}
                                 max={5.0}
-                                step={0.5}
+                                step={0.1}
                                 value={cond.stdDev ?? 2.0}
                                 onChange={(e) => handleUpdateCondition(cond.id, { stdDev: Number(e.target.value) })}
                                 className="w-11 px-1.5 py-0.5 rounded bg-background border border-border/60 text-xs text-foreground font-mono"
                               />
                             </div>
+                          ) : cond.indicator === 'VOLUME_SURGE' ? (
+                            <div className="flex items-center gap-1 text-xs font-mono text-muted-foreground">
+                              <span>period</span>
+                              <input
+                                type="number"
+                                min={2}
+                                max={100}
+                                value={cond.period || 20}
+                                onChange={(e) => handleUpdateCondition(cond.id, { period: Number(e.target.value) })}
+                                className="w-12 px-1.5 py-0.5 rounded bg-background border border-border/60 text-xs text-foreground font-mono"
+                              />
+                              <span>multiplier</span>
+                              <input
+                                type="number"
+                                min={1.1}
+                                max={10.0}
+                                step={0.1}
+                                value={cond.multiplier ?? cond.value ?? 1.5}
+                                onChange={(e) => handleUpdateCondition(cond.id, { multiplier: Number(e.target.value), value: Number(e.target.value) })}
+                                className="w-14 px-1.5 py-0.5 rounded bg-background border border-border/60 text-xs text-foreground font-mono"
+                              />
+                              <span>x</span>
+                            </div>
+                          ) : cond.indicator === 'VWAP' ? (
+                            <span className="text-[10px] font-mono text-primary/80 px-2 py-0.5 rounded bg-primary/10 border border-primary/20">
+                              Volume-Weighted Price
+                            </span>
                           ) : cond.indicator !== 'PRICE_DRIFT' ? (
                             <div className="flex items-center gap-1 text-xs font-mono text-muted-foreground">
                               <span>period</span>
@@ -1394,16 +1640,30 @@ export const StrategyStudioView: React.FC<StrategyStudioViewProps> = ({
                             <span className="text-[11px] font-mono text-muted-foreground px-2 py-0.5 rounded bg-background border border-border/50">
                               EMA({cond.secondaryPeriod || 21})
                             </span>
-                          ) : (
+                          ) : cond.indicator === 'MACD' && (cond.operator === 'CROSS_ABOVE' || cond.operator === 'CROSS_BELOW') ? (
+                            <span className="text-[11px] font-mono text-muted-foreground px-2 py-0.5 rounded bg-background border border-border/50">
+                              Signal Line ({cond.signalPeriod || 9})
+                            </span>
+                          ) : cond.indicator === 'STOCHASTIC' && (cond.operator === 'CROSS_ABOVE' || cond.operator === 'CROSS_BELOW') ? (
+                            <span className="text-[11px] font-mono text-muted-foreground px-2 py-0.5 rounded bg-background border border-border/50">
+                              %D Line ({cond.secondaryPeriod || 3})
+                            </span>
+                          ) : cond.indicator === 'VWAP' ? (
+                            <span className="text-[11px] font-mono text-muted-foreground px-2 py-0.5 rounded bg-background border border-border/50">
+                              VWAP Benchmark
+                            </span>
+                          ) : cond.indicator === 'VOLUME_SURGE' ? null : (
                             <div className="flex items-center gap-1">
                               <input
                                 type="number"
-                                step={cond.indicator === 'PRICE_DRIFT' ? 0.0005 : 1}
+                                step={cond.indicator === 'PRICE_DRIFT' ? 0.0005 : cond.indicator === 'MACD' ? 0.1 : 1}
                                 value={cond.value}
                                 onChange={(e) => handleUpdateCondition(cond.id, { value: Number(e.target.value) })}
                                 className="w-20 px-2 py-1 rounded-lg bg-background border border-border/60 text-xs font-mono font-bold text-foreground focus:outline-none focus:border-primary"
                               />
                               {cond.indicator === 'PRICE_DRIFT' && <span className="text-[10px] font-mono text-muted-foreground">drift</span>}
+                              {cond.indicator === 'CCI' && <span className="text-[10px] font-mono text-muted-foreground">index</span>}
+                              {cond.indicator === 'WILLIAMS_R' && <span className="text-[10px] font-mono text-muted-foreground">%R</span>}
                             </div>
                           )}
                         </div>
@@ -1543,6 +1803,151 @@ export const StrategyStudioView: React.FC<StrategyStudioViewProps> = ({
                 </div>
               </div>
 
+              {/* ADVANCED STRATEGY EXECUTION & CAPITAL MANAGEMENT DRAWER */}
+              <div className="flex flex-col gap-2">
+                <button
+                  type="button"
+                  onClick={() => setShowAdvancedSettings(!showAdvancedSettings)}
+                  className="flex items-center justify-between p-3 rounded-xl bg-secondary/20 hover:bg-secondary/30 border border-border/60 text-xs font-mono font-bold text-foreground transition-all cursor-pointer"
+                >
+                  <div className="flex items-center gap-2">
+                    <AdjustmentsVerticalIcon className="w-4 h-4 text-primary" />
+                    <span>Advanced Execution, Slippage & Capital Controls</span>
+                    <Badge variant="outline" className="text-[9px] font-mono border-primary/30 text-primary bg-primary/10">
+                      {actionOrderType === 'LIMIT' ? 'LIMIT MAKER' : 'MARKET TAKER'} · Martingale: {riskMartingaleMultiplier}x · Drawdown: {riskDailyDrawdownLimitPct}%
+                    </Badge>
+                  </div>
+                  {showAdvancedSettings ? (
+                    <ChevronUpIcon className="w-4 h-4 text-muted-foreground" />
+                  ) : (
+                    <ChevronDownIcon className="w-4 h-4 text-muted-foreground" />
+                  )}
+                </button>
+
+                {showAdvancedSettings && (
+                  <div className="p-4 rounded-xl bg-secondary/15 border border-border/60 flex flex-col gap-4 animate-in fade-in duration-200">
+                    {/* Execution Engine Settings */}
+                    <div className="flex flex-col gap-2">
+                      <span className="text-[10px] font-mono uppercase font-bold text-muted-foreground flex items-center gap-1">
+                        <ScaleIcon className="w-3.5 h-3.5 text-primary" /> Order Type & Pricing Model
+                      </span>
+                      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                        <div>
+                          <label className="text-[10px] font-mono text-muted-foreground block mb-1">Execution Mode</label>
+                          <select
+                            value={actionOrderType}
+                            onChange={(e) => setActionOrderType(e.target.value as any)}
+                            className="w-full px-2.5 py-1.5 rounded-lg bg-background border border-border/60 text-xs font-bold text-foreground font-mono"
+                          >
+                            <option value="MARKET">MARKET (Immediate Taker Buy)</option>
+                            <option value="LIMIT">LIMIT (Resting Maker Post)</option>
+                          </select>
+                        </div>
+
+                        {actionOrderType === 'LIMIT' && (
+                          <>
+                            <div>
+                              <label className="text-[10px] font-mono text-muted-foreground block mb-1">Limit Pricing Model</label>
+                              <select
+                                value={actionLimitPricing}
+                                onChange={(e) => setActionLimitPricing(e.target.value as any)}
+                                className="w-full px-2.5 py-1.5 rounded-lg bg-background border border-border/60 text-xs font-bold text-foreground font-mono"
+                              >
+                                <option value="BEST_BID_ASK">Best Available Bid / Ask</option>
+                                <option value="MIDPOINT">Order Book Midpoint</option>
+                                <option value="DISCOUNT_OFFSET">Discount Basis Points Offset</option>
+                              </select>
+                            </div>
+
+                            <div>
+                              <label className="text-[10px] font-mono text-muted-foreground block mb-1">Limit Offset (Bps)</label>
+                              <input
+                                type="number"
+                                min={1}
+                                max={100}
+                                value={actionLimitOffsetBps}
+                                onChange={(e) => setActionLimitOffsetBps(Number(e.target.value))}
+                                className="w-full px-2.5 py-1.5 rounded-lg bg-background border border-border/60 text-xs font-bold text-foreground font-mono"
+                              />
+                            </div>
+                          </>
+                        )}
+
+                        <div>
+                          <label className="text-[10px] font-mono text-muted-foreground block mb-1">Max Slippage Tolerance (Bps)</label>
+                          <input
+                            type="number"
+                            min={5}
+                            max={100}
+                            value={actionMaxSlippageBps}
+                            onChange={(e) => setActionMaxSlippageBps(Number(e.target.value))}
+                            className="w-full px-2.5 py-1.5 rounded-lg bg-background border border-border/60 text-xs font-bold text-foreground font-mono"
+                          />
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Capital Management & Position Sizing Multipliers */}
+                    <div className="flex flex-col gap-2 pt-3 border-t border-border/40">
+                      <span className="text-[10px] font-mono uppercase font-bold text-muted-foreground flex items-center gap-1">
+                        <ChartBarIcon className="w-3.5 h-3.5 text-primary" /> Capital Safeguards & Sizing Multipliers
+                      </span>
+                      <div className="grid grid-cols-1 sm:grid-cols-4 gap-3">
+                        <div>
+                          <label className="text-[10px] font-mono text-muted-foreground block mb-1">Martingale Multiplier</label>
+                          <select
+                            value={riskMartingaleMultiplier}
+                            onChange={(e) => setRiskMartingaleMultiplier(Number(e.target.value))}
+                            className="w-full px-2.5 py-1.5 rounded-lg bg-background border border-border/60 text-xs font-bold text-foreground font-mono"
+                          >
+                            <option value={1.0}>1.0x (Flat Sizing - Default)</option>
+                            <option value={1.25}>1.25x (Gentle Recovery)</option>
+                            <option value={1.5}>1.5x (Moderate)</option>
+                            <option value={2.0}>2.0x (Aggressive Martingale)</option>
+                          </select>
+                        </div>
+
+                        <div>
+                          <label className="text-[10px] font-mono text-muted-foreground block mb-1">Take-Profit Target Lock (%)</label>
+                          <input
+                            type="number"
+                            min={5}
+                            max={200}
+                            value={riskTakeProfitTargetPct}
+                            onChange={(e) => setRiskTakeProfitTargetPct(Number(e.target.value))}
+                            className="w-full px-2.5 py-1.5 rounded-lg bg-background border border-border/60 text-xs font-bold text-foreground font-mono"
+                          />
+                        </div>
+
+                        <div>
+                          <label className="text-[10px] font-mono text-muted-foreground block mb-1">Daily Drawdown Breaker (%)</label>
+                          <input
+                            type="number"
+                            min={5}
+                            max={50}
+                            value={riskDailyDrawdownLimitPct}
+                            onChange={(e) => setRiskDailyDrawdownLimitPct(Number(e.target.value))}
+                            className="w-full px-2.5 py-1.5 rounded-lg bg-background border border-border/60 text-xs font-bold text-foreground font-mono"
+                          />
+                        </div>
+
+                        <div>
+                          <label className="text-[10px] font-mono text-muted-foreground block mb-1">Expiry Buffer Guard (Sec)</label>
+                          <input
+                            type="number"
+                            min={5}
+                            max={60}
+                            value={riskExpiryBufferSec}
+                            onChange={(e) => setRiskExpiryBufferSec(Number(e.target.value))}
+                            className="w-full px-2.5 py-1.5 rounded-lg bg-background border border-border/60 text-xs font-bold text-foreground font-mono"
+                          />
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                )}
+              </div>
+
               {/* SENTENCE SECTION 5: DEDICATED BANKROLL ALLOWANCE */}
               <div className="flex flex-col gap-2">
                 <div className="flex items-center justify-between">
@@ -1595,6 +2000,7 @@ export const StrategyStudioView: React.FC<StrategyStudioViewProps> = ({
                   </div>
                 </div>
               </div>
+
 
               {/* Action Buttons */}
               <div className="flex items-center justify-between pt-2 border-t border-border/30 flex-wrap gap-3">
@@ -1737,7 +2143,7 @@ export const StrategyStudioView: React.FC<StrategyStudioViewProps> = ({
             <div className="terminal-panel p-4 flex flex-col gap-3">
               <div className="flex items-center justify-between border-b border-border/30 pb-2">
                 <span className="text-xs font-bold tracking-tight text-foreground uppercase font-mono">
-                  Quick Load Blueprints ({agents.length})
+                  Quick Load Blueprints ({Math.min(4, agents.length)})
                 </span>
                 <span className="text-[10px] font-mono text-muted-foreground">Click to edit</span>
               </div>
@@ -2301,8 +2707,8 @@ export const StrategyStudioView: React.FC<StrategyStudioViewProps> = ({
                           </td>
 
                           {/* Trigger summary */}
-                          <td className="p-3 font-mono text-[10px] text-muted-foreground max-w-[220px] truncate">
-                            {agent.rules?.conditions?.map((c) => `${c.indicator} ${c.operator === 'LESS_THAN' ? '<' : '>'} ${c.value}`).join(` ${agent.rules?.operator || 'AND'} `) || '—'}
+                          <td className="p-3 font-mono text-[10px] text-muted-foreground max-w-[240px] truncate" title={agent.rules?.conditions?.map((c) => formatConditionRuleSummary(c)).join(` ${agent.rules?.operator || 'AND'} `)}>
+                            {agent.rules?.conditions?.map((c) => formatConditionRuleSummary(c)).join(` ${agent.rules?.operator || 'AND'} `) || '—'}
                           </td>
 
                           {/* Realized PnL */}

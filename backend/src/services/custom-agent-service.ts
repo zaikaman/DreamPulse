@@ -160,6 +160,162 @@ export const STARTER_TEMPLATES: CustomAgentDefinition[] = [
       },
     },
   },
+  {
+    id: '00000000-0000-0000-0000-000000000004',
+    userAddress: '0x0000000000000000000000000000000000000000',
+    name: 'MACD Volume Surge Breakout',
+    description: 'Sniper entries on MACD 12/26 signal cross confirmed by 1.5x institutional volume expansion.',
+    symbol: 'BTC/USD',
+    timeframe: '5m',
+    strategyType: 'BREAKOUT',
+    color: '#38bdf8',
+    icon: 'BoltIcon',
+    isActive: true,
+    isDeployed: false,
+    allocatedAllowance: 250,
+    spentAllowance: 0,
+    pnl: 0,
+    winRate: 0,
+    tradesCount: 0,
+    createdAt: '2026-01-01T00:00:00.000Z',
+    rules: {
+      operator: 'AND',
+      conditions: [
+        {
+          id: 'c-1',
+          indicator: 'MACD',
+          period: 12,
+          secondaryPeriod: 26,
+          signalPeriod: 9,
+          operator: 'CROSS_ABOVE',
+          value: 0,
+        },
+        {
+          id: 'c-2',
+          indicator: 'VOLUME_SURGE',
+          period: 20,
+          multiplier: 1.5,
+          operator: 'GREATER_THAN',
+          value: 1.5,
+        },
+      ],
+      action: {
+        direction: 'CALL',
+        durationSec: 300,
+        stakeType: 'FIXED',
+        stakeAmount: 25,
+        orderType: 'LIMIT',
+        limitPricing: 'DISCOUNT_OFFSET',
+        limitOffsetBps: 10,
+      },
+      risk: {
+        maxConsecutiveLosses: 2,
+        cooldownMinutes: 3,
+        minPoolPayoutPct: 78,
+        takeProfitTargetPct: 30,
+        martingaleMultiplier: 1.25,
+      },
+    },
+  },
+  {
+    id: '00000000-0000-0000-0000-000000000005',
+    userAddress: '0x0000000000000000000000000000000000000000',
+    name: 'VWAP Trend Master (ADX Filtered)',
+    description: 'Follows institutional directional order flow when price reclaims VWAP during strong trend regimes (ADX > 25).',
+    symbol: 'ETH/USD',
+    timeframe: '15m',
+    strategyType: 'MOMENTUM',
+    color: '#ec4899',
+    icon: 'ArrowTrendingUpIcon',
+    isActive: true,
+    isDeployed: false,
+    allocatedAllowance: 300,
+    spentAllowance: 0,
+    pnl: 0,
+    winRate: 0,
+    tradesCount: 0,
+    createdAt: '2026-01-01T00:00:00.000Z',
+    rules: {
+      operator: 'AND',
+      conditions: [
+        {
+          id: 'c-1',
+          indicator: 'VWAP',
+          operator: 'CROSS_ABOVE',
+          value: 0,
+        },
+        {
+          id: 'c-2',
+          indicator: 'ADX',
+          period: 14,
+          operator: 'GREATER_THAN',
+          value: 25,
+        },
+      ],
+      action: {
+        direction: 'CALL',
+        durationSec: 900,
+        stakeType: 'FIXED',
+        stakeAmount: 30,
+      },
+      risk: {
+        maxConsecutiveLosses: 2,
+        cooldownMinutes: 5,
+        minPoolPayoutPct: 75,
+        dailyDrawdownLimitPct: 20,
+      },
+    },
+  },
+  {
+    id: '00000000-0000-0000-0000-000000000006',
+    userAddress: '0x0000000000000000000000000000000000000000',
+    name: 'Stochastic & CCI Reversal Hunter',
+    description: 'High-conviction contrarian mean-reversion when both Stochastic (%K < 20) and CCI (<-100) reach extreme oversold zones.',
+    symbol: 'BTC/USD',
+    timeframe: '5m',
+    strategyType: 'MEAN_REVERSION',
+    color: '#10b981',
+    icon: 'SparklesIcon',
+    isActive: true,
+    isDeployed: false,
+    allocatedAllowance: 150,
+    spentAllowance: 0,
+    pnl: 0,
+    winRate: 0,
+    tradesCount: 0,
+    createdAt: '2026-01-01T00:00:00.000Z',
+    rules: {
+      operator: 'AND',
+      conditions: [
+        {
+          id: 'c-1',
+          indicator: 'STOCHASTIC',
+          period: 14,
+          secondaryPeriod: 3,
+          operator: 'LESS_THAN',
+          value: 20,
+        },
+        {
+          id: 'c-2',
+          indicator: 'CCI',
+          period: 20,
+          operator: 'LESS_THAN',
+          value: -100,
+        },
+      ],
+      action: {
+        direction: 'CALL',
+        durationSec: 300,
+        stakeType: 'FIXED',
+        stakeAmount: 15,
+      },
+      risk: {
+        maxConsecutiveLosses: 3,
+        cooldownMinutes: 4,
+        minPoolPayoutPct: 80,
+      },
+    },
+  },
 ];
 
 export const STARTER_TEMPLATE_IDS = STARTER_TEMPLATES.map((t) => t.id);
@@ -965,17 +1121,19 @@ Given a trader's natural language concept, generate a structured strategy specif
   "symbol": "BTC/USD" | "ETH/USD",
   "timeframe": "1m" | "5m" | "15m" | "1h",
   "strategyType": "MOMENTUM" | "MEAN_REVERSION" | "BREAKOUT" | "VOLATILITY" | "CUSTOM",
-  "color": "#2dd4bf" | "#f59e0b" | "#a78bfa",
-  "icon": "BoltIcon" | "SparklesIcon" | "AdjustmentsHorizontalIcon",
+  "color": "#2dd4bf" | "#f59e0b" | "#a78bfa" | "#ec4899" | "#38bdf8",
+  "icon": "BoltIcon" | "SparklesIcon" | "AdjustmentsHorizontalIcon" | "ChartBarIcon" | "ArrowTrendingUpIcon",
   "rules": {
     "operator": "AND" | "OR",
     "conditions": [
       {
         "id": "c-1",
-        "indicator": "RSI" | "SMA" | "EMA" | "BOLLINGER_UPPER" | "BOLLINGER_LOWER" | "PRICE_DRIFT",
-        "period": 9,
+        "indicator": "RSI" | "SMA" | "EMA" | "BOLLINGER_UPPER" | "BOLLINGER_LOWER" | "MACD" | "STOCHASTIC" | "ATR" | "VWAP" | "VOLUME_SURGE" | "ADX" | "CCI" | "WILLIAMS_R" | "PRICE_DRIFT",
+        "period": 14,
         "secondaryPeriod": 21,
+        "signalPeriod": 9,
         "stdDev": 2.0,
+        "multiplier": 1.5,
         "operator": "LESS_THAN" | "GREATER_THAN" | "CROSS_ABOVE" | "CROSS_BELOW",
         "value": 0
       }
@@ -984,17 +1142,32 @@ Given a trader's natural language concept, generate a structured strategy specif
       "direction": "CALL" | "PUT",
       "durationSec": 60 | 300 | 900,
       "stakeType": "FIXED",
-      "stakeAmount": 10
+      "stakeAmount": 10,
+      "orderType": "MARKET" | "LIMIT",
+      "limitPricing": "BEST_BID_ASK" | "MIDPOINT" | "DISCOUNT_OFFSET",
+      "limitOffsetBps": 10
     },
     "risk": {
       "maxConsecutiveLosses": 2,
       "cooldownMinutes": 3,
-      "minPoolPayoutPct": 75
+      "minPoolPayoutPct": 75,
+      "dailyDrawdownLimitPct": 15,
+      "takeProfitTargetPct": 25,
+      "martingaleMultiplier": 1.0,
+      "expiryBufferSec": 15
     }
   }
 }
 If the user mentions moving averages or crosses (e.g. 9/21 EMA), set indicator="EMA", period=9, secondaryPeriod=21, operator="CROSS_ABOVE" or "CROSS_BELOW".
-If the user mentions velocity or drift, add a condition with indicator="PRICE_DRIFT", operator="GREATER_THAN" or "LESS_THAN", value=0.0015.
+If the user mentions MACD, set indicator="MACD", period=12, secondaryPeriod=26, signalPeriod=9, operator="CROSS_ABOVE" | "CROSS_BELOW" | "GREATER_THAN" | "LESS_THAN".
+If the user mentions Stochastic, set indicator="STOCHASTIC", period=14, secondaryPeriod=3, operator="LESS_THAN" (oversold) | "GREATER_THAN" (overbought) | "CROSS_ABOVE".
+If the user mentions VWAP, set indicator="VWAP", operator="CROSS_ABOVE" | "GREATER_THAN" | "LESS_THAN".
+If the user mentions volume spike or surge, set indicator="VOLUME_SURGE", period=20, multiplier=1.5, operator="GREATER_THAN".
+If the user mentions ATR or volatility breakout, set indicator="ATR", period=14, operator="GREATER_THAN".
+If the user mentions ADX or trend strength, set indicator="ADX", period=14, operator="GREATER_THAN", value=25.
+If the user mentions CCI, set indicator="CCI", period=20, operator="LESS_THAN" (-100) or "GREATER_THAN" (100).
+If the user mentions Williams %R, set indicator="WILLIAMS_R", period=14, operator="LESS_THAN" (-80) or "GREATER_THAN" (-20).
+If the user mentions velocity or drift, add indicator="PRICE_DRIFT", operator="GREATER_THAN" or "LESS_THAN", value=0.0015.
 Respond ONLY with valid JSON. No markdown codeblocks, no explanations.`;
 
     try {
@@ -1037,7 +1210,9 @@ Respond ONLY with valid JSON. No markdown codeblocks, no explanations.`;
                 indicator: c.indicator || 'RSI',
                 period: c.period || 14,
                 secondaryPeriod: c.secondaryPeriod,
+                signalPeriod: c.signalPeriod,
                 stdDev: c.stdDev || 2.0,
+                multiplier: c.multiplier,
                 operator: c.operator || 'LESS_THAN',
                 value: c.value ?? 0,
               })),
@@ -1046,11 +1221,18 @@ Respond ONLY with valid JSON. No markdown codeblocks, no explanations.`;
                 durationSec: rules.action?.durationSec || (timeframe === '1m' ? 60 : 300),
                 stakeType: 'FIXED',
                 stakeAmount: rules.action?.stakeAmount || 10,
+                orderType: rules.action?.orderType === 'LIMIT' ? 'LIMIT' : 'MARKET',
+                limitPricing: rules.action?.limitPricing || 'BEST_BID_ASK',
+                limitOffsetBps: rules.action?.limitOffsetBps || 10,
               },
               risk: {
                 maxConsecutiveLosses: rules.risk?.maxConsecutiveLosses || 2,
                 cooldownMinutes: rules.risk?.cooldownMinutes || 3,
                 minPoolPayoutPct: rules.risk?.minPoolPayoutPct || 75,
+                dailyDrawdownLimitPct: rules.risk?.dailyDrawdownLimitPct,
+                takeProfitTargetPct: rules.risk?.takeProfitTargetPct,
+                martingaleMultiplier: rules.risk?.martingaleMultiplier,
+                expiryBufferSec: rules.risk?.expiryBufferSec || 15,
               },
             },
           };
@@ -1062,7 +1244,7 @@ Respond ONLY with valid JSON. No markdown codeblocks, no explanations.`;
 
     // Intelligent Deterministic Keyword Fallback
     const p = prompt.toLowerCase();
-    const isCall = p.includes('call') || p.includes('buy') || p.includes('long') || p.includes('bounce') || p.includes('dip') || p.includes('golden') || p.includes('above');
+    const isCall = p.includes('call') || p.includes('buy') || p.includes('long') || p.includes('bounce') || p.includes('dip') || p.includes('golden') || p.includes('above') || p.includes('surge');
     const isEth = p.includes('eth') || p.includes('ethereum');
     const symbol = isEth ? 'ETH/USD' : 'BTC/USD';
     const is60s = p.includes('60') || p.includes('1m') || p.includes('turbo');
@@ -1072,6 +1254,97 @@ Respond ONLY with valid JSON. No markdown codeblocks, no explanations.`;
     const durationSec = is60s ? 60 : is15m ? 900 : is1h ? 3600 : 300;
 
     const fallbackConditions: ConditionRule[] = [];
+
+    // Parse MACD
+    if (p.includes('macd')) {
+      fallbackConditions.push({
+        id: 'c-macd',
+        indicator: 'MACD',
+        period: 12,
+        secondaryPeriod: 26,
+        signalPeriod: 9,
+        operator: isCall ? 'CROSS_ABOVE' : 'CROSS_BELOW',
+        value: 0,
+      });
+    }
+
+    // Parse Stochastic
+    if (p.includes('stochastic') || p.includes('stoch')) {
+      fallbackConditions.push({
+        id: 'c-stoch',
+        indicator: 'STOCHASTIC',
+        period: 14,
+        secondaryPeriod: 3,
+        operator: isCall ? 'LESS_THAN' : 'GREATER_THAN',
+        value: isCall ? 20 : 80,
+      });
+    }
+
+    // Parse VWAP
+    if (p.includes('vwap')) {
+      fallbackConditions.push({
+        id: 'c-vwap',
+        indicator: 'VWAP',
+        operator: isCall ? 'CROSS_ABOVE' : 'CROSS_BELOW',
+        value: 0,
+      });
+    }
+
+    // Parse Volume Surge / Spike
+    if (p.includes('volume') || p.includes('surge') || p.includes('spike')) {
+      fallbackConditions.push({
+        id: 'c-vol',
+        indicator: 'VOLUME_SURGE',
+        period: 20,
+        multiplier: 1.5,
+        operator: 'GREATER_THAN',
+        value: 1.5,
+      });
+    }
+
+    // Parse ATR / Volatility
+    if (p.includes('atr') || p.includes('volatility breakout') || p.includes('squeeze')) {
+      fallbackConditions.push({
+        id: 'c-atr',
+        indicator: 'ATR',
+        period: 14,
+        operator: 'GREATER_THAN',
+        value: symbol === 'ETH/USD' ? 5 : 50,
+      });
+    }
+
+    // Parse ADX / Trend Strength
+    if (p.includes('adx') || p.includes('trend strength') || p.includes('strong trend')) {
+      fallbackConditions.push({
+        id: 'c-adx',
+        indicator: 'ADX',
+        period: 14,
+        operator: 'GREATER_THAN',
+        value: 25,
+      });
+    }
+
+    // Parse CCI
+    if (p.includes('cci')) {
+      fallbackConditions.push({
+        id: 'c-cci',
+        indicator: 'CCI',
+        period: 20,
+        operator: isCall ? 'LESS_THAN' : 'GREATER_THAN',
+        value: isCall ? -100 : 100,
+      });
+    }
+
+    // Parse Williams %R
+    if (p.includes('williams') || p.includes('%r')) {
+      fallbackConditions.push({
+        id: 'c-wr',
+        indicator: 'WILLIAMS_R',
+        period: 14,
+        operator: isCall ? 'LESS_THAN' : 'GREATER_THAN',
+        value: isCall ? -80 : -20,
+      });
+    }
 
     // Parse EMA / Moving Average Cross
     if (p.includes('ema') || p.includes('moving average') || p.includes('cross') || p.includes('golden')) {
@@ -1088,7 +1361,7 @@ Respond ONLY with valid JSON. No markdown codeblocks, no explanations.`;
     }
 
     // Parse Velocity / Price Drift
-    if (p.includes('velocity') || p.includes('drift') || p.includes('momentum') || p.includes('speed') || p.includes('spike')) {
+    if (p.includes('velocity') || p.includes('drift') || p.includes('momentum') || p.includes('speed')) {
       fallbackConditions.push({
         id: 'c-drift',
         indicator: 'PRICE_DRIFT',
@@ -1140,7 +1413,17 @@ Respond ONLY with valid JSON. No markdown codeblocks, no explanations.`;
       });
     }
 
-    const titlePrefix = p.includes('ema') ? 'EMA Golden Cross Rider' : isCall ? 'Momentum Dip Hunter' : 'Exhaustion Mean Reverter';
+    const titlePrefix = p.includes('macd')
+      ? 'MACD Signal Sniper'
+      : p.includes('vwap')
+      ? 'VWAP Institutional Rider'
+      : p.includes('stoch')
+      ? 'Stochastic Oscillator Reverter'
+      : p.includes('ema')
+      ? 'EMA Golden Cross Rider'
+      : isCall
+      ? 'Momentum Dip Hunter'
+      : 'Exhaustion Mean Reverter';
 
     return {
       name: `${symbol.split('/')[0]} ${titlePrefix}`,

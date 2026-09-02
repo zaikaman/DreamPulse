@@ -6,9 +6,17 @@ import {
   calculateSeriesEMA,
   calculateSeriesSMA,
   calculateSeriesBollinger,
+  calculateSeriesMACD,
+  calculateSeriesStochastic,
+  calculateSeriesATR,
+  calculateSeriesVWAP,
+  calculateSeriesVolumeSurge,
+  calculateSeriesADX,
+  calculateSeriesCCI,
+  calculateSeriesWilliamsR,
 } from '../src/agents/custom-agent-evaluator.js';
 import { marketService } from '../src/services/market-service.js';
-import { sessionService } from '../src/services/session-service.js';
+import { sessionService, type SessionRecord } from '../src/services/session-service.js';
 import { operatorAccount } from '../src/config/somnia.js';
 import type { Market, SessionGrant, CustomAgentDefinition } from '../src/types/index.js';
 import type { IAgentContext } from '../src/agents/base-agent.js';
@@ -17,7 +25,7 @@ import type { HistoricalCandle } from '../src/services/backtest-service.js';
 describe('SwarmRunner, CustomAgentEvaluator & Agent System Suite', () => {
   const userAddress = operatorAccount.address;
 
-  const mockSession: SessionGrant = {
+  const mockSession: SessionRecord & SessionGrant = {
     id: 'sess-eval-1234',
     userAddress,
     operatorAddress: operatorAccount.address,
@@ -25,8 +33,12 @@ describe('SwarmRunner, CustomAgentEvaluator & Agent System Suite', () => {
     maxTradeSize: 50,
     dailyVolumeCap: 500,
     spentToday: 0,
+    lastSpendResetTimestamp: Date.now(),
     expiresAt: new Date(Date.now() + 3600000).toISOString(),
     isActive: true,
+    nonce: 0,
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString(),
   };
 
   const mockMarket: Market = {
@@ -36,11 +48,13 @@ describe('SwarmRunner, CustomAgentEvaluator & Agent System Suite', () => {
     strikePrice: 96000,
     openTimestamp: new Date(Date.now() - 60000).toISOString(),
     closeTimestamp: new Date(Date.now() + 240000).toISOString(),
+    resolutionTimestamp: new Date(Date.now() + 300000).toISOString(),
     status: 'Open',
     bestBidYes: 0.48,
     bestAskYes: 0.52,
     bestBidNo: 0.48,
     bestAskNo: 0.52,
+    impliedProbYes: 0.50,
     fairValueYes: 0.55,
     edgePercentage: 0.05,
   };
@@ -112,8 +126,8 @@ describe('SwarmRunner, CustomAgentEvaluator & Agent System Suite', () => {
   describe('Technical Indicators & CustomAgentEvaluator', () => {
     let evaluator: CustomAgentEvaluator;
 
-    const mockCandles: HistoricalCandle[] = Array.from({ length: 30 }, (_, i) => ({
-      timestamp: Date.now() - (30 - i) * 60000,
+    const mockCandles: HistoricalCandle[] = Array.from({ length: 40 }, (_, i) => ({
+      timestamp: Date.now() - (40 - i) * 60000,
       open: 96000 + i * 10,
       high: 96050 + i * 10,
       low: 95950 + i * 10,
@@ -150,11 +164,17 @@ describe('SwarmRunner, CustomAgentEvaluator & Agent System Suite', () => {
           durationSec: 300,
           stakeType: 'FIXED',
           stakeAmount: 10,
+          orderType: 'LIMIT',
+          limitPricing: 'DISCOUNT_OFFSET',
+          limitOffsetBps: 15,
         },
         risk: {
           maxConsecutiveLosses: 2,
           cooldownMinutes: 3,
           minPoolPayoutPct: 75,
+          martingaleMultiplier: 1.5,
+          takeProfitTargetPct: 30,
+          dailyDrawdownLimitPct: 20,
         },
       },
       tradesCount: 5,
@@ -184,7 +204,41 @@ describe('SwarmRunner, CustomAgentEvaluator & Agent System Suite', () => {
       expect(bb.middle).toBeGreaterThan(bb.lower);
     });
 
-    it('evaluates custom agent against context and records trade attempt', async () => {
+    it('calculates advanced quantitative indicators (MACD, Stochastic, ATR, VWAP, Volume Surge, ADX, CCI, Williams %R)', () => {
+      const macd = calculateSeriesMACD(mockCandles, 12, 26, 9);
+      expect(macd).toBeDefined();
+      expect(typeof macd.macd).toBe('number');
+      expect(typeof macd.signal).toBe('number');
+      expect(typeof macd.histogram).toBe('number');
+
+      const stoch = calculateSeriesStochastic(mockCandles, 14, 3);
+      expect(stoch.k).toBeGreaterThanOrEqual(0);
+      expect(stoch.k).toBeLessThanOrEqual(100);
+      expect(stoch.d).toBeGreaterThanOrEqual(0);
+      expect(stoch.d).toBeLessThanOrEqual(100);
+
+      const atr = calculateSeriesATR(mockCandles, 14);
+      expect(atr).toBeGreaterThan(0);
+
+      const vwap = calculateSeriesVWAP(mockCandles);
+      expect(vwap).toBeGreaterThan(90000);
+
+      const surge = calculateSeriesVolumeSurge(mockCandles, 20);
+      expect(surge).toBeGreaterThan(0);
+
+      const adx = calculateSeriesADX(mockCandles, 14);
+      expect(adx.adx).toBeGreaterThanOrEqual(0);
+      expect(adx.adx).toBeLessThanOrEqual(100);
+
+      const cci = calculateSeriesCCI(mockCandles, 20);
+      expect(typeof cci).toBe('number');
+
+      const willR = calculateSeriesWilliamsR(mockCandles, 14);
+      expect(willR).toBeLessThanOrEqual(0);
+      expect(willR).toBeGreaterThanOrEqual(-100);
+    });
+
+    it('evaluates custom agent against context with limit order pricing and martingale sizing', async () => {
       const context: IAgentContext = {
         market: mockMarket,
         spotTicker: {
@@ -237,6 +291,41 @@ describe('SwarmRunner, CustomAgentEvaluator & Agent System Suite', () => {
 
       const decisionNearExpiry = await evaluator.evaluate(mockCustomAgent, { ...context, market: expiredMarket });
       expect(decisionNearExpiry.action).toBe('HOLD');
+    });
+
+    it('enforces take-profit target lock and daily drawdown breaker guardrails', async () => {
+      const lockedAgent: CustomAgentDefinition = {
+        ...mockCustomAgent,
+        allocatedAllowance: 100,
+        pnl: 35.0, // 35% profit > 30% takeProfitTargetPct
+      };
+
+      const context: IAgentContext = {
+        market: mockMarket,
+        spotTicker: {
+          symbol: 'BTC/USD',
+          price: 96500,
+          change1m: 0.002,
+          change5m: 0.005,
+          timestamp: Date.now(),
+        },
+        depth: { yesBids: [], yesAsks: [] },
+        activeSessions: [mockSession],
+      };
+
+      const tpDecision = await evaluator.evaluate(lockedAgent, context, mockSession);
+      expect(tpDecision.action).toBe('HOLD');
+      expect(tpDecision.rationale).toContain('locked profits');
+
+      const drawdownAgent: CustomAgentDefinition = {
+        ...mockCustomAgent,
+        allocatedAllowance: 100,
+        pnl: -25.0, // 25% drawdown > 20% dailyDrawdownLimitPct
+      };
+
+      const ddDecision = await evaluator.evaluate(drawdownAgent, context, mockSession);
+      expect(ddDecision.action).toBe('HOLD');
+      expect(ddDecision.rationale).toContain('drawdown circuit breaker');
     });
   });
 });

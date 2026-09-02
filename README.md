@@ -14,7 +14,7 @@
   <a href="https://shannon-explorer.somnia.network"><img src="https://img.shields.io/badge/Blockchain-Somnia%20Shannon%20(50312)-00ffcc?style=for-the-badge&logo=ethereum&logoColor=black" alt="Somnia Shannon Testnet" /></a>
   <a href="https://docs.dreamdex.io/developers/event-contracts"><img src="https://img.shields.io/badge/Protocol-DreamDEX%20Event%20Contracts-7928CA?style=for-the-badge&logo=chainlink&logoColor=white" alt="DreamDEX Protocol" /></a>
   <a href="https://github.com/zaikaman/DreamPulse/actions/workflows/ci.yml"><img src="https://img.shields.io/badge/CI-GitHub%20Actions%20Passing-0284c7?style=for-the-badge&logo=githubactions&logoColor=white" alt="CI GitHub Actions" /></a>
-  <a href="https://github.com/zaikaman/DreamPulse"><img src="https://img.shields.io/badge/Tests-270%2F270%20Passed%20(100%25)-00e676?style=for-the-badge&logo=vitest&logoColor=white" alt="Tests 270/270 Passing" /></a>
+  <a href="https://github.com/zaikaman/DreamPulse"><img src="https://img.shields.io/badge/Tests-272%2F272%20Passed%20(100%25)-00e676?style=for-the-badge&logo=vitest&logoColor=white" alt="Tests 272/272 Passing" /></a>
   <a href="https://groq.com"><img src="https://img.shields.io/badge/LLM-Groq%20(Telemetry)%20%2B%20Gemini%20(Studio)-f55036?style=for-the-badge&logo=openai&logoColor=white" alt="Groq + Gemini LLM" /></a>
 </p>
 
@@ -29,7 +29,7 @@
 * **Machine-Readable Evidence Artifact**: [`evidence.json`](./evidence.json) *(Full audit trail, on-chain tx hashes, and JSON schemas)*
 * **SDK & Documentation Developer Feedback Report**: [Jump to Feedback Report](#developer-feedback-report-somnia--dreamdex-sdk)
 * **2–3 Minute Judging Demo Script**: [Jump to Video Walkthrough](#23-minute-demo-video-walkthrough)
-* **Automated Verification Suite**: `npm run verify` *(270/270 Unit & Integration Tests Passing, 100% Type Safety)*
+* **Automated Verification Suite**: `npm run verify` *(272/272 Unit & Integration Tests Passing, 100% Type Safety)*
 
 ---
 
@@ -55,7 +55,7 @@
 18. [System Architecture & Execution Workflows](#system-architecture--execution-workflows)
 19. [API & WebSocket Telemetry Protocol](#api--websocket-telemetry-protocol)
 20. [Local Installation & Development Guide](#local-installation--development-guide)
-21. [Verification & Test Suite (270/270 Passing)](#verification--test-suite-270270-passing)
+21. [Verification & Test Suite (272/272 Passing)](#verification--test-suite-272272-passing)
 22. [2–3 Minute Demo Video Walkthrough](#23-minute-demo-video-walkthrough)
 23. [Future Roadmap Beyond Hackathon](#future-roadmap-beyond-hackathon)
 24. [License & Acknowledgements](#license--acknowledgements)
@@ -74,7 +74,7 @@ DreamPulse AI is structured into four tightly integrated operational layers:
 
 1. **Client Application Layer (`React` · `Vite` · `TypeScript`)**
    * **Pro Trade Terminal**: CLOB order book, real-time depth ladders, interactive binary charts, and AI Alpha Copilot guidance.
-   * **Visual Strategy Studio**: No-code sentence-based rule AST builder with dedicated Google Gemini strategy synthesis.
+   * **Visual Strategy Studio**: No-code sentence-based rule AST builder with 14 quantitative indicators, limit order execution controls, and dedicated Google Gemini strategy synthesis.
    * **Quantitative Backtester**: Binance historical spot replay, friction/slippage simulation, and Sharpe/Sortino performance modeling.
    * **Swarm Arena & Social Alpha**: Dual-track leaderboards, 1-click strategy cloning, and automated forecaster mirror trading.
 
@@ -116,7 +116,7 @@ Decentralized Central Limit Order Book (CLOB) prediction markets are the fastest
 | Platform Pillar | Core Capabilities | Key Advantages |
 | :--- | :--- | :--- |
 | **1. Pro Trade Terminal** | Live binary settlement chart, strike price indicators, AI Alpha Copilot, gasless session tickets. | Sub-second order execution with real-time Black-Scholes edge calculations and 1-click follow. |
-| **2. Strategy Studio** | Visual sentence canvas, dedicated Gemini copilot, isolated tUSDC allowances, JSON rule AST compiler. | True no-code strategy creation without consuming shared background swarm quota. |
+| **2. Strategy Studio** | Visual sentence canvas, 14 technical indicators, limit execution drawer, dedicated Gemini copilot, isolated tUSDC allowances. | True no-code quantitative strategy creation with maker/taker controls and martingale sizing. |
 | **3. Quant Backtester** | Binance 1m/5m/15m/1h historical data, configurable slippage and latency delays, Sortino and drawdown metrics. | Verified historical performance validation before deploying to personal or global swarms. |
 | **4. Autonomous Swarms** | 4 specialized autonomous agents (Volt, Oracle, Titan, Sweeper), protocol vs. personal swarms, 100ms evaluation loops. | Continuous two-sided market liquidity and latency arbitrage with isolated per-wallet parameters. |
 | **5. Swarm Arena & Social** | Dual-track leaderboards (AI fleet & human forecasters), 1-click strategy cloning, forecaster mirror trading. | Fully transparent on-chain performance tracking and high-resolution Proof-of-Alpha cards. |
@@ -158,19 +158,36 @@ The **Visual Strategy Studio** (`#studio` / `StrategyStudioView.tsx`) enables an
 
 ### Visual Algorithmic Sentence Workflow:
 1. **WHEN (Market & Timeframe)**: Select asset (`BTC/USD`, `ETH/USD`) and candle resolution (`1m`, `5m`, `15m`, `1h`).
-2. **IF (Trigger Conditions)**: Add multi-indicator capsules (e.g. `RSI < 28`, `Bollinger Lower Band Touch`, `EMA Momentum`).
-3. **THEN EXECUTE (Binary Action)**: Define trade direction (`CALL` or `PUT`), duration (`60s Turbo` to `1h`), and fixed lot stake.
-4. **RISK LEASH (Autonomous Guardrails)**: Set consecutive loss limits before pause, cooldown periods, and required payout hurdles.
+2. **IF (Trigger Conditions)**: Add multi-indicator capsules across 14 technical & quantitative indicators (e.g. `MACD 12/26 Golden Cross`, `VWAP Reclaim`, `Stochastic %K < 20`, `Volume > 1.5x`).
+3. **THEN EXECUTE (Binary Action & Pricing)**: Define trade direction (`CALL` or `PUT`), duration (`60s Turbo` to `1h`), fixed lot stake, execution style (`MARKET` taker buy vs `LIMIT` resting maker post), and limit offset bps.
+4. **RISK LEASH & CAPITAL MANAGEMENT**: Set consecutive loss limits, loss cooldowns, dynamic martingale sizing, take-profit target locks, daily drawdown circuit breakers, and expiry buffer guards.
 
 ### Core Studio Capabilities:
 * **Interactive Sentence & Capsule Canvas**:
   * **Market & Timeframe**: Select asset (`BTC/USD`, `ETH/USD`) and candle resolution (`1m`, `5m`, `15m`, `1h`).
-  * **Trigger Condition Capsules**: Add multi-indicator triggers (`RSI`, `BOLLINGER_LOWER`, `BOLLINGER_UPPER`, `EMA`, `SMA`, `PRICE_DRIFT`) with custom periods, comparison operators (`<`, `>`, `Crosses Above`, `Crosses Below`), and threshold values.
+  * **14 Quantitative Indicator Capsules**:
+    * `RSI` (Relative Strength Index overbought/oversold)
+    * `MACD` (12/26/9 Fast/Slow/Signal crossovers & histogram divergence)
+    * `STOCHASTIC` (%K and %D cyclical swing indicator with crossover triggers)
+    * `BOLLINGER_LOWER` & `BOLLINGER_UPPER` (Configurable rolling period and standard deviation envelopes)
+    * `EMA` & `SMA` (Trend moving averages with dual-period golden/death cross support)
+    * `VWAP` (Volume-Weighted Average Price institutional reclaim/fade benchmark)
+    * `VOLUME_SURGE` (Heavy volume breakout detector vs rolling baseline multiplier)
+    * `ADX` (Average Directional Index trend strength regime filter)
+    * `ATR` (Average True Range volatility expansion indicator)
+    * `CCI` (Commodity Channel Index cyclical statistical deviation)
+    * `WILLIAMS_R` (Williams %R ultra-responsive momentum oscillator)
+    * `PRICE_DRIFT` (High-frequency spot price displacement within contract expiration window)
   * **Configurable Logic Gate**: Switch seamlessly between `ALL Must Agree (AND)` and `ANY May Trigger (OR)`.
-  * **Binary Action Specification**: Direction (`CALL` / `PUT`), contract duration (`60s Turbo`, `5m`, `15m`, `1h`), and fixed lot sizing.
-  * **Autonomous Risk Leash**: Max consecutive loss ceiling before auto-pause, loss cooldown duration, and minimum required pool payout percentage.
+* **Advanced Strategy Execution & Capital Controls Drawer**:
+  * **Execution Mode**: `MARKET` (Immediate Taker Buy) or `LIMIT` (Resting Maker Post).
+  * **Limit Pricing Models**: `Best Available Bid/Ask`, `Order Book Midpoint`, or `Basis Point Discount Offset`.
+  * **Slippage & Timing Guards**: Max slippage tolerance bps and expiry safety buffer (seconds).
+  * **Dynamic Position Sizing**: `1.0x (Flat)` | `1.25x (Gentle)` | `1.5x (Moderate)` | `2.0x (Martingale)` recovery sizing.
+  * **Take-Profit Target Lock (%)**: Automatically locks realized gains and pauses trading when target profit is achieved.
+  * **Daily Drawdown Circuit Breaker (%)**: Shuts down execution if drawdown limit is breached, preventing catastrophic tail risk.
 * **Dedicated Google Gemini Prompt-to-Strategy Co-Pilot**:
-  * Plain English strategy description Omnibar (e.g. *"Aggressive BTC 60s Call sniper when RSI drops below 25 after a sharp dip"*).
+  * Plain English strategy description Omnibar (e.g. *"Aggressive BTC 60s Call sniper on MACD golden cross and RSI < 35 with 1.5x volume surge"*).
   * **Exclusively Dedicated Gemini Engine**: Uses Google Gemini (`GEMINI_API_KEY`, `GEMINI_BASE_URL`, `GEMINI_MODEL`) strictly for user strategy synthesis, with zero background swarm consumption, reserving 100% of your Gemini quota for studio creation.
   * Instant pre-set suggestion chips for 1-click strategy generation.
 * **Instant Ghost Radar**: Real-time heuristic performance HUD previewing estimated win rate, 24-hour trigger frequency, simulated net PnL, and profit factor.
@@ -181,7 +198,7 @@ The **Visual Strategy Studio** (`#studio` / `StrategyStudioView.tsx`) enables an
   * **1-Click Deploy / Pause Controls**: Toggle any agent between `DEPLOYED (Live Autotrading)` and `PAUSED (Dormant)` with single-click instant responsiveness.
   * **Inline Bankroll Modification**: Adjust an agent's tUSDC budget on the fly without needing to recreate or retune its underlying indicators.
 * **Strategy Library & Starter Presets**:
-  * Pre-loaded starter templates: *RSI Oversold Dip Sniper*, *Bollinger Band Exhaustion Fade*, and *Fast EMA Momentum Rider*.
+  * Pre-loaded starter templates: *RSI Oversold Dip Sniper*, *Bollinger Band Exhaustion Fade*, *Fast EMA Momentum Rider*, *MACD Volume Surge Breakout*, *VWAP Trend Master*, and *Stochastic & CCI Reversal Hunter*.
   * Saved custom agents and deployed bankrolls persist to PostgreSQL via Supabase RLS with in-memory caching.
 
 ---
@@ -713,7 +730,7 @@ For step-by-step instructions on deploying the **Frontend to Vercel** and the **
 
 ---
 
-## Verification & Test Suite (270/270 Passing)
+## Verification & Test Suite (272/272 Passing)
 
 DreamPulse enforces strict production-grade quality invariants through a **three-tier verification architecture** that clearly separates **Tested Locally (Unit/Integration)**, **Simulated Quantitative Lab (Historical Backtests & Synthetic Models)**, and **Verified Live (On-Chain Testnet & Production Cloud)**.
 
@@ -738,7 +755,7 @@ npm run verify
 
 ---
 
-### Comprehensive Test Suite Breakdown (270 Tests Across 23 Suites)
+### Comprehensive Test Suite Breakdown (272 Tests Across 23 Suites)
 
 | Test File | Tests | Verification Tier | Coverage & Verified Invariants |
 | :--- | :---: | :---: | :--- |
@@ -752,11 +769,11 @@ npm run verify
 | [`tests/settlement.test.ts`](file:///d:/DreamPulse/backend/tests/settlement.test.ts) | **14** | 🟢 Live / Local | Matured market resolution detection, automated winning share redemptions via Sweeper daemon, 100% collateral compounding into active trading balances, multi-market batch claim aggregation, and failed sweep accounting. |
 | [`tests/price-feed-operator.test.ts`](file:///d:/DreamPulse/backend/tests/price-feed-operator.test.ts) | **12** | 🟢 Live / Local | Real-time spot price feeds, realized volatility, staleness detection, personal swarm configurations, and on-chain operator permissions. |
 | [`tests/order-service.test.ts`](file:///d:/DreamPulse/backend/tests/order-service.test.ts) | **13** | 🟢 Live / Local | User manual orders, autonomous agent executions, resting limit order lifecycle, partial fill accounting, direct user on-chain tx receipt verification, event-driven market settlements, pagination, and PnL reconciliation. |
+| [`tests/custom-evaluator-runner.test.ts`](file:///d:/DreamPulse/backend/tests/custom-evaluator-runner.test.ts) | **9** | 🔵 Local Unit | 14 quantitative indicators (RSI, MACD, Stochastic, Bollinger, EMA, SMA, VWAP, Volume Surge, ADX, ATR, CCI, Williams %R, Drift), limit order pricing, take-profit locks, and daily drawdown circuit breakers. |
 | [`tests/analytics-anomaly.test.ts`](file:///d:/DreamPulse/backend/tests/analytics-anomaly.test.ts) | **9** | 🔵 Local Unit | Black-Scholes edge anomaly detector, severity classifications, multi-range PnL analytics, Sharpe ratios, and equity curve generation. |
 | [`tests/backtest.test.ts`](file:///d:/DreamPulse/backend/tests/backtest.test.ts) | **8** | 🟡 Simulated Lab | Historical backtesting engine against Binance tick data, Sortino ratio, Profit Factor, Max Drawdown underwater curve computations, fee and slippage simulations. |
 | [`tests/market-service.test.ts`](file:///d:/DreamPulse/backend/tests/market-service.test.ts) | **8** | 🟢 Live / Local | Somnia on-chain CLOB order book polling, GraphQL indexer query parsing, anomaly detection (spread/staleness/mispricing), Binance spot ticker ingestion, and fallback market generation. |
 | [`tests/websocket.test.ts`](file:///d:/DreamPulse/backend/tests/websocket.test.ts) | **8** | 🔵 Local Integration | Telemetry WebSocket gateway, batched ticks, depth ladders, agent thoughts, PnL updates, and high-frequency market emitter. |
-| [`tests/custom-evaluator-runner.test.ts`](file:///d:/DreamPulse/backend/tests/custom-evaluator-runner.test.ts) | **7** | 🔵 Local Unit | Technical indicators (RSI, EMA, SMA, Bollinger Bands), custom rule evaluations, and multi-agent swarm runner loops. |
 | [`tests/compounder-custom-agent.test.ts`](file:///d:/DreamPulse/backend/tests/compounder-custom-agent.test.ts) | **7** | 🔵 Local Unit | Automated 100% compounding protocol, session allowance replenishment, custom agent lifecycle (creation, deployment, pauses, settlements), and custom multi-agent swarms. |
 | [`tests/llm.test.ts`](file:///d:/DreamPulse/backend/tests/llm.test.ts) | **7** | 🔵 Local Integration | Groq Qwen 3.8 multi-key round-robin rotation, persistent key index, structured reasoning thoughts, and exclusive Google Gemini Strategy Studio isolation. |
 | [`tests/social-copy.test.ts`](file:///d:/DreamPulse/backend/tests/social-copy.test.ts) | **5** | 🔵 Local Unit | Autonomous forecaster social mirror trading, active target tracking, real-time trade fanout to copiers, per-forecaster `maxTradeSize` position clamping, and 24h rolling `dailyVolumeCap` reset & enforcement. |
@@ -765,7 +782,7 @@ npm run verify
 | [`tests/bootstrap-lifecycle.test.ts`](file:///d:/DreamPulse/backend/tests/bootstrap-lifecycle.test.ts) | **5** | 🔵 Local Integration | Express server lifecycle, CORS origin filters, and root health check. |
 | [`tests/base-agent.test.ts`](file:///d:/DreamPulse/backend/tests/base-agent.test.ts) | **3** | 🔵 Local Unit | `BaseAgent` abstract class lifecycle, risk validation limits (single trade cap, cumulative daily cap, expiration check), and thought log events. |
 | [`tests/setup.test.ts`](file:///d:/DreamPulse/backend/tests/setup.test.ts) | **2** | 🟢 Live / Local | Environment configuration sanity check, Somnia Shannon network (Chain ID `50312`), and contract constants validation. |
-| **Total** | **270** | **All 3 Tiers** | **100% Passing across 23 test suites with zero failures and zero `any` types** |
+| **Total** | **272** | **All 3 Tiers** | **100% Passing across 23 test suites with zero failures and zero `any` types** |
 
 ### Test Suite Execution Output
 ```

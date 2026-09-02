@@ -95,47 +95,20 @@ function getBinanceSymbol(symbol: string): string | null {
   return null;
 }
 
-function calculateSeriesRSI(candles: HistoricalCandle[], period = 14): number {
-  if (candles.length < period + 1) return 50;
-  let gains = 0;
-  let losses = 0;
-  for (let i = candles.length - period; i < candles.length; i++) {
-    const diff = candles[i].close - candles[i - 1].close;
-    if (diff >= 0) gains += diff;
-    else losses += Math.abs(diff);
-  }
-  if (losses === 0) return 100;
-  const rs = (gains / period) / (losses / period);
-  return 100 - (100 / (1 + rs));
-}
-
-function calculateSeriesEMA(candles: HistoricalCandle[], period = 20): number {
-  if (candles.length === 0) return 0;
-  if (candles.length < period) return candles[candles.length - 1].close;
-  const k = 2 / (period + 1);
-  let ema = candles[0].close;
-  for (let i = 1; i < candles.length; i++) {
-    ema = (candles[i].close * k) + (ema * (1 - k));
-  }
-  return ema;
-}
-
-function calculateSeriesBollinger(candles: HistoricalCandle[], period = 20, stdDev = 2.0): { upper: number; middle: number; lower: number } {
-  if (candles.length < period) {
-    const last = candles[candles.length - 1]?.close || 0;
-    return { upper: last * 1.01, middle: last, lower: last * 0.99 };
-  }
-  const slice = candles.slice(candles.length - period);
-  const sum = slice.reduce((acc, c) => acc + c.close, 0);
-  const mean = sum / period;
-  const variance = slice.reduce((acc, c) => acc + Math.pow(c.close - mean, 2), 0) / period;
-  const sd = Math.sqrt(variance);
-  return {
-    upper: mean + (stdDev * sd),
-    middle: mean,
-    lower: mean - (stdDev * sd),
-  };
-}
+import {
+  calculateSeriesRSI,
+  calculateSeriesEMA,
+  calculateSeriesSMA,
+  calculateSeriesBollinger,
+  calculateSeriesMACD,
+  calculateSeriesStochastic,
+  calculateSeriesATR,
+  calculateSeriesVWAP,
+  calculateSeriesVolumeSurge,
+  calculateSeriesADX,
+  calculateSeriesCCI,
+  calculateSeriesWilliamsR,
+} from '../agents/custom-agent-evaluator.js';
 
 export class BacktestService {
   private history: DetailedBacktestResult[] = [];
@@ -716,38 +689,114 @@ export class BacktestService {
 
             for (const cond of rules.conditions) {
               let passed = false;
-              if (cond.indicator === 'RSI') {
-                const rsi = calculateSeriesRSI(histSlice, cond.period || 14);
-                if (cond.operator === 'LESS_THAN') passed = rsi < cond.value;
-                else if (cond.operator === 'GREATER_THAN') passed = rsi > cond.value;
-                else passed = Math.abs(rsi - cond.value) < 3;
-              } else if (cond.indicator === 'BOLLINGER_LOWER') {
-                const bb = calculateSeriesBollinger(histSlice, cond.period || 20, cond.stdDev || 2.0);
-                passed = currentSpot <= bb.lower;
-              } else if (cond.indicator === 'BOLLINGER_UPPER') {
-                const bb = calculateSeriesBollinger(histSlice, cond.period || 20, cond.stdDev || 2.0);
-                passed = currentSpot >= bb.upper;
-              } else if (cond.indicator === 'EMA') {
-                const fastEma = calculateSeriesEMA(histSlice, cond.period || 9);
-                const slowEma = calculateSeriesEMA(histSlice, cond.secondaryPeriod || 21);
-                if (cond.operator === 'CROSS_ABOVE' || cond.operator === 'GREATER_THAN') passed = fastEma > slowEma;
-                else passed = fastEma < slowEma;
-              } else if (cond.indicator === 'PRICE_DRIFT') {
-                const drift = (currentSpot - prevSpot) / (prevSpot || 1);
-                if (cond.operator === 'GREATER_THAN') passed = drift > cond.value;
-                else if (cond.operator === 'LESS_THAN') passed = drift < cond.value;
-                else passed = Math.abs(drift) >= Math.abs(cond.value);
-              } else {
-                passed = true;
+              switch (cond.indicator) {
+                case 'RSI': {
+                  const rsi = calculateSeriesRSI(histSlice, cond.period || 14);
+                  if (cond.operator === 'LESS_THAN') passed = rsi < cond.value;
+                  else if (cond.operator === 'GREATER_THAN') passed = rsi > cond.value;
+                  else passed = Math.abs(rsi - cond.value) < 3;
+                  break;
+                }
+                case 'SMA': {
+                  const sma = calculateSeriesSMA(histSlice, cond.period || 20);
+                  if (cond.operator === 'GREATER_THAN' || cond.operator === 'CROSS_ABOVE') passed = currentSpot > sma;
+                  else passed = currentSpot < sma;
+                  break;
+                }
+                case 'EMA': {
+                  const fastEma = calculateSeriesEMA(histSlice, cond.period || 9);
+                  const slowEma = calculateSeriesEMA(histSlice, cond.secondaryPeriod || 21);
+                  if (cond.operator === 'CROSS_ABOVE' || cond.operator === 'GREATER_THAN') passed = fastEma > slowEma;
+                  else passed = fastEma < slowEma;
+                  break;
+                }
+                case 'BOLLINGER_LOWER': {
+                  const bb = calculateSeriesBollinger(histSlice, cond.period || 20, cond.stdDev || 2.0);
+                  passed = currentSpot <= bb.lower;
+                  break;
+                }
+                case 'BOLLINGER_UPPER': {
+                  const bb = calculateSeriesBollinger(histSlice, cond.period || 20, cond.stdDev || 2.0);
+                  passed = currentSpot >= bb.upper;
+                  break;
+                }
+                case 'MACD': {
+                  const macdRes = calculateSeriesMACD(histSlice, cond.period || 12, cond.secondaryPeriod || 26, cond.signalPeriod || 9);
+                  if (cond.operator === 'CROSS_ABOVE') passed = macdRes.macd > macdRes.signal;
+                  else if (cond.operator === 'CROSS_BELOW') passed = macdRes.macd < macdRes.signal;
+                  else if (cond.operator === 'GREATER_THAN') passed = macdRes.histogram > (cond.value || 0);
+                  else passed = macdRes.histogram < (cond.value || 0);
+                  break;
+                }
+                case 'STOCHASTIC': {
+                  const stoch = calculateSeriesStochastic(histSlice, cond.period || 14, cond.secondaryPeriod || 3);
+                  if (cond.operator === 'LESS_THAN') passed = stoch.k < cond.value;
+                  else if (cond.operator === 'GREATER_THAN') passed = stoch.k > cond.value;
+                  else if (cond.operator === 'CROSS_ABOVE') passed = stoch.k > stoch.d;
+                  else passed = stoch.k < stoch.d;
+                  break;
+                }
+                case 'ATR': {
+                  const atr = calculateSeriesATR(histSlice, cond.period || 14);
+                  const thresh = cond.value ?? (currentSpot * 0.002);
+                  if (cond.operator === 'GREATER_THAN' || cond.operator === 'CROSS_ABOVE') passed = atr > thresh;
+                  else passed = atr < thresh;
+                  break;
+                }
+                case 'VWAP': {
+                  const vwap = calculateSeriesVWAP(histSlice);
+                  if (cond.operator === 'GREATER_THAN' || cond.operator === 'CROSS_ABOVE') passed = currentSpot > vwap;
+                  else passed = currentSpot < vwap;
+                  break;
+                }
+                case 'VOLUME_SURGE': {
+                  const surge = calculateSeriesVolumeSurge(histSlice, cond.period || 20);
+                  const thresh = cond.multiplier || cond.value || 1.5;
+                  if (cond.operator === 'GREATER_THAN' || cond.operator === 'CROSS_ABOVE') passed = surge > thresh;
+                  else passed = surge < thresh;
+                  break;
+                }
+                case 'ADX': {
+                  const adxRes = calculateSeriesADX(histSlice, cond.period || 14);
+                  const thresh = cond.value ?? 25;
+                  if (cond.operator === 'GREATER_THAN' || cond.operator === 'CROSS_ABOVE') passed = adxRes.adx > thresh;
+                  else passed = adxRes.adx < thresh;
+                  break;
+                }
+                case 'CCI': {
+                  const cci = calculateSeriesCCI(histSlice, cond.period || 20);
+                  const thresh = cond.value ?? 0;
+                  if (cond.operator === 'GREATER_THAN') passed = cci > thresh;
+                  else passed = cci < thresh;
+                  break;
+                }
+                case 'WILLIAMS_R': {
+                  const wr = calculateSeriesWilliamsR(histSlice, cond.period || 14);
+                  const thresh = cond.value ?? -50;
+                  if (cond.operator === 'GREATER_THAN') passed = wr > thresh;
+                  else passed = wr < thresh;
+                  break;
+                }
+                case 'PRICE_DRIFT': {
+                  const drift = (currentSpot - prevSpot) / (prevSpot || 1);
+                  if (cond.operator === 'GREATER_THAN') passed = drift > cond.value;
+                  else if (cond.operator === 'LESS_THAN') passed = drift < cond.value;
+                  else passed = Math.abs(drift) >= Math.abs(cond.value);
+                  break;
+                }
+                default:
+                  passed = true;
+                  break;
               }
               if (passed) passedCount++;
             }
 
             const ruleSatisfied = rules.operator === 'OR' ? passedCount > 0 : passedCount === rules.conditions.length;
+            const minTimeRemaining = rules.risk?.expiryBufferSec ?? 15;
 
-            if (ruleSatisfied && timeRemainingSec >= 15) {
+            if (ruleSatisfied && timeRemainingSec >= minTimeRemaining) {
               tradeExecuted = true;
-              tradeAction = 'CUSTOM_SIGNAL';
+              tradeAction = rules.action?.orderType === 'LIMIT' ? 'MM_SPREAD_CAPTURE' : 'CUSTOM_SIGNAL';
               tradeOutcome = rules.action?.direction === 'PUT' ? 'NO' : 'YES';
               tradePrice = tradeOutcome === 'YES'
                 ? quantizePrice(Math.min(0.75, Math.max(0.25, fairYes)))

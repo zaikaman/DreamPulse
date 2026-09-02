@@ -244,7 +244,22 @@ export interface PersonalSwarmStatus {
 // ------------------------------------------------------------------------------
 // Custom Agent & Swarm Definitions (Strategy Studio)
 // ------------------------------------------------------------------------------
-export type IndicatorType = 'RSI' | 'SMA' | 'EMA' | 'BOLLINGER_UPPER' | 'BOLLINGER_LOWER' | 'MACD' | 'PRICE_DRIFT';
+export type IndicatorType =
+  | 'RSI'
+  | 'SMA'
+  | 'EMA'
+  | 'BOLLINGER_UPPER'
+  | 'BOLLINGER_LOWER'
+  | 'MACD'
+  | 'STOCHASTIC'
+  | 'ATR'
+  | 'VWAP'
+  | 'VOLUME_SURGE'
+  | 'ADX'
+  | 'CCI'
+  | 'WILLIAMS_R'
+  | 'PRICE_DRIFT';
+
 export type ComparisonOperator = 'CROSS_ABOVE' | 'CROSS_BELOW' | 'GREATER_THAN' | 'LESS_THAN' | 'EQUALS';
 export type BinaryActionDirection = 'CALL' | 'PUT';
 
@@ -253,7 +268,9 @@ export interface ConditionRule {
   indicator: IndicatorType;
   period?: number;
   secondaryPeriod?: number;
+  signalPeriod?: number;
   stdDev?: number;
+  multiplier?: number;
   operator: ComparisonOperator;
   value: number;
 }
@@ -263,6 +280,10 @@ export interface ActionRule {
   durationSec: number;
   stakeType: 'FIXED' | 'PERCENTAGE';
   stakeAmount: number;
+  orderType?: 'MARKET' | 'LIMIT';
+  limitPricing?: 'BEST_BID_ASK' | 'MIDPOINT' | 'DISCOUNT_OFFSET';
+  limitOffsetBps?: number;
+  maxSlippageBps?: number;
 }
 
 export interface RiskRule {
@@ -270,6 +291,10 @@ export interface RiskRule {
   cooldownMinutes: number;
   minPoolPayoutPct: number;
   dailyDrawdownLimitPct?: number;
+  martingaleMultiplier?: number;
+  takeProfitTargetPct?: number;
+  trailingStopPct?: number;
+  expiryBufferSec?: number;
 }
 
 export interface CustomAgentRules {
