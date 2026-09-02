@@ -1454,8 +1454,8 @@ export const StrategyStudioView: React.FC<StrategyStudioViewProps> = ({
                 </span>
               </div>
 
-              {/* Single-Line Fluid Pipeline (No Scrollbar, No Multi-Line Break) */}
-              <div className="flex items-center gap-1.5 w-full min-w-0 overflow-x-auto no-scrollbar py-0.5 select-none">
+              {/* Natural Language Visual Sentence Capsules Pipeline */}
+              <div className="flex items-center flex-wrap gap-2 w-full select-none py-0.5">
                 {/* Step 1: Market Node */}
                 <div
                   onClick={() => document.getElementById('section-market')?.scrollIntoView({ behavior: 'smooth' })}
@@ -1472,7 +1472,7 @@ export const StrategyStudioView: React.FC<StrategyStudioViewProps> = ({
                 {/* Step 2: Trigger Conditions Summary */}
                 <div
                   onClick={() => document.getElementById('section-conditions')?.scrollIntoView({ behavior: 'smooth' })}
-                  className="px-2.5 py-1.5 rounded-lg bg-secondary/30 hover:bg-secondary/50 border border-border/60 hover:border-primary/40 flex items-center gap-1.5 min-w-0 flex-1 text-xs font-mono transition-colors cursor-pointer"
+                  className="px-2.5 py-1.5 rounded-lg bg-secondary/30 hover:bg-secondary/50 border border-border/60 hover:border-primary/40 flex items-center gap-1.5 min-w-0 max-w-full text-xs font-mono transition-colors cursor-pointer"
                   title="Click to configure Trigger Conditions"
                 >
                   <span className="text-cyan-400 font-bold flex-shrink-0">IF:</span>
