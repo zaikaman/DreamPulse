@@ -102,6 +102,8 @@ export interface OrderExecution {
   totalCost: number;
   status: OrderStatus;
   txHash?: `0x${string}`;
+  cancelTxHash?: `0x${string}`;
+  onchainOrderId?: string;
   pnl?: number;
   isSettled?: boolean;
   settledAt?: string;

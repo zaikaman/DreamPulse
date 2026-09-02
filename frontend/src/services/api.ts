@@ -313,6 +313,19 @@ export const apiClient = {
     });
   },
 
+  async cancelOrder(
+    orderId: string,
+    userAddress?: string,
+  ): Promise<{ success: boolean; message: string; txHash?: string; data?: OrderExecution }> {
+    return fetchJson<{ success: boolean; message: string; txHash?: string; data?: OrderExecution }>(
+      `/orders/${encodeURIComponent(orderId)}/cancel`,
+      {
+        method: 'POST',
+        body: JSON.stringify({ userAddress }),
+      },
+    );
+  },
+
   async getPortfolioSummary(userAddress?: string): Promise<{ success: boolean; data: PortfolioSummary }> {
     const endpoint = userAddress ? `/portfolio/summary?userAddress=${encodeURIComponent(userAddress)}` : '/portfolio/summary';
     return fetchJson<{ success: boolean; data: PortfolioSummary }>(endpoint);

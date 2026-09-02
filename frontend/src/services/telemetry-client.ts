@@ -73,9 +73,18 @@ export type TelemetryEventType =
   | 'agent_thought'
   | 'debug_thought'
   | 'order_filled'
+  | 'order_cancelled'
   | 'sweep_completed'
   | 'pnl_update'
   | 'swarm_pnl_tick';
+
+export interface OrderCancelledData {
+  userAddress: string;
+  orderId: string;
+  marketId: string;
+  txHash?: string;
+  timestamp: number;
+}
 
 export type TelemetryEventCallback<T = any> = (data: T) => void;
 
@@ -374,6 +383,17 @@ class TelemetryClient {
             timestamp: payload.timestamp || now,
           };
           this.emit('order_filled', orderFill);
+          break;
+
+        case 'order_cancelled':
+          const orderCancelled: OrderCancelledData = {
+            userAddress: payload.userAddress,
+            orderId: payload.orderId,
+            marketId: payload.marketId,
+            txHash: payload.txHash,
+            timestamp: payload.timestamp || now,
+          };
+          this.emit('order_cancelled', orderCancelled);
           break;
 
         case 'sweep_completed':

@@ -270,6 +270,16 @@ export const BINARY_POOL_WRITE_ABI = [
       { name: 'id', type: 'uint128' },
     ],
   },
+  {
+    type: 'function',
+    name: 'cancelOrderFor',
+    stateMutability: 'nonpayable',
+    inputs: [
+      { name: 'owner', type: 'address' },
+      { name: 'orderId', type: 'uint128' },
+    ],
+    outputs: [],
+  },
 ] as const;
 
 /**

@@ -1019,6 +1019,36 @@ apiRouter.post('/orders/place', requireWalletAuth, async (req: Request, res: Res
   }
 });
 
+apiRouter.post('/orders/:id/cancel', requireWalletAuth, async (req: Request, res: Response) => {
+  try {
+    const { id } = req.params;
+    const effectiveUserAddress = (req.walletAddress || req.body.userAddress || req.headers['x-user-address']) as string;
+
+    if (!id) {
+      return res.status(400).json({ success: false, error: 'Order ID parameter is required' });
+    }
+
+    if (!effectiveUserAddress || typeof effectiveUserAddress !== 'string' || !isAddress(effectiveUserAddress)) {
+      return res.status(400).json({ success: false, error: 'Valid userAddress is required' });
+    }
+
+    const result = await orderService.cancelOrderFor(id, getAddress(effectiveUserAddress) as Address);
+
+    return res.json({
+      success: true,
+      message: result.message || 'Order cancelled successfully',
+      txHash: result.txHash,
+      data: result.order,
+    });
+  } catch (err: any) {
+    console.warn(`[Routes] Error cancelling order ${req.params.id}:`, err?.message || err);
+    return res.status(400).json({
+      success: false,
+      error: err?.message || 'Failed to cancel order',
+    });
+  }
+});
+
 apiRouter.get('/portfolio/summary', optionalWalletAuth, async (req: Request, res: Response) => {
   try {
     const { userAddress } = req.query;

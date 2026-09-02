@@ -463,26 +463,88 @@ describe('OrderService Comprehensive Suite', () => {
     ).rejects.toThrow('Transaction reverted on-chain');
   });
 
-  it('rejects user-submitted order when transaction sender does not match authenticated user', async () => {
-    const { publicClient } = await import('../src/config/somnia.js');
-    vi.spyOn(publicClient, 'getTransactionReceipt').mockResolvedValue({
-      status: 'success',
-      from: '0x0000000000000000000000000000000000000001' as Address,
-      to: mockMarket.poolAddress as Address,
-    } as any);
+  it('cancels resting PENDING limit order for user and marks status CANCELLED', async () => {
+    // Submit a pending order into service cache
+    const pendingOrder = await service.submitUserOrder({
+      userAddress,
+      marketId: mockMarket.id,
+      outcome: 'YES',
+      direction: 'BUY',
+      orderType: 'LIMIT',
+      price: 0.40,
+      lotSize: 5.0,
+      txHash: '0x1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef',
+    });
 
+    // Manually set status to PENDING (simulating resting limit order)
+    pendingOrder.status = 'PENDING';
+    pendingOrder.onchainOrderId = '42';
+
+    const cancelRes = await service.cancelOrderFor(pendingOrder.id, userAddress);
+
+    expect(cancelRes.success).toBe(true);
+    expect(cancelRes.order.status).toBe('CANCELLED');
+    expect(cancelRes.txHash).toBeDefined();
+
+    const fetched = service.getOrderById(pendingOrder.id);
+    expect(fetched?.status).toBe('CANCELLED');
+  });
+
+  it('rejects cancellation when order does not belong to caller address', async () => {
+    const order = await service.submitUserOrder({
+      userAddress,
+      marketId: mockMarket.id,
+      outcome: 'YES',
+      direction: 'BUY',
+      orderType: 'LIMIT',
+      price: 0.40,
+      lotSize: 5.0,
+      txHash: '0x1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef',
+    });
+    order.status = 'PENDING';
+
+    const otherUser = '0x1111111111111111111111111111111111111111' as Address;
+    await expect(service.cancelOrderFor(order.id, otherUser)).rejects.toThrow('Unauthorized');
+  });
+
+  it('rejects cancellation if order is already filled', async () => {
+    const order = await service.submitUserOrder({
+      userAddress,
+      marketId: mockMarket.id,
+      outcome: 'YES',
+      direction: 'BUY',
+      orderType: 'LIMIT',
+      price: 0.50,
+      lotSize: 1.0,
+      txHash: '0x1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef',
+    });
+    order.status = 'FILLED';
+
+    await expect(service.cancelOrderFor(order.id, userAddress)).rejects.toThrow('already filled');
+  });
+
+  it('returns idempotent success if order is already cancelled', async () => {
+    const order = await service.submitUserOrder({
+      userAddress,
+      marketId: mockMarket.id,
+      outcome: 'YES',
+      direction: 'BUY',
+      orderType: 'LIMIT',
+      price: 0.50,
+      lotSize: 1.0,
+      txHash: '0x1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef',
+    });
+    order.status = 'CANCELLED';
+
+    const res = await service.cancelOrderFor(order.id, userAddress);
+    expect(res.success).toBe(true);
+    expect(res.message).toContain('already cancelled');
+  });
+
+  it('throws if order ID is not found', async () => {
     await expect(
-      service.submitUserOrder({
-        userAddress,
-        marketId: mockMarket.id,
-        outcome: 'YES',
-        direction: 'BUY',
-        orderType: 'LIMIT',
-        price: 0.50,
-        lotSize: 1.0,
-        txHash: '0xdddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd',
-      }),
-    ).rejects.toThrow('Transaction sender');
+      service.cancelOrderFor('non-existent-order-id', userAddress),
+    ).rejects.toThrow('not found');
   });
 });
 

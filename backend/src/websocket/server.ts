@@ -741,6 +741,35 @@ export class TelemetryWebSocketServer {
   }
 
   /**
+   * Broadcasts order cancellation confirmation to user portfolio subscribers with pre-serialization.
+   * Scoped to clients that subscribed to userAddress or user_portfolio.
+   */
+  public broadcastOrderCancelled(order: {
+    userAddress: string;
+    orderId: string;
+    marketId: string;
+    txHash?: string;
+  }): void {
+    const payloadString = JSON.stringify({
+      event: 'order_cancelled',
+      timestamp: Date.now(),
+      status: 'CANCELLED',
+      ...order,
+    });
+
+    const targetUser = order.userAddress ? order.userAddress.toLowerCase() : '';
+
+    for (const [, sub] of this.clients) {
+      if (sub.ws.readyState !== WebSocket.OPEN) continue;
+      const hasAddressMatch = targetUser !== '' && sub.userAddresses.has(targetUser);
+      const hasChannelAndAddress = sub.channels.has('user_portfolio') && hasAddressMatch;
+      if (hasAddressMatch || hasChannelAndAddress) {
+        this.safeSend(sub.ws, payloadString);
+      }
+    }
+  }
+
+  /**
    * Broadcasts completed settlement sweep confirmation with pre-serialization.
    * Hardened: same address-scoped delivery as broadcastOrderFilled.
    */

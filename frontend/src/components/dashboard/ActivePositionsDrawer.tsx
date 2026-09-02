@@ -7,10 +7,12 @@ import {
   BriefcaseIcon,
   BoltIcon,
   CheckCircleIcon,
+  XMarkIcon,
 } from '@heroicons/react/24/outline';
 import type { OrderExecution, Market } from '../../types/index.js';
 import type { WalletState } from '../../hooks/useSessionKey.js';
 import { apiClient } from '../../services/api.js';
+import { telemetryClient } from '../../services/telemetry-client.js';
 import { Badge } from '../ui/badge.js';
 import { cn } from '../../lib/utils.js';
 import { shouldPoll } from '../../lib/polling.js';
@@ -116,6 +118,8 @@ export const ActivePositionsDrawer: React.FC<ActivePositionsDrawerProps> = ({
   const [activeTab, setActiveTab] = useState<'positions' | 'orders' | 'history'>('positions');
   const [userOrders, setUserOrders] = useState<OrderExecution[]>([]);
   const [isLoading, setIsLoading] = useState<boolean>(false);
+  const [cancellingOrderId, setCancellingOrderId] = useState<string | null>(null);
+  const [cancelError, setCancelError] = useState<string | null>(null);
 
   const fetchOrders = async () => {
     if (!wallet.isConnected || !wallet.address) {
@@ -139,6 +143,27 @@ export const ActivePositionsDrawer: React.FC<ActivePositionsDrawerProps> = ({
     }
   };
 
+  const handleCancelOrder = async (order: OrderExecution) => {
+    if (!wallet.isConnected || !wallet.address) return;
+    setCancellingOrderId(order.id);
+    setCancelError(null);
+    try {
+      const res = await apiClient.cancelOrder(order.id, wallet.address);
+      if (res.success) {
+        setUserOrders((prev) =>
+          prev.map((o) => (o.id === order.id ? { ...o, status: 'CANCELLED' } : o)),
+        );
+        fetchOrders();
+      } else {
+        setCancelError(res.message || 'Failed to cancel order');
+      }
+    } catch (err: any) {
+      setCancelError(err?.message || 'Error cancelling order');
+    } finally {
+      setCancellingOrderId(null);
+    }
+  };
+
   useEffect(() => {
     if (!wallet.isConnected || !wallet.address) return;
     if (shouldPoll()) {
@@ -154,10 +179,17 @@ export const ActivePositionsDrawer: React.FC<ActivePositionsDrawerProps> = ({
     const onFocus = () => {
       if (shouldPoll()) fetchOrders();
     };
+    const unsubCancelled = telemetryClient.on('order_cancelled', (data: { orderId: string }) => {
+      setUserOrders((prev) =>
+        prev.map((o) => (o.id === data.orderId ? { ...o, status: 'CANCELLED' } : o)),
+      );
+    });
+
     document.addEventListener('visibilitychange', onVisible);
     window.addEventListener('focus', onFocus);
     return () => {
       clearInterval(interval);
+      unsubCancelled();
       document.removeEventListener('visibilitychange', onVisible);
       window.removeEventListener('focus', onFocus);
     };
@@ -412,70 +444,109 @@ Tx: ${pos.txHash || 'N/A'}`;
                 <span>No resting limit orders on the CLOB. Swarm and taker limit orders match against resting depth upon placement.</span>
               </div>
             ) : (
-              <table className="w-full min-w-[540px] text-left">
-                <thead>
-                  <tr className="text-[10px] text-muted-foreground uppercase border-b border-border/20">
-                    <th className="pb-1.5 pl-2">Target Asset & Event</th>
-                    <th className="pb-1.5">Type & Side</th>
-                    <th className="pb-1.5">Limit Price</th>
-                    <th className="pb-1.5">Lots & Size</th>
-                    <th className="pb-1.5 pr-2 text-right">Status</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-border/10">
-                  {restingOrders.map((ord) => {
-                    const marketInfo = parseOrderMarketDetails(ord);
-                    return (
-                      <tr key={ord.id} className="hover:bg-secondary/20 transition-colors">
-                        <td className="py-2 pl-2">
-                          <div className="flex flex-col gap-0.5">
-                            <div className="flex items-center gap-1.5">
-                              <span className="font-bold text-foreground text-xs">{marketInfo.symbol}</span>
-                              {marketInfo.windowDuration && (
-                                <span className="text-[9px] px-1 py-0 rounded bg-white/5 text-muted-foreground">
-                                  {marketInfo.windowDuration}
-                                </span>
-                              )}
+              <>
+                {cancelError && (
+                  <div className="mb-2 p-2 rounded border border-[#ff3366]/30 bg-[#ff3366]/10 text-[#ff3366] flex items-center justify-between text-[11px]">
+                    <span>{cancelError}</span>
+                    <button
+                      type="button"
+                      onClick={() => setCancelError(null)}
+                      className="text-[#ff3366] hover:text-white transition-colors cursor-pointer"
+                    >
+                      <XMarkIcon className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
+                )}
+                <table className="w-full min-w-[540px] text-left">
+                  <thead>
+                    <tr className="text-[10px] text-muted-foreground uppercase border-b border-border/20">
+                      <th className="pb-1.5 pl-2">Target Asset & Event</th>
+                      <th className="pb-1.5">Type & Side</th>
+                      <th className="pb-1.5">Limit Price</th>
+                      <th className="pb-1.5">Lots & Size</th>
+                      <th className="pb-1.5 pr-2 text-right">Status & Action</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-border/10">
+                    {restingOrders.map((ord) => {
+                      const marketInfo = parseOrderMarketDetails(ord);
+                      return (
+                        <tr key={ord.id} className="hover:bg-secondary/20 transition-colors">
+                          <td className="py-2 pl-2">
+                            <div className="flex flex-col gap-0.5">
+                              <div className="flex items-center gap-1.5">
+                                <span className="font-bold text-foreground text-xs">{marketInfo.symbol}</span>
+                                {marketInfo.windowDuration && (
+                                  <span className="text-[9px] px-1 py-0 rounded bg-white/5 text-muted-foreground">
+                                    {marketInfo.windowDuration}
+                                  </span>
+                                )}
+                              </div>
+                              <div className="text-[10px] text-muted-foreground">
+                                {marketInfo.strikePrice ? (
+                                  <span>Target: <strong className="text-brand-cyan font-semibold">&gt; {formatCurrencyAmount(marketInfo.strikePrice)}</strong></span>
+                                ) : (
+                                  <span>ID: {ord.marketId.slice(0, 8)}...</span>
+                                )}
+                              </div>
                             </div>
-                            <div className="text-[10px] text-muted-foreground">
-                              {marketInfo.strikePrice ? (
-                                <span>Target: <strong className="text-brand-cyan font-semibold">&gt; {formatCurrencyAmount(marketInfo.strikePrice)}</strong></span>
-                              ) : (
-                                <span>ID: {ord.marketId.slice(0, 8)}...</span>
-                              )}
+                          </td>
+                          <td className="py-2">
+                            <div className="flex flex-col">
+                              <span className={cn("font-bold text-xs", ord.direction === 'BUY' ? "text-[#00e676]" : "text-[#ff3366]")}>
+                                {ord.direction} {ord.outcome}
+                              </span>
+                              <span className="text-[9.5px] text-muted-foreground">{ord.orderType}</span>
                             </div>
-                          </div>
-                        </td>
-                        <td className="py-2">
-                          <div className="flex flex-col">
-                            <span className={cn("font-bold text-xs", ord.direction === 'BUY' ? "text-[#00e676]" : "text-[#ff3366]")}>
-                              {ord.direction} {ord.outcome}
-                            </span>
-                            <span className="text-[9.5px] text-muted-foreground">{ord.orderType}</span>
-                          </div>
-                        </td>
-                        <td className="py-2">
-                          <div className="flex flex-col">
-                            <span className="font-mono text-foreground font-semibold">${ord.price.toFixed(2)}</span>
-                            <span className="text-[9.5px] text-brand-cyan opacity-80">{(ord.price * 100).toFixed(0)}% prob</span>
-                          </div>
-                        </td>
-                        <td className="py-2">
-                          <div className="flex flex-col">
-                            <span className="text-foreground">{ord.lotSize} lots</span>
-                            <span className="text-[9.5px] text-muted-foreground">${(ord.lotSize * ord.price).toFixed(2)} total</span>
-                          </div>
-                        </td>
-                        <td className="py-2 pr-2 text-right">
-                          <Badge variant="outline" className="text-[9px] border-[#ffb700]/40 text-[#ffb700] bg-[#ffb700]/10">
-                            RESTING ON CLOB
-                          </Badge>
-                        </td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
+                          </td>
+                          <td className="py-2">
+                            <div className="flex flex-col">
+                              <span className="font-mono text-foreground font-semibold">${ord.price.toFixed(2)}</span>
+                              <span className="text-[9.5px] text-brand-cyan opacity-80">{(ord.price * 100).toFixed(0)}% prob</span>
+                            </div>
+                          </td>
+                          <td className="py-2">
+                            <div className="flex flex-col">
+                              <span className="text-foreground">{ord.lotSize} lots</span>
+                              <span className="text-[9.5px] text-muted-foreground">${(ord.lotSize * ord.price).toFixed(2)} total</span>
+                            </div>
+                          </td>
+                          <td className="py-2 pr-2 text-right">
+                            <div className="flex items-center justify-end gap-2">
+                              <Badge variant="outline" className="text-[9px] border-[#ffb700]/40 text-[#ffb700] bg-[#ffb700]/10">
+                                RESTING ON CLOB
+                              </Badge>
+                              <button
+                                type="button"
+                                onClick={() => handleCancelOrder(ord)}
+                                disabled={cancellingOrderId === ord.id}
+                                title="Cancel limit order and reclaim collateral"
+                                className={cn(
+                                  "inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-semibold transition-all cursor-pointer",
+                                  "border border-[#ff3366]/40 text-[#ff3366] bg-[#ff3366]/10 hover:bg-[#ff3366]/20 hover:border-[#ff3366]/60 active:scale-95",
+                                  "disabled:opacity-50 disabled:cursor-not-allowed disabled:pointer-events-none"
+                                )}
+                              >
+                                {cancellingOrderId === ord.id ? (
+                                  <>
+                                    <ArrowPathIcon className="w-2.5 h-2.5 animate-spin" />
+                                    <span>Cancelling...</span>
+                                  </>
+                                ) : (
+                                  <>
+                                    <XMarkIcon className="w-2.5 h-2.5 text-[#ff3366]" />
+                                    <span>Cancel</span>
+                                  </>
+                                )}
+                              </button>
+                            </div>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </>
             )
           ) : (
             settledHistory.length === 0 ? (

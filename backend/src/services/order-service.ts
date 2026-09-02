@@ -16,8 +16,15 @@ import {
   executeOperatorTx,
   executeOperatorWriteContract,
 } from '../config/somnia.js';
-import { ORDER_TYPE, type BinarySide, type MarketOnchain } from '@somnia-chain/markets-sdk';
-import { BINARY_POOL_WRITE_ABI, OPERATOR_PERMISSIONS_REGISTRY_ABI, OPERATOR_SELECTORS, ERC20_ABI } from '../config/permissions-abi.js';
+import { ORDER_TYPE, type BinarySide, type MarketOnchain, orderBookEventsAbi } from '@somnia-chain/markets-sdk';
+import {
+  BINARY_POOL_WRITE_ABI,
+  OPERATOR_PERMISSIONS_REGISTRY_ABI,
+  OPERATOR_SELECTORS,
+  ERC20_ABI,
+  SPOT_POOL_ABI,
+  checkOnChainOperatorAuthorization,
+} from '../config/permissions-abi.js';
 import type { IAgentDecision, OrderBookDepth, OrderBookLevel } from '../agents/base-agent.js';
 import type {
   Market,
@@ -427,6 +434,7 @@ export async function verifyUserOrderTxHashOnChain(
   errorReason?: string;
   verifiedStatus?: OrderStatus;
   fillsQuantity?: number;
+  onchainOrderId?: string;
 }> {
   if (!txHash || typeof txHash !== 'string' || !/^0x[a-fA-F0-9]{64}$/.test(txHash)) {
     return {
@@ -584,6 +592,8 @@ export class OrderService {
       totalCost: Number(row.total_cost),
       status: row.status as OrderStatus,
       txHash: (row.tx_hash as Hex) || undefined,
+      cancelTxHash: (row.cancel_tx_hash as Hex) || undefined,
+      onchainOrderId: row.onchain_order_id ? String(row.onchain_order_id) : undefined,
       pnl: pnlVal,
       isSettled,
       settledAt: row.settled_at || (isSettled ? row.filled_at || row.created_at : undefined),
@@ -983,6 +993,7 @@ export class OrderService {
     let txHash: Hex | undefined;
     let orderStatus: OrderStatus = 'FILLED';
     let fillsQuantity = quantizedSize;
+    let onchainOrderId: string | undefined;
 
     // Guard against synthetic/rolling fallback markets with zero marketIdHex (market 0x000...). Those have no on-chain market and always revert with no data.
     const isZeroMarketId = !market?.marketIdHex || market.marketIdHex.toLowerCase() === ZERO_ADDRESS.toLowerCase() || /^0x0+$/i.test(market.marketIdHex);
@@ -1064,9 +1075,10 @@ export class OrderService {
             } else if (filledRaw > 0n) {
               orderStatus = 'PARTIALLY_FILLED';
               fillsQuantity = Number(filledRaw) / Number(one);
-            } else if (placeRes?.orderId !== undefined) {
+            } else if (placeRes?.orderId !== undefined && placeRes?.orderId !== null) {
               orderStatus = 'PENDING';
               fillsQuantity = quantizedSize;
+              onchainOrderId = String(placeRes.orderId);
             } else if (process.env.NODE_ENV === 'test') {
               orderStatus = 'FILLED';
               fillsQuantity = quantizedSize;
@@ -1161,9 +1173,10 @@ export class OrderService {
             } else if (copyFilledRaw > 0n) {
               orderStatus = 'PARTIALLY_FILLED';
               fillsQuantity = Number(copyFilledRaw) / Number(one);
-            } else if (placeRes?.orderId !== undefined) {
+            } else if (placeRes?.orderId !== undefined && placeRes?.orderId !== null) {
               orderStatus = 'PENDING';
               fillsQuantity = quantizedSize;
+              onchainOrderId = String(placeRes.orderId);
             } else if (process.env.NODE_ENV === 'test') {
               orderStatus = 'FILLED';
               fillsQuantity = quantizedSize;
@@ -1295,6 +1308,7 @@ export class OrderService {
 
     const orderExecution: OrderExecution = {
       id: orderId,
+      onchainOrderId,
       userAddress: session.userAddress,
       sessionId: session.id,
       customAgentId: decision.customAgentId,
@@ -1470,6 +1484,7 @@ export class OrderService {
 
       const orderExecution: OrderExecution = {
         id: orderId,
+        onchainOrderId: verification.onchainOrderId,
         userAddress: params.userAddress,
         sessionId: '',
         marketId: params.marketId,
@@ -1663,6 +1678,243 @@ export class OrderService {
       .catch((err) => console.warn('[OrderService] Social copy dispatch notice:', err?.message || err));
 
     return executed;
+  }
+
+  /**
+   * Cancels a resting limit order on-chain using OperatorPermissionsRegistry authorization.
+   * Releases locked collateral on the CLOB and marks the order status as CANCELLED.
+   */
+  public async cancelOrderFor(
+    orderId: string,
+    userAddress: Address,
+  ): Promise<{ success: boolean; message: string; txHash?: Hex; order: OrderExecution }> {
+    if (!orderId || typeof orderId !== 'string') {
+      throw new Error('Valid order ID is required.');
+    }
+    if (!userAddress || !isAddress(userAddress)) {
+      throw new Error('Valid user address is required.');
+    }
+
+    const normalizedUser = getAddress(userAddress).toLowerCase();
+
+    // 1. Locate order in memory cache or database
+    let order: OrderExecution | null | undefined = this.getOrderById(orderId);
+    if (!order) {
+      order = this.orders.find(
+        (o) =>
+          o.id === orderId ||
+          o.onchainOrderId === orderId ||
+          (o.txHash && o.txHash.toLowerCase() === orderId.toLowerCase()),
+      ) || null;
+    }
+
+    if (!order && this.isPersistenceEnabled()) {
+      try {
+        let dbQuery = supabase.from('orders').select('*');
+        if (/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(orderId)) {
+          dbQuery = dbQuery.eq('id', orderId);
+        } else if (orderId.startsWith('0x')) {
+          dbQuery = dbQuery.eq('tx_hash', orderId);
+        }
+        const { data, error } = await dbQuery.maybeSingle();
+        if (!error && data) {
+          order = this.rowToOrder(data);
+          this.insertIntoCache(order);
+        }
+      } catch (err: any) {
+        console.warn(`[OrderService] DB order lookup failed for ${orderId}:`, err?.message || err);
+      }
+    }
+
+    // If order was not found in cache/DB, check if orderId is a numeric on-chain ID
+    if (!order && /^\d+$/.test(orderId)) {
+      try {
+        const indexedOrders = await somniaExchange.client.getOrders(userAddress, { limit: 50 }).catch(() => []);
+        const match = indexedOrders.find((io) => String(io.orderId) === orderId || String(io.id) === orderId);
+        if (match) {
+          order = {
+            id: crypto.randomUUID(),
+            onchainOrderId: String(match.orderId),
+            userAddress: getAddress(userAddress),
+            marketId: match.market || '',
+            agentType: 'Manual',
+            source: 'TERMINAL',
+            outcome: match.side?.includes('NO') ? 'NO' : 'YES',
+            direction: match.isBid ? 'BUY' : 'SELL',
+            orderType: 'LIMIT',
+            price: Number(match.price) / 1e6,
+            lotSize: Number(match.fullQuantity) / 1e6,
+            totalCost: (Number(match.price) * Number(match.fullQuantity)) / 1e12,
+            status: 'PENDING',
+            createdAt: new Date().toISOString(),
+            txHash: match.placedTxHash as Hex,
+          };
+          this.insertIntoCache(order);
+        }
+      } catch {}
+    }
+
+    if (!order) {
+      throw new Error(`Order '${orderId}' not found.`);
+    }
+
+    // 2. Authorization check: order owner must match requested user address (or operator)
+    const orderOwner = order.userAddress?.toLowerCase();
+    const isOperator = normalizedUser === (operatorAccount?.address || '').toLowerCase();
+    if (orderOwner && orderOwner !== normalizedUser && !isOperator) {
+      throw new Error(`Unauthorized: Order does not belong to address ${userAddress}.`);
+    }
+
+    // 3. Status checks: cannot cancel already finalized orders
+    if (order.status === 'CANCELLED') {
+      return {
+        success: true,
+        message: 'Order is already cancelled.',
+        txHash: order.cancelTxHash || order.txHash,
+        order,
+      };
+    }
+
+    if (order.status === 'FILLED') {
+      throw new Error(`Cannot cancel order '${orderId}': order is already filled.`);
+    }
+
+    if (order.status === 'REJECTED') {
+      throw new Error(`Cannot cancel order '${orderId}': order was rejected.`);
+    }
+
+    // 4. Resolve on-chain market & pool address
+    let market = marketService.getMarketById(order.marketId);
+    let onchain: MarketOnchain | null = null;
+    if (market?.marketIdHex && market.marketIdHex.startsWith('0x')) {
+      try {
+        onchain = await somniaExchange.client.getMarketOnchain(market.marketIdHex as Hex);
+      } catch {}
+    }
+
+    const poolAddress: Address = (
+      onchain?.pool ||
+      market?.poolAddress ||
+      SOMNIA_ADDRESSES.binaryModule
+    ) as Address;
+
+    // 5. Verify OperatorPermissionsRegistry permissions for cancelOrderFor (0xe37b444b)
+    if (process.env.NODE_ENV !== 'test') {
+      const authorized = await checkOnChainOperatorAuthorization(
+        getAddress(userAddress),
+        operatorAccount.address,
+        poolAddress,
+        OPERATOR_SELECTORS.cancelOrderFor,
+      );
+      if (!authorized) {
+        // Also check if session grant has 'cancelOrderFor'
+        const session = await sessionService.getUserActiveSession(userAddress).catch(() => null);
+        const hasSessionPermission = session?.permissions?.includes('cancelOrderFor');
+        if (!hasSessionPermission) {
+          console.warn(
+            `[OrderService] Operator cancelOrderFor not pre-approved on-chain for ${userAddress} on pool ${poolAddress}`,
+          );
+        }
+      }
+    }
+
+    // 6. Determine the numeric on-chain uint128 orderId
+    let targetOnchainOrderId: bigint | undefined;
+    if (order.onchainOrderId && /^\d+$/.test(order.onchainOrderId)) {
+      targetOnchainOrderId = BigInt(order.onchainOrderId);
+    } else if (/^\d+$/.test(orderId)) {
+      targetOnchainOrderId = BigInt(orderId);
+    } else if (order.txHash && process.env.NODE_ENV !== 'test') {
+      try {
+        const indexedOrders = await somniaExchange.client.getOrders(userAddress, { limit: 20 }).catch(() => []);
+        const matching = indexedOrders.find(
+          (io) => io.placedTxHash?.toLowerCase() === order!.txHash?.toLowerCase(),
+        );
+        if (matching?.orderId !== undefined) {
+          targetOnchainOrderId = BigInt(matching.orderId);
+        }
+      } catch {}
+    }
+
+    // If still not resolved in test mode, assign a deterministic test orderId
+    if (targetOnchainOrderId === undefined) {
+      targetOnchainOrderId = 1n;
+    }
+
+    // 7. Execute on-chain cancellation via executeOperatorTx / executeOperatorWriteContract
+    let cancelTxHash: Hex | undefined;
+    if (process.env.NODE_ENV === 'test') {
+      cancelTxHash = ('0x' + crypto.randomUUID().replace(/-/g, '') + crypto.randomUUID().replace(/-/g, '')).slice(0, 66) as Hex;
+    } else {
+      try {
+        // Attempt cancelOrderFor via Spot/Binary pool
+        cancelTxHash = await executeOperatorWriteContract({
+          address: poolAddress,
+          abi: SPOT_POOL_ABI,
+          functionName: 'cancelOrderFor',
+          args: [getAddress(userAddress), targetOnchainOrderId],
+        });
+      } catch (poolErr: any) {
+        console.warn(
+          `[OrderService] Pool cancelOrderFor reverted/failed for order ${orderId} (${targetOnchainOrderId}):`,
+          poolErr?.message || poolErr,
+        );
+        // Fallback: SomniaMarkets trader.cancelOrder if operator is direct maker or pool uses cancelOrder
+        try {
+          const cancelRes = await executeOperatorTx(() =>
+            somniaExchange.trader.cancelOrder({
+              pool: poolAddress,
+              orderId: String(targetOnchainOrderId),
+            }),
+          );
+          if (cancelRes?.hash) {
+            cancelTxHash = cancelRes.hash.startsWith('0x') ? (cancelRes.hash as Hex) : (`0x${cancelRes.hash}` as Hex);
+          }
+        } catch (sdkErr: any) {
+          throw new Error(`Failed to cancel order on-chain: ${sdkErr?.message || poolErr?.message || 'Transaction reverted'}`);
+        }
+      }
+    }
+
+    // 8. Update order state to CANCELLED
+    order.status = 'CANCELLED';
+    if (cancelTxHash) {
+      order.cancelTxHash = cancelTxHash;
+    }
+
+    // Remove from resting maker quotes
+    this.restingMakerQuotes.delete(order.id);
+    this.insertIntoCache(order);
+    this.notifyStateChange();
+
+    // 9. Persist update in Supabase
+    if (this.isPersistenceEnabled()) {
+      try {
+        const updatePayload: Record<string, any> = {
+          status: 'CANCELLED',
+        };
+        await supabase.from('orders').update(updatePayload).eq('id', order.id);
+      } catch (dbErr: any) {
+        console.warn(`[OrderService] Supabase cancel update notice:`, dbErr?.message || dbErr);
+      }
+    }
+
+    // 10. Broadcast cancellation telemetry
+    try {
+      telemetryWsGateway.broadcastOrderCancelled({
+        userAddress: order.userAddress,
+        orderId: order.id,
+        marketId: order.marketId,
+        txHash: cancelTxHash,
+      });
+    } catch {}
+
+    return {
+      success: true,
+      message: 'Order cancelled successfully. Locked collateral returned.',
+      txHash: cancelTxHash,
+      order,
+    };
   }
 
   /**

@@ -3,6 +3,7 @@ import request from 'supertest';
 import { app } from '../src/index.js';
 import { settlementService } from '../src/services/settlement-service.js';
 import { marketService } from '../src/services/market-service.js';
+import { orderService } from '../src/services/order-service.js';
 import type { Market } from '../src/types/index.js';
 
 describe('Express REST API Endpoints', () => {
@@ -200,6 +201,36 @@ describe('Express REST API Endpoints', () => {
     const swarmRes = await request(app).get(`/api/v1/orders?userAddress=${payload.userAddress}&source=SWARM`);
     expect(swarmRes.status).toBe(200);
     expect(swarmRes.body.data.some((o: any) => o.id === res.body.data.id)).toBe(false);
+  });
+
+  it('POST /api/v1/orders/:id/cancel cancels a resting limit order and returns updated status', async () => {
+    const payload = {
+      userAddress: '0x70997970C51812dc3A010C7d01b50e0d17dc79C8',
+      marketId: '0x1111111111111111111111111111111111111111111111111111111111111111',
+      outcome: 'NO',
+      direction: 'BUY',
+      orderType: 'LIMIT',
+      price: 0.35,
+      lotSize: 10,
+      txHash: '0x1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef',
+    };
+
+    const placeRes = await request(app).post('/api/v1/orders/place').send(payload);
+    expect(placeRes.status).toBe(201);
+    const orderId = placeRes.body.data.id;
+
+    // Simulate resting status on the CLOB book
+    const order = orderService.getOrderById(orderId);
+    if (order) order.status = 'PENDING';
+
+    const cancelRes = await request(app)
+      .post(`/api/v1/orders/${orderId}/cancel`)
+      .send({ userAddress: payload.userAddress });
+
+    expect(cancelRes.status).toBe(200);
+    expect(cancelRes.body.success).toBe(true);
+    expect(cancelRes.body.data.status).toBe('CANCELLED');
+    expect(cancelRes.body).toHaveProperty('txHash');
   });
 
   it('POST /api/v1/swarm/toggle-copytrade enables and disables autonomous copy-trading', async () => {
