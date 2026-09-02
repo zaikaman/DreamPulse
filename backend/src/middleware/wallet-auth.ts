@@ -9,6 +9,7 @@ import {
   isNonceReplay,
   clearNonceCache,
 } from '../services/auth-service.js';
+import { sessionService } from '../services/session-service.js';
 import { env } from '../config/env.js';
 import { getCookie, JWT_COOKIE_NAME } from '../config/cookie.js';
 
@@ -19,7 +20,7 @@ declare global {
   namespace Express {
     interface Request {
       walletAddress?: Address;
-      authMethod?: 'bearer' | 'eip712' | 'siwe' | 'txHash';
+      authMethod?: 'bearer' | 'eip712' | 'siwe' | 'txHash' | 'session';
     }
   }
 }
@@ -47,8 +48,42 @@ function isTestEnv(): boolean {
 
 interface AuthResult {
   address: Address | null;
-  method: 'bearer' | 'eip712' | 'siwe' | 'txHash' | null;
+  method: 'bearer' | 'eip712' | 'siwe' | 'txHash' | 'session' | null;
   error: string | null;
+}
+
+/**
+ * Detects whether the request is a settlement sweeper trigger request (e.g. POST /sweeper/trigger).
+ */
+export function isSweeperTriggerRequest(req: Request): boolean {
+  const url = (req.originalUrl || req.baseUrl || req.url || req.path || '').toLowerCase();
+  return url.includes('/sweeper/trigger');
+}
+
+/**
+ * Validates whether the user has an active session delegation to authorize batch sweeper executions.
+ */
+export async function checkSessionDelegationAuth(req: Request): Promise<Address | null> {
+  if (!isSweeperTriggerRequest(req)) return null;
+  const rawAddress = req.body?.userAddress || (req.query as any)?.userAddress;
+  if (!rawAddress || typeof rawAddress !== 'string' || !isAddress(rawAddress.trim())) {
+    return null;
+  }
+  const candidate = getAddress(rawAddress.trim()) as Address;
+  try {
+    const session = await sessionService.getUserActiveSession(candidate);
+    if (session && session.isActive) {
+      const exp = new Date(session.expiresAt).getTime();
+      if (exp > Date.now()) {
+        return candidate;
+      }
+    }
+  } catch (err: any) {
+    if (process.env.NODE_ENV !== 'test') {
+      console.warn('[wallet-auth] Session delegation check error:', err?.message);
+    }
+  }
+  return null;
 }
 
 /**
@@ -75,6 +110,11 @@ export function isTxHashOrderSubmission(req: Request): boolean {
 }
 
 export async function authenticateRequest(req: Request): Promise<AuthResult> {
+  let bearerError: string | null = null;
+  const isSweeper = isSweeperTriggerRequest(req);
+  const isTxOrder = isTxHashOrderSubmission(req);
+  const allowAuthFallback = isTxOrder || isSweeper;
+
   // 1) Bearer JWT — Authorization: Bearer <token>  (minted via POST /auth/wallet-verify)
   //    Also checks httpOnly cookie `dreampulse_jwt` (XSS-hardened; not readable via JS).
   //    Cookie is preferred in production because XSS cannot steal it, unlike localStorage Bearer.
@@ -112,19 +152,23 @@ export async function authenticateRequest(req: Request): Promise<AuthResult> {
         if (candidate && isAddress(candidate)) {
           const normalized = getAddress(candidate) as Address;
           if (payload.exp && Number(payload.exp) <= Math.floor(Date.now() / 1000)) {
-            if (!isTxHashOrderSubmission(req)) {
+            if (!allowAuthFallback) {
               return { address: null, method: null, error: 'Bearer token expired' };
             }
+            bearerError = 'Bearer token expired';
           } else {
             return { address: normalized, method: 'bearer', error: null };
           }
-        } else if (!isTxHashOrderSubmission(req)) {
+        } else if (!allowAuthFallback) {
           return { address: null, method: null, error: 'Bearer token missing user_address claim' };
+        } else {
+          bearerError = 'Bearer token missing user_address claim';
         }
       } catch (e: any) {
-        if (!isTxHashOrderSubmission(req)) {
+        if (!allowAuthFallback) {
           return { address: null, method: null, error: `Invalid Bearer token: ${e.message || 'verify failed'}` };
         }
+        bearerError = `Invalid Bearer token: ${e.message || 'verify failed'}`;
       }
     } else {
       // JWT secret not configured — cannot verify bearer, fall through to EIP-712
@@ -220,15 +264,23 @@ export async function authenticateRequest(req: Request): Promise<AuthResult> {
   }
 
   // 4) Direct on-chain txHash submission (e.g. POST /orders/place)
-  if (isTxHashOrderSubmission(req)) {
+  if (isTxOrder) {
     const candidate = String(req.body.userAddress).trim();
     if (isAddress(candidate)) {
       return { address: getAddress(candidate) as Address, method: 'txHash', error: null };
     }
   }
 
+  // 5) Active session delegation (e.g. for batch sweeper trigger)
+  if (isSweeper) {
+    const sessionUser = await checkSessionDelegationAuth(req);
+    if (sessionUser) {
+      return { address: sessionUser, method: 'session', error: null };
+    }
+  }
+
   // No auth found
-  return { address: null, method: null, error: null };
+  return { address: null, method: null, error: bearerError };
 }
 
 /**

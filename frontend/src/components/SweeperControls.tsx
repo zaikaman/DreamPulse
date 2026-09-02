@@ -69,6 +69,7 @@ export const SweeperControls: React.FC<SweeperControlsProps> = ({
   })();
 
   const [isSweeping, setIsSweeping] = useState<boolean>(false);
+  const [sweepError, setSweepError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState<boolean>(!initialCache);
   const [history, setHistory] = useState<SettlementSweep[]>(initialHistory);
   const [unclaimedAmount, setUnclaimedAmount] = useState<number>(initialCache?.unclaimedAmount || 0);
@@ -98,6 +99,7 @@ export const SweeperControls: React.FC<SweeperControlsProps> = ({
 
   useEffect(() => {
     setCurrentPage(1);
+    setSweepError(null);
   }, [selectedOutcome, searchQuery, activeAddress]);
 
   const totalPages = Math.max(1, Math.ceil(filteredHistory.length / pageSize));
@@ -203,6 +205,7 @@ export const SweeperControls: React.FC<SweeperControlsProps> = ({
   const handleManualSweep = async () => {
     if (!activeAddress) return;
     setIsSweeping(true);
+    setSweepError(null);
     try {
       const res = await apiClient.triggerSweep(activeAddress, false);
       if (res.success) {
@@ -212,9 +215,12 @@ export const SweeperControls: React.FC<SweeperControlsProps> = ({
         setUnclaimedAmount(0);
         await fetchSweeperData();
         if (onRefreshPortfolio) onRefreshPortfolio();
+      } else {
+        setSweepError((res as any).error || 'Failed to trigger settlement sweep');
       }
     } catch (err: any) {
       console.warn('[SweeperControls] Sweep trigger error:', err);
+      setSweepError(err.message || 'Settlement sweep failed. Please check wallet connection or session delegation.');
     } finally {
       setIsSweeping(false);
     }
@@ -239,6 +245,42 @@ export const SweeperControls: React.FC<SweeperControlsProps> = ({
               <span>Connect Wallet</span>
             </button>
           )}
+        </div>
+      )}
+
+      {/* ---------- Error State Feedback Banner ---------- */}
+      {sweepError && (
+        <div
+          role="alert"
+          className="flex items-center justify-between gap-3 px-4 py-3 rounded-xl border border-rose-500/30 bg-rose-500/10 text-rose-300 text-xs backdrop-blur-sm transition-all"
+        >
+          <div className="flex items-center gap-2.5 min-w-0">
+            <ExclamationCircleIcon className="w-4 h-4 text-rose-400 flex-shrink-0" />
+            <div className="min-w-0">
+              <span className="font-semibold text-rose-200">Sweep Error: </span>
+              <span className="text-rose-300/90 break-words">{sweepError}</span>
+            </div>
+          </div>
+          <div className="flex items-center gap-2 flex-shrink-0">
+            {onConnectWallet && (sweepError.toLowerCase().includes('auth') || sweepError.toLowerCase().includes('token') || sweepError.toLowerCase().includes('unauthorized') || sweepError.toLowerCase().includes('jwt')) && (
+              <button
+                type="button"
+                onClick={onConnectWallet}
+                className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg border border-rose-500/40 bg-rose-500/20 hover:bg-rose-500/30 text-rose-100 font-semibold text-[11px] transition-colors"
+              >
+                <WalletIcon className="w-3 h-3" />
+                <span>Reconnect Wallet</span>
+              </button>
+            )}
+            <button
+              type="button"
+              onClick={() => setSweepError(null)}
+              className="text-rose-400 hover:text-rose-200 p-1 rounded-md hover:bg-rose-500/20 transition-colors"
+              aria-label="Dismiss error"
+            >
+              <XMarkIcon className="w-4 h-4" />
+            </button>
+          </div>
         </div>
       )}
 

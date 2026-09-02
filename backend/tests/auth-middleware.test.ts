@@ -16,7 +16,10 @@ import {
   authenticateRequest,
   requireWalletAuth,
   optionalWalletAuth,
+  isSweeperTriggerRequest,
+  checkSessionDelegationAuth,
 } from '../src/middleware/wallet-auth.js';
+import { sessionService } from '../src/services/session-service.js';
 import { JWT_COOKIE_NAME } from '../src/config/cookie.js';
 import { env } from '../src/config/env.js';
 
@@ -738,6 +741,132 @@ describe('AuthService & WalletAuth Middleware Comprehensive Suite', () => {
         expiresAt: Math.floor(Date.now() / 1000) + 3600,
       });
       expect(res.valid).toBe(false);
+    });
+
+    it('detects isSweeperTriggerRequest for sweeper endpoints', () => {
+      expect(isSweeperTriggerRequest({ path: '/api/v1/sweeper/trigger' } as Request)).toBe(true);
+      expect(isSweeperTriggerRequest({ originalUrl: '/sweeper/trigger' } as Request)).toBe(true);
+      expect(isSweeperTriggerRequest({ url: '/api/v1/orders/place' } as Request)).toBe(false);
+    });
+
+    it('allows users with active session delegation to trigger batch sweeps', async () => {
+      vi.spyOn(sessionService, 'getUserActiveSession').mockResolvedValue({
+        id: 'session-123',
+        userAddress: userAddress as any,
+        operatorAddress: userAddress as any,
+        permissions: ['placeOrderFor'],
+        maxTradeSize: 100,
+        dailyVolumeCap: 1000,
+        spentToday: 0,
+        lastSpendResetTimestamp: Date.now(),
+        expiresAt: new Date(Date.now() + 3600 * 1000).toISOString(),
+        isActive: true,
+        nonce: 1,
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+      });
+
+      const req = {
+        originalUrl: '/api/v1/sweeper/trigger',
+        body: {
+          userAddress,
+          autoCompound: false,
+        },
+        headers: {},
+      } as unknown as Request;
+
+      const auth = await authenticateRequest(req);
+      expect(auth.address?.toLowerCase()).toBe(userAddress.toLowerCase());
+      expect(auth.method).toBe('session');
+      expect(auth.error).toBeNull();
+
+      const { res } = createMockRes();
+      const next = vi.fn();
+      await requireWalletAuth(req, res, next);
+      expect(next).toHaveBeenCalled();
+      expect((req as any).walletAddress?.toLowerCase()).toBe(userAddress.toLowerCase());
+      expect((req as any).authMethod).toBe('session');
+    });
+
+    it('allows sweeper trigger when JWT is expired but active session delegation exists', async () => {
+      const expiredPayload = {
+        aud: 'authenticated',
+        role: 'authenticated',
+        sub: userAddress.toLowerCase(),
+        user_address: userAddress.toLowerCase(),
+        exp: Math.floor(Date.now() / 1000) - 60,
+      };
+      const expiredToken = jwt.sign(expiredPayload, mockJwtSecret, { algorithm: 'HS256' });
+
+      vi.spyOn(sessionService, 'getUserActiveSession').mockResolvedValueOnce({
+        id: 'session-456',
+        userAddress: userAddress as any,
+        operatorAddress: userAddress as any,
+        permissions: ['placeOrderFor'],
+        maxTradeSize: 100,
+        dailyVolumeCap: 1000,
+        spentToday: 0,
+        lastSpendResetTimestamp: Date.now(),
+        expiresAt: new Date(Date.now() + 3600 * 1000).toISOString(),
+        isActive: true,
+        nonce: 1,
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+      });
+
+      const req = {
+        originalUrl: '/api/v1/sweeper/trigger',
+        headers: {
+          authorization: `Bearer ${expiredToken}`,
+        },
+        body: {
+          userAddress,
+          autoCompound: false,
+        },
+      } as unknown as Request;
+
+      const auth = await authenticateRequest(req);
+      expect(auth.address?.toLowerCase()).toBe(userAddress.toLowerCase());
+      expect(auth.method).toBe('session');
+      expect(auth.error).toBeNull();
+    });
+
+    it('rejects sweeper trigger when JWT is expired and no active session delegation exists', async () => {
+      const expiredPayload = {
+        aud: 'authenticated',
+        role: 'authenticated',
+        sub: userAddress.toLowerCase(),
+        user_address: userAddress.toLowerCase(),
+        exp: Math.floor(Date.now() / 1000) - 60,
+      };
+      const expiredToken = jwt.sign(expiredPayload, mockJwtSecret, { algorithm: 'HS256' });
+
+      vi.spyOn(sessionService, 'getUserActiveSession').mockResolvedValueOnce(null);
+
+      const req = {
+        originalUrl: '/api/v1/sweeper/trigger',
+        headers: {
+          authorization: `Bearer ${expiredToken}`,
+        },
+        body: {
+          userAddress,
+          autoCompound: false,
+        },
+      } as unknown as Request;
+
+      const auth = await authenticateRequest(req);
+      expect(auth.address).toBeNull();
+      expect(auth.error).toMatch(/expired/i);
+
+      const { res, statusSpy, jsonSpy } = createMockRes();
+      const next = vi.fn();
+      await requireWalletAuth(req, res, next);
+      expect(next).not.toHaveBeenCalled();
+      expect(statusSpy).toHaveBeenCalledWith(401);
+      expect(jsonSpy).toHaveBeenCalledWith(expect.objectContaining({
+        success: false,
+        error: expect.stringMatching(/expired/i),
+      }));
     });
   });
 });

@@ -1130,8 +1130,9 @@ apiRouter.get('/sweeper/unclaimed', optionalWalletAuth, async (req: Request, res
 apiRouter.post('/sweeper/trigger', requireWalletAuth, async (req: Request, res: Response) => {
   try {
     const { userAddress, autoCompound } = req.body;
+    const targetAddress = req.walletAddress || userAddress || operatorAccount.address;
     const result = await settlementService.triggerBatchSweep(
-      userAddress || operatorAccount.address,
+      targetAddress,
       autoCompound ?? true,
     );
 
