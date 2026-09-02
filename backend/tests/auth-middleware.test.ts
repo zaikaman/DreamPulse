@@ -582,6 +582,102 @@ describe('AuthService & WalletAuth Middleware Comprehensive Suite', () => {
       expect(next).not.toHaveBeenCalled();
     });
 
+    it('allows direct on-chain order placement with txHash and userAddress in production mode without prior JWT', async () => {
+      process.env.NODE_ENV = 'production';
+      process.env.VITEST = '';
+
+      const req = {
+        originalUrl: '/api/v1/orders/place',
+        headers: {},
+        body: {
+          userAddress,
+          txHash: '0x1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef',
+          marketId: 'test-market-id',
+        },
+        query: {},
+        params: {},
+      } as unknown as Request;
+
+      const { res, statusSpy } = createMockRes();
+      const next = vi.fn();
+
+      await requireWalletAuth(req, res, next);
+      expect(next).toHaveBeenCalled();
+      expect(statusSpy).not.toHaveBeenCalledWith(401);
+      expect(req.walletAddress?.toLowerCase()).toBe(userAddress.toLowerCase());
+      expect(req.authMethod).toBe('txHash');
+    });
+
+    it('rejects spoofed address mismatch even when txHash is provided in order placement', async () => {
+      process.env.NODE_ENV = 'production';
+      process.env.VITEST = '';
+
+      const otherAccount = privateKeyToAccount(generatePrivateKey());
+      const req = {
+        originalUrl: '/api/v1/orders/place',
+        headers: {},
+        body: {
+          userAddress,
+          txHash: '0x1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef',
+          marketId: 'test-market-id',
+        },
+        query: {
+          userAddress: otherAccount.address, // mismatch spoof
+        },
+        params: {},
+      } as unknown as Request;
+
+      const { res, statusSpy, jsonSpy } = createMockRes();
+      const next = vi.fn();
+
+      await requireWalletAuth(req, res, next);
+      expect(next).not.toHaveBeenCalled();
+      expect(statusSpy).toHaveBeenCalledWith(401);
+      expect(jsonSpy).toHaveBeenCalledWith(
+        expect.objectContaining({
+          success: false,
+          error: expect.stringContaining('address spoofing detected'),
+        }),
+      );
+    });
+
+    it('allows txHash order submission even if an expired bearer token is present', async () => {
+      process.env.NODE_ENV = 'production';
+      process.env.VITEST = '';
+
+      const expiredPayload = {
+        aud: 'authenticated',
+        role: 'authenticated',
+        sub: userAddress.toLowerCase(),
+        user_address: userAddress.toLowerCase(),
+        exp: Math.floor(Date.now() / 1000) - 3600,
+      };
+      const expiredToken = jwt.sign(expiredPayload, mockJwtSecret, { algorithm: 'HS256' });
+
+      const req = {
+        originalUrl: '/api/v1/orders/place',
+        headers: {
+          authorization: `Bearer ${expiredToken}`,
+        },
+        body: {
+          userAddress,
+          txHash: '0x1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef',
+          marketId: 'test-market-id',
+        },
+        query: {},
+        params: {},
+      } as unknown as Request;
+
+      const { res, statusSpy } = createMockRes();
+      const next = vi.fn();
+
+      await requireWalletAuth(req, res, next);
+      expect(next).toHaveBeenCalled();
+      expect(statusSpy).not.toHaveBeenCalledWith(401);
+      expect(req.walletAddress?.toLowerCase()).toBe(userAddress.toLowerCase());
+      expect(req.authMethod).toBe('txHash');
+    });
+
     it('handles optionalWalletAuth address mismatch and invalid token downgrades gracefully', async () => {
       const otherAccount = privateKeyToAccount(generatePrivateKey());
       const mint = mintSupabaseJwt(userAddress);

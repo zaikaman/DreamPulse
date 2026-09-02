@@ -966,9 +966,10 @@ apiRouter.get('/orders/:id', async (req: Request, res: Response) => {
 
 apiRouter.post('/orders/place', requireWalletAuth, async (req: Request, res: Response) => {
   try {
-    const { userAddress, marketId, outcome, direction, orderType, price, lotSize, txHash } = req.body;
+    const effectiveUserAddress = (req.walletAddress || req.body.userAddress) as string;
+    const { marketId, outcome, direction, orderType, price, lotSize, txHash } = req.body;
 
-    if (!userAddress || typeof userAddress !== 'string' || !isAddress(userAddress)) {
+    if (!effectiveUserAddress || typeof effectiveUserAddress !== 'string' || !isAddress(effectiveUserAddress)) {
       return res.status(400).json({ success: false, error: 'Valid userAddress is required' });
     }
 
@@ -994,7 +995,7 @@ apiRouter.post('/orders/place', requireWalletAuth, async (req: Request, res: Res
     const normDirection = direction === 'SELL' ? 'SELL' : 'BUY';
 
     const order = await orderService.submitUserOrder({
-      userAddress: getAddress(userAddress) as Address,
+      userAddress: getAddress(effectiveUserAddress) as Address,
       marketId,
       outcome,
       direction: normDirection,

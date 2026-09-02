@@ -19,7 +19,7 @@ declare global {
   namespace Express {
     interface Request {
       walletAddress?: Address;
-      authMethod?: 'bearer' | 'eip712' | 'siwe';
+      authMethod?: 'bearer' | 'eip712' | 'siwe' | 'txHash';
     }
   }
 }
@@ -47,8 +47,31 @@ function isTestEnv(): boolean {
 
 interface AuthResult {
   address: Address | null;
-  method: 'bearer' | 'eip712' | 'siwe' | null;
+  method: 'bearer' | 'eip712' | 'siwe' | 'txHash' | null;
   error: string | null;
+}
+
+/**
+ * Detects whether the request is a direct on-chain order placement with txHash.
+ * In this mode, the trader executed and signed the transaction on Somnia Shannon Testnet via MetaMask.
+ * Downstream orderService.submitUserOrder() cryptographically verifies the on-chain transaction receipt
+ * ensuring receipt.from === userAddress, status === success, and target contracts match.
+ */
+export function isTxHashOrderSubmission(req: Request): boolean {
+  const url = (req.originalUrl || req.url || req.path || '').toLowerCase();
+  const isOrderPath = !url || url.includes('/orders/place') || url.includes('/orders') || url.endsWith('/place');
+
+  const hasTx =
+    Boolean(req.body) &&
+    typeof req.body.txHash === 'string' &&
+    /^0x[a-fA-F0-9]{64}$/.test(req.body.txHash.trim());
+
+  const hasUser =
+    Boolean(req.body) &&
+    typeof req.body.userAddress === 'string' &&
+    isAddress(req.body.userAddress.trim());
+
+  return Boolean((isOrderPath || req.body?.marketId) && hasTx && hasUser);
 }
 
 export async function authenticateRequest(req: Request): Promise<AuthResult> {
@@ -89,13 +112,19 @@ export async function authenticateRequest(req: Request): Promise<AuthResult> {
         if (candidate && isAddress(candidate)) {
           const normalized = getAddress(candidate) as Address;
           if (payload.exp && Number(payload.exp) <= Math.floor(Date.now() / 1000)) {
-            return { address: null, method: null, error: 'Bearer token expired' };
+            if (!isTxHashOrderSubmission(req)) {
+              return { address: null, method: null, error: 'Bearer token expired' };
+            }
+          } else {
+            return { address: normalized, method: 'bearer', error: null };
           }
-          return { address: normalized, method: 'bearer', error: null };
+        } else if (!isTxHashOrderSubmission(req)) {
+          return { address: null, method: null, error: 'Bearer token missing user_address claim' };
         }
-        return { address: null, method: null, error: 'Bearer token missing user_address claim' };
       } catch (e: any) {
-        return { address: null, method: null, error: `Invalid Bearer token: ${e.message || 'verify failed'}` };
+        if (!isTxHashOrderSubmission(req)) {
+          return { address: null, method: null, error: `Invalid Bearer token: ${e.message || 'verify failed'}` };
+        }
       }
     } else {
       // JWT secret not configured — cannot verify bearer, fall through to EIP-712
@@ -190,6 +219,14 @@ export async function authenticateRequest(req: Request): Promise<AuthResult> {
     }
   }
 
+  // 4) Direct on-chain txHash submission (e.g. POST /orders/place)
+  if (isTxHashOrderSubmission(req)) {
+    const candidate = String(req.body.userAddress).trim();
+    if (isAddress(candidate)) {
+      return { address: getAddress(candidate) as Address, method: 'txHash', error: null };
+    }
+  }
+
   // No auth found
   return { address: null, method: null, error: null };
 }
@@ -277,6 +314,28 @@ export async function requireWalletAuth(req: Request, res: Response, next: NextF
       }
     } catch {}
 
+    next();
+    return;
+  }
+
+  // Allow txHash-authenticated direct order submissions:
+  // If req.body.txHash is provided along with req.body.userAddress, allow the request to
+  // proceed to orderService.submitUserOrder(), which cryptographically verifies the
+  // transaction receipt on Somnia Testnet (receipt.from.toLowerCase() === userAddress.toLowerCase()).
+  if (isTxHashOrderSubmission(req)) {
+    const claimed = getAddress(String(req.body.userAddress).trim()) as Address;
+    const mismatch = checkAddressMismatch(req, claimed);
+    if (mismatch) {
+      res.status(401).json({ success: false, error: mismatch });
+      return;
+    }
+    req.walletAddress = claimed;
+    req.authMethod = 'txHash';
+    try {
+      if (req.body && typeof req.body.userAddress === 'string') {
+        req.body.userAddress = claimed;
+      }
+    } catch {}
     next();
     return;
   }

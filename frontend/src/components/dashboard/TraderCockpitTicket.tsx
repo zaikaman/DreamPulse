@@ -11,10 +11,9 @@ import {
   ShieldCheckIcon,
   ShieldExclamationIcon,
 } from '@heroicons/react/24/outline';
-import type { Market, AgentThoughtLog } from '../../types/index.js';
+import type { Market, AgentThoughtLog, OrderExecution, SessionGrant } from '../../types/index.js';
 import type { MarketTickData } from '../../hooks/useTelemetry.js';
 import type { WalletState } from '../../hooks/useSessionKey.js';
-import type { SessionGrant } from '../../types/index.js';
 import { useMarketCountdown } from '../../hooks/useMarketCountdown.js';
 import { evaluateTradeConfluence } from '../../lib/confluence.js';
 import { apiClient } from '../../services/api.js';
@@ -261,20 +260,25 @@ export const TraderCockpitTicket: React.FC<TraderCockpitTicketProps> = ({
           lotSize: calculations.lotSize,
         });
 
-        const indexed = await apiClient.placeOrder({
-          userAddress: wallet.address,
-          marketId: market.id,
-          outcome,
-          direction: 'BUY',
-          orderType: 'LIMIT',
-          price,
-          lotSize: calculations.lotSize,
-          txHash: walletRes.hash,
-        });
+        let indexed: { success?: boolean; data?: OrderExecution } | null = null;
+        try {
+          indexed = await apiClient.placeOrder({
+            userAddress: wallet.address,
+            marketId: market.id,
+            outcome,
+            direction: 'BUY',
+            orderType: 'LIMIT',
+            price,
+            lotSize: calculations.lotSize,
+            txHash: walletRes.hash,
+          });
+        } catch (indexErr: any) {
+          console.warn('[TraderCockpitTicket] Direct on-chain order confirmed, indexing notice:', indexErr);
+        }
 
         soundEngine.playTradeFill();
         setLastExecutedOrder({
-          id: indexed.data?.id || `tx-${walletRes.hash.slice(2, 10)}`,
+          id: indexed?.data?.id || `tx-${walletRes.hash.slice(2, 10)}`,
           txHash: walletRes.hash,
           price,
           lotSize: calculations.lotSize,
