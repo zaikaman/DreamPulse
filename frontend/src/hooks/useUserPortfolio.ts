@@ -32,6 +32,7 @@ export function useUserPortfolio(wallet?: WalletState): UseUserPortfolioReturn {
   const inFlightRef = useRef<boolean>(false);
   const lastFetchAtRef = useRef<number>(0);
   const debounceTimerRef = useRef<number | null>(null);
+  const fetchGenRef = useRef(0);
   const currentAddressRef = useRef<string | null>(address);
   currentAddressRef.current = address;
 
@@ -60,12 +61,14 @@ export function useUserPortfolio(wallet?: WalletState): UseUserPortfolioReturn {
     if (inFlightRef.current) return;
     if (!force && now - lastFetchAtRef.current < 800) return;
 
+    const gen = ++fetchGenRef.current;
     inFlightRef.current = true;
     lastFetchAtRef.current = now;
 
     try {
       setIsLoading(true);
       const res = await apiClient.getPortfolioSummary(targetAddr);
+      if (gen !== fetchGenRef.current) return;
       // Ensure the response matches the currently active address
       if (res.success && res.data && currentAddressRef.current === targetAddr) {
         setPortfolio(res.data);

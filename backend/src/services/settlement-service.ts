@@ -3,7 +3,7 @@ import { supabase, isPersistenceEnabled } from '../config/supabase.js';
 import { compounderService } from './compounder-service.js';
 import { telemetryWsGateway } from '../websocket/server.js';
 import { marketService } from './market-service.js';
-import { orderService } from './order-service.js';
+import { orderService, resolveOnchainWinningOutcome } from './order-service.js';
 import { sessionService } from './session-service.js';
 import { userSwarmService } from './user-swarm-service.js';
 import {
@@ -86,6 +86,20 @@ export interface ClaimResult {
   totalClaimedAmount: string;
   txHash: Hex;
   sweeps: SettlementSweep[];
+}
+
+function settleUnclaimedPosition(pos: {
+  marketId: string;
+  marketIdHex?: string;
+  winningOutcome: OutcomeType;
+  isVoided?: boolean;
+}): void {
+  const isVoid = Boolean(pos.isVoided) || pos.winningOutcome === 'VOID';
+  const outcome: OutcomeType = isVoid ? 'VOID' : pos.winningOutcome;
+  void orderService.settleOrdersForMarket(pos.marketId, outcome, undefined, isVoid).catch(() => {});
+  if (pos.marketIdHex && pos.marketIdHex.toLowerCase() !== pos.marketId.toLowerCase()) {
+    void orderService.settleOrdersForMarket(pos.marketIdHex, outcome, undefined, isVoid).catch(() => {});
+  }
 }
 
 export class SettlementService {
@@ -995,10 +1009,7 @@ export class SettlementService {
             });
           } else {
             // Settle locally so the scanner never loops on un-redeemable or already-handled positions
-            void orderService.settleOrdersForMarket(pos.marketId, pos.winningOutcome).catch(() => {});
-            if (pos.marketIdHex && pos.marketIdHex.toLowerCase() !== pos.marketId.toLowerCase()) {
-              void orderService.settleOrdersForMarket(pos.marketIdHex, pos.winningOutcome).catch(() => {});
-            }
+            settleUnclaimedPosition(pos);
 
             // Suppress scanner from re-queueing by recording an idempotent sweep entry
             const sweepId = crypto.randomUUID();
@@ -1092,10 +1103,7 @@ export class SettlementService {
                 totalClaimed += pos.claimableAmount;
 
                 // Settle orders in orderService immediately for both IDs
-                void orderService.settleOrdersForMarket(pos.marketId, pos.winningOutcome).catch(() => {});
-                if (pos.marketIdHex && pos.marketIdHex.toLowerCase() !== pos.marketId.toLowerCase()) {
-                  void orderService.settleOrdersForMarket(pos.marketIdHex, pos.winningOutcome).catch(() => {});
-                }
+                settleUnclaimedPosition(pos);
               }
               this.invalidateCache(normalizedUser);
             } else {
@@ -1134,10 +1142,7 @@ export class SettlementService {
                       totalClaimed += pos.claimableAmount;
 
                       // Only mark settled when the individual payout succeeds
-                      void orderService.settleOrdersForMarket(pos.marketId, pos.winningOutcome).catch(() => {});
-                      if (pos.marketIdHex && pos.marketIdHex.toLowerCase() !== pos.marketId.toLowerCase()) {
-                        void orderService.settleOrdersForMarket(pos.marketIdHex, pos.winningOutcome).catch(() => {});
-                      }
+                      settleUnclaimedPosition(pos);
                       continue;
                     }
                   } catch (sErr: any) {
@@ -1177,10 +1182,7 @@ export class SettlementService {
               claimedSweeps.push(sweep);
               totalClaimed += pos.claimableAmount;
 
-              void orderService.settleOrdersForMarket(pos.marketId, pos.winningOutcome).catch(() => {});
-              if (pos.marketIdHex && pos.marketIdHex.toLowerCase() !== pos.marketId.toLowerCase()) {
-                void orderService.settleOrdersForMarket(pos.marketIdHex, pos.winningOutcome).catch(() => {});
-              }
+              settleUnclaimedPosition(pos);
             }
 
             this.invalidateCache(normalizedUser);
@@ -1246,10 +1248,7 @@ export class SettlementService {
               txHash = '0x1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef' as Hex;
             } else {
               // Settle order locally so scanner does not loop on it
-              void orderService.settleOrdersForMarket(pos.marketId, pos.winningOutcome).catch(() => {});
-              if (pos.marketIdHex && pos.marketIdHex.toLowerCase() !== pos.marketId.toLowerCase()) {
-                void orderService.settleOrdersForMarket(pos.marketIdHex, pos.winningOutcome).catch(() => {});
-              }
+              settleUnclaimedPosition(pos);
               continue;
             }
           }
@@ -1288,10 +1287,7 @@ export class SettlementService {
           claimedSweeps.push(sweep);
           totalClaimed += pos.claimableAmount;
 
-          void orderService.settleOrdersForMarket(pos.marketId, pos.winningOutcome).catch(() => {});
-          if (pos.marketIdHex && pos.marketIdHex.toLowerCase() !== pos.marketId.toLowerCase()) {
-            void orderService.settleOrdersForMarket(pos.marketIdHex, pos.winningOutcome).catch(() => {});
-          }
+          settleUnclaimedPosition(pos);
         }
       }
     }
@@ -1332,19 +1328,22 @@ export class SettlementService {
       : operatorAccount.address;
 
     const market = marketService.getMarketById(marketId);
-    let winningOutcome: 'YES' | 'NO' = winningOutcomePreference === 'NO' ? 'NO' : 'YES';
+    let winningOutcome: OutcomeType = winningOutcomePreference === 'NO' ? 'NO' : winningOutcomePreference === 'VOID' ? 'VOID' : 'YES';
     let amount = 0;
     let txHash: Hex | undefined;
+    let isVoided = winningOutcome === 'VOID';
 
     const targetHex = market?.marketIdHex || (marketId.startsWith('0x') && marketId.length === 66 ? (marketId as Hex) : undefined);
     if (targetHex) {
       try {
         const onchain = await somniaExchange.client.getMarketOnchain(targetHex).catch(() => null);
-        if (onchain && (onchain.isResolved || onchain.finalized)) {
-          const winIdx: 0 | 1 = typeof onchain.winningOutcome === 'number'
-            ? (onchain.winningOutcome === 0 ? 0 : 1)
-            : (winningOutcomePreference === 'NO' ? 1 : 0);
-          winningOutcome = winIdx === 0 ? 'YES' : 'NO';
+        if (onchain && (onchain.isResolved || onchain.finalized || onchain.isVoided)) {
+          const resolved = resolveOnchainWinningOutcome(onchain);
+          if (resolved) {
+            winningOutcome = resolved;
+            isVoided = resolved === 'VOID';
+          }
+          const winIdx: 0 | 1 = winningOutcome === 'NO' ? 1 : 0;
           const winId = winIdx === 0 ? onchain.yesId : onchain.noId;
 
           const isCopyTrader = normalizedUser.toLowerCase() !== operatorAccount.address.toLowerCase();
@@ -1399,10 +1398,7 @@ export class SettlementService {
                 amount = Math.max(0, Number((totalExpected - alreadyClaimed).toFixed(4)));
               }
             } else {
-              void orderService.settleOrdersForMarket(marketId, winningOutcome).catch(() => {});
-              if (targetHex) {
-                void orderService.settleOrdersForMarket(targetHex, winningOutcome).catch(() => {});
-              }
+              settleUnclaimedPosition({ marketId, marketIdHex: targetHex, winningOutcome, isVoided });
             }
           }
         }
@@ -1514,7 +1510,7 @@ export class SettlementService {
         }
       }
 
-      void orderService.settleOrdersForMarket(marketId, sweep.winningOutcome).catch(() => {});
+      settleUnclaimedPosition({ marketId, marketIdHex: targetHex, winningOutcome: sweep.winningOutcome, isVoided });
     }
 
     telemetryWsGateway.broadcastSweepCompleted({

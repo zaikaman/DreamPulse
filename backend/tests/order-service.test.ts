@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
-import { OrderService, orderService } from '../src/services/order-service.js';
+import { OrderService, orderService, computeRealizedPnl, resolveOnchainWinningOutcome } from '../src/services/order-service.js';
 import { marketService } from '../src/services/market-service.js';
 import { sessionService } from '../src/services/session-service.js';
 import { operatorAccount } from '../src/config/somnia.js';
@@ -182,6 +182,73 @@ describe('OrderService Comprehensive Suite', () => {
     const updatedLost = service.getOrderById(orderLost.id);
     expect(updatedLost?.isSettled).toBe(true);
     expect(updatedLost?.pnl).toBe(-6.0);
+  });
+
+  it('does not overwrite already-settled PnL when settleOrdersForMarket is called again with a different outcome', async () => {
+    const orderWon = await service.submitUserOrder({
+      userAddress,
+      marketId: mockMarket.id,
+      outcome: 'YES',
+      orderType: 'LIMIT',
+      price: 0.40,
+      lotSize: 10.0,
+      txHash: '0x6666666666666666666666666666666666666666666666666666666666666666',
+    });
+
+    await service.settleOrdersForMarket(mockMarket.id, 'YES');
+    const settledPnl = service.getOrderById(orderWon.id)?.pnl;
+    expect(settledPnl).toBe(6.0);
+
+    const firstTotal = await service.getTotalRealizedPnlAsync(undefined, userAddress);
+
+    const secondCount = await service.settleOrdersForMarket(mockMarket.id, 'NO');
+    expect(secondCount).toBe(0);
+    expect(service.getOrderById(orderWon.id)?.pnl).toBe(settledPnl);
+
+    const secondTotal = await service.getTotalRealizedPnlAsync(undefined, userAddress);
+    expect(secondTotal).toBe(firstTotal);
+  });
+
+  it('computes VOID settlement as a 0.50-per-lot refund and does not let a later YES/NO settle flip it', async () => {
+    const order = await service.submitUserOrder({
+      userAddress,
+      marketId: mockMarket.id,
+      outcome: 'YES',
+      orderType: 'LIMIT',
+      price: 0.40,
+      lotSize: 10.0,
+      txHash: '0x7777777777777777777777777777777777777777777777777777777777777777',
+    });
+
+    const voidedCount = await service.settleOrdersForMarket(mockMarket.id, 'VOID', undefined, true);
+    expect(voidedCount).toBeGreaterThanOrEqual(1);
+    // BUY 10 lots at 0.40 costs 4.00; VOID refunds 5.00 → +1.00
+    expect(service.getOrderById(order.id)?.pnl).toBe(1.0);
+
+    await service.settleOrdersForMarket(mockMarket.id, 'YES');
+    expect(service.getOrderById(order.id)?.pnl).toBe(1.0);
+  });
+
+  it('maps on-chain market state to YES/NO/VOID without guessing a missing winner as NO', () => {
+    expect(resolveOnchainWinningOutcome(null)).toBeUndefined();
+    expect(resolveOnchainWinningOutcome({ isResolved: false, finalized: false })).toBeUndefined();
+    expect(resolveOnchainWinningOutcome({ isResolved: true, finalized: true })).toBeUndefined();
+    expect(resolveOnchainWinningOutcome({ isResolved: true, winningOutcome: 0 })).toBe('YES');
+    expect(resolveOnchainWinningOutcome({ isResolved: true, winningOutcome: 1 })).toBe('NO');
+    expect(resolveOnchainWinningOutcome({ isVoided: true, winningOutcome: 0 })).toBe('VOID');
+    expect(resolveOnchainWinningOutcome({ status: 5 })).toBe('VOID');
+    expect(computeRealizedPnl(
+      { direction: 'BUY', price: 0.6, lotSize: 10, outcome: 'YES' },
+      'YES',
+    )).toBe(4);
+    expect(computeRealizedPnl(
+      { direction: 'BUY', price: 0.6, lotSize: 10, outcome: 'YES' },
+      'NO',
+    )).toBe(-6);
+    expect(computeRealizedPnl(
+      { direction: 'BUY', price: 0.6, lotSize: 10, outcome: 'YES' },
+      'VOID',
+    )).toBe(-1);
   });
 
   it('calculates open positions and swarm PnL summary correctly', async () => {

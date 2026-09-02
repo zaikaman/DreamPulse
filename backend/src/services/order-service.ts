@@ -102,6 +102,57 @@ function parseSymbolFromRaw(raw: string): string {
 }
 
 /**
+ * Realized PnL for a filled binary contract: BUY pays (payout - entry), SELL is the inverse.
+ * VOID markets refund 0.50 per lot instead of 1.00 / 0.00.
+ */
+export function computeRealizedPnl(
+  order: Pick<OrderExecution, 'direction' | 'price' | 'lotSize' | 'outcome'>,
+  winningOutcome: OutcomeType,
+  isVoided = false,
+): number {
+  const isBuy = order.direction === 'BUY';
+  const entryCost = Number((order.price * order.lotSize).toFixed(4));
+  const isVoid = isVoided || winningOutcome === 'VOID';
+  if (isVoid) {
+    const payoutVoid = 0.5 * order.lotSize;
+    return isBuy
+      ? Number((payoutVoid - entryCost).toFixed(2))
+      : Number((entryCost - payoutVoid).toFixed(2));
+  }
+  const payout = order.outcome === winningOutcome ? order.lotSize * 1.0 : 0;
+  return isBuy
+    ? Number((payout - entryCost).toFixed(2))
+    : Number((entryCost - payout).toFixed(2));
+}
+
+/**
+ * Map on-chain market state to YES / NO / VOID.
+ * Returns undefined when the market is not resolved or the winner is not yet known —
+ * callers must not treat a missing winner as NO (that caused Total Net PnL to oscillate).
+ */
+export function resolveOnchainWinningOutcome(onchain: {
+  isVoided?: boolean;
+  isResolved?: boolean;
+  finalized?: boolean;
+  status?: number;
+  winningOutcome?: number;
+} | null | undefined): OutcomeType | undefined {
+  if (!onchain) return undefined;
+  const resolved = Boolean(
+    onchain.isResolved ||
+    onchain.finalized ||
+    onchain.isVoided ||
+    onchain.status === 4 ||
+    onchain.status === 5,
+  );
+  if (!resolved) return undefined;
+  if (onchain.isVoided || onchain.status === 5) return 'VOID';
+  if (onchain.winningOutcome === 0) return 'YES';
+  if (onchain.winningOutcome === 1) return 'NO';
+  return undefined;
+}
+
+/**
  * Ensures the operator wallet has sufficient TestUSDC collateral for swarm order execution.
  * Concurrent callers await the same faucet promise instead of silently skipping.
  */
@@ -546,6 +597,12 @@ export class OrderService {
    * Caller must have already persisted to Supabase (or is about to) — evicted rows remain in DB for history queries.
    */
   public insertIntoCache(order: OrderExecution): void {
+    const existingIdx = this.orders.findIndex((o) => o.id === order.id);
+    if (existingIdx >= 0) {
+      this.orders[existingIdx] = order;
+      this.orderMap.set(order.id, order);
+      return;
+    }
     this.orderMap.set(order.id, order);
     this.orders.unshift(order);
     if (this.orders.length > OrderService.MAX_CACHE_SIZE) {
@@ -2161,7 +2218,8 @@ export class OrderService {
     const targetOrders = this.orders.filter((o) => {
       const oMid = o.marketId.toLowerCase();
       const matches = oMid === marketId.toLowerCase() || (altHex && oMid === altHex);
-      return matches && (o.status === 'FILLED' || o.status === 'PARTIALLY_FILLED' || o.status === 'PENDING' || !o.isSettled);
+      if (!matches || o.isSettled) return false;
+      return o.status === 'FILLED' || o.status === 'PARTIALLY_FILLED' || o.status === 'PENDING';
     });
     if (targetOrders.length === 0) return 0;
 
@@ -2170,16 +2228,8 @@ export class OrderService {
     const nowIso = new Date().toISOString();
 
     for (const order of targetOrders) {
-      const isBuy = order.direction === 'BUY';
-      const entryCost = Number((order.price * order.lotSize).toFixed(4));
-      let newPnl: number;
-      if (isVoid) {
-        const payoutVoid = 0.5 * order.lotSize;
-        newPnl = isBuy ? Number((payoutVoid - entryCost).toFixed(2)) : Number((entryCost - payoutVoid).toFixed(2));
-      } else {
-        const payout = order.outcome === winningOutcome ? order.lotSize * 1.0 : 0;
-        newPnl = isBuy ? Number((payout - entryCost).toFixed(2)) : Number((entryCost - payout).toFixed(2));
-      }
+      if (order.isSettled) continue;
+      const newPnl = computeRealizedPnl(order, winningOutcome, isVoid);
 
       const pnlChanged = Math.abs((order.pnl || 0) - newPnl) > 0.001;
       const statusChanged = !order.isSettled || order.status === 'PENDING';
@@ -2323,19 +2373,9 @@ export class OrderService {
       const onchain = onchainCache.get(order.marketId.toLowerCase());
       if (!onchain) continue;
 
-      const isVoid = onchain.isVoided;
-      const onchainWinner = isVoid ? 'VOID' : (onchain.winningOutcome === 0 ? 'YES' : 'NO');
-      const isBuy = order.direction === 'BUY';
-      const entryCost = Number((order.price * order.lotSize).toFixed(4));
-      let truePnl: number;
-
-      if (isVoid) {
-        const payoutVoid = 0.5 * order.lotSize;
-        truePnl = isBuy ? Number((payoutVoid - entryCost).toFixed(2)) : Number((entryCost - payoutVoid).toFixed(2));
-      } else {
-        const payout = order.outcome === onchainWinner ? order.lotSize * 1.0 : 0;
-        truePnl = isBuy ? Number((payout - entryCost).toFixed(2)) : Number((entryCost - payout).toFixed(2));
-      }
+      const onchainWinner = resolveOnchainWinningOutcome(onchain);
+      if (!onchainWinner) continue;
+      const truePnl = computeRealizedPnl(order, onchainWinner);
 
       const needsCorrection = Math.abs((order.pnl || 0) - truePnl) > 0.001 || !order.isSettled;
       if (needsCorrection) {
@@ -2513,15 +2553,11 @@ export class OrderService {
 
         if (isOnChainHexMarket && process.env.NODE_ENV !== 'test') {
           try {
-            const onchain = onchainMarketCache.get(order.marketId);
-            if (onchain && (onchain.isResolved || onchain.finalized || onchain.status === 4 || onchain.status === 5)) {
+            const resolvedOutcome = resolveOnchainWinningOutcome(onchainMarketCache.get(order.marketId));
+            if (resolvedOutcome) {
               shouldResolve = true;
-              if (onchain.isVoided || onchain.status === 5) {
-                winningOutcome = 'VOID';
-                isVoided = true;
-              } else {
-                winningOutcome = onchain.winningOutcome === 0 ? 'YES' : 'NO';
-              }
+              winningOutcome = resolvedOutcome;
+              if (resolvedOutcome === 'VOID') isVoided = true;
             }
           } catch {}
 
@@ -2579,16 +2615,7 @@ export class OrderService {
         }
 
         if (!shouldResolve || !winningOutcome) continue;
-        const isBuy = order.direction === 'BUY';
-        const entryCost = Number((order.price * order.lotSize).toFixed(4));
-        let newPnl: number;
-        if (isVoided || winningOutcome === 'VOID') {
-          const payoutVoid = 0.5 * order.lotSize;
-          newPnl = isBuy ? Number((payoutVoid - entryCost).toFixed(2)) : Number((entryCost - payoutVoid).toFixed(2));
-        } else {
-          const payout = order.outcome === winningOutcome ? order.lotSize * 1.0 : 0;
-          newPnl = isBuy ? Number((payout - entryCost).toFixed(2)) : Number((entryCost - payout).toFixed(2));
-        }
+        const newPnl = computeRealizedPnl(order, winningOutcome, isVoided);
 
         order.pnl = newPnl;
         order.isSettled = true;
@@ -2841,7 +2868,7 @@ export class OrderService {
       const o = ordersList[i];
       if (!o.userAddress || o.userAddress.toLowerCase() !== opAddr) continue;
       const ag = o.agentType?.toLowerCase();
-      const pnl = o.pnl || 0;
+      const pnl = o.isSettled ? (o.pnl || 0) : 0;
       const isCountableTrade = o.status === 'FILLED' || o.status === 'PARTIALLY_FILLED' || o.status === 'PENDING';
 
       if (ag === 'volt') {
@@ -2887,6 +2914,7 @@ export class OrderService {
       const o = ordersList[i];
       if (targetAgent && (!o.agentType || o.agentType.toLowerCase() !== targetAgent)) continue;
       if (targetAddr && (!o.userAddress || o.userAddress.toLowerCase() !== targetAddr)) continue;
+      if (!o.isSettled) continue;
       sum += (o.pnl || 0);
     }
     const rounded = Number(sum.toFixed(2));
