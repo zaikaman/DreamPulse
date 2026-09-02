@@ -68,7 +68,6 @@ export const Header: React.FC<HeaderProps> = ({
 }) => {
   const btcPrice = spotPrices["BTC/USD"] || spotPrices["BTC"] || 0;
   const ethPrice = spotPrices["ETH/USD"] || spotPrices["ETH"] || 0;
-  const somniaPrice = spotPrices["SOMI/USD"] || spotPrices["STT/USD"] || spotPrices["SOMNIA"] || 0;
 
   return (
     <header className="sticky top-0 z-20 w-full border-b border-border/50 bg-background/80 backdrop-blur-xl">
@@ -116,14 +115,6 @@ export const Header: React.FC<HeaderProps> = ({
             <div className="flex items-center gap-1.5">
               <span className="text-[11px] text-muted-foreground">ETH:</span>
               <span className="text-foreground font-medium">{formatCurrency(ethPrice)}</span>
-            </div>
-          )}
-
-          {/* SOMNIA Spot */}
-          {somniaPrice > 0 && (
-            <div className="flex items-center gap-1.5">
-              <span className="text-[11px] text-muted-foreground">SOMI:</span>
-              <span className="text-foreground font-medium">{formatCurrency(somniaPrice, 2)}</span>
             </div>
           )}
 

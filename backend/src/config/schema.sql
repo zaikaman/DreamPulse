@@ -73,7 +73,86 @@ CREATE TABLE IF NOT EXISTS public.agent_strategies (
 );
 
 -- ------------------------------------------------------------------------------
--- 4. Orders & Trade Executions
+-- 4. Custom User-Defined Agents & Multi-Agent Swarms
+-- ------------------------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS public.custom_agents (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    user_address VARCHAR(42) NOT NULL,
+    name VARCHAR(64) NOT NULL,
+    description TEXT,
+    symbol VARCHAR(32) NOT NULL DEFAULT 'BTC/USD',
+    timeframe VARCHAR(8) NOT NULL DEFAULT '5m',
+    strategy_type VARCHAR(32) NOT NULL DEFAULT 'MOMENTUM',
+    rules JSONB NOT NULL DEFAULT '{}'::jsonb,
+    color VARCHAR(16) NOT NULL DEFAULT '#2dd4bf',
+    icon VARCHAR(32) NOT NULL DEFAULT 'BoltIcon',
+    is_active BOOLEAN NOT NULL DEFAULT TRUE,
+    is_deployed BOOLEAN NOT NULL DEFAULT FALSE,
+    allocated_allowance NUMERIC(16, 2) NOT NULL DEFAULT 100.00,
+    spent_allowance NUMERIC(16, 2) NOT NULL DEFAULT 0.00,
+    pnl NUMERIC(16, 2) NOT NULL DEFAULT 0.00,
+    win_rate NUMERIC(5, 2) NOT NULL DEFAULT 0.00,
+    trades_count INTEGER NOT NULL DEFAULT 0,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    CONSTRAINT valid_custom_agent_address CHECK (user_address ~ '^0x[a-fA-F0-9]{40}$')
+);
+
+CREATE INDEX IF NOT EXISTS idx_custom_agents_deployment ON public.custom_agents(user_address, is_deployed);
+
+CREATE INDEX IF NOT EXISTS idx_custom_agents_user ON public.custom_agents(user_address, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_custom_agents_symbol ON public.custom_agents(symbol);
+
+CREATE TABLE IF NOT EXISTS public.custom_swarms (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    user_address VARCHAR(42) NOT NULL,
+    name VARCHAR(64) NOT NULL,
+    description TEXT,
+    agent_ids JSONB NOT NULL DEFAULT '[]'::jsonb,
+    consensus_rule VARCHAR(32) NOT NULL DEFAULT 'MAJORITY' CHECK (consensus_rule IN ('UNANIMOUS', 'MAJORITY', 'WEIGHTED', 'VETO')),
+    confidence_threshold NUMERIC(4, 2) NOT NULL DEFAULT 0.60,
+    is_active BOOLEAN NOT NULL DEFAULT TRUE,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    CONSTRAINT valid_custom_swarm_address CHECK (user_address ~ '^0x[a-fA-F0-9]{40}$')
+);
+
+CREATE INDEX IF NOT EXISTS idx_custom_swarms_user ON public.custom_swarms(user_address, created_at DESC);
+
+ALTER TABLE public.custom_agents ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.custom_swarms ENABLE ROW LEVEL SECURITY;
+
+-- Drop legacy open policies
+DROP POLICY IF EXISTS "Public Read Custom Agents" ON public.custom_agents;
+DROP POLICY IF EXISTS "User Modify Own Custom Agents" ON public.custom_agents;
+DROP POLICY IF EXISTS "Public Read Custom Swarms" ON public.custom_swarms;
+DROP POLICY IF EXISTS "User Modify Own Custom Swarms" ON public.custom_swarms;
+DROP POLICY IF EXISTS "Custom Agents public read" ON public.custom_agents;
+DROP POLICY IF EXISTS "custom_agents_owner_insert" ON public.custom_agents;
+DROP POLICY IF EXISTS "custom_agents_owner_update" ON public.custom_agents;
+DROP POLICY IF EXISTS "custom_agents_owner_delete" ON public.custom_agents;
+DROP POLICY IF EXISTS "custom_agents_service_role" ON public.custom_agents;
+DROP POLICY IF EXISTS "Custom Swarms public read" ON public.custom_swarms;
+DROP POLICY IF EXISTS "custom_swarms_owner_insert" ON public.custom_swarms;
+DROP POLICY IF EXISTS "custom_swarms_owner_update" ON public.custom_swarms;
+DROP POLICY IF EXISTS "custom_swarms_owner_delete" ON public.custom_swarms;
+DROP POLICY IF EXISTS "custom_swarms_service_role" ON public.custom_swarms;
+
+-- Arena discovery: public SELECT for leaderboard/social clone; DML is owner JWT + service_role only
+CREATE POLICY "Custom Agents public read" ON public.custom_agents FOR SELECT TO anon, authenticated USING (true);
+CREATE POLICY "custom_agents_owner_insert" ON public.custom_agents FOR INSERT TO authenticated WITH CHECK (lower(auth.jwt() ->> 'user_address') = lower(user_address));
+CREATE POLICY "custom_agents_owner_update" ON public.custom_agents FOR UPDATE TO authenticated USING (lower(auth.jwt() ->> 'user_address') = lower(user_address)) WITH CHECK (lower(auth.jwt() ->> 'user_address') = lower(user_address));
+CREATE POLICY "custom_agents_owner_delete" ON public.custom_agents FOR DELETE TO authenticated USING (lower(auth.jwt() ->> 'user_address') = lower(user_address));
+CREATE POLICY "custom_agents_service_role" ON public.custom_agents FOR ALL TO service_role USING (true) WITH CHECK (true);
+
+CREATE POLICY "Custom Swarms public read" ON public.custom_swarms FOR SELECT TO anon, authenticated USING (true);
+CREATE POLICY "custom_swarms_owner_insert" ON public.custom_swarms FOR INSERT TO authenticated WITH CHECK (lower(auth.jwt() ->> 'user_address') = lower(user_address));
+CREATE POLICY "custom_swarms_owner_update" ON public.custom_swarms FOR UPDATE TO authenticated USING (lower(auth.jwt() ->> 'user_address') = lower(user_address)) WITH CHECK (lower(auth.jwt() ->> 'user_address') = lower(user_address));
+CREATE POLICY "custom_swarms_owner_delete" ON public.custom_swarms FOR DELETE TO authenticated USING (lower(auth.jwt() ->> 'user_address') = lower(user_address));
+CREATE POLICY "custom_swarms_service_role" ON public.custom_swarms FOR ALL TO service_role USING (true) WITH CHECK (true);
+
+-- ------------------------------------------------------------------------------
+-- 5. Orders & Trade Executions
 -- ------------------------------------------------------------------------------
 CREATE TABLE IF NOT EXISTS public.orders (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
@@ -102,8 +181,25 @@ CREATE TABLE IF NOT EXISTS public.orders (
 CREATE INDEX IF NOT EXISTS idx_orders_custom_agent ON public.orders(custom_agent_id, is_settled, created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_orders_user_custom_agent ON public.orders(user_address, custom_agent_id, created_at DESC);
 
+-- Ensure columns and foreign key exist if table was already created in an earlier migration
+DO $$
+BEGIN
+    IF NOT EXISTS (
+        SELECT 1 FROM information_schema.columns 
+        WHERE table_schema = 'public' AND table_name = 'orders' AND column_name = 'custom_agent_id'
+    ) THEN
+        ALTER TABLE public.orders ADD COLUMN custom_agent_id UUID REFERENCES public.custom_agents(id) ON DELETE SET NULL;
+    END IF;
+    IF NOT EXISTS (
+        SELECT 1 FROM information_schema.columns 
+        WHERE table_schema = 'public' AND table_name = 'orders' AND column_name = 'custom_agent_name'
+    ) THEN
+        ALTER TABLE public.orders ADD COLUMN custom_agent_name VARCHAR(64);
+    END IF;
+END $$;
+
 -- ------------------------------------------------------------------------------
--- 5. Autonomous Settlement Sweeps
+-- 6. Autonomous Settlement Sweeps
 -- ------------------------------------------------------------------------------
 CREATE TABLE IF NOT EXISTS public.sweeps (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
@@ -119,7 +215,7 @@ CREATE TABLE IF NOT EXISTS public.sweeps (
 );
 
 -- ------------------------------------------------------------------------------
--- 6. Real-Time AI Agent Thought Stream & Telemetry
+-- 7. Real-Time AI Agent Thought Stream & Telemetry
 -- ------------------------------------------------------------------------------
 CREATE TABLE IF NOT EXISTS public.agent_logs (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
@@ -134,7 +230,7 @@ CREATE TABLE IF NOT EXISTS public.agent_logs (
 );
 
 -- ------------------------------------------------------------------------------
--- 7. Historical Backtest Simulation Runs
+-- 8. Historical Backtest Simulation Runs
 -- ------------------------------------------------------------------------------
 CREATE TABLE IF NOT EXISTS public.backtests (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
@@ -286,7 +382,7 @@ CREATE POLICY "backtests_owner_delete" ON public.backtests FOR DELETE TO authent
 CREATE POLICY "backtests_service_role" ON public.backtests FOR ALL TO service_role USING (true) WITH CHECK (true);
 
 -- ------------------------------------------------------------------------------
--- 8. Persistent System State & Key Rotation Index
+-- 9. Persistent System State & Key Rotation Index
 -- ------------------------------------------------------------------------------
 CREATE TABLE IF NOT EXISTS public.system_state (
     key VARCHAR(100) PRIMARY KEY,
@@ -310,7 +406,7 @@ VALUES ('groq_key_rotation', '{"current_index": 0, "total_keys": 20}'::jsonb, 'T
 ON CONFLICT (key) DO NOTHING;
 
 -- ------------------------------------------------------------------------------
--- 9. Personal Swarm Configs (Per-Wallet Isolated Strategy)
+-- 10. Personal Swarm Configs (Per-Wallet Isolated Strategy)
 --    Mode: COPY (mirror operator) vs PERSONAL (user-owned independent swarm)
 -- ------------------------------------------------------------------------------
 CREATE TABLE IF NOT EXISTS public.user_swarm_configs (
@@ -350,85 +446,6 @@ CREATE POLICY "swarm_configs_owner_insert" ON public.user_swarm_configs FOR INSE
 CREATE POLICY "swarm_configs_owner_update" ON public.user_swarm_configs FOR UPDATE TO authenticated USING (lower(auth.jwt() ->> 'user_address') = lower(user_address)) WITH CHECK (lower(auth.jwt() ->> 'user_address') = lower(user_address));
 CREATE POLICY "swarm_configs_owner_delete" ON public.user_swarm_configs FOR DELETE TO authenticated USING (lower(auth.jwt() ->> 'user_address') = lower(user_address));
 CREATE POLICY "swarm_configs_service_role" ON public.user_swarm_configs FOR ALL TO service_role USING (true) WITH CHECK (true);
-
--- ------------------------------------------------------------------------------
--- 10. Custom User-Defined Agents & Multi-Agent Swarms
--- ------------------------------------------------------------------------------
-CREATE TABLE IF NOT EXISTS public.custom_agents (
-    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    user_address VARCHAR(42) NOT NULL,
-    name VARCHAR(64) NOT NULL,
-    description TEXT,
-    symbol VARCHAR(32) NOT NULL DEFAULT 'BTC/USD',
-    timeframe VARCHAR(8) NOT NULL DEFAULT '5m',
-    strategy_type VARCHAR(32) NOT NULL DEFAULT 'MOMENTUM',
-    rules JSONB NOT NULL DEFAULT '{}'::jsonb,
-    color VARCHAR(16) NOT NULL DEFAULT '#2dd4bf',
-    icon VARCHAR(32) NOT NULL DEFAULT 'BoltIcon',
-    is_active BOOLEAN NOT NULL DEFAULT TRUE,
-    is_deployed BOOLEAN NOT NULL DEFAULT FALSE,
-    allocated_allowance NUMERIC(16, 2) NOT NULL DEFAULT 100.00,
-    spent_allowance NUMERIC(16, 2) NOT NULL DEFAULT 0.00,
-    pnl NUMERIC(16, 2) NOT NULL DEFAULT 0.00,
-    win_rate NUMERIC(5, 2) NOT NULL DEFAULT 0.00,
-    trades_count INTEGER NOT NULL DEFAULT 0,
-    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-    CONSTRAINT valid_custom_agent_address CHECK (user_address ~ '^0x[a-fA-F0-9]{40}$')
-);
-
-CREATE INDEX IF NOT EXISTS idx_custom_agents_deployment ON public.custom_agents(user_address, is_deployed);
-
-CREATE INDEX IF NOT EXISTS idx_custom_agents_user ON public.custom_agents(user_address, created_at DESC);
-CREATE INDEX IF NOT EXISTS idx_custom_agents_symbol ON public.custom_agents(symbol);
-
-CREATE TABLE IF NOT EXISTS public.custom_swarms (
-    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    user_address VARCHAR(42) NOT NULL,
-    name VARCHAR(64) NOT NULL,
-    description TEXT,
-    agent_ids JSONB NOT NULL DEFAULT '[]'::jsonb,
-    consensus_rule VARCHAR(32) NOT NULL DEFAULT 'MAJORITY' CHECK (consensus_rule IN ('UNANIMOUS', 'MAJORITY', 'WEIGHTED', 'VETO')),
-    confidence_threshold NUMERIC(4, 2) NOT NULL DEFAULT 0.60,
-    is_active BOOLEAN NOT NULL DEFAULT TRUE,
-    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-    CONSTRAINT valid_custom_swarm_address CHECK (user_address ~ '^0x[a-fA-F0-9]{40}$')
-);
-
-CREATE INDEX IF NOT EXISTS idx_custom_swarms_user ON public.custom_swarms(user_address, created_at DESC);
-
-ALTER TABLE public.custom_agents ENABLE ROW LEVEL SECURITY;
-ALTER TABLE public.custom_swarms ENABLE ROW LEVEL SECURITY;
-
--- Drop legacy open policies
-DROP POLICY IF EXISTS "Public Read Custom Agents" ON public.custom_agents;
-DROP POLICY IF EXISTS "User Modify Own Custom Agents" ON public.custom_agents;
-DROP POLICY IF EXISTS "Public Read Custom Swarms" ON public.custom_swarms;
-DROP POLICY IF EXISTS "User Modify Own Custom Swarms" ON public.custom_swarms;
-DROP POLICY IF EXISTS "Custom Agents public read" ON public.custom_agents;
-DROP POLICY IF EXISTS "custom_agents_owner_insert" ON public.custom_agents;
-DROP POLICY IF EXISTS "custom_agents_owner_update" ON public.custom_agents;
-DROP POLICY IF EXISTS "custom_agents_owner_delete" ON public.custom_agents;
-DROP POLICY IF EXISTS "custom_agents_service_role" ON public.custom_agents;
-DROP POLICY IF EXISTS "Custom Swarms public read" ON public.custom_swarms;
-DROP POLICY IF EXISTS "custom_swarms_owner_insert" ON public.custom_swarms;
-DROP POLICY IF EXISTS "custom_swarms_owner_update" ON public.custom_swarms;
-DROP POLICY IF EXISTS "custom_swarms_owner_delete" ON public.custom_swarms;
-DROP POLICY IF EXISTS "custom_swarms_service_role" ON public.custom_swarms;
-
--- Arena discovery: public SELECT for leaderboard/social clone; DML is owner JWT + service_role only
-CREATE POLICY "Custom Agents public read" ON public.custom_agents FOR SELECT TO anon, authenticated USING (true);
-CREATE POLICY "custom_agents_owner_insert" ON public.custom_agents FOR INSERT TO authenticated WITH CHECK (lower(auth.jwt() ->> 'user_address') = lower(user_address));
-CREATE POLICY "custom_agents_owner_update" ON public.custom_agents FOR UPDATE TO authenticated USING (lower(auth.jwt() ->> 'user_address') = lower(user_address)) WITH CHECK (lower(auth.jwt() ->> 'user_address') = lower(user_address));
-CREATE POLICY "custom_agents_owner_delete" ON public.custom_agents FOR DELETE TO authenticated USING (lower(auth.jwt() ->> 'user_address') = lower(user_address));
-CREATE POLICY "custom_agents_service_role" ON public.custom_agents FOR ALL TO service_role USING (true) WITH CHECK (true);
-
-CREATE POLICY "Custom Swarms public read" ON public.custom_swarms FOR SELECT TO anon, authenticated USING (true);
-CREATE POLICY "custom_swarms_owner_insert" ON public.custom_swarms FOR INSERT TO authenticated WITH CHECK (lower(auth.jwt() ->> 'user_address') = lower(user_address));
-CREATE POLICY "custom_swarms_owner_update" ON public.custom_swarms FOR UPDATE TO authenticated USING (lower(auth.jwt() ->> 'user_address') = lower(user_address)) WITH CHECK (lower(auth.jwt() ->> 'user_address') = lower(user_address));
-CREATE POLICY "custom_swarms_owner_delete" ON public.custom_swarms FOR DELETE TO authenticated USING (lower(auth.jwt() ->> 'user_address') = lower(user_address));
-CREATE POLICY "custom_swarms_service_role" ON public.custom_swarms FOR ALL TO service_role USING (true) WITH CHECK (true);
 
 -- ------------------------------------------------------------------------------
 -- 11. Pre-aggregated Daily PnL for Analytics (avoids full table scans)

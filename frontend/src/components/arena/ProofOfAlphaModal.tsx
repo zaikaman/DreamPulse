@@ -555,9 +555,9 @@ export const ProofOfAlphaModal: React.FC<ProofOfAlphaModalProps> = ({
     if (!config) return;
     const text = encodeURIComponent(
       `Check out ${config.title} on @DreamPulse_AI on @Somnia_Network Shannon!\n\n` +
-      `⚡ ${config.primaryMetricLabel}: ${config.primaryMetricValue}\n` +
-      `🎯 ${config.secondaryMetricLabel}: ${config.secondaryMetricValue}\n` +
-      `🚀 ${customTagline}\n\n`
+      `[ALPHA] ${config.primaryMetricLabel}: ${config.primaryMetricValue}\n` +
+      `[TARGET] ${config.secondaryMetricLabel}: ${config.secondaryMetricValue}\n` +
+      `>> ${customTagline}\n\n`
     );
     const shareUrl = typeof window !== 'undefined' && !window.location.hostname.includes('localhost')
       ? `${window.location.origin}/#arena`

@@ -6,6 +6,7 @@ import {
   AdjustmentsVerticalIcon,
   PlayIcon,
   ArrowUpRightIcon,
+  ArrowRightIcon,
   ArrowTrendingUpIcon,
   ArrowTrendingDownIcon,
   CheckCircleIcon,
@@ -1309,7 +1310,7 @@ export const StrategyStudioView: React.FC<StrategyStudioViewProps> = ({
                   <span className="text-muted-foreground text-[10px]">({draftTimeframe})</span>
                 </div>
 
-                <span className="text-muted-foreground/60 font-mono text-xs select-none flex-shrink-0">➔</span>
+                <ArrowRightIcon className="w-3 h-3 text-muted-foreground/60 flex-shrink-0" />
 
                 {/* Step 2: Trigger Conditions Summary */}
                 <div
@@ -1323,7 +1324,7 @@ export const StrategyStudioView: React.FC<StrategyStudioViewProps> = ({
                   </span>
                 </div>
 
-                <span className="text-muted-foreground/60 font-mono text-xs select-none flex-shrink-0">➔</span>
+                <ArrowRightIcon className="w-3 h-3 text-muted-foreground/60 flex-shrink-0" />
 
                 {/* Step 3: Binary Action */}
                 <div
@@ -1340,7 +1341,7 @@ export const StrategyStudioView: React.FC<StrategyStudioViewProps> = ({
                   <span className="text-[10px] font-normal opacity-90">({actionDurationSec}s @ ${actionStakeAmount}{actionOrderType === 'LIMIT' ? ' · LIMIT' : ''})</span>
                 </div>
 
-                <span className="text-muted-foreground/60 font-mono text-xs select-none flex-shrink-0">➔</span>
+                <ArrowRightIcon className="w-3 h-3 text-muted-foreground/60 flex-shrink-0" />
 
                 {/* Step 4: Risk Guard */}
                 <div

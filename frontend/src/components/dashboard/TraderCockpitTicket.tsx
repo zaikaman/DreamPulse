@@ -711,7 +711,7 @@ export const TraderCockpitTicket: React.FC<TraderCockpitTicketProps> = ({
           <span className="font-bold text-foreground">{userBalance.toFixed(2)}</span>
         </div>
         <div className="flex items-center justify-between text-muted-foreground">
-          <span>SOMI</span>
+          <span>STT</span>
           <span>{wallet.balanceSTT || '0.000'}</span>
         </div>
         <div className="flex items-center justify-between text-muted-foreground pt-1 border-t border-border/20 text-[10px]">

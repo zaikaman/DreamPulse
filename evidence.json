@@ -20,7 +20,7 @@
     "canonicalOperator": "0x93e300607c363E7D7a47e50f5c9fDf1723e859Cf"
   },
   "verificationSuite": {
-    "totalTests": 239,
+    "totalTests": 275,
     "testSuites": 23,
     "passingRate": "100%",
     "zeroAnyTypes": true,
