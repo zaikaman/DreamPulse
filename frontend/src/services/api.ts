@@ -471,6 +471,8 @@ export const apiClient = {
     color?: string;
     icon?: string;
     isActive?: boolean;
+    isDeployed?: boolean;
+    allocatedAllowance?: number;
   }): Promise<{ success: boolean; data: CustomAgentDefinition }> {
     customAgentsCache.clear();
     return fetchJson('/agents/custom', {

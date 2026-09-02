@@ -41,6 +41,7 @@ import {
   ChevronUpIcon,
   ChartBarIcon,
   ScaleIcon,
+  WalletIcon,
 } from '@heroicons/react/24/outline';
 import type {
   CustomAgentDefinition,
@@ -218,13 +219,14 @@ export const StrategyStudioView: React.FC<StrategyStudioViewProps> = ({
   },
   activeSession = null,
   onOpenSessionModal,
-  onConnectWallet: _onConnectWallet,
+  onConnectWallet,
   onNavigateToBacktester,
 }) => {
   const {
     agents,
     isSaving,
     isGenerating,
+    saveLocalDraft,
     createAgent,
     updateAgent,
     deleteAgent,
@@ -313,6 +315,17 @@ export const StrategyStudioView: React.FC<StrategyStudioViewProps> = ({
 
   // Safe Deletion Confirmation Modal
   const [agentToDelete, setAgentToDelete] = useState<CustomAgentDefinition | null>(null);
+
+  // Web3 Wallet Connection Prompt Modal (for unauthenticated save / deploy)
+  const [walletPromptModal, setWalletPromptModal] = useState<{
+    isOpen: boolean;
+    intent: 'save' | 'deploy';
+    saveAsCopy?: boolean;
+    targetAgent?: CustomAgentDefinition;
+  }>({
+    isOpen: false,
+    intent: 'save',
+  });
 
   // Mark studio visited for quest progress
   useEffect(() => {
@@ -488,9 +501,91 @@ export const StrategyStudioView: React.FC<StrategyStudioViewProps> = ({
     color: draftColor,
   });
 
+  // Save offline draft to localStorage directly
+  const handleSaveOfflineDraft = () => {
+    const rules: CustomAgentRules = {
+      operator: draftOperator,
+      conditions,
+      action: {
+        direction: actionDirection,
+        durationSec: actionDurationSec,
+        stakeType: 'FIXED',
+        stakeAmount: actionStakeAmount,
+        orderType: actionOrderType,
+        limitPricing: actionLimitPricing,
+        limitOffsetBps: actionLimitOffsetBps,
+        maxSlippageBps: actionMaxSlippageBps,
+      },
+      risk: {
+        maxConsecutiveLosses: riskMaxLosses,
+        cooldownMinutes: riskCooldownMins,
+        minPoolPayoutPct: riskMinPayoutPct,
+        dailyDrawdownLimitPct: riskDailyDrawdownLimitPct,
+        takeProfitTargetPct: riskTakeProfitTargetPct,
+        martingaleMultiplier: riskMartingaleMultiplier,
+        expiryBufferSec: riskExpiryBufferSec,
+      },
+    };
+
+    const isLocalDraftExisting =
+      editingAgentId &&
+      (editingAgentId.startsWith('local-draft-') || editingAgentId.startsWith('draft-'));
+
+    const draft = saveLocalDraft({
+      id: isLocalDraftExisting ? editingAgentId : undefined,
+      name: draftName,
+      description: draftDesc,
+      symbol: draftSymbol,
+      timeframe: draftTimeframe,
+      strategyType: actionDirection === 'CALL' ? 'MOMENTUM' : 'MEAN_REVERSION',
+      rules,
+      color: draftColor,
+      icon: actionDirection === 'CALL' ? 'BoltIcon' : 'AdjustmentsHorizontalIcon',
+      allocatedAllowance: draftAllowance,
+    });
+
+    setEditingAgentId(draft.id);
+    setEditingOriginalAgent(draft);
+    setSaveSuccessMsg('Strategy saved to local storage (Offline Draft)! Connect wallet anytime to deploy.');
+    setTimeout(() => setSaveSuccessMsg(null), 5000);
+    setWalletPromptModal((prev) => ({ ...prev, isOpen: false }));
+  };
+
+  const handleDuplicateAgentOffline = (agent: CustomAgentDefinition) => {
+    const draft = saveLocalDraft({
+      name: `${agent.name} (Offline Copy)`,
+      description: agent.description || 'Cloned custom strategy',
+      symbol: agent.symbol,
+      timeframe: agent.timeframe,
+      strategyType: agent.strategyType,
+      rules: JSON.parse(JSON.stringify(agent.rules)),
+      color: agent.color,
+      icon: agent.icon,
+      allocatedAllowance: agent.allocatedAllowance || 100,
+    });
+    setSaveSuccessMsg(`Cloned "${draft.name}" to local storage!`);
+    setTimeout(() => setSaveSuccessMsg(null), 4000);
+    setWalletPromptModal((prev) => ({ ...prev, isOpen: false }));
+  };
+
+  const handleModalConnectWallet = async () => {
+    setWalletPromptModal((prev) => ({ ...prev, isOpen: false }));
+    if (onConnectWallet) {
+      await onConnectWallet();
+    }
+  };
+
   // Save current draft: Supports In-Place Update OR New Strategy Clone
   const handleSaveStrategy = async (deployNow: boolean = false, saveAsCopy: boolean = false) => {
     setSaveSuccessMsg(null);
+    if (!wallet.isConnected) {
+      setWalletPromptModal({
+        isOpen: true,
+        intent: deployNow ? 'deploy' : 'save',
+        saveAsCopy,
+      });
+      return;
+    }
     const rules: CustomAgentRules = {
       operator: draftOperator,
       conditions,
@@ -630,6 +725,14 @@ export const StrategyStudioView: React.FC<StrategyStudioViewProps> = ({
 
   // Clone an agent directly from library card
   const handleDuplicateAgent = async (agent: CustomAgentDefinition) => {
+    if (!wallet.isConnected) {
+      setWalletPromptModal({
+        isOpen: true,
+        intent: 'save',
+        targetAgent: agent,
+      });
+      return;
+    }
     setActionLoadingId(agent.id);
     try {
       await createAgent({
@@ -653,6 +756,14 @@ export const StrategyStudioView: React.FC<StrategyStudioViewProps> = ({
 
   // 1-Click Deploy / Pause handler for library cards
   const handleToggleDeploy = async (agent: CustomAgentDefinition) => {
+    if (!wallet.isConnected) {
+      setWalletPromptModal({
+        isOpen: true,
+        intent: 'deploy',
+        targetAgent: agent,
+      });
+      return;
+    }
     if (!agent.isDeployed && (!activeSession || !activeSession.isActive)) {
       onOpenSessionModal?.();
       return;
@@ -1179,6 +1290,52 @@ export const StrategyStudioView: React.FC<StrategyStudioViewProps> = ({
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
           {/* Left 2 Cols: The Sentence & Capsule Builder */}
           <div className="lg:col-span-2 flex flex-col gap-4">
+            {/* Unconnected Offline Exploration Mode Notice */}
+            {!wallet.isConnected && (
+              <div className="p-3.5 rounded-xl bg-amber-500/10 border border-amber-500/30 flex items-center justify-between gap-3 flex-wrap shadow-sm">
+                <div className="flex items-center gap-2.5 min-w-0">
+                  <div className="w-7 h-7 rounded-lg bg-amber-500/20 text-amber-300 border border-amber-500/40 grid place-items-center flex-shrink-0">
+                    <InformationCircleIcon className="w-4 h-4" />
+                  </div>
+                  <div className="min-w-0">
+                    <div className="flex items-center gap-2">
+                      <span className="text-xs font-bold text-amber-200">
+                        Offline Exploration Mode
+                      </span>
+                      <Badge variant="outline" className="text-[9px] font-mono border-amber-500/40 text-amber-300 bg-amber-500/10">
+                        Unconnected
+                      </Badge>
+                    </div>
+                    <p className="text-[10px] font-mono text-amber-300/80">
+                      Build indicators, synthesize prompts, and save local drafts offline. Connect your Web3 wallet anytime to deploy to the Somnia CLOB.
+                    </p>
+                  </div>
+                </div>
+
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={handleSaveOfflineDraft}
+                    className="px-2.5 py-1 rounded-lg bg-secondary/60 hover:bg-secondary border border-border text-xs font-medium text-foreground flex items-center gap-1 transition-colors cursor-pointer"
+                    title="Save current state to local storage"
+                  >
+                    <ArrowDownTrayIcon className="w-3.5 h-3.5" />
+                    <span>Save Offline Draft</span>
+                  </button>
+                  {onConnectWallet && (
+                    <button
+                      type="button"
+                      onClick={onConnectWallet}
+                      className="px-3 py-1 rounded-lg bg-primary hover:bg-primary/90 text-primary-foreground text-xs font-bold flex items-center gap-1 shadow-sm transition-all cursor-pointer"
+                    >
+                      <WalletIcon className="w-3.5 h-3.5" />
+                      <span>Connect Wallet</span>
+                    </button>
+                  )}
+                </div>
+              </div>
+            )}
+
             {/* Active Editing Indicator Banner (when editing an existing agent) */}
             {editingAgentId && (
               <div className="p-3.5 rounded-xl bg-cyan-500/10 border border-cyan-500/30 flex items-center justify-between gap-3 flex-wrap shadow-sm">
@@ -2024,7 +2181,7 @@ export const StrategyStudioView: React.FC<StrategyStudioViewProps> = ({
                     className="px-3.5 py-2 rounded-xl bg-secondary hover:bg-secondary/80 text-foreground border border-border/60 text-xs font-bold flex items-center gap-1.5 transition-all disabled:opacity-50 cursor-pointer"
                   >
                     {isSaving ? <Spinner size="xs" /> : <DocumentCheckIcon className="w-3.5 h-3.5" />}
-                    <span>{editingAgentId ? 'Update Strategy' : 'Save Draft'}</span>
+                    <span>{editingAgentId ? 'Update Strategy' : wallet.isConnected ? 'Save Draft' : 'Save Draft (Offline)'}</span>
                   </button>
 
                   <button
@@ -2397,6 +2554,7 @@ export const StrategyStudioView: React.FC<StrategyStudioViewProps> = ({
                 const pctUsed = Math.min(100, Math.round((spent / (allocated || 1)) * 100));
                 const isEditingThis = editingAllowanceId === agent.id;
                 const isTemplate = agent.id.startsWith('00000000-0000-0000-0000-') || agent.id.startsWith('template-');
+                const isLocalDraft = agent.id.startsWith('local-draft-') || agent.id.startsWith('draft-') || agent.userAddress === 'offline';
 
                 return (
                   <div
@@ -2429,9 +2587,17 @@ export const StrategyStudioView: React.FC<StrategyStudioViewProps> = ({
                               <span>DEPLOYED IN FLEET</span>
                             </button>
                           ) : (
-                            <span className="px-2 py-0.5 rounded-full text-[9px] font-mono font-semibold bg-secondary/60 border border-border/60 text-muted-foreground flex items-center gap-1">
-                              <span className="w-1.5 h-1.5 rounded-full bg-muted-foreground/50" />
-                              <span>{isTemplate ? 'STARTER BLUEPRINT' : 'DRAFT BLUEPRINT'}</span>
+                            <span className={cn(
+                              "px-2 py-0.5 rounded-full text-[9px] font-mono font-semibold flex items-center gap-1",
+                              isLocalDraft
+                                ? "bg-amber-500/15 border border-amber-500/40 text-amber-300"
+                                : "bg-secondary/60 border border-border/60 text-muted-foreground"
+                            )}>
+                              <span className={cn(
+                                "w-1.5 h-1.5 rounded-full",
+                                isLocalDraft ? "bg-amber-400" : "bg-muted-foreground/50"
+                              )} />
+                              <span>{isLocalDraft ? 'OFFLINE DRAFT' : isTemplate ? 'STARTER BLUEPRINT' : 'SAVED STRATEGY'}</span>
                             </span>
                           )}
                           <Badge variant="outline" className="text-[9px] font-mono border-border text-foreground">
@@ -2677,6 +2843,7 @@ export const StrategyStudioView: React.FC<StrategyStudioViewProps> = ({
                       const spent = agent.spentAllowance ?? 0;
                       const remaining = Math.max(0, allocated - spent);
                       const isTemplate = agent.id.startsWith('00000000-0000-0000-0000-') || agent.id.startsWith('template-');
+                      const isLocalDraft = agent.id.startsWith('local-draft-') || agent.id.startsWith('draft-') || agent.userAddress === 'offline';
 
                       return (
                         <tr key={agent.id} className="hover:bg-secondary/20 transition-colors font-sans">
@@ -2751,8 +2918,13 @@ export const StrategyStudioView: React.FC<StrategyStudioViewProps> = ({
                                 <span>ACTIVE</span>
                               </span>
                             ) : (
-                              <span className="px-2 py-0.5 rounded-full text-[9px] font-mono text-muted-foreground bg-secondary/50 border border-border/50">
-                                {isTemplate ? 'TEMPLATE' : 'PAUSED'}
+                              <span className={cn(
+                                "px-2 py-0.5 rounded-full text-[9px] font-mono",
+                                isLocalDraft
+                                  ? "bg-amber-500/15 border border-amber-500/40 text-amber-300"
+                                  : "text-muted-foreground bg-secondary/50 border border-border/50"
+                              )}>
+                                {isLocalDraft ? 'OFFLINE DRAFT' : isTemplate ? 'TEMPLATE' : 'PAUSED'}
                               </span>
                             )}
                           </td>
@@ -2974,6 +3146,104 @@ export const StrategyStudioView: React.FC<StrategyStudioViewProps> = ({
                 className="px-4 py-1.5 rounded-lg bg-red-500 hover:bg-red-600 text-white text-xs font-bold cursor-pointer"
               >
                 Delete Permanently
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ----------------- MODAL 3: WEB3 WALLET REQUIRED FOR SAVE / DEPLOY ----------------- */}
+      {walletPromptModal.isOpen && (
+        <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-md flex items-center justify-center p-4">
+          <div className="terminal-panel max-w-md w-full p-6 flex flex-col gap-5 border border-primary/30 bg-card shadow-2xl rounded-2xl relative">
+            <button
+              type="button"
+              onClick={() => setWalletPromptModal((prev) => ({ ...prev, isOpen: false }))}
+              className="absolute top-4 right-4 text-muted-foreground hover:text-foreground cursor-pointer"
+            >
+              <XMarkIcon className="w-5 h-5" />
+            </button>
+
+            <div className="flex items-start gap-3.5">
+              <div className={cn(
+                "w-11 h-11 rounded-xl grid place-items-center flex-shrink-0 border",
+                walletPromptModal.intent === 'deploy'
+                  ? "bg-amber-500/15 border-amber-500/30 text-amber-400"
+                  : "bg-primary/15 border-primary/30 text-primary"
+              )}>
+                {walletPromptModal.intent === 'deploy' ? (
+                  <RocketLaunchIcon className="w-6 h-6" />
+                ) : (
+                  <WalletIcon className="w-6 h-6" />
+                )}
+              </div>
+              <div className="flex flex-col gap-1">
+                <Badge
+                  variant="outline"
+                  className={cn(
+                    "text-[10px] font-mono uppercase tracking-wider w-fit px-2 py-0.5",
+                    walletPromptModal.intent === 'deploy'
+                      ? "bg-amber-500/10 text-amber-400 border-amber-500/30"
+                      : "bg-primary/10 text-primary border-primary/30"
+                  )}
+                >
+                  {walletPromptModal.intent === 'deploy' ? 'Autonomous Execution' : 'Web3 Wallet Required'}
+                </Badge>
+                <h3 className="text-base font-bold text-foreground">
+                  {walletPromptModal.intent === 'deploy'
+                    ? 'Connect Wallet to Deploy'
+                    : 'Connect Wallet to Save Strategy'}
+                </h3>
+              </div>
+            </div>
+
+            <p className="text-xs text-muted-foreground leading-relaxed">
+              {walletPromptModal.intent === 'deploy'
+                ? 'Autonomous execution requires a connected Web3 wallet with an active Somnia session key. Connect your wallet to deploy this agent with simulated or live tUSDC bankroll.'
+                : 'Connect your Web3 wallet to save this autonomous agent to your library. You can also save it directly to your browser storage to continue offline exploration.'}
+            </p>
+
+            <div className="p-3.5 rounded-xl bg-secondary/30 border border-border/50 flex flex-col gap-1.5">
+              <div className="flex items-center gap-2 text-xs font-semibold text-foreground">
+                <InformationCircleIcon className="w-4 h-4 text-cyan-400 flex-shrink-0" />
+                <span>Offline Exploration Mode</span>
+              </div>
+              <p className="text-[11px] text-muted-foreground leading-normal">
+                You can save this strategy to local storage to refine indicator rules, review ghost telemetry, and replay historical backtests without connecting a wallet.
+              </p>
+            </div>
+
+            <div className="flex flex-col gap-2 pt-1">
+              <button
+                type="button"
+                onClick={handleModalConnectWallet}
+                className="w-full py-2.5 px-4 rounded-xl bg-primary hover:bg-primary/90 text-primary-foreground font-bold text-xs flex items-center justify-center gap-2 shadow-lg shadow-primary/20 transition-all cursor-pointer"
+              >
+                <WalletIcon className="w-4 h-4" />
+                <span>Connect Web3 Wallet</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => {
+                  if (walletPromptModal.targetAgent) {
+                    handleDuplicateAgentOffline(walletPromptModal.targetAgent);
+                  } else {
+                    handleSaveOfflineDraft();
+                  }
+                }}
+                className="w-full py-2 px-4 rounded-xl bg-secondary hover:bg-secondary/80 text-foreground border border-border/60 text-xs font-semibold flex items-center justify-center gap-2 transition-all cursor-pointer"
+              >
+                <ArrowDownTrayIcon className="w-3.5 h-3.5 text-muted-foreground" />
+                <span>Save as Local Draft (Offline)</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setWalletPromptModal((prev) => ({ ...prev, isOpen: false }))}
+                className="w-full py-1.5 text-center text-xs text-muted-foreground hover:text-foreground transition-colors cursor-pointer"
+              >
+                Dismiss
               </button>
             </div>
           </div>

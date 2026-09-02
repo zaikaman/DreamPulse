@@ -1324,8 +1324,17 @@ apiRouter.post('/agents/custom', requireWalletAuth, async (req: Request, res: Re
       allocatedAllowance,
       spentAllowance,
     } = req.body;
-    if (!userAddress || !rules) {
-      return res.status(400).json({ success: false, error: 'userAddress and rules are required' });
+    const isDummy =
+      !userAddress ||
+      userAddress === '0x0000000000000000000000000000000000000001' ||
+      userAddress === '0x0000000000000000000000000000000000000000';
+    if (isDummy || !rules) {
+      return res.status(400).json({
+        success: false,
+        error: isDummy
+          ? 'Valid user wallet address is required. Please connect your Web3 wallet.'
+          : 'Strategy rules are required',
+      });
     }
     const created = await customAgentService.createCustomAgent({
       userAddress,
@@ -1384,8 +1393,12 @@ apiRouter.delete('/agents/custom/:id', requireWalletAuth, async (req: Request, r
 apiRouter.post('/agents/custom/:id/deploy', requireWalletAuth, async (req: Request, res: Response) => {
   try {
     const { userAddress, allowance } = req.body;
-    if (!userAddress) {
-      return res.status(400).json({ success: false, error: 'userAddress is required' });
+    const isDummy =
+      !userAddress ||
+      userAddress === '0x0000000000000000000000000000000000000001' ||
+      userAddress === '0x0000000000000000000000000000000000000000';
+    if (isDummy) {
+      return res.status(400).json({ success: false, error: 'Valid user wallet address is required. Please connect your Web3 wallet.' });
     }
     const updated = await customAgentService.deployAgent(
       req.params.id,
@@ -1404,8 +1417,12 @@ apiRouter.post('/agents/custom/:id/deploy', requireWalletAuth, async (req: Reque
 apiRouter.post('/agents/custom/:id/pause', requireWalletAuth, async (req: Request, res: Response) => {
   try {
     const { userAddress } = req.body;
-    if (!userAddress) {
-      return res.status(400).json({ success: false, error: 'userAddress is required' });
+    const isDummy =
+      !userAddress ||
+      userAddress === '0x0000000000000000000000000000000000000001' ||
+      userAddress === '0x0000000000000000000000000000000000000000';
+    if (isDummy) {
+      return res.status(400).json({ success: false, error: 'Valid user wallet address is required. Please connect your Web3 wallet.' });
     }
     const updated = await customAgentService.pauseAgent(req.params.id, userAddress);
     if (!updated) {
@@ -1420,8 +1437,12 @@ apiRouter.post('/agents/custom/:id/pause', requireWalletAuth, async (req: Reques
 apiRouter.post('/agents/custom/:id/allowance', requireWalletAuth, async (req: Request, res: Response) => {
   try {
     const { userAddress, allowance } = req.body;
-    if (!userAddress || allowance === undefined) {
-      return res.status(400).json({ success: false, error: 'userAddress and allowance are required' });
+    const isDummy =
+      !userAddress ||
+      userAddress === '0x0000000000000000000000000000000000000001' ||
+      userAddress === '0x0000000000000000000000000000000000000000';
+    if (isDummy || allowance === undefined) {
+      return res.status(400).json({ success: false, error: isDummy ? 'Valid user wallet address is required. Please connect your Web3 wallet.' : 'Allowance is required' });
     }
     const updated = await customAgentService.setAgentAllowance(req.params.id, userAddress, Number(allowance));
     if (!updated) {

@@ -14,6 +14,18 @@ export interface UseCustomAgentsReturn {
   isGenerating: boolean;
   error: string | null;
   refresh: () => Promise<void>;
+  saveLocalDraft: (payload: {
+    id?: string;
+    name: string;
+    description?: string;
+    symbol: string;
+    timeframe: string;
+    strategyType: string;
+    rules: CustomAgentRules;
+    color?: string;
+    icon?: string;
+    allocatedAllowance?: number;
+  }) => CustomAgentDefinition;
   createAgent: (payload: {
     name: string;
     description?: string;
@@ -42,6 +54,43 @@ export interface UseCustomAgentsReturn {
   deleteSwarm: (id: string) => Promise<boolean>;
 }
 
+const LOCAL_STORAGE_DRAFTS_KEY = 'dreampulse_studio_local_drafts';
+
+function loadLocalDrafts(): CustomAgentDefinition[] {
+  try {
+    const raw = localStorage.getItem(LOCAL_STORAGE_DRAFTS_KEY);
+    if (!raw) return [];
+    const parsed = JSON.parse(raw);
+    return Array.isArray(parsed) ? parsed : [];
+  } catch {
+    return [];
+  }
+}
+
+function saveLocalDraftToStorage(draft: CustomAgentDefinition): void {
+  try {
+    const drafts = loadLocalDrafts();
+    const idx = drafts.findIndex((d) => d.id === draft.id);
+    if (idx >= 0) {
+      drafts[idx] = draft;
+    } else {
+      drafts.unshift(draft);
+    }
+    localStorage.setItem(LOCAL_STORAGE_DRAFTS_KEY, JSON.stringify(drafts));
+  } catch (err) {
+    console.warn('[useCustomAgents] failed to save draft to localStorage', err);
+  }
+}
+
+function removeLocalDraftFromStorage(id: string): void {
+  try {
+    const drafts = loadLocalDrafts().filter((d) => d.id !== id);
+    localStorage.setItem(LOCAL_STORAGE_DRAFTS_KEY, JSON.stringify(drafts));
+  } catch (err) {
+    console.warn('[useCustomAgents] failed to remove draft from localStorage', err);
+  }
+}
+
 export const useCustomAgents = (userAddress?: string): UseCustomAgentsReturn => {
   const [agents, setAgents] = useState<CustomAgentDefinition[]>([]);
   const [swarms, setSwarms] = useState<CustomSwarmDefinition[]>([]);
@@ -54,14 +103,21 @@ export const useCustomAgents = (userAddress?: string): UseCustomAgentsReturn => 
     setIsLoading(true);
     setError(null);
     try {
+      const localDrafts = loadLocalDrafts();
       const [agentsRes, swarmsRes] = await Promise.all([
         apiClient.getCustomAgents(userAddress).catch(() => ({ success: true, count: 0, data: [] })),
         apiClient.getCustomSwarms(userAddress).catch(() => ({ success: true, count: 0, data: [] })),
       ]);
 
-      if (agentsRes?.data) {
-        setAgents(agentsRes.data);
+      const remoteAgents = agentsRes?.data || [];
+      const combined = [...localDrafts];
+      for (const remote of remoteAgents) {
+        if (!combined.some((a) => a.id === remote.id)) {
+          combined.push(remote);
+        }
       }
+
+      setAgents(combined);
       if (swarmsRes?.data) {
         setSwarms(swarmsRes.data);
       }
@@ -76,6 +132,57 @@ export const useCustomAgents = (userAddress?: string): UseCustomAgentsReturn => 
     fetchAll();
   }, [fetchAll]);
 
+  const saveLocalDraft = useCallback(
+    (payload: {
+      id?: string;
+      name: string;
+      description?: string;
+      symbol: string;
+      timeframe: string;
+      strategyType: string;
+      rules: CustomAgentRules;
+      color?: string;
+      icon?: string;
+      allocatedAllowance?: number;
+    }): CustomAgentDefinition => {
+      const draftId = payload.id || `local-draft-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
+      const now = new Date().toISOString();
+      const draftAgent: CustomAgentDefinition = {
+        id: draftId,
+        userAddress: userAddress || 'offline',
+        name: payload.name,
+        description: payload.description || '',
+        symbol: payload.symbol,
+        timeframe: (payload.timeframe as any) || '5m',
+        strategyType: (payload.strategyType as any) || 'CUSTOM',
+        rules: payload.rules,
+        color: payload.color || '#2dd4bf',
+        icon: payload.icon || 'BoltIcon',
+        isActive: true,
+        isDeployed: false,
+        allocatedAllowance: payload.allocatedAllowance || 100,
+        spentAllowance: 0,
+        pnl: 0,
+        winRate: 0,
+        tradesCount: 0,
+        createdAt: now,
+        updatedAt: now,
+      };
+      saveLocalDraftToStorage(draftAgent);
+      setAgents((prev) => {
+        const idx = prev.findIndex((a) => a.id === draftId);
+        if (idx >= 0) {
+          const next = [...prev];
+          next[idx] = draftAgent;
+          return next;
+        }
+        return [draftAgent, ...prev];
+      });
+      return draftAgent;
+    },
+    [userAddress]
+  );
+
   const createAgent = useCallback(
     async (payload: {
       name: string;
@@ -89,13 +196,17 @@ export const useCustomAgents = (userAddress?: string): UseCustomAgentsReturn => 
       isDeployed?: boolean;
       allocatedAllowance?: number;
     }): Promise<CustomAgentDefinition | null> => {
-      const targetAddress = userAddress || '0x0000000000000000000000000000000000000001';
+      // If user is not connected, save to local storage as offline draft
+      if (!userAddress || userAddress === '0x0000000000000000000000000000000000000001') {
+        const localDraft = saveLocalDraft(payload);
+        return localDraft;
+      }
       setIsSaving(true);
       setError(null);
       try {
         const res = await apiClient.createCustomAgent({
           ...payload,
-          userAddress: targetAddress,
+          userAddress,
         });
         if (res?.success && res.data) {
           setAgents((prev) => [res.data, ...prev]);
@@ -109,11 +220,44 @@ export const useCustomAgents = (userAddress?: string): UseCustomAgentsReturn => 
         setIsSaving(false);
       }
     },
-    [userAddress]
+    [userAddress, saveLocalDraft]
   );
 
   const updateAgent = useCallback(
     async (id: string, payload: Partial<CustomAgentDefinition>): Promise<CustomAgentDefinition | null> => {
+      if (id.startsWith('local-draft-') || !userAddress || userAddress === '0x0000000000000000000000000000000000000001') {
+        const existing = agents.find((a) => a.id === id);
+        const defaultRules: CustomAgentRules = {
+          operator: 'AND',
+          conditions: [],
+          action: { direction: 'CALL', durationSec: 60, stakeType: 'FIXED', stakeAmount: 10 },
+          risk: { maxConsecutiveLosses: 2, cooldownMinutes: 3, minPoolPayoutPct: 78 },
+        };
+        const updated: CustomAgentDefinition = {
+          id,
+          userAddress: userAddress || 'offline',
+          name: payload.name || existing?.name || 'Draft Strategy',
+          description: payload.description ?? existing?.description ?? '',
+          symbol: payload.symbol || existing?.symbol || 'BTC/USD',
+          timeframe: (payload.timeframe || existing?.timeframe || '5m') as any,
+          strategyType: (payload.strategyType || existing?.strategyType || 'CUSTOM') as any,
+          rules: payload.rules || existing?.rules || defaultRules,
+          color: payload.color || existing?.color || '#2dd4bf',
+          icon: payload.icon || existing?.icon || 'BoltIcon',
+          isActive: payload.isActive ?? existing?.isActive ?? true,
+          isDeployed: payload.isDeployed ?? existing?.isDeployed ?? false,
+          allocatedAllowance: payload.allocatedAllowance ?? existing?.allocatedAllowance ?? 100,
+          spentAllowance: payload.spentAllowance ?? existing?.spentAllowance ?? 0,
+          pnl: payload.pnl ?? existing?.pnl ?? 0,
+          winRate: payload.winRate ?? existing?.winRate ?? 0,
+          tradesCount: payload.tradesCount ?? existing?.tradesCount ?? 0,
+          createdAt: existing?.createdAt || new Date().toISOString(),
+          updatedAt: new Date().toISOString(),
+        };
+        saveLocalDraftToStorage(updated);
+        setAgents((prev) => prev.map((a) => (a.id === id ? updated : a)));
+        return updated;
+      }
       setIsSaving(true);
       setError(null);
       try {
@@ -133,14 +277,18 @@ export const useCustomAgents = (userAddress?: string): UseCustomAgentsReturn => 
         setIsSaving(false);
       }
     },
-    [userAddress]
+    [userAddress, agents]
   );
 
   const deleteAgent = useCallback(
     async (id: string): Promise<boolean> => {
-      const targetAddress = userAddress || '';
+      if (id.startsWith('local-draft-') || !userAddress || userAddress === '0x0000000000000000000000000000000000000001') {
+        removeLocalDraftFromStorage(id);
+        setAgents((prev) => prev.filter((a) => a.id !== id));
+        return true;
+      }
       try {
-        await apiClient.deleteCustomAgent(id, targetAddress);
+        await apiClient.deleteCustomAgent(id, userAddress);
         setAgents((prev) => prev.filter((a) => a.id !== id));
         return true;
       } catch {
@@ -152,28 +300,65 @@ export const useCustomAgents = (userAddress?: string): UseCustomAgentsReturn => 
 
   const deployAgent = useCallback(
     async (id: string, allowance?: number): Promise<boolean> => {
-      const targetAddress = userAddress || '0x0000000000000000000000000000000000000001';
+      if (!userAddress || userAddress === '0x0000000000000000000000000000000000000001') {
+        setError('Wallet not connected. Connect your Web3 wallet to deploy autonomous agents.');
+        return false;
+      }
+      let targetId = id;
+      if (id.startsWith('local-draft-')) {
+        const draft = agents.find((a) => a.id === id);
+        if (draft) {
+          try {
+            const res = await apiClient.createCustomAgent({
+              name: draft.name,
+              description: draft.description,
+              symbol: draft.symbol,
+              timeframe: draft.timeframe,
+              strategyType: draft.strategyType,
+              rules: draft.rules,
+              color: draft.color,
+              icon: draft.icon,
+              isDeployed: true,
+              allocatedAllowance: allowance || draft.allocatedAllowance || 100,
+              userAddress,
+            });
+            if (res?.success && res.data) {
+              removeLocalDraftFromStorage(id);
+              setAgents((prev) => [res.data, ...prev.filter((a) => a.id !== id)]);
+              return true;
+            }
+          } catch (err: any) {
+            setError(err.message || 'Failed to deploy local strategy');
+            return false;
+          }
+        }
+      }
+
       try {
-        const res = await apiClient.deployCustomAgent(id, targetAddress, allowance);
+        const res = await apiClient.deployCustomAgent(targetId, userAddress, allowance);
         if (res?.success && res.data) {
           setAgents((prev) =>
-            prev.map((a) => (a.id === id ? res.data : a))
+            prev.map((a) => (a.id === targetId ? res.data : a))
           );
           return true;
         }
         return false;
-      } catch {
+      } catch (err: any) {
+        setError(err.message || 'Failed to deploy agent');
         return false;
       }
     },
-    [userAddress]
+    [userAddress, agents]
   );
 
   const pauseAgent = useCallback(
     async (id: string): Promise<boolean> => {
-      const targetAddress = userAddress || '0x0000000000000000000000000000000000000001';
+      if (!userAddress || userAddress === '0x0000000000000000000000000000000000000001') {
+        setError('Wallet not connected.');
+        return false;
+      }
       try {
-        const res = await apiClient.pauseCustomAgent(id, targetAddress);
+        const res = await apiClient.pauseCustomAgent(id, userAddress);
         if (res?.success && res.data) {
           setAgents((prev) =>
             prev.map((a) => (a.id === id ? res.data : a))
@@ -190,9 +375,12 @@ export const useCustomAgents = (userAddress?: string): UseCustomAgentsReturn => 
 
   const setAgentAllowance = useCallback(
     async (id: string, allowance: number): Promise<boolean> => {
-      const targetAddress = userAddress || '0x0000000000000000000000000000000000000001';
+      if (!userAddress || userAddress === '0x0000000000000000000000000000000000000001') {
+        setError('Wallet not connected.');
+        return false;
+      }
       try {
-        const res = await apiClient.setCustomAgentAllowance(id, targetAddress, allowance);
+        const res = await apiClient.setCustomAgentAllowance(id, userAddress, allowance);
         if (res?.success && res.data) {
           setAgents((prev) =>
             prev.map((a) => (a.id === id ? res.data : a))
@@ -235,13 +423,16 @@ export const useCustomAgents = (userAddress?: string): UseCustomAgentsReturn => 
       consensusRule: string;
       confidenceThreshold?: number;
     }): Promise<CustomSwarmDefinition | null> => {
-      const targetAddress = userAddress || '0x0000000000000000000000000000000000000001';
+      if (!userAddress || userAddress === '0x0000000000000000000000000000000000000001') {
+        setError('Wallet not connected. Connect your Web3 wallet to create custom swarms.');
+        return null;
+      }
       setIsSaving(true);
       setError(null);
       try {
         const res = await apiClient.createCustomSwarm({
           ...payload,
-          userAddress: targetAddress,
+          userAddress,
         });
         if (res?.success && res.data) {
           setSwarms((prev) => [res.data, ...prev]);
@@ -260,9 +451,11 @@ export const useCustomAgents = (userAddress?: string): UseCustomAgentsReturn => 
 
   const deleteSwarm = useCallback(
     async (id: string): Promise<boolean> => {
-      const targetAddress = userAddress || '';
+      if (!userAddress || userAddress === '0x0000000000000000000000000000000000000001') {
+        return false;
+      }
       try {
-        await apiClient.deleteCustomSwarm(id, targetAddress);
+        await apiClient.deleteCustomSwarm(id, userAddress);
         setSwarms((prev) => prev.filter((s) => s.id !== id));
         return true;
       } catch {
@@ -280,6 +473,7 @@ export const useCustomAgents = (userAddress?: string): UseCustomAgentsReturn => 
     isGenerating,
     error,
     refresh: fetchAll,
+    saveLocalDraft,
     createAgent,
     updateAgent,
     deleteAgent,

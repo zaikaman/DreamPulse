@@ -622,6 +622,23 @@ describe('Express REST API Endpoints', () => {
     expect(genRes.status).toBe(200);
     expect(genRes.body.success).toBe(true);
 
+    // Reject dummy address 0x000...001 on POST /agents/custom
+    const rejectDummyRes = await request(app).post('/api/v1/agents/custom').send({
+      userAddress: '0x0000000000000000000000000000000000000001',
+      name: 'Dummy Fail Strategy',
+      rules: { entry: { condition: 'RSI_OVERSOLD' } },
+    });
+    expect(rejectDummyRes.status).toBe(400);
+    expect(rejectDummyRes.body.success).toBe(false);
+    expect(rejectDummyRes.body.error).toContain('Valid user wallet address is required');
+
+    // Reject dummy address on deploy
+    const rejectDeployRes = await request(app).post(`/api/v1/agents/custom/${agentId}/deploy`).send({
+      userAddress: '0x0000000000000000000000000000000000000001',
+    });
+    expect(rejectDeployRes.status).toBe(400);
+    expect(rejectDeployRes.body.success).toBe(false);
+
     // DELETE /agents/custom/:id
     const delRes = await request(app).delete(`/api/v1/agents/custom/${agentId}?userAddress=${testUser}`);
     expect(delRes.status).toBe(200);
