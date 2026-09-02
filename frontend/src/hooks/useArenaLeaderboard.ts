@@ -218,10 +218,10 @@ export function useArenaLeaderboard(userAddress?: string | null) {
     enabled: boolean,
     maxTradeSize?: number,
     dailyVolumeCap?: number,
-  ) => {
+  ): Promise<boolean> => {
     if (!userAddress) {
       setError('Please connect your wallet to enable social copy-trading');
-      return;
+      return false;
     }
 
     setCopyTradingTarget(targetAddress);
@@ -259,9 +259,12 @@ export function useArenaLeaderboard(userAddress?: string | null) {
           }
           return filtered;
         });
+        return true;
       }
+      return false;
     } catch (err: any) {
       setError(err.message || 'Failed to update copy-trading settings');
+      return false;
     } finally {
       setIsCopyTradeLoading(false);
       setCopyTradingTarget(null);

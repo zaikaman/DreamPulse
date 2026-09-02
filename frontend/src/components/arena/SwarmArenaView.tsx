@@ -30,6 +30,7 @@ import { Spinner } from '../ui/Spinner.js';
 import { Badge } from '../ui/badge.js';
 import { Button } from '../ui/button.js';
 import { cn } from '../../lib/utils.js';
+import { soundEngine } from '../../services/soundEngine.js';
 
 export interface SwarmArenaViewProps {
   wallet?: WalletState;
@@ -178,7 +179,29 @@ export const SwarmArenaView: React.FC<SwarmArenaViewProps> = ({
       if (onConnectWallet) onConnectWallet();
       return;
     }
-    await cloneStrategy(agent.id, wallet.address || undefined);
+    const cloned = await cloneStrategy(agent.id, wallet.address || undefined);
+    if (cloned) {
+      soundEngine.playTradeFill();
+      soundEngine.playCloneSuccess();
+    }
+  };
+
+  const handleToggleCopyTrading = async (
+    targetAddress: string,
+    enabled: boolean,
+    maxTradeSize?: number,
+    dailyVolumeCap?: number
+  ) => {
+    const success = await toggleSocialCopyTrading(
+      targetAddress,
+      enabled,
+      maxTradeSize,
+      dailyVolumeCap
+    );
+    if (success !== false) {
+      soundEngine.playTradeFill();
+      soundEngine.playCopyTradeToggle(enabled);
+    }
   };
 
   const handleBacktestAgentClick = (agent: ArenaAgentEntry) => {
@@ -642,11 +665,40 @@ export const SwarmArenaView: React.FC<SwarmArenaViewProps> = ({
                 </div>
               </div>
               <div className="flex items-center gap-1.5 mt-3 pt-2.5 border-t border-border/40">
+                {wallet?.address && wallet.address.toLowerCase() !== traders[0]?.userAddress.toLowerCase() && (
+                  <Button
+                    variant={isForecasterMirrored(traders[0]?.userAddress) ? "outline" : "default"}
+                    size="sm"
+                    onClick={() => handleOpenForecasterRiskModal(traders[0])}
+                    disabled={isCopyTradeLoading && copyTradingTarget?.toLowerCase() === traders[0]?.userAddress.toLowerCase()}
+                    className={cn(
+                      "flex-1 h-7 text-xs font-medium gap-1",
+                      isForecasterMirrored(traders[0]?.userAddress)
+                        ? "border-[#00e676]/40 text-[#00e676] hover:bg-[#00e676]/10"
+                        : "bg-[#00e676] text-black hover:bg-[#00c853] font-semibold"
+                    )}
+                  >
+                    {isForecasterMirrored(traders[0]?.userAddress) ? (
+                      <>
+                        <CheckCircleIcon className="w-3 h-3 text-[#00e676]" />
+                        <span>Mirroring</span>
+                      </>
+                    ) : (
+                      <>
+                        <UserPlusIcon className="w-3 h-3" />
+                        <span>Mirror Forecaster</span>
+                      </>
+                    )}
+                  </Button>
+                )}
                 <Button
                   variant="outline"
                   size="sm"
                   onClick={() => handleOpenTraderProfile(traders[0]?.userAddress)}
-                  className="flex-1 h-7 text-xs font-medium text-foreground hover:bg-secondary/60 gap-1"
+                  className={cn(
+                    "h-7 text-xs font-medium text-foreground hover:bg-secondary/60 gap-1",
+                    (!wallet?.address || wallet.address.toLowerCase() === traders[0]?.userAddress.toLowerCase()) ? "flex-1" : ""
+                  )}
                 >
                   <span>Profile</span>
                   <ArrowTopRightOnSquareIcon className="w-3 h-3" />
@@ -1100,7 +1152,7 @@ export const SwarmArenaView: React.FC<SwarmArenaViewProps> = ({
         isCurrentlyMirroring={selectedTraderForRisk ? isForecasterMirrored(selectedTraderForRisk.userAddress) : false}
         isLoading={isCopyTradeLoading}
         onConfirm={async (params) => {
-          await toggleSocialCopyTrading(
+          await handleToggleCopyTrading(
             params.targetAddress,
             true,
             params.maxTradeSize,
@@ -1108,7 +1160,7 @@ export const SwarmArenaView: React.FC<SwarmArenaViewProps> = ({
           );
         }}
         onStopMirroring={async (targetAddress) => {
-          await toggleSocialCopyTrading(targetAddress, false);
+          await handleToggleCopyTrading(targetAddress, false);
         }}
         hasActiveSession={Boolean(wallet?.isConnected)}
         onOpenSessionModal={_onOpenSessionModal}
