@@ -409,7 +409,7 @@ Tx: ${pos.txHash || 'N/A'}`;
           ) : activeTab === 'orders' ? (
             restingOrders.length === 0 ? (
               <div className="flex flex-col items-center justify-center h-full text-muted-foreground py-6">
-                <span>No resting limit orders on the CLOB. Market IOC orders fill immediately upon placement.</span>
+                <span>No resting limit orders on the CLOB. Swarm and taker limit orders match against resting depth upon placement.</span>
               </div>
             ) : (
               <table className="w-full min-w-[540px] text-left">

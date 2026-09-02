@@ -10,14 +10,14 @@ import {
 import { marketService } from '../src/services/market-service.js';
 import { sessionService } from '../src/services/session-service.js';
 import { operatorAccount } from '../src/config/somnia.js';
-import type { Market, SessionGrant, SessionRecord, CustomAgentDefinition } from '../src/types/index.js';
+import type { Market, SessionGrant, CustomAgentDefinition } from '../src/types/index.js';
 import type { IAgentContext } from '../src/agents/base-agent.js';
 import type { HistoricalCandle } from '../src/services/backtest-service.js';
 
 describe('SwarmRunner, CustomAgentEvaluator & Agent System Suite', () => {
   const userAddress = operatorAccount.address;
 
-  const mockSession: SessionRecord = {
+  const mockSession: SessionGrant = {
     id: 'sess-eval-1234',
     userAddress,
     operatorAddress: operatorAccount.address,
@@ -25,12 +25,8 @@ describe('SwarmRunner, CustomAgentEvaluator & Agent System Suite', () => {
     maxTradeSize: 50,
     dailyVolumeCap: 500,
     spentToday: 0,
-    lastSpendResetTimestamp: Date.now(),
-    nonce: 0,
     expiresAt: new Date(Date.now() + 3600000).toISOString(),
     isActive: true,
-    createdAt: new Date().toISOString(),
-    updatedAt: new Date().toISOString(),
   };
 
   const mockMarket: Market = {
@@ -47,7 +43,6 @@ describe('SwarmRunner, CustomAgentEvaluator & Agent System Suite', () => {
     bestAskNo: 0.52,
     fairValueYes: 0.55,
     edgePercentage: 0.05,
-    tradeCount: 45,
   };
 
   beforeEach(() => {
@@ -133,33 +128,38 @@ describe('SwarmRunner, CustomAgentEvaluator & Agent System Suite', () => {
       description: 'Trades RSI momentum with risk guardrails',
       symbol: 'BTC/USD',
       timeframe: '5m',
+      strategyType: 'MOMENTUM',
+      color: '#10b981',
+      icon: 'SparklesIcon',
       isActive: true,
       isDeployed: true,
       allocatedAllowance: 100,
       spentAllowance: 0,
       rules: {
-        entryConditions: [
+        operator: 'AND',
+        conditions: [
           {
+            id: 'cond-1',
             indicator: 'RSI',
             operator: 'GREATER_THAN',
             value: 60,
-            timeframe: '5m',
           },
         ],
         action: {
-          direction: 'BUY',
-          outcome: 'YES',
-          orderType: 'IOC',
+          direction: 'CALL',
+          durationSec: 300,
+          stakeType: 'FIXED',
           stakeAmount: 10,
         },
-      } as any,
-      stats: {
-        totalTrades: 5,
-        winCount: 4,
-        lossCount: 1,
-        winRate: 80,
-        totalPnl: 25.0,
+        risk: {
+          maxConsecutiveLosses: 2,
+          cooldownMinutes: 3,
+          minPoolPayoutPct: 75,
+        },
       },
+      tradesCount: 5,
+      winRate: 80,
+      pnl: 25.0,
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString(),
     };

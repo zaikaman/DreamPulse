@@ -39,7 +39,7 @@ export class VoltSniperAgent extends BaseAgent {
 
   /**
    * Evaluates spot velocity vs order book quote latency.
-   * If spot price jumped or dumped faster than resting quotes adjusted, fires IOC taker order with VWAP depth awareness.
+   * If spot price jumped or dumped faster than resting quotes adjusted, fires limit taker order with VWAP depth awareness.
    */
   public async evaluate(context: IAgentContext): Promise<IAgentDecision> {
     if (!this.isEnabled) {
@@ -173,7 +173,7 @@ export class VoltSniperAgent extends BaseAgent {
           );
           const confidence = Math.min(0.99, Number((0.82 + netEdge * 2.5).toFixed(2)));
 
-          const rationale = `[SPOT JUMP] ${market.symbol} surged +${(drift * 100).toFixed(2)}% (5m: ${(spotTicker.change5m * 100).toFixed(2)}%, σ=${(fair.volatilityUsed * 100).toFixed(1)}%). Depth VWAP YES ask at ${snappedPrice.toFixed(2)} is lagging fair value ${fair.fairValueYes.toFixed(2)} (Net Edge: +${(netEdge * 100).toFixed(1)}%, ROI/Risk: +${(roiEdge * 100).toFixed(1)}%). Firing IOC taker buy (${lotSize} lots).`;
+          const rationale = `[SPOT JUMP] ${market.symbol} surged +${(drift * 100).toFixed(2)}% (5m: ${(spotTicker.change5m * 100).toFixed(2)}%, σ=${(fair.volatilityUsed * 100).toFixed(1)}%). Depth VWAP YES ask at ${snappedPrice.toFixed(2)} is lagging fair value ${fair.fairValueYes.toFixed(2)} (Net Edge: +${(netEdge * 100).toFixed(1)}%, ROI/Risk: +${(roiEdge * 100).toFixed(1)}%). Firing limit taker buy (${lotSize} lots).`;
 
           const decision: IAgentDecision = {
             agentType: 'Volt',
@@ -282,7 +282,7 @@ export class VoltSniperAgent extends BaseAgent {
           );
           const confidence = Math.min(0.99, Number((0.82 + netEdge * 2.5).toFixed(2)));
 
-          const rationale = `[SPOT DUMP] ${market.symbol} dropped ${(drift * 100).toFixed(2)}% (5m: ${(spotTicker.change5m * 100).toFixed(2)}%, σ=${(fair.volatilityUsed * 100).toFixed(1)}%). Depth VWAP NO ask at ${snappedPrice.toFixed(2)} is lagging fair value ${fair.fairValueNo.toFixed(2)} (Net Edge: +${(netEdge * 100).toFixed(1)}%, ROI/Risk: +${(roiEdge * 100).toFixed(1)}%). Firing IOC taker buy (${lotSize} lots).`;
+          const rationale = `[SPOT DUMP] ${market.symbol} dropped ${(drift * 100).toFixed(2)}% (5m: ${(spotTicker.change5m * 100).toFixed(2)}%, σ=${(fair.volatilityUsed * 100).toFixed(1)}%). Depth VWAP NO ask at ${snappedPrice.toFixed(2)} is lagging fair value ${fair.fairValueNo.toFixed(2)} (Net Edge: +${(netEdge * 100).toFixed(1)}%, ROI/Risk: +${(roiEdge * 100).toFixed(1)}%). Firing limit taker buy (${lotSize} lots).`;
 
           const decision: IAgentDecision = {
             agentType: 'Volt',

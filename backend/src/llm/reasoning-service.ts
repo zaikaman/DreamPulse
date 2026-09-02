@@ -100,7 +100,7 @@ Explain your execution decision in JSON format with keys "confidence" (float 0.0
 function fallbackThought(ctx: ReasoningContext): string {
   switch (ctx.agentType) {
     case 'Volt':
-      return `Detected ${(Math.abs(ctx.driftPercentage || 0) * 100).toFixed(2)}% spot drift. Resting quote priced at ${ctx.bestAskYes.toFixed(2)} vs fair value ${ctx.fairValueYes.toFixed(2)}. Firing immediate IOC taker order.`;
+      return `Detected ${(Math.abs(ctx.driftPercentage || 0) * 100).toFixed(2)}% spot drift. Resting quote priced at ${ctx.bestAskYes.toFixed(2)} vs fair value ${ctx.fairValueYes.toFixed(2)}. Firing immediate limit taker order.`;
     case 'Oracle':
       return `Mathematical mispricing detected: Implied probability ${(ctx.impliedProbYes * 100).toFixed(1)}% deviates by ${(ctx.edgePercentage * 100).toFixed(1)}% from Black-Scholes Φ(z) ${(ctx.fairValueYes * 100).toFixed(1)}%.`;
     case 'Titan':

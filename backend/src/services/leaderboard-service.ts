@@ -108,7 +108,7 @@ const PROTOCOL_SWARM_ARCHETYPES: Array<{
   {
     id: 'archetype-volt-sniper',
     name: 'Volt High-Speed Latency Sniper',
-    description: 'Autonomous microsecond latency sniper capitalizing on spot-to-CLOB drift imbalances with aggressive IOC taker orders.',
+    description: 'Autonomous microsecond latency sniper capitalizing on spot-to-CLOB drift imbalances with aggressive LIMIT taker orders.',
     creatorAddress: SOMNIA_ADDRESSES.operatorAccount || operatorAccount.address,
     creatorName: 'DreamPulse Core Team',
     isProtocolArchetype: true,
@@ -119,8 +119,8 @@ const PROTOCOL_SWARM_ARCHETYPES: Array<{
     color: '#f59e0b',
     icon: 'BoltIcon',
     allocatedAllowance: 500,
-    tags: ['Latency Arb', 'Spot Drift', 'IOC Taker', 'High Frequency'],
-    rulesSummary: ['Price Drift > 0.20%', 'Min Edge >= 3.0%', 'IOC Execution (5 lots)'],
+    tags: ['Latency Arb', 'Spot Drift', 'Limit Taker', 'High Frequency'],
+    rulesSummary: ['Price Drift > 0.20%', 'Min Edge >= 3.0%', 'Limit Execution (5 lots)'],
     createdAt: '2026-08-20T00:00:00.000Z',
   },
   {

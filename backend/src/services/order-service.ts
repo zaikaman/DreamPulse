@@ -1247,7 +1247,7 @@ export class OrderService {
       source,
       outcome,
       direction,
-      orderType: decision.action === 'LIMIT_QUOTE' ? 'LIMIT' : 'IOC',
+      orderType: 'LIMIT',
       price: quantizedPrice,
       lotSize: actualLotSize,
       totalCost: actualTotalCost,
