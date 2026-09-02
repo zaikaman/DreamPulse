@@ -10,6 +10,7 @@ import {
   SparklesIcon,
   ShieldCheckIcon,
   ShieldExclamationIcon,
+  ArrowPathIcon,
 } from '@heroicons/react/24/outline';
 import type { Market, AgentThoughtLog, OrderExecution, SessionGrant } from '../../types/index.js';
 import type { MarketTickData } from '../../hooks/useTelemetry.js';
@@ -687,7 +688,9 @@ export const TraderCockpitTicket: React.FC<TraderCockpitTicketProps> = ({
         </div>
         <div className="flex items-center justify-between text-muted-foreground">
           <span>Market expiry</span>
-          <span className="text-foreground">{formattedExpiry}</span>
+          <span className={market.status === 'Resolving' ? "text-[#ffb700] font-bold" : "text-foreground"}>
+            {market.status === 'Resolving' ? 'Resolving Outcome...' : formattedExpiry}
+          </span>
         </div>
         <div className="flex items-center justify-between text-muted-foreground pt-1 border-t border-border/20">
           <span>Settles against</span>
@@ -764,6 +767,15 @@ export const TraderCockpitTicket: React.FC<TraderCockpitTicketProps> = ({
             className="w-full py-3 rounded-xl bg-brand-cyan text-background font-bold text-xs uppercase tracking-wider hover:opacity-90 transition-opacity cursor-pointer flex items-center justify-center gap-2"
           >
             Connect Wallet
+          </button>
+        ) : market.status === 'Resolving' ? (
+          <button
+            type="button"
+            disabled={true}
+            className="w-full py-3 rounded-xl font-bold text-xs uppercase tracking-wider bg-[#ffb700]/10 text-[#ffb700] border border-[#ffb700]/40 flex items-center justify-center gap-2 cursor-not-allowed shadow-[0_0_12px_rgba(255,183,0,0.15)]"
+          >
+            <ArrowPathIcon className="w-4 h-4 text-[#ffb700] animate-spin" />
+            <span>Round Ended — Resolving Outcome...</span>
           </button>
         ) : isTradingLocked ? (
           <button

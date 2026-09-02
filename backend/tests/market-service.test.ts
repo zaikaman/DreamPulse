@@ -213,6 +213,46 @@ describe('MarketService Comprehensive Unit Suite', () => {
       winningOutcome: 'YES',
     });
   });
+
+  it('keeps Resolving markets active in this.markets and depthBooks until Finalized', () => {
+    const resolvingMarketId = 'market-btc-resolving-1';
+    const resolvingMarket: Market = {
+      ...mockMarket,
+      id: resolvingMarketId,
+      symbol: 'BTC/USD',
+      status: 'Resolving',
+      settlementPrice: 96450,
+      strikePrice: 96400,
+      closeTimestamp: new Date(Date.now() - 10000).toISOString(),
+      resolutionTimestamp: new Date(Date.now() + 50000).toISOString(),
+    };
+
+    (service as any).markets.set(resolvingMarketId, resolvingMarket);
+    (service as any).buildDepthBookFromClob(resolvingMarket);
+
+    // Active markets should return both Open and Resolving markets
+    const active = service.getActiveMarkets();
+    expect(active.some((m) => m.id === resolvingMarketId)).toBe(true);
+
+    // Filter by Resolving status explicitly
+    const resolvingOnly = service.getActiveMarkets({ status: 'Resolving' });
+    expect(resolvingOnly.length).toBe(1);
+    expect(resolvingOnly[0].id).toBe(resolvingMarketId);
+    expect(resolvingOnly[0].settlementPrice).toBe(96450);
+
+    // Market and depth should be retained during resolving
+    expect(service.getMarketById(resolvingMarketId)).toBeDefined();
+    expect(service.getMarketDepth(resolvingMarketId)).toBeDefined();
+
+    // When resolution period expires, refreshMarketTimersAndFairValues finalizes and archives it
+    resolvingMarket.resolutionTimestamp = new Date(Date.now() - 1000).toISOString();
+    service.refreshMarketTimersAndFairValues();
+
+    // Now it should be pruned from active markets and present in historical markets
+    const postFinalizeActive = service.getActiveMarkets();
+    expect(postFinalizeActive.some((m) => m.id === resolvingMarketId)).toBe(false);
+    expect(service.getHistoricalMarkets().some((m) => m.id === resolvingMarketId)).toBe(true);
+  });
 });
 
 

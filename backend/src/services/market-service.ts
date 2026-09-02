@@ -302,7 +302,7 @@ export class MarketService extends EventEmitter {
           base: symbol.split('/')[0] || symbol,
           quote: 'USDC',
           settle: 'USDC',
-          active: status === 'Open',
+          active: status === 'Open' || status === 'Resolving',
           contract: false,
           precision: {
             price: 6,
@@ -370,6 +370,19 @@ export class MarketService extends EventEmitter {
         const bestBidNo = bestAskYes > 0 ? Number((1.0 - bestAskYes).toFixed(2)) : 0;
         const bestAskNo = bestBidYes > 0 ? Number((1.0 - bestBidYes).toFixed(2)) : 0;
 
+        const frozenSpot = existingMarket?.settlementPrice || (status === 'Resolving' ? spot : undefined);
+        const settlementPrice = (status === 'Finalized' || status === 'Resolving') && (m as any).settlementPrice
+          ? Number((m as any).settlementPrice)
+          : frozenSpot;
+
+        const isAlreadyResolving = existingMarket?.status === 'Resolving' || status === 'Resolving';
+        const fairValueYes = (isAlreadyResolving && existingMarket?.fairValueYes !== undefined)
+          ? existingMarket.fairValueYes
+          : evalResult.fairValueYes;
+        const impliedProbYes = (isAlreadyResolving && existingMarket?.impliedProbYes !== undefined)
+          ? existingMarket.impliedProbYes
+          : evalResult.impliedProbYes;
+
         const marketObj: Market = {
           id: marketId,
           symbol,
@@ -379,14 +392,14 @@ export class MarketService extends EventEmitter {
           closeTimestamp: new Date(closeTimeMs).toISOString(),
           resolutionTimestamp: new Date(closeTimeMs + 60000).toISOString(),
           status,
-          settlementPrice: status === 'Finalized' && (m as any).settlementPrice ? Number((m as any).settlementPrice) : undefined,
+          settlementPrice,
           winningOutcome,
           bestBidYes: Number(bestBidYes.toFixed(2)),
           bestAskYes: Number(bestAskYes.toFixed(2)),
           bestBidNo,
           bestAskNo,
-          impliedProbYes: evalResult.impliedProbYes,
-          fairValueYes: evalResult.fairValueYes,
+          impliedProbYes,
+          fairValueYes,
           edgePercentage: hasRealClobDepth ? evalResult.edgePercentage : 0,
           convictionState: evalResult.convictionState,
           recommendedAction: evalResult.recommendedAction,
@@ -408,7 +421,7 @@ export class MarketService extends EventEmitter {
           isSeedDepth: false,
         };
 
-        if (status === 'Open') {
+        if (status === 'Open' || status === 'Resolving') {
           this.markets.set(marketId, marketObj);
           this.buildDepthBookFromClob(marketObj, depthLevels);
         } else {
@@ -424,13 +437,24 @@ export class MarketService extends EventEmitter {
           if (!discoveredIds.has(id)) {
             const stale = this.markets.get(id);
             if (stale) {
-              const closeMs = new Date(stale.closeTimestamp).getTime();
-              if (Date.now() >= closeMs && stale.status !== 'Finalized') {
+              const resMs = stale.resolutionTimestamp
+                ? new Date(stale.resolutionTimestamp).getTime()
+                : new Date(stale.closeTimestamp).getTime() + 60000;
+              const nowMs = Date.now();
+              // If within resolution window (~60s after close), keep in this.markets with Resolving status
+              if (nowMs < resMs && stale.status !== 'Finalized') {
                 stale.status = 'Resolving';
+                if (!stale.settlementPrice) {
+                  const ticker = this.spotPrices.get(stale.symbol);
+                  stale.settlementPrice = ticker?.price || stale.strikePrice;
+                }
+                this.markets.set(id, stale);
+              } else {
+                stale.status = 'Finalized';
+                this.archiveHistoricalMarket(stale);
+                this.markets.delete(id);
+                this.depthBooks.delete(id);
               }
-              this.archiveHistoricalMarket(stale);
-              this.markets.delete(id);
-              this.depthBooks.delete(id);
             }
           }
         }
@@ -571,11 +595,32 @@ export class MarketService extends EventEmitter {
       const closeTime = new Date(market.closeTimestamp).getTime();
       const timeLeftSeconds = Math.max(0, Math.floor((closeTime - now) / 1000));
 
+      const resTime = market.resolutionTimestamp
+        ? new Date(market.resolutionTimestamp).getTime()
+        : closeTime + 60000;
+
       if (timeLeftSeconds <= 0 && market.status === 'Open') {
         market.status = 'Resolving';
+        if (!market.settlementPrice) {
+          const ticker = this.spotPrices.get(market.symbol);
+          market.settlementPrice = ticker?.price || market.strikePrice;
+        }
         void import('./order-service.js').then((mod) => {
           void mod.orderService.syncResolvedOrdersPnLAsync({ force: true });
         }).catch(() => {});
+      } else if (market.status === 'Resolving') {
+        // If resolution window expired without on-chain finalize event, transition to Finalized and archive
+        if (now >= resTime) {
+          market.status = 'Finalized';
+          market.winningOutcome = market.winningOutcome || (
+            (market.settlementPrice ?? market.strikePrice) >= market.strikePrice ? 'YES' : 'NO'
+          );
+          this.archiveHistoricalMarket(market);
+          this.markets.delete(id);
+          this.depthBooks.delete(id);
+          this.persistFinalizedMarket(market).catch(() => {});
+          expiredCount++;
+        }
       } else if (market.status === 'Open') {
         const ticker = this.spotPrices.get(market.symbol);
         const spot = ticker?.price || market.strikePrice;
@@ -769,8 +814,8 @@ export class MarketService extends EventEmitter {
     } else if (filters?.status) {
       result = Array.from(this.markets.values()).filter((m) => m.status === filters.status);
     } else {
-      // By default return live active open markets
-      result = Array.from(this.markets.values()).filter((m) => m.status === 'Open');
+      // By default return live active open and resolving markets
+      result = Array.from(this.markets.values()).filter((m) => m.status === 'Open' || m.status === 'Resolving');
     }
 
     if (filters?.symbol) {

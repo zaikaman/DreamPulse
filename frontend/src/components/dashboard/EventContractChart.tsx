@@ -4,6 +4,7 @@ import {
   ArrowTrendingDownIcon,
   SparklesIcon,
   ClockIcon,
+  ArrowPathIcon,
 } from '@heroicons/react/24/outline';
 import type { Market, AgentThoughtLog } from '../../types/index.js';
 import type { MarketTickData } from '../../hooks/useTelemetry.js';
@@ -172,9 +173,9 @@ export const EventContractChart: React.FC<EventContractChartProps> = ({
     setPriceHistory(history);
   }, [market.id, market.symbol, timeRange]);
 
-  // Track live spot price changes
+  // Track live spot price changes (frozen if round ended / resolving)
   useEffect(() => {
-    if (!spot || isNaN(spot)) return;
+    if (!spot || isNaN(spot) || market.status === 'Resolving') return;
     setPriceHistory((prev) => {
       const now = Date.now();
       const last = prev[prev.length - 1];
@@ -627,19 +628,25 @@ export const EventContractChart: React.FC<EventContractChartProps> = ({
         <div
           className={cn(
             "absolute z-20 flex flex-col items-center gap-0.5 px-2.5 py-1 rounded-lg border shadow-lg backdrop-blur-md transition-all",
-            "bg-background/90 border-border/70 text-brand-cyan"
+            market.status === 'Resolving'
+              ? "bg-[#ffb700]/10 border-[#ffb700]/40 text-[#ffb700]"
+              : "bg-background/90 border-border/70 text-brand-cyan"
           )}
           style={{
             left: `${splitX + 14}px`,
             top: '8px',
           }}
         >
-          <div className={cn("flex items-center gap-1.5 text-xs font-mono font-bold", "text-brand-cyan")}>
-            <ClockIcon className="w-3.5 h-3.5 animate-pulse text-brand-cyan" />
-            <span>{formattedCountdown}</span>
+          <div className={cn("flex items-center gap-1.5 text-xs font-mono font-bold", market.status === 'Resolving' ? "text-[#ffb700]" : "text-brand-cyan")}>
+            {market.status === 'Resolving' ? (
+              <ArrowPathIcon className="w-3.5 h-3.5 animate-spin text-[#ffb700]" />
+            ) : (
+              <ClockIcon className="w-3.5 h-3.5 animate-pulse text-brand-cyan" />
+            )}
+            <span>{market.status === 'Resolving' ? 'Resolving Outcome...' : formattedCountdown}</span>
           </div>
           <div className="text-[8px] font-mono text-muted-foreground tracking-wider uppercase">
-            Time to Settlement
+            {market.status === 'Resolving' ? 'Oracle Settlement' : 'Time to Settlement'}
           </div>
         </div>
 

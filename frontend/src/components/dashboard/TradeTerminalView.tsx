@@ -5,6 +5,7 @@ import {
   EyeSlashIcon,
   SparklesIcon,
   BoltIcon,
+  ArrowPathIcon,
 } from '@heroicons/react/24/outline';
 import type { Market, SessionGrant, AgentThoughtLog } from '../../types/index.js';
 import type { MarketTickData, DepthUpdateData } from '../../hooks/useTelemetry.js';
@@ -62,8 +63,25 @@ export const TradeTerminalView: React.FC<TradeTerminalViewProps> = ({
 
   // Active contract telemetry — strict selection (no silent fallback to wrong contract)
   const market = selectedMarket ?? null;
+  const isResolving = market?.status === 'Resolving';
   const tick = market ? liveTicks.get(market.id) : undefined;
-  const spot = (market?.symbol && currentSpotPrices[market.symbol]) || tick?.spotPrice || market?.strikePrice || 0;
+
+  const [localFrozenSpot, setLocalFrozenSpot] = useState<number | null>(null);
+  const liveSpot = (market?.symbol && currentSpotPrices[market.symbol]) || tick?.spotPrice || market?.strikePrice || 0;
+
+  React.useEffect(() => {
+    if (isResolving) {
+      if (market?.settlementPrice) {
+        setLocalFrozenSpot(market.settlementPrice);
+      } else if (localFrozenSpot === null && liveSpot > 0) {
+        setLocalFrozenSpot(liveSpot);
+      }
+    } else {
+      setLocalFrozenSpot(null);
+    }
+  }, [isResolving, market?.settlementPrice, market?.id, liveSpot, localFrozenSpot]);
+
+  const spot = isResolving ? (market?.settlementPrice ?? localFrozenSpot ?? liveSpot) : liveSpot;
   const strike = market?.strikePrice || 0;
 
   const activeCustomForSymbol = useMemo(() => {
@@ -144,6 +162,11 @@ export const TradeTerminalView: React.FC<TradeTerminalViewProps> = ({
                         <div className="flex items-center gap-1.5">
                           <span>{m.symbol}</span>
                           <span className="text-[10px] text-muted-foreground">({m.windowDuration})</span>
+                          {m.status === 'Resolving' && (
+                            <span className="text-[9px] px-1 py-0.2 rounded bg-[#ffb700]/20 text-[#ffb700] border border-[#ffb700]/30 font-bold">
+                              Resolving
+                            </span>
+                          )}
                         </div>
                         <span className="text-[11px] text-muted-foreground">${m.strikePrice.toLocaleString()}</span>
                       </button>
@@ -153,12 +176,16 @@ export const TradeTerminalView: React.FC<TradeTerminalViewProps> = ({
               )}
             </div>
 
-            {/* Live Spot Price */}
+            {/* Live or Frozen Spot Price */}
             <div className="flex items-baseline gap-1.5 font-mono">
               <span className="text-sm font-bold text-foreground">
                 ${spot.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
               </span>
-              {change1m !== 0 ? (
+              {isResolving ? (
+                <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-[#ffb700]/20 text-[#ffb700] border border-[#ffb700]/30 animate-pulse">
+                  FROZEN SPOT
+                </span>
+              ) : change1m !== 0 ? (
                 <span className={cn("text-xs font-bold", isPositiveDelta ? "text-[#00e676]" : "text-[#ff3366]")}>
                   {formattedDelta}
                 </span>
@@ -171,10 +198,17 @@ export const TradeTerminalView: React.FC<TradeTerminalViewProps> = ({
 
             {/* Event Question Title */}
             <div className="hidden lg:flex items-center text-xs font-mono text-muted-foreground border-l border-border/40 pl-3">
-              <span>Will {market.symbol.split('/')[0]} settle above{' '}
-                <strong className="text-foreground">${strike.toLocaleString('en-US', { minimumFractionDigits: 2 })}</strong>{' '}
-                at {formattedExpiry}?
-              </span>
+              {isResolving ? (
+                <span className="text-[#ffb700] flex items-center gap-1.5 font-semibold">
+                  <ArrowPathIcon className="w-3.5 h-3.5 animate-spin text-[#ffb700]" />
+                  <span>Settlement window: frozen at <strong>${spot.toLocaleString('en-US', { minimumFractionDigits: 2 })}</strong> vs strike <strong>${strike.toLocaleString('en-US', { minimumFractionDigits: 2 })}</strong></span>
+                </span>
+              ) : (
+                <span>Will {market.symbol.split('/')[0]} settle above{' '}
+                  <strong className="text-foreground">${strike.toLocaleString('en-US', { minimumFractionDigits: 2 })}</strong>{' '}
+                  at {formattedExpiry}?
+                </span>
+              )}
             </div>
           </div>
 
@@ -248,6 +282,50 @@ export const TradeTerminalView: React.FC<TradeTerminalViewProps> = ({
         </div>
       )}
 
+      {/* Designated "Round Ended — Resolving On-Chain Outcome..." state banner */}
+      {market && isResolving && (
+        <div className="terminal-panel px-4 py-2.5 flex items-center justify-between flex-wrap gap-3 bg-[#ffb700]/10 border border-[#ffb700]/40 backdrop-blur-md rounded-xl text-xs font-mono shadow-[0_0_16px_rgba(255,183,0,0.12)] flex-shrink-0 animate-in fade-in duration-200">
+          <div className="flex items-center gap-2.5">
+            <div className="relative flex items-center justify-center">
+              <span className="w-3 h-3 rounded-full bg-[#ffb700] animate-ping absolute opacity-75" />
+              <span className="w-2.5 h-2.5 rounded-full bg-[#ffb700]" />
+            </div>
+            <div className="flex items-center gap-2">
+              <span className="font-bold text-[#ffb700] text-xs tracking-wide">
+                Round Ended — Resolving On-Chain Outcome...
+              </span>
+              <span className="hidden sm:inline text-muted-foreground text-[11px]">
+                • Final spot frozen against strike • Awaiting oracle settlement on Somnia Shannon
+              </span>
+            </div>
+          </div>
+          <div className="flex items-center gap-3">
+            <div className="flex items-center gap-1.5 text-[11px]">
+              <span className="text-muted-foreground">Frozen Spot:</span>
+              <span className="font-bold text-foreground">
+                ${spot.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+              </span>
+            </div>
+            <div className="flex items-center gap-1.5 text-[11px]">
+              <span className="text-muted-foreground">Strike:</span>
+              <span className="font-bold text-foreground">
+                ${strike.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+              </span>
+            </div>
+            <span
+              className={cn(
+                "px-2 py-0.5 rounded font-bold text-[10px] tracking-wider border",
+                spot >= strike
+                  ? "bg-[#00e676]/20 text-[#00e676] border-[#00e676]/40"
+                  : "bg-[#ff3366]/20 text-[#ff3366] border-[#ff3366]/40"
+              )}
+            >
+              {spot >= strike ? 'PROJECTED YES (UP)' : 'PROJECTED NO (DOWN)'}
+            </span>
+          </div>
+        </div>
+      )}
+
       {!market ? (
         <div className="flex-1 flex flex-col items-center justify-center p-8 text-center rounded-xl border border-border/40 bg-background/60 backdrop-blur-md gap-4 min-h-[400px]">
           <div className="w-12 h-12 rounded-2xl bg-brand-cyan/10 border border-brand-cyan/30 flex items-center justify-center text-brand-cyan shadow-sm">
@@ -269,7 +347,14 @@ export const TradeTerminalView: React.FC<TradeTerminalViewProps> = ({
               >
                 <div className="flex items-center justify-between text-xs font-mono font-bold">
                   <span className="text-foreground group-hover:text-brand-cyan">{m.symbol}</span>
-                  <span className="text-[10px] px-1.5 py-0.5 rounded bg-secondary/80 text-muted-foreground border border-border/40">{m.windowDuration}</span>
+                  <div className="flex items-center gap-1">
+                    {m.status === 'Resolving' && (
+                      <span className="text-[9px] px-1 py-0.2 rounded bg-[#ffb700]/20 text-[#ffb700] border border-[#ffb700]/30 font-bold">
+                        Resolving
+                      </span>
+                    )}
+                    <span className="text-[10px] px-1.5 py-0.5 rounded bg-secondary/80 text-muted-foreground border border-border/40">{m.windowDuration}</span>
+                  </div>
                 </div>
                 <div className="flex items-center justify-between text-[11px] font-mono text-muted-foreground">
                   <span>Strike: ${m.strikePrice.toLocaleString()}</span>
