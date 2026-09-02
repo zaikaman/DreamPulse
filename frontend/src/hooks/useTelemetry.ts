@@ -131,6 +131,9 @@ export function useTelemetry(userAddress?: string) {
     });
 
     return () => {
+      // Clean up all multiplexed WebSocket telemetry listeners to avoid memory leaks on view switching.
+      // (Supabase Realtime channels in hooks like usePersonalSwarm/useMarkets/useSessionKey
+      // call supabase.removeChannel(channel) alongside channel.unsubscribe() on teardown).
       unsubStatus();
       unsubTicks();
       unsubDepth();

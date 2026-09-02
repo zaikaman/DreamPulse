@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { apiClient } from '../services/api.js';
 import type { AgentType, PersonalSwarmConfig, PersonalSwarmStatus } from '../types/index.js';
-import { subscribeToPrivateTable } from '../services/supabase.js';
+import { supabase, subscribeToPrivateTable } from '../services/supabase.js';
 import { ensureSupabaseAuthForWallet } from '../services/supabase-auth.js';
 import type { RealtimeChannel } from '@supabase/supabase-js';
 import { shouldPoll, STALE_TIMES } from '../lib/polling.js';
@@ -110,10 +110,17 @@ export const usePersonalSwarm = (userAddress?: string): UsePersonalSwarmReturn =
           });
         },
       );
+      if (cancelled && channel) {
+        channel.unsubscribe();
+        supabase.removeChannel(channel);
+      }
     })();
     return () => {
       cancelled = true;
-      if (channel) channel.unsubscribe();
+      if (channel) {
+        channel.unsubscribe();
+        supabase.removeChannel(channel);
+      }
     };
   }, [userAddress]);
 

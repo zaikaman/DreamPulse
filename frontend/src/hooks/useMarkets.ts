@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import type { Market, MarketStatus } from '../types/index.js';
 import { apiClient } from '../services/api.js';
-import { subscribeToTable } from '../services/supabase.js';
+import { supabase, subscribeToTable } from '../services/supabase.js';
 import { telemetryClient, type MarketTickData } from '../services/telemetry-client.js';
 import { shouldPoll, STALE_TIMES } from '../lib/polling.js';
 
@@ -156,6 +156,7 @@ export function useMarkets(options?: UseMarketsOptions) {
 
     return () => {
       channel.unsubscribe();
+      supabase.removeChannel(channel);
     };
   }, []);
 

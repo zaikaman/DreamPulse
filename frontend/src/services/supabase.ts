@@ -112,7 +112,22 @@ const PRIVATE_REALTIME_TABLES = new Set<string>([
 function createNoopChannel(): RealtimeChannel {
   return {
     unsubscribe: () => Promise.resolve('ok'),
+    teardown: () => {},
   } as unknown as RealtimeChannel;
+}
+
+/**
+ * Cleanly unbinds, unsubscribes, and removes a Supabase Realtime channel
+ * from the client multiplexer table to prevent memory leaks in long sessions.
+ */
+export async function removeRealtimeChannel(channel: RealtimeChannel | null | undefined): Promise<void> {
+  if (!channel) return;
+  try {
+    channel.unsubscribe();
+  } catch {}
+  try {
+    await supabaseBrowser.removeChannel(channel);
+  } catch {}
 }
 
 /**

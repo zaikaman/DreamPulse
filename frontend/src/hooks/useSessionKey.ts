@@ -7,7 +7,7 @@ import { apiClient } from '../services/api.js';
 import { web3Service, SOMNIA_ADDRESSES, somniaShannonTestnet } from '../services/web3.js';
 import { telemetryClient, type OrderFillData, type SweepCompleteData } from '../services/telemetry-client.js';
 import { parseWeb3Error } from '../lib/errorUtils.js';
-import { subscribeToPrivateTable } from '../services/supabase.js';
+import { supabase, subscribeToPrivateTable } from '../services/supabase.js';
 import { ensureSupabaseAuthForWallet, restoreSupabaseAuthIfCached, clearSupabaseAuthForLogout } from '../services/supabase-auth.js';
 import type { RealtimeChannel } from '@supabase/supabase-js';
 import { shouldPoll, STALE_TIMES } from '../lib/polling.js';
@@ -839,11 +839,18 @@ export function useSessionKey(): UseSessionKeyReturn {
           setActiveSession(null);
         },
       );
+      if (cancelled && channel) {
+        channel.unsubscribe();
+        supabase.removeChannel(channel);
+      }
     })();
 
     return () => {
       cancelled = true;
-      if (channel) channel.unsubscribe();
+      if (channel) {
+        channel.unsubscribe();
+        supabase.removeChannel(channel);
+      }
     };
   }, [wallet.address]);
 

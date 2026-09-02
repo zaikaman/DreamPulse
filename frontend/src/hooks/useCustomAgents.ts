@@ -128,6 +128,9 @@ export const useCustomAgents = (userAddress?: string): UseCustomAgentsReturn => 
     }
   }, [userAddress]);
 
+  // Synchronizes agent/swarm definitions via REST. Supabase Realtime subscriptions
+  // for active swarms and sessions are handled by usePersonalSwarm/useSessionKey,
+  // which invoke supabase.removeChannel(channel) alongside channel.unsubscribe() on teardown.
   useEffect(() => {
     fetchAll();
   }, [fetchAll]);
