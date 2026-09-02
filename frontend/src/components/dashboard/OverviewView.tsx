@@ -28,6 +28,7 @@ interface OverviewViewProps {
   selectedMarketId: string | null;
   onSelectMarket: (marketId: string) => void;
   onNavigateToTab: (tab: string) => void;
+  onOpenTradeTerminal?: (marketId: string) => void;
   wallet?: WalletState;
   activeSession?: SessionGrant | null;
   isLoading?: boolean;
@@ -47,6 +48,7 @@ const OverviewViewComponent: React.FC<OverviewViewProps> = ({
   selectedMarketId,
   onSelectMarket,
   onNavigateToTab,
+  onOpenTradeTerminal,
   wallet,
   activeSession,
   isLoading = false,
@@ -405,8 +407,12 @@ const OverviewViewComponent: React.FC<OverviewViewProps> = ({
                         className="h-6 text-xs px-2 gap-1 font-normal text-muted-foreground hover:text-foreground"
                         onClick={(e) => {
                           e.stopPropagation();
-                          onSelectMarket(m.id);
-                          onNavigateToTab('Markets & Depth');
+                          if (onOpenTradeTerminal) {
+                            onOpenTradeTerminal(m.id);
+                          } else {
+                            onSelectMarket(m.id);
+                            onNavigateToTab('Trade Terminal');
+                          }
                         }}
                       >
                         <span>Trade</span>

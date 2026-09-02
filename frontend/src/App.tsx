@@ -276,6 +276,7 @@ export const App: React.FC = () => {
               const target = tab as DashboardViewType;
               handleNavigateView(target);
             }}
+            onOpenTradeTerminal={handleOpenTradeTerminal}
             wallet={wallet}
             activeSession={activeSession}
             isFauceting={isSessionFauceting}
