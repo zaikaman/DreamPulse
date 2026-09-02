@@ -1,6 +1,16 @@
 import { getDefaultConfig, type Chain } from '@rainbow-me/rainbowkit';
-import { http } from 'viem';
+import { fallback, http } from 'viem';
 import { QueryClient } from '@tanstack/react-query';
+
+const configuredRpc = import.meta.env.VITE_SOMNIA_RPC_URL;
+const isStandardRpc =
+  !configuredRpc ||
+  configuredRpc === 'https://dream-rpc.somnia.network' ||
+  configuredRpc === 'https://api.infra.testnet.somnia.network';
+
+export const somniaRpcUrls: string[] = isStandardRpc
+  ? ['https://dream-rpc.somnia.network', 'https://api.infra.testnet.somnia.network']
+  : Array.from(new Set([configuredRpc, 'https://dream-rpc.somnia.network', 'https://api.infra.testnet.somnia.network'].filter(Boolean)));
 
 /**
  * Somnia Shannon Testnet chain definition (Chain ID 50312).
@@ -15,10 +25,10 @@ export const somniaShannonTestnet = {
   },
   rpcUrls: {
     default: {
-      http: [import.meta.env.VITE_SOMNIA_RPC_URL || 'https://dream-rpc.somnia.network'],
+      http: somniaRpcUrls,
     },
     public: {
-      http: [import.meta.env.VITE_SOMNIA_RPC_URL || 'https://dream-rpc.somnia.network'],
+      http: somniaRpcUrls,
     },
   },
   blockExplorers: {
@@ -46,7 +56,10 @@ export const wagmiConfig = getDefaultConfig({
   projectId: walletConnectProjectId,
   chains: [somniaShannonTestnet],
   transports: {
-    [somniaShannonTestnet.id]: http(import.meta.env.VITE_SOMNIA_RPC_URL || 'https://dream-rpc.somnia.network'),
+    [somniaShannonTestnet.id]: fallback(
+      somniaRpcUrls.map((url) => http(url)),
+      { rank: false, retryCount: 3 }
+    ),
   },
   ssr: false,
 });

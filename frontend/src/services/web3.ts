@@ -2,6 +2,7 @@ import {
   createPublicClient,
   createWalletClient,
   custom,
+  fallback,
   http,
   defineChain,
   parseUnits,
@@ -21,6 +22,20 @@ import {
 } from 'wagmi/actions';
 import { wagmiConfig } from '../config/wagmi.js';
 
+const configuredRpc = import.meta.env.VITE_SOMNIA_RPC_URL;
+const isStandardRpc =
+  !configuredRpc ||
+  configuredRpc === 'https://dream-rpc.somnia.network' ||
+  configuredRpc === 'https://api.infra.testnet.somnia.network';
+
+export const somniaRpcUrls: string[] = isStandardRpc
+  ? ['https://dream-rpc.somnia.network', 'https://api.infra.testnet.somnia.network']
+  : Array.from(new Set([configuredRpc, 'https://dream-rpc.somnia.network', 'https://api.infra.testnet.somnia.network'].filter(Boolean)));
+
+export const somniaTransport = fallback(
+  somniaRpcUrls.map((url) => http(url)),
+  { rank: false, retryCount: 3 }
+);
 
 /**
  * Somnia Shannon Testnet chain definition (Chain ID 50312).
@@ -35,10 +50,10 @@ export const somniaShannonTestnet = defineChain({
   },
   rpcUrls: {
     default: {
-      http: ['https://dream-rpc.somnia.network'],
+      http: somniaRpcUrls,
     },
     public: {
-      http: ['https://dream-rpc.somnia.network'],
+      http: somniaRpcUrls,
     },
   },
   blockExplorers: {
@@ -299,11 +314,11 @@ export const ERC20_ABI = [
 export const ERC20_BALANCE_ABI = ERC20_ABI;
 
 /**
- * Public Viem client for querying Somnia testnet state.
+ * Public Viem client for querying Somnia testnet state with multi-RPC fallback resiliency.
  */
 export const publicClient: PublicClient = createPublicClient({
   chain: somniaShannonTestnet,
-  transport: http(import.meta.env.VITE_SOMNIA_RPC_URL || 'https://dream-rpc.somnia.network'),
+  transport: somniaTransport,
 });
 
 declare global {
@@ -445,7 +460,7 @@ export class Web3Service {
                     chainId: chainIdHex,
                     chainName: somniaShannonTestnet.name,
                     nativeCurrency: somniaShannonTestnet.nativeCurrency,
-                    rpcUrls: ['https://dream-rpc.somnia.network'],
+                    rpcUrls: somniaRpcUrls,
                     blockExplorerUrls: ['https://shannon-explorer.somnia.network'],
                   },
                 ],

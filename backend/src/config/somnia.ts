@@ -1,6 +1,7 @@
 import {
   createPublicClient,
   createWalletClient,
+  fallback,
   http,
   defineChain,
   type Address,
@@ -25,6 +26,21 @@ export const MARKET_STATUS = {
   Voided: 5,
 } as const;
 
+const configuredRpc = env.SOMNIA_RPC_URL;
+const isStandardRpc =
+  !configuredRpc ||
+  configuredRpc === 'https://dream-rpc.somnia.network' ||
+  configuredRpc === 'https://api.infra.testnet.somnia.network';
+
+export const somniaRpcUrls: string[] = isStandardRpc
+  ? ['https://dream-rpc.somnia.network', 'https://api.infra.testnet.somnia.network']
+  : Array.from(new Set([configuredRpc, 'https://dream-rpc.somnia.network', 'https://api.infra.testnet.somnia.network'].filter(Boolean)));
+
+export const somniaTransport = fallback(
+  somniaRpcUrls.map((url) => http(url)),
+  { rank: false, retryCount: 3 }
+);
+
 /**
  * Somnia Shannon Testnet chain definition (Chain ID 50312).
  */
@@ -38,11 +54,11 @@ export const somniaShannonTestnet = defineChain({
   },
   rpcUrls: {
     default: {
-      http: [env.SOMNIA_RPC_URL || 'https://api.infra.testnet.somnia.network'],
+      http: somniaRpcUrls,
       webSocket: ['wss://api.infra.testnet.somnia.network/ws'],
     },
     public: {
-      http: [env.SOMNIA_RPC_URL || 'https://api.infra.testnet.somnia.network'],
+      http: somniaRpcUrls,
       webSocket: ['wss://api.infra.testnet.somnia.network/ws'],
     },
   },
@@ -86,11 +102,11 @@ export const SOMNIA_ADDRESSES = {
 };
 
 /**
- * Viem Public Client for querying Somnia Shannon Testnet.
+ * Viem Public Client for querying Somnia Shannon Testnet with fallback transport resiliency.
  */
 export const publicClient: PublicClient = createPublicClient({
   chain: somniaShannonTestnet,
-  transport: http(env.SOMNIA_RPC_URL),
+  transport: somniaTransport,
 });
 
 /**
@@ -107,7 +123,7 @@ export const operatorAccount = privateKeyToAccount(operatorPrivateKey, { nonceMa
 export const walletClient: WalletClient = createWalletClient({
   account: operatorAccount,
   chain: somniaShannonTestnet,
-  transport: http(env.SOMNIA_RPC_URL),
+  transport: somniaTransport,
 });
 
 let txQueue = Promise.resolve();
