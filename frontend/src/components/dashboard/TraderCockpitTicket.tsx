@@ -451,7 +451,7 @@ export const TraderCockpitTicket: React.FC<TraderCockpitTicketProps> = ({
 
       {/* 3. TWO MASSIVE BINARY ACTION BUTTONS (DreamDEX UP / DOWN) */}
       <div className="grid grid-cols-2 gap-2.5 mb-3.5 flex-shrink-0">
-        {/* ▲ UP Button */}
+        {/* UP Button */}
         <button
           type="button"
           onClick={() => {
@@ -468,7 +468,7 @@ export const TraderCockpitTicket: React.FC<TraderCockpitTicketProps> = ({
           <div className="flex items-center justify-between w-full mb-1">
             <span className="text-sm font-bold flex items-center gap-1">
               <ArrowTrendingUpIcon className="w-4 h-4" />
-              <span>▲ Up</span>
+              <span>Up</span>
             </span>
             <span className="text-sm font-bold">{upOddsPct}%</span>
           </div>
@@ -484,7 +484,7 @@ export const TraderCockpitTicket: React.FC<TraderCockpitTicketProps> = ({
           </div>
         </button>
 
-        {/* ▼ DOWN Button */}
+        {/* DOWN Button */}
         <button
           type="button"
           onClick={() => {
@@ -501,7 +501,7 @@ export const TraderCockpitTicket: React.FC<TraderCockpitTicketProps> = ({
           <div className="flex items-center justify-between w-full mb-1">
             <span className="text-sm font-bold flex items-center gap-1">
               <ArrowTrendingDownIcon className="w-4 h-4" />
-              <span>▼ Down</span>
+              <span>Down</span>
             </span>
             <span className="text-sm font-bold">{downOddsPct}%</span>
           </div>

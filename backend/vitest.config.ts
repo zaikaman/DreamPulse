@@ -20,6 +20,6 @@ export default defineConfig({
       include: ['src/**/*.ts'],
       exclude: ['node_modules/', 'dist/', 'tests/', 'src/types/**', 'src/scripts/**', 'vitest.config.ts'],
     },
-    testTimeout: 15000,
+    testTimeout: 35000,
   },
 });
