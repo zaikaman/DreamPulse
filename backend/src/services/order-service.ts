@@ -2537,8 +2537,10 @@ export class OrderService {
 
       // Unmatched resting limit orders at expiration hold collateral, not outcome tokens.
       // Transition to EXPIRED with 0 PnL, prune resting quotes, and trigger on-chain collateral release.
-      if (order.status === 'PENDING') {
-        order.status = 'EXPIRED';
+      if (order.status !== 'FILLED' && order.status !== 'PARTIALLY_FILLED') {
+        if (order.status !== 'CANCELLED') {
+          order.status = 'EXPIRED';
+        }
         order.pnl = 0;
         order.isSettled = true;
         order.settledAt = order.settledAt || nowIso;
@@ -2553,9 +2555,16 @@ export class OrderService {
                 await executeOperatorWriteContract({
                   address: onchain.pool as Address,
                   abi: SPOT_POOL_ABI,
-                  functionName: 'cancelOrderFor',
-                  args: [getAddress(order.userAddress || operatorAccount.address), BigInt(order.onchainOrderId!)],
-                }).catch(() => {});
+                  functionName: 'cancelOrder',
+                  args: [BigInt(order.onchainOrderId!)],
+                }).catch(async () => {
+                  await executeOperatorWriteContract({
+                    address: onchain.pool as Address,
+                    abi: SPOT_POOL_ABI,
+                    functionName: 'cancelOrderFor',
+                    args: [getAddress(order.userAddress || operatorAccount.address), BigInt(order.onchainOrderId!)],
+                  }).catch(() => {});
+                });
               }
             } catch {}
           })();
@@ -2577,13 +2586,13 @@ export class OrderService {
                   .from('orders')
                   .update({
                     pnl: 0,
-                    status: 'EXPIRED',
+                    status: order.status,
                     is_settled: true,
                     settled_at: order.settledAt,
                   })
                   .eq('id', order.id);
                 if (res.error && res.error.message.includes('is_settled')) {
-                  await supabase.from('orders').update({ pnl: 0, status: 'EXPIRED' }).eq('id', order.id);
+                  await supabase.from('orders').update({ pnl: 0, status: order.status }).eq('id', order.id);
                 }
               } catch {}
             })(),
@@ -2737,12 +2746,14 @@ export class OrderService {
       const onchain = onchainCache.get(order.marketId.toLowerCase());
       if (!onchain) continue;
 
-      if (order.status === 'PENDING') {
-        const needsExpiring = !order.isSettled || (order.pnl || 0) !== 0;
+      if (order.status !== 'FILLED' && order.status !== 'PARTIALLY_FILLED') {
+        const needsExpiring = !order.isSettled || (order.pnl || 0) !== 0 || (order.status !== 'EXPIRED' && order.status !== 'CANCELLED');
         if (needsExpiring) {
           correctedCount++;
           order.pnl = 0;
-          order.status = 'EXPIRED';
+          if (order.status !== 'CANCELLED') {
+            order.status = 'EXPIRED';
+          }
           order.isSettled = true;
           order.settledAt = order.settledAt || nowIso;
           this.restingMakerQuotes.delete(order.id);
@@ -2753,13 +2764,13 @@ export class OrderService {
                   .from('orders')
                   .update({
                     pnl: 0,
-                    status: 'EXPIRED',
+                    status: order.status,
                     is_settled: true,
                     settled_at: order.settledAt,
                   })
                   .eq('id', order.id);
                 if (res.error && res.error.message.includes('is_settled')) {
-                  await supabase.from('orders').update({ pnl: 0, status: 'EXPIRED' }).eq('id', order.id);
+                  await supabase.from('orders').update({ pnl: 0, status: order.status }).eq('id', order.id);
                 }
               } catch {}
             })(),
@@ -3010,9 +3021,11 @@ export class OrderService {
 
         if (!shouldResolve || !winningOutcome) continue;
 
-        if (order.status === 'PENDING') {
+        if (order.status !== 'FILLED' && order.status !== 'PARTIALLY_FILLED') {
           order.pnl = 0;
-          order.status = 'EXPIRED';
+          if (order.status !== 'CANCELLED') {
+            order.status = 'EXPIRED';
+          }
           order.isSettled = true;
           order.settledAt = new Date().toISOString();
           this.restingMakerQuotes.delete(order.id);
@@ -3026,9 +3039,16 @@ export class OrderService {
                   await executeOperatorWriteContract({
                     address: onchain.pool as Address,
                     abi: SPOT_POOL_ABI,
-                    functionName: 'cancelOrderFor',
-                    args: [getAddress(order.userAddress || operatorAccount.address), BigInt(order.onchainOrderId!)],
-                  }).catch(() => {});
+                    functionName: 'cancelOrder',
+                    args: [BigInt(order.onchainOrderId!)],
+                  }).catch(async () => {
+                    await executeOperatorWriteContract({
+                      address: onchain.pool as Address,
+                      abi: SPOT_POOL_ABI,
+                      functionName: 'cancelOrderFor',
+                      args: [getAddress(order.userAddress || operatorAccount.address), BigInt(order.onchainOrderId!)],
+                    }).catch(() => {});
+                  });
                 }
               } catch {}
             })();
@@ -3047,12 +3067,12 @@ export class OrderService {
               try {
                 const res = await supabase.from('orders').update({
                   pnl: 0,
-                  status: 'EXPIRED',
+                  status: order.status,
                   is_settled: true,
                   settled_at: order.settledAt,
                 }).eq('id', order.id);
                 if (res.error && res.error.message.includes('is_settled')) {
-                  await supabase.from('orders').update({ pnl: 0, status: 'EXPIRED' }).eq('id', order.id);
+                  await supabase.from('orders').update({ pnl: 0, status: order.status }).eq('id', order.id);
                 }
               } catch {}
             })();

@@ -654,6 +654,32 @@ describe('OrderService Comprehensive Suite', () => {
     expect(res.message).toContain('Locked collateral returned');
   });
 
+  it('does not calculate win PnL for EXPIRED or CANCELLED resting orders when market resolves', async () => {
+    const expiredOrder = await service.submitUserOrder({
+      userAddress,
+      marketId: mockMarket.id,
+      outcome: 'YES',
+      direction: 'BUY',
+      orderType: 'LIMIT',
+      price: 0.01,
+      lotSize: 5000.0,
+      txHash: '0x7777777777777777777777777777777777777777777777777777777777777777',
+    });
+    expiredOrder.status = 'EXPIRED';
+    expiredOrder.pnl = 0;
+    expiredOrder.isSettled = true;
+
+    // Settle market with winning outcome YES
+    await service.settleOrdersForMarket(mockMarket.id, 'YES');
+
+    const check = service.getOrderById(expiredOrder.id);
+    expect(check?.status).toBe('EXPIRED');
+    expect(check?.pnl).toBe(0);
+
+    const totalPnl = await service.getTotalRealizedPnlAsync(undefined, userAddress);
+    expect(totalPnl).toBe(0);
+  });
+
   it('throws if order ID is not found', async () => {
     await expect(
       service.cancelOrderFor('non-existent-order-id', userAddress),

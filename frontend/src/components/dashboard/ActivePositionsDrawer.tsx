@@ -567,20 +567,24 @@ Tx: ${pos.txHash || 'N/A'}`;
                 </thead>
                 <tbody className="divide-y divide-border/10">
                   {settledHistory.map((hist) => {
-                    const isProfitable = (hist.pnl ?? 0) >= 0;
+                    const isUnfilled = hist.status === 'EXPIRED' || hist.status === 'CANCELLED' || (!hist.filledAt && hist.status !== 'FILLED' && hist.status !== 'PARTIALLY_FILLED');
+                    const isProfitable = !isUnfilled && (hist.pnl ?? 0) > 0;
+                    const isLoss = !isUnfilled && (hist.pnl ?? 0) < 0;
                     const marketInfo = parseOrderMarketDetails(hist);
-                    const pnlVal = hist.pnl ?? 0;
+                    const pnlVal = isUnfilled ? 0 : (hist.pnl ?? 0);
 
-                    const settlementSubText = marketInfo.settlementPrice
+                    const settlementSubText = isUnfilled
+                      ? (hist.status === 'CANCELLED' ? 'Cancelled (Unfilled)' : 'Expired (Unfilled)')
+                      : marketInfo.settlementPrice
                       ? `Settled @ ${formatCurrencyAmount(marketInfo.settlementPrice)}`
-                      : (pnlVal > 0 ? 'Settled (Win)' : 'Settled (Loss)');
+                      : (pnlVal > 0 ? 'Settled (Win)' : (pnlVal < 0 ? 'Settled (Loss)' : 'Settled (Breakeven)'));
 
                     const tooltipText = `[Settled Trade Summary]
 Asset: ${marketInfo.assetName} (${marketInfo.symbol}) ${marketInfo.windowDuration}
 Condition: Price > ${formatCurrencyAmount(marketInfo.strikePrice)} at Expiry
 Entry: ${hist.direction} ${hist.lotSize} Lots @ $${hist.price.toFixed(2)}
-Settlement: ${marketInfo.settlementPrice ? `Settled @ ${formatCurrencyAmount(marketInfo.settlementPrice)}` : 'Resolved'}
-PnL: ${isProfitable ? '+' : ''}$${pnlVal.toFixed(2)} tUSDC
+Status: ${isUnfilled ? (hist.status === 'CANCELLED' ? 'Cancelled (Unfilled)' : 'Expired (Unfilled)') : (marketInfo.settlementPrice ? `Settled @ ${formatCurrencyAmount(marketInfo.settlementPrice)}` : 'Resolved')}
+PnL: ${isUnfilled ? '$0.00 tUSDC (Unfilled)' : `${isProfitable ? '+' : ''}$${pnlVal.toFixed(2)} tUSDC`}
 Tx: ${hist.txHash || 'N/A'}`;
 
                     return (
@@ -623,16 +627,22 @@ Tx: ${hist.txHash || 'N/A'}`;
                             <span
                               className={cn(
                                 "font-bold text-[11px]",
-                                isProfitable ? "text-[#00e676]" : "text-[#ff3366]"
+                                isUnfilled
+                                  ? "text-muted-foreground"
+                                  : isProfitable
+                                  ? "text-[#00e676]"
+                                  : isLoss
+                                  ? "text-[#ff3366]"
+                                  : "text-foreground"
                               )}
                             >
-                              {isProfitable ? '+' : ''}${pnlVal.toFixed(2)} tUSDC
+                              {isUnfilled ? '$0.00 tUSDC' : `${isProfitable ? '+' : ''}$${pnlVal.toFixed(2)} tUSDC`}
                             </span>
                             <div className="flex items-center gap-1.5">
                               <span className="text-[9.5px] text-muted-foreground">
                                 {settlementSubText}
                               </span>
-                              {isProfitable && (
+                              {!isUnfilled && isProfitable && (
                                 <span className="inline-flex items-center gap-0.5 px-1 py-0 rounded text-[8.5px] font-semibold bg-[#00e676]/15 text-[#00e676] border border-[#00e676]/30">
                                   <CheckCircleIcon className="w-2.5 h-2.5 text-[#00e676]" />
                                   <span>Auto-Swept</span>
