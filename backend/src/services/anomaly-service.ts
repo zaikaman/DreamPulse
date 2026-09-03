@@ -24,6 +24,20 @@ export interface AnomalyReport {
   detectedAt: number;
 }
 
+/**
+ * Normalizes an asset/market symbol string to standard pair format (e.g. 'BTC/USD', 'ETH/USD').
+ */
+export function normalizeMarketSymbol(raw: string): string {
+  if (!raw) return 'BTC/USD';
+  const s = raw.trim().toUpperCase().replace(/\/USD\/USD$/i, '/USD');
+  if (s.includes('ETH')) return 'ETH/USD';
+  if (s.includes('BTC')) return 'BTC/USD';
+  if (s.includes('/')) return s;
+  if (s.endsWith('USD')) return `${s.slice(0, -3)}/USD`;
+  if (s.endsWith('USDT')) return `${s.slice(0, -4)}/USD`;
+  return `${s}/USD`;
+}
+
 export class AnomalyService extends EventEmitter {
   private defaultThreshold: number = 0.03; // 3.0% edge
   private activeAnomalies: Map<string, AnomalyReport> = new Map();
@@ -118,13 +132,23 @@ export class AnomalyService extends EventEmitter {
    */
   public scanMarkets(
     markets: Market[],
-    spotPrices: Record<string, number>,
+    spotPrices: Record<string, number | { price?: number }>,
     threshold?: number,
   ): AnomalyReport[] {
     const reports: AnomalyReport[] = [];
 
+    const resolvePrice = (val: number | { price?: number } | undefined): number | undefined => {
+      if (typeof val === 'number') return val;
+      if (val && typeof (val as { price?: number }).price === 'number') return (val as { price: number }).price;
+      return undefined;
+    };
+
     for (const market of markets) {
-      const spot = spotPrices[market.symbol] ?? market.strikePrice;
+      const normSym = normalizeMarketSymbol(market.symbol);
+      const spot =
+        resolvePrice(spotPrices[normSym]) ??
+        resolvePrice(spotPrices[market.symbol]) ??
+        market.strikePrice;
       const report = this.evaluateMarket(market, spot, threshold);
       if (report) {
         reports.push(report);

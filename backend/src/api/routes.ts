@@ -1,6 +1,6 @@
 import { Router, Request, Response } from 'express';
 import { marketService } from '../services/market-service.js';
-import { anomalyService } from '../services/anomaly-service.js';
+import { anomalyService, normalizeMarketSymbol } from '../services/anomaly-service.js';
 import { sessionService } from '../services/session-service.js';
 import { swarmRunner } from '../agents/swarm-runner.js';
 import { orderService } from '../services/order-service.js';
@@ -63,10 +63,11 @@ apiRouter.get('/markets/anomalies', (req: Request, res: Response) => {
   const spotMap: Record<string, number> = {};
   for (const [k, v] of Object.entries(spotPrices)) {
     spotMap[k] = v.price;
+    spotMap[normalizeMarketSymbol(k)] = v.price;
   }
 
   const markets = marketService.getActiveMarkets();
-  const anomalies = anomalyService.scanMarkets(markets, spotMap, threshold);
+  const anomalies = anomalyService.scanMarkets(markets, spotPrices, threshold);
 
   res.json({
     success: true,

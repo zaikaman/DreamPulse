@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
-import { AnomalyService, anomalyService } from '../src/services/anomaly-service.js';
+import { AnomalyService, anomalyService, normalizeMarketSymbol } from '../src/services/anomaly-service.js';
 import { analyticsService } from '../src/services/analytics-service.js';
 import { orderService } from '../src/services/order-service.js';
 import { settlementService } from '../src/services/settlement-service.js';
@@ -110,6 +110,37 @@ describe('AnalyticsService & AnomalyService Comprehensive Suite', () => {
 
       const active = service.getActiveAnomalies();
       expect(active.length).toBe(reports.length);
+    });
+
+    it('correctly normalizes varied market symbols with normalizeMarketSymbol', () => {
+      expect(normalizeMarketSymbol('BTCUSDT')).toBe('BTC/USD');
+      expect(normalizeMarketSymbol('BTC')).toBe('BTC/USD');
+      expect(normalizeMarketSymbol('btcusdt')).toBe('BTC/USD');
+      expect(normalizeMarketSymbol('ETHUSDT')).toBe('ETH/USD');
+      expect(normalizeMarketSymbol('eth')).toBe('ETH/USD');
+      expect(normalizeMarketSymbol('BTC/USD/USD')).toBe('BTC/USD');
+      expect(normalizeMarketSymbol('SOLUSDT')).toBe('SOL/USD');
+      expect(normalizeMarketSymbol('')).toBe('BTC/USD');
+    });
+
+    it('resolves spot price when market has symbol variation (e.g. BTCUSDT) without falling back to strikePrice', () => {
+      const marketVariation: Market = {
+        ...mockOpenMarket,
+        id: 'market-btc-var-1',
+        symbol: 'BTCUSDT',
+        strikePrice: 90000,
+        bestBidYes: 0.10,
+        bestAskYes: 0.12,
+      };
+
+      // Spot prices keyed by standard 'BTC/USD' with SpotTicker object
+      const reports = service.scanMarkets([marketVariation], {
+        'BTC/USD': { price: 95000 } as any,
+      });
+
+      expect(reports.length).toBe(1);
+      expect(reports[0].spotPrice).toBe(95000);
+      expect(reports[0].spotPrice).not.toBe(marketVariation.strikePrice);
     });
 
     it('allows setting and getting anomaly threshold', () => {

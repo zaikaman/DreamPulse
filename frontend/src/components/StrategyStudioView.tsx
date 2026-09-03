@@ -125,6 +125,91 @@ const INDICATOR_OPTIONS: Array<{ value: IndicatorType; label: string; desc: stri
   { value: 'PRICE_DRIFT', label: 'Rapid Price Velocity Drift', desc: 'High-frequency spot price displacement within the active contract window' },
 ];
 
+/**
+ * Intelligently infers strategy archetype based on selected technical indicators.
+ * e.g., RSI / Bollinger / Stochastic / CCI / Williams %R -> MEAN_REVERSION
+ * EMA / SMA / MACD / ADX / Price Drift -> MOMENTUM
+ * Volume Surge -> BREAKOUT
+ * ATR -> VOLATILITY
+ */
+export function inferStrategyType(
+  conditions: ConditionRule[],
+  _actionDirection?: BinaryActionDirection
+): 'MOMENTUM' | 'MEAN_REVERSION' | 'BREAKOUT' | 'VOLATILITY' {
+  if (!conditions || conditions.length === 0) {
+    return 'MOMENTUM';
+  }
+
+  let meanRevWeight = 0;
+  let momentumWeight = 0;
+  let breakoutWeight = 0;
+  let volatilityWeight = 0;
+
+  for (const cond of conditions) {
+    switch (cond.indicator) {
+      case 'RSI':
+      case 'BOLLINGER_LOWER':
+      case 'BOLLINGER_UPPER':
+      case 'STOCHASTIC':
+      case 'CCI':
+      case 'WILLIAMS_R':
+        meanRevWeight += 3;
+        break;
+      case 'EMA':
+      case 'SMA':
+      case 'MACD':
+      case 'ADX':
+      case 'PRICE_DRIFT':
+        momentumWeight += 3;
+        break;
+      case 'VOLUME_SURGE':
+        breakoutWeight += 3;
+        momentumWeight += 1;
+        break;
+      case 'ATR':
+        volatilityWeight += 3;
+        breakoutWeight += 1;
+        break;
+      case 'VWAP':
+        if (cond.operator === 'CROSS_ABOVE' || cond.operator === 'CROSS_BELOW') {
+          momentumWeight += 2;
+        } else {
+          meanRevWeight += 2;
+        }
+        break;
+      default:
+        momentumWeight += 1;
+        break;
+    }
+  }
+
+  if (breakoutWeight > momentumWeight && breakoutWeight > meanRevWeight && breakoutWeight > volatilityWeight) {
+    return 'BREAKOUT';
+  }
+  if (volatilityWeight > momentumWeight && volatilityWeight > meanRevWeight && volatilityWeight > breakoutWeight) {
+    return 'VOLATILITY';
+  }
+  if (meanRevWeight >= momentumWeight) {
+    return 'MEAN_REVERSION';
+  }
+  return 'MOMENTUM';
+}
+
+export function getStrategyIcon(type: string, dir?: BinaryActionDirection): string {
+  switch (type) {
+    case 'MOMENTUM':
+      return 'BoltIcon';
+    case 'MEAN_REVERSION':
+      return 'AdjustmentsHorizontalIcon';
+    case 'BREAKOUT':
+      return 'ArrowTrendingUpIcon';
+    case 'VOLATILITY':
+      return 'SparklesIcon';
+    default:
+      return dir === 'CALL' ? 'BoltIcon' : 'AdjustmentsHorizontalIcon';
+  }
+}
+
 const OPERATOR_OPTIONS: Array<{ value: ComparisonOperator; label: string }> = [
   { value: 'LESS_THAN', label: '< Less Than' },
   { value: 'GREATER_THAN', label: '> Greater Than' },
@@ -254,6 +339,9 @@ export const StrategyStudioView: React.FC<StrategyStudioViewProps> = ({
   const [draftColor, setDraftColor] = useState<string>('#2dd4bf');
   const [draftOperator, setDraftOperator] = useState<'AND' | 'OR'>('AND');
   const [draftAllowance, setDraftAllowance] = useState<number>(100);
+  const [draftStrategyType, setDraftStrategyType] = useState<
+    'AUTO' | 'MOMENTUM' | 'MEAN_REVERSION' | 'BREAKOUT' | 'VOLATILITY'
+  >('AUTO');
 
   const [conditions, setConditions] = useState<ConditionRule[]>([
     {
@@ -280,6 +368,11 @@ export const StrategyStudioView: React.FC<StrategyStudioViewProps> = ({
   const [actionLimitPricing, setActionLimitPricing] = useState<'BEST_BID_ASK' | 'MIDPOINT' | 'DISCOUNT_OFFSET'>('BEST_BID_ASK');
   const [actionLimitOffsetBps, setActionLimitOffsetBps] = useState<number>(10);
   const [actionMaxSlippageBps, setActionMaxSlippageBps] = useState<number>(20);
+
+  const effectiveStrategyType = useMemo<'MOMENTUM' | 'MEAN_REVERSION' | 'BREAKOUT' | 'VOLATILITY'>(() => {
+    if (draftStrategyType !== 'AUTO') return draftStrategyType;
+    return inferStrategyType(conditions, actionDirection);
+  }, [draftStrategyType, conditions, actionDirection]);
 
   const [riskMaxLosses, setRiskMaxLosses] = useState<number>(2);
   const [riskCooldownMins, setRiskCooldownMins] = useState<number>(3);
@@ -375,6 +468,7 @@ export const StrategyStudioView: React.FC<StrategyStudioViewProps> = ({
     setDraftDesc('Autonomous binary options strategy built with zero code');
     setDraftSymbol('BTC/USD');
     setDraftTimeframe('5m');
+    setDraftStrategyType('AUTO');
     setDraftColor('#2dd4bf');
     setDraftOperator('AND');
     setDraftAllowance(100);
@@ -423,6 +517,7 @@ export const StrategyStudioView: React.FC<StrategyStudioViewProps> = ({
       if (result.description) setDraftDesc(result.description);
       if (result.symbol) setDraftSymbol(result.symbol);
       if (result.timeframe) setDraftTimeframe(result.timeframe as any);
+      if (result.strategyType) setDraftStrategyType(result.strategyType as any);
       if (result.color) setDraftColor(result.color);
       if (result.rules) {
         if (result.rules.operator) setDraftOperator(result.rules.operator);
@@ -474,7 +569,7 @@ export const StrategyStudioView: React.FC<StrategyStudioViewProps> = ({
     description: draftDesc,
     symbol: draftSymbol,
     timeframe: draftTimeframe,
-    strategyType: actionDirection === 'CALL' ? 'MOMENTUM' : 'MEAN_REVERSION',
+    strategyType: effectiveStrategyType,
     rules: {
       operator: draftOperator,
       conditions,
@@ -537,10 +632,10 @@ export const StrategyStudioView: React.FC<StrategyStudioViewProps> = ({
       description: draftDesc,
       symbol: draftSymbol,
       timeframe: draftTimeframe,
-      strategyType: actionDirection === 'CALL' ? 'MOMENTUM' : 'MEAN_REVERSION',
+      strategyType: effectiveStrategyType,
       rules,
       color: draftColor,
-      icon: actionDirection === 'CALL' ? 'BoltIcon' : 'AdjustmentsHorizontalIcon',
+      icon: getStrategyIcon(effectiveStrategyType, actionDirection),
       allocatedAllowance: draftAllowance,
     });
 
@@ -621,7 +716,7 @@ export const StrategyStudioView: React.FC<StrategyStudioViewProps> = ({
         description: draftDesc,
         symbol: draftSymbol,
         timeframe: draftTimeframe,
-        strategyType: actionDirection === 'CALL' ? 'MOMENTUM' : 'MEAN_REVERSION',
+        strategyType: effectiveStrategyType,
         rules,
         color: draftColor,
         isDeployed: deployNow ? true : editingOriginalAgent?.isDeployed ?? false,
@@ -653,10 +748,10 @@ export const StrategyStudioView: React.FC<StrategyStudioViewProps> = ({
       description: draftDesc,
       symbol: draftSymbol,
       timeframe: draftTimeframe,
-      strategyType: actionDirection === 'CALL' ? 'MOMENTUM' : 'MEAN_REVERSION',
+      strategyType: effectiveStrategyType,
       rules,
       color: draftColor,
-      icon: actionDirection === 'CALL' ? 'BoltIcon' : 'AdjustmentsHorizontalIcon',
+      icon: getStrategyIcon(effectiveStrategyType, actionDirection),
       isDeployed: deployNow,
       allocatedAllowance: draftAllowance,
     });
@@ -695,6 +790,7 @@ export const StrategyStudioView: React.FC<StrategyStudioViewProps> = ({
     setDraftDesc(agent.description || '');
     setDraftSymbol(agent.symbol);
     setDraftTimeframe(agent.timeframe as any);
+    setDraftStrategyType((agent.strategyType as any) || 'AUTO');
     setDraftColor(agent.color || '#2dd4bf');
     setDraftAllowance(agent.allocatedAllowance || 100);
     if (agent.rules) {
@@ -821,6 +917,7 @@ export const StrategyStudioView: React.FC<StrategyStudioViewProps> = ({
       if (parsed.description) setDraftDesc(parsed.description);
       if (parsed.symbol) setDraftSymbol(parsed.symbol);
       if (parsed.timeframe) setDraftTimeframe(parsed.timeframe);
+      if (parsed.strategyType) setDraftStrategyType(parsed.strategyType);
       if (parsed.color) setDraftColor(parsed.color);
       if (parsed.allocatedAllowance) setDraftAllowance(parsed.allocatedAllowance);
 
@@ -1495,7 +1592,7 @@ export const StrategyStudioView: React.FC<StrategyStudioViewProps> = ({
                   title="Click to configure Binary Action & Stake"
                 >
                   <span>EXEC: {actionDirection}</span>
-                  <span className="text-[10px] font-normal opacity-90">({actionDurationSec}s @ ${actionStakeAmount}{actionOrderType === 'LIMIT' ? ' · LIMIT' : ''})</span>
+                  <span className="text-[10px] font-normal opacity-90">({actionDurationSec}s @ ${actionStakeAmount || 0}{actionOrderType === 'LIMIT' ? ' · LIMIT' : ''})</span>
                 </div>
 
                 <ArrowRightIcon className="w-3 h-3 text-muted-foreground/60 flex-shrink-0" />
@@ -1535,6 +1632,10 @@ export const StrategyStudioView: React.FC<StrategyStudioViewProps> = ({
                 <div className="flex items-center gap-2 flex-wrap">
                   <Badge variant="outline" className="text-[10px] font-mono font-bold" style={{ borderColor: draftColor, color: draftColor }}>
                     {actionDirection === 'CALL' ? 'BULLISH CALL' : 'BEARISH PUT'}
+                  </Badge>
+                  <Badge variant="secondary" className="text-[10px] font-mono font-semibold">
+                    {effectiveStrategyType.replace('_', ' ')}
+                    {draftStrategyType === 'AUTO' && <span className="opacity-60 ml-1 text-[9px]">(AUTO)</span>}
                   </Badge>
                   <span className="text-[11px] font-mono text-muted-foreground">{draftSymbol} · {draftTimeframe}</span>
                 </div>
@@ -1578,6 +1679,19 @@ export const StrategyStudioView: React.FC<StrategyStudioViewProps> = ({
                     <option value="5m">5-Minute Candles</option>
                     <option value="15m">15-Minute Candles</option>
                     <option value="1h">1-Hour Candles</option>
+                  </select>
+                  <span className="text-xs font-mono font-bold text-muted-foreground">· Archetype:</span>
+                  <select
+                    value={draftStrategyType}
+                    onChange={(e) => setDraftStrategyType(e.target.value as any)}
+                    className="px-3 py-1.5 rounded-lg bg-secondary/30 border border-border/60 text-xs font-bold text-foreground font-mono focus:outline-none focus:border-primary"
+                    title="Strategy Archetype Classification"
+                  >
+                    <option value="AUTO">Auto-Detect ({effectiveStrategyType})</option>
+                    <option value="MOMENTUM">Momentum (Trend Following)</option>
+                    <option value="MEAN_REVERSION">Mean Reversion (Bounce / Fade)</option>
+                    <option value="BREAKOUT">Breakout (Volatility Expansion)</option>
+                    <option value="VOLATILITY">Volatility (Dispersion)</option>
                   </select>
                 </div>
               </div>
@@ -1908,8 +2022,11 @@ export const StrategyStudioView: React.FC<StrategyStudioViewProps> = ({
                         type="number"
                         min={1}
                         max={100}
-                        value={actionStakeAmount}
-                        onChange={(e) => setActionStakeAmount(Number(e.target.value))}
+                        value={Number.isNaN(actionStakeAmount) || actionStakeAmount === 0 ? '' : actionStakeAmount}
+                        onChange={(e) => {
+                          const val = e.target.value;
+                          setActionStakeAmount(val === '' ? 0 : Number(val));
+                        }}
                         className="w-16 px-2 py-1 rounded bg-background border border-border/60 text-xs font-bold text-foreground font-mono"
                       />
                     </div>
@@ -2153,7 +2270,7 @@ export const StrategyStudioView: React.FC<StrategyStudioViewProps> = ({
                   <div className="flex items-center justify-between text-[11px] text-muted-foreground font-mono border-t border-border/30 pt-2">
                     <span>Consecutive Trades Funded:</span>
                     <span className="font-bold text-foreground">
-                      ~{Math.floor(draftAllowance / Math.max(1, actionStakeAmount))} trades ({actionStakeAmount} tUSDC / trade)
+                      ~{Math.floor(draftAllowance / Math.max(1, actionStakeAmount || 0))} trades ({actionStakeAmount || 0} tUSDC / trade)
                     </span>
                   </div>
                 </div>
