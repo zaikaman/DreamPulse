@@ -156,12 +156,15 @@ export const OrderHistoryTable: React.FC<OrderHistoryTableProps> = ({
   const [cancelError, setCancelError] = useState<string | null>(null);
 
   const handleCancelOrder = async (order: OrderExecution) => {
-    const targetAddress = userAddress || order.userAddress;
-    if (!targetAddress) return;
+    if (!userAddress || !order.userAddress) return;
+    if (userAddress.toLowerCase() !== order.userAddress.toLowerCase()) {
+      setCancelError('Cannot cancel an order that does not belong to your connected wallet.');
+      return;
+    }
     setCancellingOrderId(order.id);
     setCancelError(null);
     try {
-      const res = await apiClient.cancelOrder(order.id, targetAddress);
+      const res = await apiClient.cancelOrder(order.id, userAddress);
       if (res.success) {
         setOrders((prev) =>
           prev.map((o) => (o.id === order.id ? { ...o, status: 'CANCELLED' } : o)),
@@ -581,11 +584,17 @@ export const OrderHistoryTable: React.FC<OrderHistoryTableProps> = ({
                 ) : (
                   orders.map((order) => {
                     const customDetails = order.agentType === 'CUSTOM' ? resolveCustomAgentDetails(order, customAgentsMap) : null;
+                    const isOwner = Boolean(
+                      userAddress &&
+                      order.userAddress &&
+                      userAddress.toLowerCase() === order.userAddress.toLowerCase()
+                    );
                     return (
                       <OrderRowItem
                         key={order.id}
                         order={order}
                         customDetails={customDetails}
+                        isOwner={isOwner}
                         onCancelOrder={handleCancelOrder}
                         isCancelling={cancellingOrderId === order.id}
                       />
@@ -833,9 +842,10 @@ function getOutcomeBadge(outcome: OutcomeType) {
 const OrderRowItem = React.memo<{
   order: OrderExecution;
   customDetails: { name: string; subtext: string; color?: string } | null;
+  isOwner?: boolean;
   onCancelOrder?: (order: OrderExecution) => void;
   isCancelling?: boolean;
-}>(({ order, customDetails, onCancelOrder, isCancelling }) => {
+}>(({ order, customDetails, isOwner, onCancelOrder, isCancelling }) => {
   const dateObj = new Date(order.createdAt);
   const timeStr = dateObj.toLocaleTimeString();
   const dateStr = dateObj.toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
@@ -1123,7 +1133,7 @@ Tx Hash: ${order.txHash || 'N/A'}`;
 
       {/* 11. ACTION (Cancel resting limit orders) */}
       <td style={{ padding: '10px 16px', textAlign: 'center' }}>
-        {order.status === 'PENDING' ? (
+        {order.status === 'PENDING' && isOwner ? (
           <button
             type="button"
             onClick={() => onCancelOrder?.(order)}
@@ -1158,7 +1168,12 @@ Tx Hash: ${order.txHash || 'N/A'}`;
             )}
           </button>
         ) : (
-          <span style={{ fontSize: '11px', color: 'var(--muted-foreground)' }}>—</span>
+          <span
+            style={{ fontSize: '11px', color: 'var(--muted-foreground)' }}
+            title={order.status === 'PENDING' ? 'Resting order owned by another trader or swarm agent' : undefined}
+          >
+            —
+          </span>
         )}
       </td>
     </tr>
