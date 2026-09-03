@@ -86,7 +86,7 @@ const HERO_SLIDES: HeroSlide[] = [
     badge3: { icon: CurrencyDollarIcon, label: "Automated Settlement Sweeper" },
     title: "Non-Custodial Session Keys. Zero Gas Drag.",
     description:
-      "Grant cryptographically scoped trading permissions to local AI agents without sharing private keys, featuring automated batch settlement sweeps and collateral compounding.",
+      "Grant cryptographically scoped trading permissions to local AI agents without sharing private keys, featuring automated batch settlement sweeps and direct wallet payouts.",
     primaryCtaText: "Open Swarm Cockpit",
     secondaryCtaText: "Explore Edge Radar",
     targetView: "Swarm Cockpit",

@@ -95,13 +95,13 @@ describe('Express REST API Endpoints', () => {
     expect(res.body.agents).toHaveProperty('sweeper');
   });
 
-  it('GET /api/v1/sweeper/summary returns live unclaimed and compounding metrics', async () => {
+  it('GET /api/v1/sweeper/summary returns live unclaimed and settlement metrics', async () => {
     const res = await request(app).get('/api/v1/sweeper/summary?userAddress=0x70997970C51812dc3A010C7d01b50e0d17dc79C8');
     expect(res.status).toBe(200);
     expect(res.body.success).toBe(true);
     expect(res.body.data).toHaveProperty('unclaimedAmount');
     expect(res.body.data).toHaveProperty('totalClaimedAllTime');
-    expect(res.body.data).toHaveProperty('compoundedStats');
+    expect(res.body.data).toHaveProperty('unclaimedPositions');
   });
 
   it('GET /api/v1/sweeper/unclaimed scans positions across finalized markets', async () => {
@@ -123,7 +123,7 @@ describe('Express REST API Endpoints', () => {
 
     const res = await request(app)
       .post('/api/v1/sweeper/trigger')
-      .send({ userAddress: '0x70997970C51812dc3A010C7d01b50e0d17dc79C8', autoCompound: true });
+      .send({ userAddress: '0x70997970C51812dc3A010C7d01b50e0d17dc79C8' });
     expect(res.status).toBe(200);
     expect(res.body.success).toBe(true);
     expect(res.body.txHash).toMatch(/^0x[a-f0-9]{64}$/i);

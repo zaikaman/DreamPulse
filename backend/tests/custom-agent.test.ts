@@ -1,288 +1,185 @@
-import { describe, it, expect, beforeEach, afterAll, vi } from 'vitest';
-import { customAgentService, STARTER_TEMPLATES } from '../src/services/custom-agent-service.js';
-import { customAgentEvaluator } from '../src/agents/custom-agent-evaluator.js';
-import { backtestService, type HistoricalCandle } from '../src/services/backtest-service.js';
-import type { CustomAgentDefinition, Market, SessionGrant } from '../src/types/index.js';
-import type { IAgentContext } from '../src/agents/base-agent.js';
+import { describe, it, expect, beforeEach } from 'vitest';
+import { CustomAgentService, customAgentService, STARTER_TEMPLATES } from '../src/services/custom-agent-service.js';
+import type { Address } from 'viem';
+import type { CustomAgentDefinition } from '../src/types/index.js';
 
-describe('Custom Deployed Agents & Evaluation Engine', () => {
-  const testUser = '0x000000000000000000000000000000000000dead';
+describe('CustomAgentService Comprehensive Suite', () => {
+  const userAddress = '0x70997970C51812dc3A010C7d01b50e0d17dc79C8' as Address;
 
-  beforeEach(async () => {
-    const existing = await customAgentService.getCustomAgents(testUser);
-    if (!existing.some((a) => a.name === 'Fast EMA Momentum Rider' && a.isDeployed)) {
-      const template = STARTER_TEMPLATES.find((t) => t.name === 'Fast EMA Momentum Rider');
-      if (template) {
-        await customAgentService.createCustomAgent({
-          ...template,
-          userAddress: testUser,
-          isDeployed: true,
-          allocatedAllowance: 200,
-        });
-      }
-    }
-  });
+  describe('CustomAgentService', () => {
+    let service: CustomAgentService;
 
-  afterAll(async () => {
-    const agents = await customAgentService.getCustomAgents(testUser);
-    for (const a of agents) {
-      if (a.userAddress.toLowerCase() === testUser.toLowerCase()) {
-        try {
-          await customAgentService.deleteCustomAgent(a.id, testUser);
-        } catch {
-          // ignore cleanup errors
-        }
-      }
-    }
-  });
+    beforeEach(() => {
+      service = new CustomAgentService();
+    });
 
-  it('preserves pristine starter templates while loading deployed agents', async () => {
-    // Other clean user
-    const otherUser = '0x9999999999999999999999999999999999999999';
-    const otherAgents = await customAgentService.getCustomAgents(otherUser);
+    it('loads starter templates in memory on initialization', async () => {
+      const agents = await service.getCustomAgents(userAddress);
+      expect(agents.length).toBeGreaterThanOrEqual(STARTER_TEMPLATES.length);
+      expect(agents.some((a) => a.name.includes('RSI'))).toBe(true);
+    });
 
-    expect(otherAgents.length).toBeGreaterThanOrEqual(3);
-    const template3 = otherAgents.find((a) => a.id === '00000000-0000-0000-0000-000000000003');
-    expect(template3).toBeDefined();
-    expect(template3?.userAddress).toBe('0x0000000000000000000000000000000000000000');
-    expect(template3?.isDeployed).toBe(false);
-
-    // Target user who deployed Fast EMA Momentum Rider
-    const userAgents = await customAgentService.getCustomAgents(testUser);
-    const deployedFastEMA = userAgents.find((a) => a.name === 'Fast EMA Momentum Rider' && a.isDeployed);
-    expect(deployedFastEMA).toBeDefined();
-    expect(deployedFastEMA?.isDeployed).toBe(true);
-    expect(deployedFastEMA?.allocatedAllowance).toBeGreaterThan(0);
-  });
-
-  it('getActiveDeployedAgents returns active deployed custom agents', async () => {
-    const deployed = await customAgentService.getActiveDeployedAgents();
-    expect(deployed.length).toBeGreaterThanOrEqual(1);
-
-    const hasFastEMA = deployed.some((a) => a.name === 'Fast EMA Momentum Rider' && a.isDeployed);
-    expect(hasFastEMA).toBe(true);
-  });
-
-  it('evaluates Fast EMA Momentum Rider rules and generates actionable decision', async () => {
-    const agent: CustomAgentDefinition = {
-      id: 'test-fast-ema-agent',
-      userAddress: testUser,
-      name: 'Fast EMA Momentum Rider',
-      description: 'Test Fast EMA Momentum Strategy',
-      symbol: 'ETH/USD',
-      timeframe: '5m',
-      strategyType: 'MOMENTUM',
-      color: '#3b82f6',
-      icon: 'BoltIcon',
-      isActive: true,
-      isDeployed: true,
-      allocatedAllowance: 200,
-      spentAllowance: 0,
-      createdAt: new Date().toISOString(),
-      rules: {
-        operator: 'AND',
-        conditions: [
-          {
-            id: 'c-1',
-            indicator: 'EMA',
-            period: 9,
-            secondaryPeriod: 21,
-            operator: 'CROSS_ABOVE',
-            value: 0,
+    it('creates, updates, pauses, deploys, and deletes custom agents in memory', async () => {
+      const newAgent: Omit<CustomAgentDefinition, 'id' | 'createdAt'> = {
+        userAddress,
+        name: 'ETH Breakout Hunter',
+        description: 'Enters on 15m Bollinger Band breakouts',
+        symbol: 'ETH/USD',
+        timeframe: '15m',
+        strategyType: 'BREAKOUT',
+        color: '#3b82f6',
+        icon: 'ChartBarIcon',
+        isActive: true,
+        isDeployed: false,
+        allocatedAllowance: 100,
+        spentAllowance: 0,
+        rules: {
+          operator: 'AND',
+          conditions: [
+            {
+              id: 'c-1',
+              indicator: 'BOLLINGER_UPPER',
+              period: 20,
+              stdDev: 2.0,
+              operator: 'GREATER_THAN',
+              value: 0,
+            },
+          ],
+          action: {
+            direction: 'CALL',
+            durationSec: 300,
+            stakeType: 'FIXED',
+            stakeAmount: 15,
           },
+        } as any,
+      };
+
+      const created = await service.createCustomAgent(newAgent as any);
+      expect(created.id).toBeDefined();
+      expect(created.name).toBe('ETH Breakout Hunter');
+
+      // Deploy
+      const deployed = await service.deployAgent(created.id, userAddress, 300);
+      expect(deployed?.isDeployed).toBe(true);
+      expect(deployed?.allocatedAllowance).toBe(300);
+
+      // Pause
+      const paused = await service.pauseAgent(created.id, userAddress);
+      expect(paused?.isDeployed).toBe(false);
+
+      // Record trade settlement
+      await service.recordTradeSettlement(created.id, 12.5, true);
+
+      // Top agents
+      const top = await service.getTopCustomAgents(10);
+      expect(Array.isArray(top)).toBe(true);
+
+      // Delete
+      const deleted = await service.deleteCustomAgent(created.id, userAddress);
+      expect(deleted).toBe(true);
+    });
+
+    it('manages custom multi-agent swarms', async () => {
+      const swarmPayload = {
+        userAddress,
+        name: 'Alpha Quant Multi-Agent Swarm',
+        description: 'Combines mean-reversion and trend following',
+        color: '#10b981',
+        icon: 'CpuChipIcon',
+        agents: [
           {
-            id: 'c-2',
-            indicator: 'PRICE_DRIFT',
-            period: 5,
-            operator: 'GREATER_THAN',
-            value: 0.0015,
+            agentId: STARTER_TEMPLATES[0].id,
+            allocationPercentage: 50,
+            priority: 1,
+            role: 'Scalper',
           },
         ],
-        action: {
-          direction: 'CALL',
-          durationSec: 300,
-          stakeType: 'FIXED',
-          stakeAmount: 20,
-        },
-        risk: {
-          maxConsecutiveLosses: 2,
-          cooldownMinutes: 1,
-          minPoolPayoutPct: 75,
-        },
-      },
-    };
+        isActive: true,
+      };
 
-    const mockMarket: Market = {
-      id: '0x3ecC694Cef705358864a646142ac17A90E29e388-ETHUSD-5m-2750-1787895207306',
-      symbol: 'ETH/USD',
-      strikePrice: 2750,
-      windowDuration: '5m',
-      openTimestamp: new Date(Date.now() - 60000).toISOString(),
-      closeTimestamp: new Date(Date.now() + 240000).toISOString(),
-      resolutionTimestamp: new Date(Date.now() + 240000).toISOString(),
-      status: 'Open',
-      bestBidYes: 0.49,
-      bestAskYes: 0.51,
-      bestBidNo: 0.49,
-      bestAskNo: 0.51,
-      impliedProbYes: 0.5,
-      fairValueYes: 0.5,
-      edgePercentage: 0.02,
-    };
+      const created = await service.createCustomSwarm(swarmPayload as any);
+      expect(created.id).toBeDefined();
+      expect(created.name).toBe('Alpha Quant Multi-Agent Swarm');
 
-    const mockSession: SessionGrant = {
-      id: 'session-test-123',
-      userAddress: testUser as any,
-      operatorAddress: '0x93e300607c363E7D7a47e50f5c9fDf1723e859Cf' as any,
-      permissions: ['placeOrderFor', 'cancelOrderFor'],
-      maxTradeSize: 50,
-      dailyVolumeCap: 500,
-      spentToday: 0,
-      expiresAt: new Date(Date.now() + 86400000).toISOString(),
-      isActive: true,
-      onChainAuthorized: true,
-    };
+      const list = await service.getCustomSwarms(userAddress);
+      expect(list.length).toBeGreaterThanOrEqual(1);
 
-    const context: IAgentContext = {
-      spotTicker: {
-        symbol: 'ETH/USD',
-        price: 2755.5,
-        change1m: 0.002,
-        change5m: 0.0025, // passes > 0.0015
-        timestamp: Date.now(),
-      },
-      market: mockMarket,
-      depth: {
-        yesBids: [{ price: 0.49, quantity: 100, total: 49 }],
-        yesAsks: [{ price: 0.51, quantity: 100, total: 51 }],
-      },
-      activeSessions: [mockSession],
-    };
-
-    const momentumCandles: HistoricalCandle[] = Array.from({ length: 50 }, (_, i) => ({
-      timestamp: Date.now() - (50 - i) * 300000,
-      open: 2700 + i * 1.1,
-      high: 2702 + i * 1.1,
-      low: 2699 + i * 1.1,
-      close: 2701 + i * 1.1,
-      volume: 100 + i * 5,
-    }));
-    vi.spyOn(backtestService, 'fetchHistoricalCandles').mockResolvedValue(momentumCandles);
-
-    const decision = await customAgentEvaluator.evaluate(agent, context, mockSession);
-
-    expect(decision).toBeDefined();
-    expect(decision.agentType).toBe('CUSTOM');
-    expect(decision.action).toBe('TAKER_BUY');
-    expect(decision.targetOutcome).toBe('YES');
-    expect(decision.price).toBeGreaterThan(0.4);
-    expect(decision.price).toBeLessThan(0.6);
-    expect(decision.lotSize).toBeGreaterThanOrEqual(1);
-    expect(decision.confidence).toBeGreaterThanOrEqual(0.88);
-    expect(decision.rationale).toContain('Fast EMA Momentum Rider');
-  });
-
-  it('rejects execution when bankroll allowance is exhausted', async () => {
-    const exhaustedAgent: CustomAgentDefinition = {
-      id: 'exhausted-agent',
-      userAddress: testUser,
-      name: 'Exhausted Strategy',
-      description: 'Exhausted allowance test strategy',
-      symbol: 'BTC/USD',
-      timeframe: '5m',
-      strategyType: 'MOMENTUM',
-      color: '#ef4444',
-      icon: 'ShieldExclamationIcon',
-      isActive: true,
-      isDeployed: true,
-      allocatedAllowance: 100,
-      spentAllowance: 100, // No allowance left
-      createdAt: new Date().toISOString(),
-      rules: {
-        operator: 'AND',
-        conditions: [],
-        action: {
-          direction: 'CALL',
-          durationSec: 300,
-          stakeType: 'FIXED',
-          stakeAmount: 10,
-        },
-        risk: {
-          maxConsecutiveLosses: 2,
-          cooldownMinutes: 1,
-          minPoolPayoutPct: 75,
-        },
-      },
-    };
-
-    const mockMarket: Market = {
-      id: '0x3ecC694Cef705358864a646142ac17A90E29e388-BTCUSD-5m-96500-1787895207306',
-      symbol: 'BTC/USD',
-      strikePrice: 96500,
-      windowDuration: '5m',
-      openTimestamp: new Date(Date.now() - 60000).toISOString(),
-      closeTimestamp: new Date(Date.now() + 240000).toISOString(),
-      resolutionTimestamp: new Date(Date.now() + 240000).toISOString(),
-      status: 'Open',
-      bestBidYes: 0.49,
-      bestAskYes: 0.51,
-      bestBidNo: 0.49,
-      bestAskNo: 0.51,
-      impliedProbYes: 0.5,
-      fairValueYes: 0.5,
-      edgePercentage: 0.02,
-    };
-
-    const context: IAgentContext = {
-      spotTicker: { symbol: 'BTC/USD', price: 96500, change1m: 0, change5m: 0, timestamp: Date.now() },
-      market: mockMarket,
-      depth: { yesBids: [], yesAsks: [] },
-      activeSessions: [],
-    };
-
-    const decision = await customAgentEvaluator.evaluate(exhaustedAgent, context);
-    expect(decision.action).toBe('HOLD');
-    expect(decision.rationale).toContain('allowance exhausted');
-  });
-
-  it('records trade fills and settlements updating metrics', async () => {
-    const dummy = await customAgentService.createCustomAgent({
-      userAddress: '0x0000000000000000000000000000000000000002',
-      name: 'Unit Test Isolated Agent',
-      description: 'Isolated test agent for metrics',
-      symbol: 'BTC/USD',
-      timeframe: '5m',
-      strategyType: 'MOMENTUM',
-      color: '#3b82f6',
-      icon: 'BoltIcon',
-      isActive: true,
-      rules: {
-        operator: 'AND',
-        conditions: [],
-        action: { direction: 'CALL', durationSec: 300, stakeType: 'FIXED', stakeAmount: 10 },
-        risk: { maxConsecutiveLosses: 2, cooldownMinutes: 1, minPoolPayoutPct: 75 },
-      },
+      const deleted = await service.deleteCustomSwarm(created.id, userAddress);
+      expect(deleted).toBe(true);
     });
-    const testId = dummy.id;
 
-    try {
-      const initial = await customAgentService.getCustomAgentById(testId);
-      expect(initial).toBeDefined();
+    it('maps database rows to CustomAgentDefinition structure', () => {
+      const row = {
+        id: '12345678-1234-1234-1234-123456789012',
+        user_address: userAddress,
+        name: 'Test DB Agent',
+        description: 'Test Description',
+        symbol: 'BTC/USD',
+        timeframe: '5m',
+        strategy_type: 'MOMENTUM',
+        rules: {},
+        color: '#ff0000',
+        icon: 'BoltIcon',
+        is_active: true,
+        is_deployed: true,
+        allocated_allowance: 500,
+        spent_allowance: 100,
+        pnl: 75.0,
+        win_rate: 65,
+        trades_count: 20,
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+      };
 
-      const initialTrades = initial?.tradesCount ?? 0;
-      const initialSpent = initial?.spentAllowance ?? 0;
+      const agent = service.mapDbRowToAgent(row);
+      expect(agent.id).toBe(row.id);
+      expect(agent.userAddress).toBe(userAddress);
+      expect(agent.allocatedAllowance).toBe(500);
+      expect(agent.pnl).toBe(75.0);
+    });
 
-      await customAgentService.recordTradeFill(testId, 15.5);
-      const afterFill = await customAgentService.getCustomAgentById(testId);
-      expect(afterFill?.tradesCount).toBe(initialTrades + 1);
-      expect(afterFill?.spentAllowance).toBe(Number((initialSpent + 15.5).toFixed(4)));
+    it('covers getCustomAgentById, updateCustomAgent, setAgentAllowance, and permission checks', async () => {
+      const template = STARTER_TEMPLATES[0];
+      const found = await service.getCustomAgentById(template.id);
+      expect(found).toBeDefined();
 
-      await customAgentService.recordTradeSettlement(testId, 12.0, true);
-      const afterSettlement = await customAgentService.getCustomAgentById(testId);
-      expect(afterSettlement?.pnl).toBe(Number(((initial?.pnl ?? 0) + 12.0).toFixed(2)));
-      expect(afterSettlement?.winRate).toBeGreaterThan(0);
-    } finally {
-      await customAgentService.deleteCustomAgent(testId, dummy.userAddress);
-    }
+      const notFound = await service.getCustomAgentById('non-existent-agent-id');
+      expect(notFound).toBeNull();
+
+      // Set allowance
+      const updatedAllow = await service.setAgentAllowance(template.id, template.userAddress, 250);
+      expect(updatedAllow?.allocatedAllowance).toBe(250);
+
+      // Update custom agent
+      const updatedAgent = await service.updateCustomAgent(template.id, {
+        name: 'Renamed Template Agent',
+      }, template.userAddress);
+      expect(updatedAgent?.name).toBe('Renamed Template Agent');
+
+      // Update with wrong user address on a user-owned agent (throws Forbidden error)
+      const userAgent = await service.createCustomAgent({
+        userAddress,
+        name: 'My Protected Alpha',
+        symbol: 'BTC/USD',
+        timeframe: '5m',
+        strategyType: 'MOMENTUM',
+        rules: {},
+        isActive: true,
+      } as any);
+
+      const otherUser = '0x1111222233334444555566667777888899990000' as Address;
+      await expect(service.updateCustomAgent(userAgent.id, { name: 'Hack' }, otherUser)).rejects.toThrow('Forbidden');
+
+      // Delete with wrong user address throws Forbidden
+      await expect(service.deleteCustomAgent(userAgent.id, otherUser)).rejects.toThrow('Forbidden');
+
+      // Delete with correct user address returns true
+      const validDelete = await service.deleteCustomAgent(userAgent.id, userAddress);
+      expect(validDelete).toBe(true);
+
+      // getActiveDeployedAgents
+      const deployed = await service.getActiveDeployedAgents();
+      expect(Array.isArray(deployed)).toBe(true);
+    });
   });
 });

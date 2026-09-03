@@ -130,7 +130,7 @@ export interface SettlementSweep {
   winningOutcome: OutcomeType;
   claimableAmount: number;
   payoutToken: string;
-  isCompounded: boolean;
+  isCompounded?: boolean;
   txHash?: `0x${string}`;
   status: 'PENDING' | 'CONFIRMED' | 'FAILED';
   claimedAt: string;
@@ -149,12 +149,6 @@ export interface SweeperSummary {
     isVoided: boolean;
     status: string;
   }>;
-  autoCompound: boolean;
-  compoundedStats: {
-    totalCompoundedAmount: number;
-    reinvestedCycles: number;
-    lastCompoundedAt: string;
-  };
 }
 
 export interface AgentThoughtLog {

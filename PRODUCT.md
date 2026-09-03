@@ -16,7 +16,7 @@ DreamPulse AI serves two primary user archetypes operating on Somnia Shannon Tes
 
 2. **Retail Prediction Traders & Web3 DeFi Participants**:
    - **Situation**: Wanting exposure to automated prediction market strategies without sitting at the screen 24/7, calculating math models, or manually signing endless approvals for dozens of rolling round contracts.
-   - **Jobs to be Done**: Delegate non-custodial execution to personal or global copy-trading swarms with strict single-trade and balance caps, monitor real-time AI reasoning feeds explaining trade decisions in plain English, and autonomously claim and compound winning payouts from expired pools with zero stranded capital.
+    - **Jobs to be Done**: Delegate non-custodial execution to personal or global copy-trading swarms with strict single-trade and balance caps, monitor real-time AI reasoning feeds explaining trade decisions in plain English, and autonomously claim winning payouts from expired pools directly to user wallets with zero stranded capital.
 
 ## Product Purpose
 
@@ -26,7 +26,7 @@ It eliminates the structural hurdles of decentralized prediction markets — wid
 - **Volt**: Latency drift & spot velocity momentum sniper (IOC taker).
 - **Oracle**: Volatility surface arbitrageur exploiting divergences between CLOB implied probability and Black-Scholes fair value $\Phi(z)$.
 - **Titan**: Adaptive two-sided market maker anchoring bids/asks around fair value with dynamic inventory aversion ($\gamma \cdot |\text{inv}|^{1.25}$) and self-trade depth sanitization.
-- **Sweeper**: Autonomous settlement daemon continuously sweeping finalized rounds, batch-redeeming winning shares on-chain, and compounding collateral.
+- **Sweeper**: Autonomous settlement daemon continuously sweeping finalized rounds, batch-redeeming winning shares on-chain, and transferring payouts directly to user wallets.
 
 Success means providing sub-second mathematical market efficiency, seamless non-custodial automated execution, and complete real-time transparency through cognitive reasoning streams.
 

@@ -342,7 +342,7 @@ export const apiClient = {
     return fetchJson(endpoint);
   },
 
-  async triggerSweep(userAddress: string, autoCompound: boolean = true): Promise<{
+  async triggerSweep(userAddress: string): Promise<{
     success: boolean;
     claimedMarketsCount: number;
     totalClaimedAmount: string;
@@ -351,7 +351,7 @@ export const apiClient = {
   }> {
     return fetchJson('/sweeper/trigger', {
       method: 'POST',
-      body: JSON.stringify({ userAddress, autoCompound }),
+      body: JSON.stringify({ userAddress }),
     });
   },
 

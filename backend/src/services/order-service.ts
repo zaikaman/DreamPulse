@@ -2646,7 +2646,7 @@ export class OrderService {
             for (const userAddr of winningUserAddresses) {
               const personalCfg = userSwarmService.getConfig(userAddr);
               if (personalCfg.sweeperEnabled !== false) {
-                void settlementService.triggerBatchSweep(userAddr, true).catch(() => {});
+                void settlementService.triggerBatchSweep(userAddr).catch(() => {});
               }
             }
           }).catch(() => {});
@@ -3092,7 +3092,7 @@ export class OrderService {
                 for (const userAddr of winningUserAddresses) {
                   const personalCfg = userSwarmService.getConfig(userAddr);
                   if (personalCfg.sweeperEnabled !== false) {
-                    void settlementService.triggerBatchSweep(userAddr, true).catch(() => {});
+                    void settlementService.triggerBatchSweep(userAddr).catch(() => {});
                   }
                 }
               }).catch(() => {});

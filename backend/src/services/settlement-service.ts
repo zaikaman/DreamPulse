@@ -1,6 +1,5 @@
 import { type Hex, type Address, getAddress, isAddress } from 'viem';
 import { supabase, isPersistenceEnabled } from '../config/supabase.js';
-import { compounderService } from './compounder-service.js';
 import { telemetryWsGateway } from '../websocket/server.js';
 import { marketService } from './market-service.js';
 import { orderService, resolveOnchainWinningOutcome } from './order-service.js';
@@ -72,12 +71,6 @@ export interface SweeperSummary {
   claimableMarketsCount: number;
   confirmedSweepsCount: number;
   unclaimedPositions: SerializableUnclaimedPosition[];
-  autoCompound: boolean;
-  compoundedStats: {
-    totalCompoundedAmount: number;
-    reinvestedCycles: number;
-    lastCompoundedAt: string;
-  };
 }
 
 export interface ClaimResult {
@@ -220,10 +213,6 @@ export class SettlementService {
             const key = `${normalized}:${sweep.marketId.toLowerCase()}`;
             this.userSweptTotals.set(key, (this.userSweptTotals.get(key) || 0) + sweep.claimableAmount);
           }
-
-          if (sweep.isCompounded && sweep.claimableAmount > 0) {
-            compounderService.recordHistoricalSweep(sweep.userAddress, sweep.claimableAmount, sweep.claimedAt);
-          }
         }
 
         if (data.length < pageSize) {
@@ -339,10 +328,6 @@ export class SettlementService {
           if (sweep.status === 'CONFIRMED' && isAddress(sweep.userAddress)) {
             const key = `${sweep.userAddress.toLowerCase()}:${sweep.marketId.toLowerCase()}`;
             this.userSweptTotals.set(key, (this.userSweptTotals.get(key) || 0) + sweep.claimableAmount);
-          }
-
-          if (sweep.isCompounded && sweep.claimableAmount > 0) {
-            compounderService.recordHistoricalSweep(sweep.userAddress, sweep.claimableAmount, sweep.claimedAt);
           }
         }
 
@@ -918,7 +903,7 @@ export class SettlementService {
   /**
    * Scans and executes batch settlement claims for a user address across all finalized prediction markets.
    */
-  public async triggerBatchSweep(userAddress: string, autoCompound: boolean = true): Promise<ClaimResult> {
+  public async triggerBatchSweep(userAddress: string): Promise<ClaimResult> {
     const normalizedUser = isAddress(userAddress)
       ? (getAddress(userAddress) as Address)
       : (userAddress as Address);
@@ -1321,7 +1306,6 @@ export class SettlementService {
     marketId: string,
     userAddress?: string,
     winningOutcomePreference: string = 'YES',
-    autoCompound: boolean = true,
   ): Promise<SettlementSweep> {
     const normalizedUser = userAddress && isAddress(userAddress)
       ? (getAddress(userAddress) as Address)
@@ -1562,8 +1546,6 @@ export class SettlementService {
         userSweeps.reduce((acc, s) => acc + s.claimableAmount, 0).toFixed(4),
       );
 
-      const compoundedStats = compounderService.getUserCompoundedStats(normalized);
-
       const result: SweeperSummary = {
         unclaimedAmount,
         totalClaimedAllTime,
@@ -1582,12 +1564,6 @@ export class SettlementService {
           isVoided: p.isVoided,
           status: p.status,
         })),
-        autoCompound: false,
-        compoundedStats: {
-          totalCompoundedAmount: compoundedStats.totalCompoundedAmount,
-          reinvestedCycles: compoundedStats.reinvestedCycles,
-          lastCompoundedAt: compoundedStats.lastCompoundedAt,
-        },
       };
 
       // 10-second TTL

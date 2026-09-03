@@ -207,7 +207,7 @@ export const SweeperControls: React.FC<SweeperControlsProps> = ({
     setIsSweeping(true);
     setSweepError(null);
     try {
-      const res = await apiClient.triggerSweep(activeAddress, false);
+      const res = await apiClient.triggerSweep(activeAddress);
       if (res.success) {
         setCelebrationState({ isOpen: true, amount: res.totalClaimedAmount, txHash: res.txHash });
         const claimedNum = parseFloat(res.totalClaimedAmount.replace(/[^0-9.]/g, '')) || 0;

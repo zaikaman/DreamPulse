@@ -1,14 +1,13 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { SweeperAgent } from '../src/agents/sweeper.js';
 import { SettlementService } from '../src/services/settlement-service.js';
-import { CompounderService } from '../src/services/compounder-service.js';
 import { somniaExchange } from '../src/config/somnia.js';
 import { orderService } from '../src/services/order-service.js';
 import type { IAgentContext } from '../src/agents/base-agent.js';
 import type { Market, SessionGrant } from '../src/types/index.js';
 import type { Address, Hex } from 'viem';
 
-describe('Phase 6 Settlement Sweeper & Collateral Compounder Tests', () => {
+describe('Phase 6 Settlement Sweeper Tests', () => {
   const finalizedMarket: Market = {
     id: '0x3333444455556666777788889999000011112222',
     symbol: 'BTC/USD',
@@ -53,7 +52,6 @@ describe('Phase 6 Settlement Sweeper & Collateral Compounder Tests', () => {
 
     beforeEach(() => {
       sweeper = new SweeperAgent({
-        autoCompound: true,
         sweepIntervalMs: 0,
       });
     });
@@ -99,7 +97,7 @@ describe('Phase 6 Settlement Sweeper & Collateral Compounder Tests', () => {
     });
   });
 
-  describe('SettlementService & CompounderService', () => {
+  describe('SettlementService', () => {
     afterEach(() => {
       vi.restoreAllMocks();
     });
@@ -128,7 +126,7 @@ describe('Phase 6 Settlement Sweeper & Collateral Compounder Tests', () => {
         receipt: { status: 'success' },
       } as any);
 
-      const result = await settlementService.triggerBatchSweep(userAddress, true);
+      const result = await settlementService.triggerBatchSweep(userAddress);
       expect(result.success).toBe(true);
       expect(result.claimedMarketsCount).toBeGreaterThan(0);
       expect(result.txHash).toMatch(/^0x[a-f0-9]{64}$/i);
@@ -154,7 +152,6 @@ describe('Phase 6 Settlement Sweeper & Collateral Compounder Tests', () => {
       expect(typeof summary.unclaimedAmount).toBe('number');
       expect(typeof summary.totalClaimedAllTime).toBe('number');
       expect(Array.isArray(summary.unclaimedPositions)).toBe(true);
-      expect(summary.compoundedStats).toBeDefined();
     });
 
     it('includes indexer getClaimable positions even when the resolved-market list is full of unrelated rows', async () => {
@@ -243,22 +240,6 @@ describe('Phase 6 Settlement Sweeper & Collateral Compounder Tests', () => {
       expect(held.winningOutcome).toBe('YES');
     });
 
-    it('compounds claimed proceeds into active user allocation using 100% compounding', async () => {
-      const compounderService = new CompounderService();
-      const userAddress = '0x70997970C51812dc3A010C7d01b50e0d17dc79C8';
-
-      const initial = compounderService.getUserCompoundedStats(userAddress);
-      expect(initial.totalCompoundedAmount).toBe(0);
-
-      const allocation = await compounderService.compoundProceeds(userAddress, 100.0);
-      expect(allocation.totalCompoundedAmount).toBe(100.0); // 100% to trading capital
-      expect(allocation.reinvestedCycles).toBe(1);
-
-      const secondAllocation = await compounderService.compoundProceeds(userAddress, 50.0);
-      expect(secondAllocation.totalCompoundedAmount).toBe(150.0); // 100 + 50
-      expect(secondAllocation.reinvestedCycles).toBe(2);
-    });
-
     it('claims individual market payout with valid confirmation', async () => {
       const settlementService = new SettlementService();
       const userAddress = '0x70997970C51812dc3A010C7d01b50e0d17dc79C8';
@@ -289,7 +270,6 @@ describe('Phase 6 Settlement Sweeper & Collateral Compounder Tests', () => {
         finalizedMarket.id,
         userAddress,
         'YES',
-        true,
       );
 
       expect(sweep).toBeDefined();
@@ -323,7 +303,7 @@ describe('Phase 6 Settlement Sweeper & Collateral Compounder Tests', () => {
       // Simulate on-chain redeem failing because operator already redeemed the tokens
       vi.spyOn(somniaExchange.trader, 'redeem').mockRejectedValue(new Error('InsufficientBalance'));
 
-      const result = await settlementService.triggerBatchSweep(copyTraderAddress, true);
+      const result = await settlementService.triggerBatchSweep(copyTraderAddress);
       expect(result.success).toBe(true);
       expect(result.claimedMarketsCount).toBe(1);
       expect(result.totalClaimedAmount).toBe('11.00 tUSDC');
@@ -394,7 +374,7 @@ describe('Phase 6 Settlement Sweeper & Collateral Compounder Tests', () => {
       expect(unclaimed[0].winningOutcome).toBe('YES');
       expect(unclaimed[0].claimableAmount).toBe(20.0); // Full $20 payout
 
-      const sweepResult = await settlementService.triggerBatchSweep(terminalUserAddress, true);
+      const sweepResult = await settlementService.triggerBatchSweep(terminalUserAddress);
       expect(sweepResult.success).toBe(true);
       expect(sweepResult.claimedMarketsCount).toBe(1);
       expect(sweepResult.totalClaimedAmount).toBe('20.00 tUSDC');

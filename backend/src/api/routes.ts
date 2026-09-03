@@ -5,7 +5,6 @@ import { sessionService } from '../services/session-service.js';
 import { swarmRunner } from '../agents/swarm-runner.js';
 import { orderService } from '../services/order-service.js';
 import { settlementService } from '../services/settlement-service.js';
-import { compounderService } from '../services/compounder-service.js';
 import { backtestService } from '../services/backtest-service.js';
 import { customAgentService } from '../services/custom-agent-service.js';
 import { operatorAccount, SOMNIA_ADDRESSES, publicClient, somniaExchange } from '../config/somnia.js';
@@ -1159,12 +1158,9 @@ apiRouter.get('/sweeper/unclaimed', optionalWalletAuth, async (req: Request, res
 
 apiRouter.post('/sweeper/trigger', requireWalletAuth, async (req: Request, res: Response) => {
   try {
-    const { userAddress, autoCompound } = req.body;
+    const { userAddress } = req.body;
     const targetAddress = req.walletAddress || userAddress || operatorAccount.address;
-    const result = await settlementService.triggerBatchSweep(
-      targetAddress,
-      autoCompound ?? true,
-    );
+    const result = await settlementService.triggerBatchSweep(targetAddress);
 
     res.json({
       success: true,

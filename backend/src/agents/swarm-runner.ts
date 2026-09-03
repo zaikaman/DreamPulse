@@ -471,7 +471,6 @@ export class MultiAgentSwarmRunner {
               if (unclaimed.length > 0 && totalUnclaimed >= sweeperAgent.sweeperConfig.minClaimableAmount) {
                 const sweepResult = await settlementService.triggerBatchSweep(
                   targetAddress,
-                  sweeperAgent.sweeperConfig.autoCompound,
                 );
                 if (sweepResult.claimedMarketsCount > 0) {
                   const claimedNum = parseFloat(sweepResult.totalClaimedAmount.replace(/[^0-9.]/g, '')) || 0;
@@ -897,7 +896,6 @@ export class MultiAgentSwarmRunner {
         if (config.lotSize !== undefined) titanMMAgent.titanConfig.lotSize = Number(config.lotSize);
         break;
       case 'Sweeper':
-        if (config.autoCompound !== undefined) sweeperAgent.sweeperConfig.autoCompound = Boolean(config.autoCompound);
         if (config.minClaimableAmount !== undefined) sweeperAgent.sweeperConfig.minClaimableAmount = Number(config.minClaimableAmount);
         if (config.sweepIntervalMs !== undefined) sweeperAgent.sweeperConfig.sweepIntervalMs = Number(config.sweepIntervalMs);
         break;

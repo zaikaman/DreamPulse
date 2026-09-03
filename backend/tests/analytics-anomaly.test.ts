@@ -214,12 +214,6 @@ describe('AnalyticsService & AnomalyService Comprehensive Suite', () => {
         claimableMarketsCount: 0,
         confirmedSweepsCount: 0,
         unclaimedPositions: [],
-        autoCompound: true,
-        compoundedStats: {
-          totalCompoundedAmount: 0,
-          reinvestedCycles: 3,
-          lastCompoundedAt: new Date().toISOString(),
-        },
       });
       vi.spyOn(settlementService, 'getSweepHistory').mockReturnValue([]);
     });

@@ -128,7 +128,7 @@ export interface SettlementSweep {
   winningOutcome: OutcomeType;
   claimableAmount: number;
   payoutToken: string;
-  isCompounded: boolean;
+  isCompounded?: boolean;
   txHash?: `0x${string}`;
   status: 'PENDING' | 'CONFIRMED' | 'FAILED';
   claimedAt: string;

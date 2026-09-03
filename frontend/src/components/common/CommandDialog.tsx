@@ -175,9 +175,9 @@ export const CommandDialog: React.FC<CommandDialogProps> = ({
       {
         id: "Settlement",
         label: "Settlement Sweeper",
-        desc: "Batch Outcome Claims & Compounder",
+        desc: "Batch Outcome Claims & Direct Payouts",
         icon: CheckCircleIcon,
-        keywords: "settlement sweeper batch outcome claims compounder sweep payout redeem winner",
+        keywords: "settlement sweeper batch outcome claims direct payouts sweep payout redeem winner",
       },
       {
         id: "Analytics",

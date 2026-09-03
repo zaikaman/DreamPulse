@@ -146,7 +146,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
     {
       id: "Settlement" as DashboardViewType,
       label: "Settlement Sweeper",
-      description: "Batch Outcome Claims & Compounder",
+      description: "Batch Outcome Claims & Direct Payouts",
       icon: CheckCircleIcon,
     },
   ];

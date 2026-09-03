@@ -44,7 +44,7 @@
 7. [Autonomous Multi-Agent Swarms (Protocol & Personal)](#4-autonomous-multi-agent-swarms-protocol--personal)
 8. [Autonomous Agent Personas (Volt, Oracle, Titan, Sweeper)](#autonomous-agent-personas)
 9. [Swarm Arena, Strategy Leaderboards & Proof-of-Alpha](#5-swarm-arena-strategy-leaderboards--proof-of-alpha)
-10. [Settlement Sweeper & Direct Compounder](#6-settlement-sweeper--direct-compounder)
+10. [Settlement Sweeper & Direct Payouts](#6-settlement-sweeper--direct-payouts)
 11. [Mathematical & Quantitative Foundation](#mathematical--quantitative-foundation)
 12. [Non-Custodial Session Delegation & BatchApprove.sol](#non-custodial-session-delegation--batchapprovesol)
 13. [Institutional Design System & Minimalist UI](#institutional-design-system--minimalist-ui)
@@ -81,7 +81,7 @@ DreamPulse AI is structured into four tightly integrated operational layers:
 2. **Intelligence & Quantitative Layer**
    * **Black-Scholes Math Engine**: High-precision Abramowitz-Stegun normal CDF $\Phi(z)$, Bayesian EWMA volatility surfaces, and dynamic fair-value calculations.
    * **Autonomous Agent Swarms**: Canonical protocol swarms alongside isolated per-wallet personal swarms (Volt Sniper, Oracle Arb, Titan MM).
-   * **Settlement Sweeper**: Autonomous payout monitoring, zero-loss batch redemptions, and direct collateral auto-compounding.
+   * **Settlement Sweeper**: Autonomous payout monitoring, zero-loss batch redemptions, and direct tUSDC wallet transfers.
 
 3. **Execution & Security Infrastructure (`Node.js` · `Express` · `TypeScript`)**
    * **Risk & Concurrency Guard**: Pre-flight depth sanitization, serialized NonceManager queue, and single-trade/daily loss caps.
@@ -120,7 +120,7 @@ Decentralized Central Limit Order Book (CLOB) prediction markets are the fastest
 | **3. Quant Backtester** | Binance 1m/5m/15m/1h historical data, configurable slippage and latency delays, Sortino and drawdown metrics. | Verified historical performance validation before deploying to personal or global swarms. |
 | **4. Autonomous Swarms** | 4 specialized autonomous agents (Volt, Oracle, Titan, Sweeper), protocol vs. personal swarms, 100ms evaluation loops. | Continuous two-sided market liquidity and latency arbitrage with isolated per-wallet parameters. |
 | **5. Swarm Arena & Social** | Dual-track leaderboards (AI fleet & human forecasters), 1-click strategy cloning, forecaster mirror trading. | Fully transparent on-chain performance tracking and high-resolution Proof-of-Alpha cards. |
-| **6. Settlement Sweeper** | Autonomous resolution scanning, zero-loss multi-pool batch claims, 100% collateral compounding. | Eliminates stranded capital by automatically recycling resolved payouts back into active bankrolls. |
+| **6. Settlement Sweeper** | Autonomous resolution scanning, zero-loss multi-pool batch claims, direct tUSDC wallet transfers. | Eliminates stranded capital by automatically claiming and transferring resolved payouts directly to user wallets. |
 
 ---
 
@@ -278,11 +278,11 @@ DreamPulse coordinates an orchestrated **Multi-Agent Swarm** operating on a high
   * Tail spread expansion: Automatically widens spreads when event probabilities enter extreme wings ($<0.30$ or $>0.70$).
   * Self-trade protection: Active maker quotes are automatically registered in memory and subtracted from depth calculations, preventing Volt and Oracle from crossing Titan's own orders.
 
-### 4. Sweeper (Autonomous Settlement & Direct Compounder)
+### 4. Sweeper (Autonomous Settlement & Direct Payouts)
 * **Strategy**: Zero-Loss Capital Recycling & Batch Redemption.
 * **Mechanism**: Monitors all prediction contracts transitioning from `Trading` $\rightarrow$ `Resolving` $\rightarrow$ `Finalized`. Identifies unclaimed winning outcome tokens (YES/NO) and invokes the DreamDEX settlement contracts to batch-claim payouts.
 * **Risk Invariants**:
-  * 100% automated compounding: Claimed `tUSDC` collateral is instantly recycled into the user's active trading allocation.
+  * 100% direct wallet transfers: Claimed `tUSDC` collateral is instantly transferred directly to the user's wallet.
   * Gas-optimized batching: Aggregates multiple matured markets into single transaction calls to minimize native `STT` gas expenditure.
 
 ---
@@ -325,13 +325,13 @@ A high-resolution graphics generator rendering 2x & 4x retina Canvas cards for s
 
 ---
 
-## 6. Settlement Sweeper & Direct Compounder
+## 6. Settlement Sweeper & Direct Payouts
 
 The **Settlement Sweeper** (`#settlement` / `SweeperControls.tsx`) provides zero-loss capital efficiency for prediction markets:
 
 * **Real-Time Settlement Watcher**: Continuously monitors prediction contracts transitioning from `Trading` $\rightarrow$ `Resolving` $\rightarrow$ `Finalized`.
 * **Zero-Loss Batch Redemption**: Queries claimable outcome token balances across all user and swarm positions, invoking the DreamDEX `BinarySettlement` router in single batch transactions.
-* **100% Direct Collateral Compounding**: Immediately replenishes user session allowances and active trading bankrolls with redeemed `tUSDC` without requiring manual wallet claims or extra transaction fees.
+* **100% Direct Wallet Transfers**: Immediately claims and transfers redeemed `tUSDC` directly to user wallets without requiring manual claims or extra gas friction.
 * **Gas-Optimized STT Batching**: Bundles multiple market redemptions into one on-chain execution to minimize gas overhead on Somnia Shannon.
 
 ---
@@ -430,7 +430,7 @@ The DreamPulse frontend is crafted with an ultra-refined, minimalist institution
 * **Institutional 3-Category Sidebar**:
   * **Trading & Markets**: *Overview*, *Edge Radar (Black-Scholes mispricing)*, *Markets & Depth*, and *Trade Terminal (Pro Execution)*.
   * **Autonomous Agents & AI**: *Fleet Cockpit (Protocol & Personal Swarms)*, *Strategy Studio (Visual No-Code Builder)*, *Backtester (Simulation Lab)*, *Swarm Arena (Leaderboards & Social)*, and *AI Swarm Feed (Real-time Thought Stream)*.
-  * **Portfolio & Settlement**: *Analytics (Sharpe/Sortino)* and *Settlement Sweeper (Batch Claim & Compound)*.
+  * **Portfolio & Settlement**: *Analytics (Sharpe/Sortino)* and *Settlement Sweeper (Batch Claim & Direct Payouts)*.
 * **Global Command Palette (`⌘K / Ctrl+K`)**: Lightning-fast fuzzy search modal to jump between prediction markets, navigate views, and execute platform actions.
 * **Procedural Web Audio Feedback**: Zero-asset synthesizer utilizing the Web Audio API to deliver millisecond-accurate acoustic feedback for order fills, opportunity alerts, and settlement sweeps.
 
@@ -537,7 +537,7 @@ All DreamPulse interactions execute on the **Somnia Shannon Testnet**:
    * **WebSocket Broadcast**: Telemetry is streamed in real time to connected web clients.
    * **On-Chain Placement**: The operator invokes `placeOrderFor` on the Somnia DreamDEX CLOB.
    * **Receipt Confirmation**: The transaction receipt is confirmed on-chain and broadcast to the user terminal.
-4. **Autonomous Resolution & Settlement**: When a contract transitions to `Finalized`, the Sweeper daemon detects unclaimed winning shares, calls `claimMarketPayout` via the settlement router, and auto-compounds the collateral.
+4. **Autonomous Resolution & Settlement**: When a contract transitions to `Finalized`, the Sweeper daemon detects unclaimed winning shares, calls `claimMarketPayout` via the settlement router, and directly transfers tUSDC to user wallets.
 
 ### End-to-End Committed Execution Proof Trail (Database & On-Chain Audit)
 
@@ -766,7 +766,7 @@ npm run verify
 | [`tests/auth-middleware.test.ts`](file:///d:/DreamPulse/backend/tests/auth-middleware.test.ts) | **19** | 🔵 Local Unit | EIP-712 auth signatures, Supabase JWT minting, verification, tamper detection, cookie parsing, SIWE, and route guard middleware. |
 | [`tests/config-bootstrap.test.ts`](file:///d:/DreamPulse/backend/tests/config-bootstrap.test.ts) | **14** | 🟢 Live / Local | HttpOnly cookies, Somnia network client, Supabase credentials, and operator ABI selectors. |
 | [`tests/leaderboard.test.ts`](file:///d:/DreamPulse/backend/tests/leaderboard.test.ts) | **14** | 🔵 Local Unit | Dual-track Swarm Arena rankings, Sharpe/Sortino ratios, APEX tier badges, 100% real human forecaster order aggregation, Copilot synergy, detailed trader profile generation, 1-click strategy cloning, and global arena stats. |
-| [`tests/settlement.test.ts`](file:///d:/DreamPulse/backend/tests/settlement.test.ts) | **14** | 🟢 Live / Local | Matured market resolution detection, automated winning share redemptions via Sweeper daemon, 100% collateral compounding into active trading balances, multi-market batch claim aggregation, and failed sweep accounting. |
+| [`tests/settlement.test.ts`](file:///d:/DreamPulse/backend/tests/settlement.test.ts) | **13** | 🟢 Live / Local | Matured market resolution detection, automated winning share redemptions via Sweeper daemon, direct tUSDC wallet payouts, multi-market batch claim aggregation, and failed sweep accounting. |
 | [`tests/price-feed-operator.test.ts`](file:///d:/DreamPulse/backend/tests/price-feed-operator.test.ts) | **12** | 🟢 Live / Local | Real-time spot price feeds, realized volatility, staleness detection, personal swarm configurations, and on-chain operator permissions. |
 | [`tests/order-service.test.ts`](file:///d:/DreamPulse/backend/tests/order-service.test.ts) | **16** | 🟢 Live / Local | User manual orders, autonomous agent executions, resting limit order lifecycle, partial fill accounting, direct user on-chain tx receipt verification, event-driven market settlements, pagination, and PnL reconciliation. |
 | [`tests/custom-evaluator-runner.test.ts`](file:///d:/DreamPulse/backend/tests/custom-evaluator-runner.test.ts) | **9** | 🔵 Local Unit | 14 quantitative indicators (RSI, MACD, Stochastic, Bollinger, EMA, SMA, VWAP, Volume Surge, ADX, ATR, CCI, Williams %R, Drift), limit order pricing, take-profit locks, and daily drawdown circuit breakers. |
@@ -774,7 +774,7 @@ npm run verify
 | [`tests/backtest.test.ts`](file:///d:/DreamPulse/backend/tests/backtest.test.ts) | **8** | 🟡 Simulated Lab | Historical backtesting engine against Binance tick data, Sortino ratio, Profit Factor, Max Drawdown underwater curve computations, fee and slippage simulations. |
 | [`tests/market-service.test.ts`](file:///d:/DreamPulse/backend/tests/market-service.test.ts) | **8** | 🟢 Live / Local | Somnia on-chain CLOB order book polling, GraphQL indexer query parsing, anomaly detection (spread/staleness/mispricing), Binance spot ticker ingestion, and fallback market generation. |
 | [`tests/websocket.test.ts`](file:///d:/DreamPulse/backend/tests/websocket.test.ts) | **8** | 🔵 Local Integration | Telemetry WebSocket gateway, batched ticks, depth ladders, agent thoughts, PnL updates, and high-frequency market emitter. |
-| [`tests/compounder-custom-agent.test.ts`](file:///d:/DreamPulse/backend/tests/compounder-custom-agent.test.ts) | **7** | 🔵 Local Unit | Automated 100% compounding protocol, session allowance replenishment, custom agent lifecycle (creation, deployment, pauses, settlements), and custom multi-agent swarms. |
+| [`tests/custom-agent.test.ts`](file:///d:/DreamPulse/backend/tests/custom-agent.test.ts) | **5** | 🔵 Local Unit | Custom agent lifecycle (creation, deployment, pauses, settlements), starter template loading, and custom multi-agent swarms. |
 | [`tests/llm.test.ts`](file:///d:/DreamPulse/backend/tests/llm.test.ts) | **7** | 🔵 Local Integration | Groq Qwen 3.8 multi-key round-robin rotation, persistent key index, structured reasoning thoughts, and exclusive Google Gemini Strategy Studio isolation. |
 | [`tests/social-copy.test.ts`](file:///d:/DreamPulse/backend/tests/social-copy.test.ts) | **5** | 🔵 Local Unit | Autonomous forecaster social mirror trading, active target tracking, real-time trade fanout to copiers, per-forecaster `maxTradeSize` position clamping, and 24h rolling `dailyVolumeCap` reset & enforcement. |
 | [`tests/navigation.test.ts`](file:///d:/DreamPulse/backend/tests/navigation.test.ts) | **5** | 🔵 Local Unit | Universal URL hash routing, deep-link profile parsing, and tab navigation state persistence. |
@@ -843,7 +843,7 @@ A structured script demonstrating all capabilities during the hackathon judging 
   * Showcase `COPY ↔ PERSONAL` mode toggle for isolated per-wallet swarm execution.
 * **2:40 – 3:00 (Swarm Arena, Proof-of-Alpha & Autonomous Settlement)**:
   * Check **Swarm Arena**: show dual-track leaderboards, 1-click strategy cloning, and export a 4x Ultra-HD Proof-of-Alpha Card.
-  * Matured market resolution: show **Sweeper** detecting finalized contract and auto-compounding winning collateral.
+  * Matured market resolution: show **Sweeper** detecting finalized contract and directly transferring winning collateral.
   * Highlight production readiness (275/275 tests, 0 `any` types) and Somnia ecosystem impact.
 
 ---

@@ -8,7 +8,6 @@ import type { AgentType, SessionGrant, OrderExecution, SettlementSweep } from '.
 import { settlementService } from '../services/settlement-service.js';
 
 export interface SweeperConfig extends AgentRiskConfig {
-  autoCompound: boolean;
   minClaimableAmount: number; // Minimum tUSDC to trigger claim
   sweepIntervalMs: number;
 }
@@ -25,7 +24,6 @@ export class SweeperAgent extends BaseAgent {
       maxTradeSize: config?.maxTradeSize ?? 100.0,
       maxDailyVolume: config?.maxDailyVolume ?? 1000.0,
       maxSlippage: config?.maxSlippage ?? 0.0,
-      autoCompound: config?.autoCompound ?? false,
       minClaimableAmount: config?.minClaimableAmount ?? 0.5,
       sweepIntervalMs: config?.sweepIntervalMs ?? 30000, // 30 seconds
     };
@@ -74,7 +72,7 @@ export class SweeperAgent extends BaseAgent {
 
     const winningOutcome = market.winningOutcome;
     const confidence = 0.98;
-    const rationale = `[SETTLEMENT SWEEP] Market ${market.symbol} resolved with winning outcome ${winningOutcome}. Redeeming unclaimed collateral and auto-compounding to trading balance.`;
+    const rationale = `[SETTLEMENT SWEEP] Market ${market.symbol} resolved with winning outcome ${winningOutcome}. Redeeming unclaimed collateral and transferring directly to user wallet.`;
 
     const decision: IAgentDecision = {
       agentType: 'Sweeper',
@@ -101,7 +99,6 @@ export class SweeperAgent extends BaseAgent {
           symbol: market.symbol,
           winningOutcome,
           status: market.status,
-          autoCompound: this.sweeperConfig.autoCompound,
         },
         createdAt: new Date().toISOString(),
       });
@@ -121,7 +118,6 @@ export class SweeperAgent extends BaseAgent {
       decision.targetMarketId,
       session.userAddress,
       decision.targetOutcome || 'YES',
-      this.sweeperConfig.autoCompound,
     );
 
     return sweep;

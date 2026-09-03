@@ -770,7 +770,6 @@ describe('AuthService & WalletAuth Middleware Comprehensive Suite', () => {
         originalUrl: '/api/v1/sweeper/trigger',
         body: {
           userAddress,
-          autoCompound: false,
         },
         headers: {},
       } as unknown as Request;
@@ -821,7 +820,6 @@ describe('AuthService & WalletAuth Middleware Comprehensive Suite', () => {
         },
         body: {
           userAddress,
-          autoCompound: false,
         },
       } as unknown as Request;
 
@@ -850,7 +848,6 @@ describe('AuthService & WalletAuth Middleware Comprehensive Suite', () => {
         },
         body: {
           userAddress,
-          autoCompound: false,
         },
       } as unknown as Request;
 
