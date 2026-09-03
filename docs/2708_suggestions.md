@@ -113,7 +113,7 @@ graph TB
 * **Component Location**: New tab in navigation: `Swarm Arena` (`#arena`).
 * **Key Specifications**:
   * **Leaderboard Table**: Ranks anonymous wallet strategies or curated archetypes (e.g. *Conservative Market Maker*, *Aggressive Vol Sniper*, *Tail-Risk Arbitrageur*) by:
-    * 24h & 7d PnL (USDC and %)
+    * 24h & 7d PnL (tUSDC and %)
     * Win Rate (%) & Total Fills
     * Sharpe & Sortino Ratios
     * Strategy Parameters (Volt drift threshold, Oracle minEdge, Titan spread & inventory aversion).

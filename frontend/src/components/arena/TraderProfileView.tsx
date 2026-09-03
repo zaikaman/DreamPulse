@@ -152,7 +152,7 @@ export const TraderProfileView: React.FC<TraderProfileViewProps> = ({
         setIsCopyTrading(true);
         setCopyConfig(res.config || null);
         setCopyTradeStatusMsg(
-          `Autonomous mirror active (Max $${params.maxTradeSize} USDC / $${params.dailyVolumeCap} Daily Cap)`
+          `Autonomous mirror active (Max $${params.maxTradeSize} tUSDC / $${params.dailyVolumeCap} Daily Cap)`
         );
       } else {
         setCopyTradeStatusMsg(res.message || 'Failed to update copy-trading preferences.');
@@ -200,7 +200,7 @@ export const TraderProfileView: React.FC<TraderProfileViewProps> = ({
       subtitle: `Forecaster ${summary.userAddress.slice(0, 6)}...${summary.userAddress.slice(-4)} • Rank #${summary.rank}`,
       badge: `${summary.tierBadge} FORECASTER`,
       primaryMetricLabel: 'Realized Net PnL',
-      primaryMetricValue: summary.realizedPnl >= 0 ? `+${summary.realizedPnl.toFixed(2)} USDC` : `${summary.realizedPnl.toFixed(2)} USDC`,
+      primaryMetricValue: summary.realizedPnl >= 0 ? `+${summary.realizedPnl.toFixed(2)} tUSDC` : `${summary.realizedPnl.toFixed(2)} tUSDC`,
       primaryMetricPositive: summary.realizedPnl >= 0,
       secondaryMetricLabel: 'Prediction Win Rate',
       secondaryMetricValue: `${summary.winRate}% (${summary.winsCount}W / ${summary.lossesCount}L)`,
@@ -355,7 +355,7 @@ export const TraderProfileView: React.FC<TraderProfileViewProps> = ({
                   "text-xl font-bold tracking-tight",
                   summary.realizedPnl >= 0 ? "text-[#00e676]" : "text-[#ff3366]"
                 )}>
-                  {summary.realizedPnl >= 0 ? `+${summary.realizedPnl.toFixed(2)}` : summary.realizedPnl.toFixed(2)} USDC
+                  {summary.realizedPnl >= 0 ? `+${summary.realizedPnl.toFixed(2)}` : summary.realizedPnl.toFixed(2)} tUSDC
                 </div>
                 <div className="text-[10px] text-muted-foreground mt-0.5">
                   ROI ~{summary.pnlPct}% of total volume
@@ -434,7 +434,7 @@ export const TraderProfileView: React.FC<TraderProfileViewProps> = ({
                     "text-xs font-mono font-semibold",
                     summary.realizedPnl >= 0 ? "text-[#00e676]" : "text-[#ff3366]"
                   )}>
-                    {summary.realizedPnl >= 0 ? `+${summary.realizedPnl.toFixed(2)}` : summary.realizedPnl.toFixed(2)} USDC Total
+                    {summary.realizedPnl >= 0 ? `+${summary.realizedPnl.toFixed(2)}` : summary.realizedPnl.toFixed(2)} tUSDC Total
                   </span>
                 </div>
 
@@ -458,7 +458,7 @@ export const TraderProfileView: React.FC<TraderProfileViewProps> = ({
                             <div className="bg-slate-900 border border-border/80 text-foreground text-[10px] font-mono px-2 py-1 rounded shadow-xl whitespace-nowrap">
                               <span className="text-muted-foreground">{point.date}: </span>
                               <span className={point.cumulativePnl >= 0 ? "text-[#00e676] font-semibold" : "text-[#ff3366] font-semibold"}>
-                                {point.cumulativePnl >= 0 ? `+${point.cumulativePnl.toFixed(2)}` : point.cumulativePnl.toFixed(2)} USDC
+                                {point.cumulativePnl >= 0 ? `+${point.cumulativePnl.toFixed(2)}` : point.cumulativePnl.toFixed(2)} tUSDC
                               </span>
                             </div>
                           </div>
@@ -554,7 +554,7 @@ export const TraderProfileView: React.FC<TraderProfileViewProps> = ({
                               <td style={{ padding: '8px 14px', textAlign: 'right' }}>
                                 {trade.isSettled ? (
                                   <span className={cn("font-medium", pnl >= 0 ? "text-[#00e676]" : "text-[#ff3366]")}>
-                                    {pnl >= 0 ? `+${pnl.toFixed(2)}` : pnl.toFixed(2)} USDC
+                                    {pnl >= 0 ? `+${pnl.toFixed(2)}` : pnl.toFixed(2)} tUSDC
                                   </span>
                                 ) : (
                                   <span className="text-muted-foreground text-[10px]">OPEN / PENDING</span>

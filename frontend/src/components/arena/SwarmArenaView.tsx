@@ -145,7 +145,7 @@ export const SwarmArenaView: React.FC<SwarmArenaViewProps> = ({
       subtitle: `By ${agent.creatorName} • ${formatAssetWindow(agent.symbol, agent.timeframe)}`,
       badge: `${agent.tierBadge} ARCHETYPE`,
       primaryMetricLabel: `${timeframe.toUpperCase()} Net PnL`,
-      primaryMetricValue: agent.pnl >= 0 ? `+${agent.pnl.toFixed(2)} USDC` : `${agent.pnl.toFixed(2)} USDC`,
+      primaryMetricValue: agent.pnl >= 0 ? `+${agent.pnl.toFixed(2)} tUSDC` : `${agent.pnl.toFixed(2)} tUSDC`,
       primaryMetricPositive: agent.pnl >= 0,
       secondaryMetricLabel: 'Sharpe / Win Rate',
       secondaryMetricValue: `${agent.sharpeRatio.toFixed(2)} (${agent.winRate}%)`,
@@ -163,7 +163,7 @@ export const SwarmArenaView: React.FC<SwarmArenaViewProps> = ({
       subtitle: `Forecaster ${trader.userAddress.slice(0, 6)}...${trader.userAddress.slice(-4)} • Rank #${trader.rank}`,
       badge: `${trader.tierBadge} TRADER`,
       primaryMetricLabel: `${timeframe.toUpperCase()} Realized PnL`,
-      primaryMetricValue: trader.realizedPnl >= 0 ? `+${trader.realizedPnl.toFixed(2)} USDC` : `${trader.realizedPnl.toFixed(2)} USDC`,
+      primaryMetricValue: trader.realizedPnl >= 0 ? `+${trader.realizedPnl.toFixed(2)} tUSDC` : `${trader.realizedPnl.toFixed(2)} tUSDC`,
       primaryMetricPositive: trader.realizedPnl >= 0,
       secondaryMetricLabel: 'Win Rate & Streak',
       secondaryMetricValue: `${trader.winRate}% (${trader.currentStreak} Streak)`,
@@ -517,7 +517,7 @@ export const SwarmArenaView: React.FC<SwarmArenaViewProps> = ({
                     "text-sm font-semibold",
                     (agents[1]?.pnl ?? 0) >= 0 ? "text-[#00e676]" : "text-[#ff3366]"
                   )}>
-                    {(agents[1]?.pnl ?? 0) >= 0 ? `+${agents[1]?.pnl.toFixed(2)}` : agents[1]?.pnl.toFixed(2)} USDC
+                    {(agents[1]?.pnl ?? 0) >= 0 ? `+${agents[1]?.pnl.toFixed(2)}` : agents[1]?.pnl.toFixed(2)} tUSDC
                   </span>
                   <span className="text-xs text-muted-foreground">({agents[1]?.winRate}%)</span>
                 </div>
@@ -559,7 +559,7 @@ export const SwarmArenaView: React.FC<SwarmArenaViewProps> = ({
                     "text-sm font-semibold",
                     (traders[1]?.realizedPnl ?? 0) >= 0 ? "text-[#00e676]" : "text-[#ff3366]"
                   )}>
-                    {(traders[1]?.realizedPnl ?? 0) >= 0 ? `+${traders[1]?.realizedPnl.toFixed(2)}` : traders[1]?.realizedPnl.toFixed(2)} USDC
+                    {(traders[1]?.realizedPnl ?? 0) >= 0 ? `+${traders[1]?.realizedPnl.toFixed(2)}` : traders[1]?.realizedPnl.toFixed(2)} tUSDC
                   </span>
                   <span className="text-xs text-muted-foreground">({traders[1]?.winRate}%)</span>
                 </div>
@@ -606,7 +606,7 @@ export const SwarmArenaView: React.FC<SwarmArenaViewProps> = ({
                     "text-base font-bold",
                     (agents[0]?.pnl ?? 0) >= 0 ? "text-[#00e676]" : "text-[#ff3366]"
                   )}>
-                    {(agents[0]?.pnl ?? 0) >= 0 ? `+${agents[0]?.pnl.toFixed(2)}` : agents[0]?.pnl.toFixed(2)} USDC
+                    {(agents[0]?.pnl ?? 0) >= 0 ? `+${agents[0]?.pnl.toFixed(2)}` : agents[0]?.pnl.toFixed(2)} tUSDC
                   </span>
                   <span className="text-xs text-muted-foreground">({agents[0]?.winRate}%)</span>
                 </div>
@@ -654,7 +654,7 @@ export const SwarmArenaView: React.FC<SwarmArenaViewProps> = ({
                     "text-base font-bold",
                     (traders[0]?.realizedPnl ?? 0) >= 0 ? "text-[#00e676]" : "text-[#ff3366]"
                   )}>
-                    {(traders[0]?.realizedPnl ?? 0) >= 0 ? `+${traders[0]?.realizedPnl.toFixed(2)}` : traders[0]?.realizedPnl.toFixed(2)} USDC
+                    {(traders[0]?.realizedPnl ?? 0) >= 0 ? `+${traders[0]?.realizedPnl.toFixed(2)}` : traders[0]?.realizedPnl.toFixed(2)} tUSDC
                   </span>
                   <span className="text-xs text-muted-foreground">({traders[0]?.winRate}%)</span>
                 </div>
@@ -732,7 +732,7 @@ export const SwarmArenaView: React.FC<SwarmArenaViewProps> = ({
                     "text-sm font-semibold",
                     (agents[2]?.pnl ?? 0) >= 0 ? "text-[#00e676]" : "text-[#ff3366]"
                   )}>
-                    {(agents[2]?.pnl ?? 0) >= 0 ? `+${agents[2]?.pnl.toFixed(2)}` : agents[2]?.pnl.toFixed(2)} USDC
+                    {(agents[2]?.pnl ?? 0) >= 0 ? `+${agents[2]?.pnl.toFixed(2)}` : agents[2]?.pnl.toFixed(2)} tUSDC
                   </span>
                   <span className="text-xs text-muted-foreground">({agents[2]?.winRate}%)</span>
                 </div>
@@ -773,7 +773,7 @@ export const SwarmArenaView: React.FC<SwarmArenaViewProps> = ({
                     "text-sm font-semibold",
                     (traders[2]?.realizedPnl ?? 0) >= 0 ? "text-[#00e676]" : "text-[#ff3366]"
                   )}>
-                    {(traders[2]?.realizedPnl ?? 0) >= 0 ? `+${traders[2]?.realizedPnl.toFixed(2)}` : traders[2]?.realizedPnl.toFixed(2)} USDC
+                    {(traders[2]?.realizedPnl ?? 0) >= 0 ? `+${traders[2]?.realizedPnl.toFixed(2)}` : traders[2]?.realizedPnl.toFixed(2)} tUSDC
                   </span>
                   <span className="text-xs text-muted-foreground">({traders[2]?.winRate}%)</span>
                 </div>
@@ -906,7 +906,7 @@ export const SwarmArenaView: React.FC<SwarmArenaViewProps> = ({
                           "font-semibold",
                           agent.pnl >= 0 ? "text-[#00e676]" : "text-[#ff3366]"
                         )}>
-                          {agent.pnl >= 0 ? `+${agent.pnl.toFixed(2)}` : agent.pnl.toFixed(2)} USDC
+                          {agent.pnl >= 0 ? `+${agent.pnl.toFixed(2)}` : agent.pnl.toFixed(2)} tUSDC
                         </div>
                         <div className={cn(
                           "text-[10px]",
@@ -1045,7 +1045,7 @@ export const SwarmArenaView: React.FC<SwarmArenaViewProps> = ({
                             "font-semibold",
                             trader.realizedPnl >= 0 ? "text-[#00e676]" : "text-[#ff3366]"
                           )}>
-                            {trader.realizedPnl >= 0 ? `+${trader.realizedPnl.toFixed(2)}` : trader.realizedPnl.toFixed(2)} USDC
+                            {trader.realizedPnl >= 0 ? `+${trader.realizedPnl.toFixed(2)}` : trader.realizedPnl.toFixed(2)} tUSDC
                           </div>
                           <div className="text-[10px] text-muted-foreground">
                             ${trader.volume.toLocaleString()} Vol

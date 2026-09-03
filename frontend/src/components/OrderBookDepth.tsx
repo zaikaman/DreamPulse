@@ -331,9 +331,9 @@ export const OrderBookDepth: React.FC<OrderBookDepthProps> = ({
           >
             {/* Book Table Column Headers */}
             <div className="grid grid-cols-3 px-3 py-1.5 border-b border-border/40 text-[9px] font-mono text-muted-foreground uppercase tracking-wider font-semibold flex-shrink-0 bg-secondary/10">
-              <div className="text-left">Price (USDC)</div>
+              <div className="text-left">Price (tUSDC)</div>
               <div className="text-right">Size (Shares)</div>
-              <div className="text-right">Total (USDC)</div>
+              <div className="text-right">Total (tUSDC)</div>
             </div>
 
             {/* Ladder Content */}
@@ -391,7 +391,7 @@ export const OrderBookDepth: React.FC<OrderBookDepthProps> = ({
                 <div className="flex flex-col">
                   <span className="text-[9px] text-muted-foreground uppercase font-semibold">SPREAD</span>
                   <span className="font-bold text-foreground mt-0.5">
-                    {hasTwoSidedLiquidity ? `${spread.toFixed(2)} USDC` : 'NO SPREAD'}
+                    {hasTwoSidedLiquidity ? `${spread.toFixed(2)} tUSDC` : 'NO SPREAD'}
                   </span>
                 </div>
 

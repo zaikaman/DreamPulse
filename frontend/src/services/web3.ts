@@ -604,14 +604,14 @@ export class Web3Service {
           args: [params.userAddress, spender],
         });
 
-        // BinaryPool copy-trades need allowance to cover trade size; approve max if below 1000 USDC threshold
+        // BinaryPool copy-trades need allowance to cover trade size; approve max if below 1000 tUSDC threshold
         const needThreshold = params.pool ? parseUnits('1000', 6) : amountRaw;
         if (allowance < needThreshold) {
           const appHash = await wallet.writeContract({
             address: token,
             abi: ERC20_ABI,
             functionName: 'approve',
-            args: [spender, parseUnits('1000000', 6)], // 1,000,000 USDC allowance for seamless trading
+            args: [spender, parseUnits('1000000', 6)], // 1,000,000 tUSDC allowance for seamless trading
           });
           await publicClient.waitForTransactionReceipt({ hash: appHash });
           result.approvalHash = appHash;

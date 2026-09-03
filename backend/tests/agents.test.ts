@@ -500,11 +500,11 @@ describe('Phase 5 Swarm Strategy & Agent Unit Tests', () => {
       const swarmRunner = new MultiAgentSwarmRunner();
       const status = swarmRunner.getSwarmStatus();
       expect(status.volt.tradesToday).toBeGreaterThanOrEqual(0);
-      expect(status.volt.pnl).toMatch(/[0-9.]+\s*(tUSDC|USDC|STT)/);
+      expect(status.volt.pnl).toMatch(/[0-9.]+\s*(tUSDC|STT)/);
       expect(status.oracle.tradesToday).toBeGreaterThanOrEqual(0);
-      expect(status.oracle.pnl).toMatch(/[0-9.]+\s*(tUSDC|USDC|STT)/);
-      expect(status.titan.spreadCaptured).toMatch(/[0-9.]+\s*(tUSDC|USDC|STT)/);
-      expect(status.sweeper.totalClaimed).toMatch(/[0-9.]+\s*(tUSDC|USDC|STT)/);
+      expect(status.oracle.pnl).toMatch(/[0-9.]+\s*(tUSDC|STT)/);
+      expect(status.titan.spreadCaptured).toMatch(/[0-9.]+\s*(tUSDC|STT)/);
+      expect(status.sweeper.totalClaimed).toMatch(/[0-9.]+\s*(tUSDC|STT)/);
     });
 
     it('toggles agents and updates swarm status in MultiAgentSwarmRunner', () => {

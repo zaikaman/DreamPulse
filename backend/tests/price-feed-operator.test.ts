@@ -188,7 +188,7 @@ describe('PriceFeedService, UserSwarmService & OperatorApprovalService Suite', (
     it('returns true when on-chain allowance or global approval is satisfied', async () => {
       vi.spyOn(publicClient, 'readContract').mockImplementation(async ({ functionName }: any) => {
         if (functionName === 'isGloballyApproved') return true;
-        if (functionName === 'allowance') return 500n * 1_000_000n; // 500 USDC
+        if (functionName === 'allowance') return 500n * 1_000_000n; // 500 tUSDC
         return false;
       });
 
@@ -199,7 +199,7 @@ describe('PriceFeedService, UserSwarmService & OperatorApprovalService Suite', (
     it('returns false when neither global approval nor allowance is present', async () => {
       vi.spyOn(publicClient, 'readContract').mockImplementation(async ({ functionName }: any) => {
         if (functionName === 'isGloballyApproved') return false;
-        if (functionName === 'allowance') return 10n * 1_000_000n; // < 100 USDC
+        if (functionName === 'allowance') return 10n * 1_000_000n; // < 100 tUSDC
         return false;
       });
 

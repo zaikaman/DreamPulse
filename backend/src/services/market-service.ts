@@ -300,8 +300,8 @@ export class MarketService extends EventEmitter {
           symbol,
           type: 'binary',
           base: symbol.split('/')[0] || symbol,
-          quote: 'USDC',
-          settle: 'USDC',
+          quote: 'tUSDC',
+          settle: 'tUSDC',
           active: status === 'Open' || status === 'Resolving',
           contract: false,
           precision: {

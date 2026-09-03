@@ -20,6 +20,6 @@ Blockchain: Somnia Shannon Testnet (Chain ID 50312), DreamDEX Event Contracts
 - The current database schema is at backend/src/config/schema.sql
 
 ## Verification & Quality Invariants
-- **Mandatory Verification**: Always run `npm run verify` from the repository root to verify everything (typecheck, tests, and production builds) and make sure nothing is broken after you're done with a task, only run this if you feel like it's necessary, don't just run it all the time, for example just fixing the docs, don't run it, if you just did some refactoring touching some actual code, run it.
+- **Mandatory Verification**: Always run `npm run verify` from the repository root to verify everything (typecheck, tests, and production builds) and make sure nothing is broken after you're done with a task, only run this if you feel like it's necessary, don't just run it all the time, for example just fixing the docs, don't run it, if you just did some refactoring touching some actual code, run it, and only run this after you're done, not before you start your work.
 - **Autonomously Fix Errors**: If `npm run verify` reports any errors (even if it's not by your work), type mismatches, or test failures, fix the errors yourself until the entire suite passes cleanly with zero errors.
 - When you're done, use Powershell to play a sound to signal completition.

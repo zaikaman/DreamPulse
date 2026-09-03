@@ -49,7 +49,7 @@ export const TraderProfileDrawer: React.FC<TraderProfileDrawerProps> = ({
       subtitle: `Trader Wallet ${summary.userAddress.slice(0, 6)}...${summary.userAddress.slice(-4)} • Rank #${summary.rank}`,
       badge: `${summary.tierBadge} FORECASTER`,
       primaryMetricLabel: 'Realized Net PnL',
-      primaryMetricValue: summary.realizedPnl >= 0 ? `+${summary.realizedPnl.toFixed(2)} USDC` : `${summary.realizedPnl.toFixed(2)} USDC`,
+      primaryMetricValue: summary.realizedPnl >= 0 ? `+${summary.realizedPnl.toFixed(2)} tUSDC` : `${summary.realizedPnl.toFixed(2)} tUSDC`,
       primaryMetricPositive: summary.realizedPnl >= 0,
       secondaryMetricLabel: 'Prediction Win Rate',
       secondaryMetricValue: `${summary.winRate}% (${summary.winsCount}W / ${summary.lossesCount}L)`,
@@ -138,7 +138,7 @@ export const TraderProfileDrawer: React.FC<TraderProfileDrawerProps> = ({
                       "text-base font-semibold mt-1 font-mono",
                       summary.realizedPnl >= 0 ? "text-[#00e676]" : "text-[#ff3366]"
                     )}>
-                      {summary.realizedPnl >= 0 ? `+${summary.realizedPnl.toFixed(2)}` : summary.realizedPnl.toFixed(2)} USDC
+                      {summary.realizedPnl >= 0 ? `+${summary.realizedPnl.toFixed(2)}` : summary.realizedPnl.toFixed(2)} tUSDC
                     </div>
                     <div className="text-[10px] text-muted-foreground mt-0.5 font-mono">ROI ~{summary.pnlPct}%</div>
                   </div>
@@ -220,7 +220,7 @@ export const TraderProfileDrawer: React.FC<TraderProfileDrawerProps> = ({
                       "text-[10px] font-mono font-medium",
                       summary.realizedPnl >= 0 ? "text-[#00e676]" : "text-[#ff3366]"
                     )}>
-                      {summary.realizedPnl >= 0 ? `+${summary.realizedPnl.toFixed(2)}` : summary.realizedPnl.toFixed(2)} USDC
+                      {summary.realizedPnl >= 0 ? `+${summary.realizedPnl.toFixed(2)}` : summary.realizedPnl.toFixed(2)} tUSDC
                     </span>
                   </div>
                   <div className="h-16 flex items-end gap-1 pt-2">
@@ -271,7 +271,7 @@ export const TraderProfileDrawer: React.FC<TraderProfileDrawerProps> = ({
                           </div>
                           <div className="flex items-center gap-2">
                             <span className={cn("font-medium", pnl >= 0 ? "text-[#00e676]" : "text-[#ff3366]")}>
-                              {pnl >= 0 ? `+${pnl.toFixed(2)}` : pnl.toFixed(2)} USDC
+                              {pnl >= 0 ? `+${pnl.toFixed(2)}` : pnl.toFixed(2)} tUSDC
                             </span>
                             {trade.txHash && (
                               <a

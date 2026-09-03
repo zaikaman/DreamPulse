@@ -254,7 +254,7 @@ export class SocialCopyService {
             copierRel.lastSpendResetTimestamp = nowMs;
           }
           if ((copierRel.spentToday || 0) + totalCost > copierRel.dailyVolumeCap) {
-            console.warn(`[SocialCopyService] Mirror skipped for ${copierRel.copierAddress}: Daily volume cap of ${copierRel.dailyVolumeCap} USDC reached for Forecaster ${copierRel.targetAddress}`);
+            console.warn(`[SocialCopyService] Mirror skipped for ${copierRel.copierAddress}: Daily volume cap of ${copierRel.dailyVolumeCap} tUSDC reached for Forecaster ${copierRel.targetAddress}`);
             continue;
           }
         }

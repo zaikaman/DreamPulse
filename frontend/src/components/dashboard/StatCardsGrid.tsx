@@ -252,7 +252,7 @@ export const StatCardsGrid: React.FC<StatCardsGridProps> = ({
                 "stat-card-value font-mono truncate",
                 userTotalPnl > 0 ? "text-emerald-400" : userTotalPnl < 0 ? "text-rose-400" : "text-foreground"
               )}>
-                {userTotalPnl > 0 ? `+${userTotalPnl.toFixed(2)}` : userTotalPnl.toFixed(2)} <span className="text-xs font-normal text-muted-foreground">USDC</span>
+                {userTotalPnl > 0 ? `+${userTotalPnl.toFixed(2)}` : userTotalPnl.toFixed(2)} <span className="text-xs font-normal text-muted-foreground">tUSDC</span>
               </div>
               <div className="stat-card-footer">
                 <span className="inline-flex items-center gap-1 font-mono text-[11px] text-muted-foreground whitespace-nowrap">

@@ -463,7 +463,7 @@ describe('Phase 6 Settlement Sweeper & Collateral Compounder Tests', () => {
         userAddress: testUser as `0x${string}`,
         winningOutcome: 'YES',
         claimableAmount: 15.5,
-        payoutToken: 'USDC',
+        payoutToken: 'tUSDC',
         isCompounded: false,
         txHash: '0xsweeptxhash123' as `0x${string}`,
         status: 'CONFIRMED',

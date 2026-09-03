@@ -45,7 +45,11 @@ function generatePriceHistoryForRange(
 ): PricePoint[] {
   const now = Date.now();
   const history: PricePoint[] = [];
-  const basePrice = strikePrice > 0 ? strikePrice : curSpot;
+  const effectiveSpot = curSpot > 0 ? curSpot : strikePrice;
+  const basePrice = strikePrice > 0 ? strikePrice : effectiveSpot;
+  if (basePrice <= 0) {
+    return [];
+  }
   const durationSec = getLookbackSeconds(range, windowDuration);
 
   // Resolution and points count scaled to timeframe
@@ -69,7 +73,7 @@ function generatePriceHistoryForRange(
     const progress = (numPoints - i) / numPoints; // 0.0 (start) to 1.0 (now)
 
     // Linear trend connecting start to current spot
-    const driftPath = startPrice + progress * (curSpot - startPrice);
+    const driftPath = startPrice + progress * (effectiveSpot - startPrice);
 
     // Brownian bridge factor: variance smoothly pinches to 0 at now so it connects seamlessly to live spot
     const bridgeFactor = 1 - Math.pow(progress, 2.2);
@@ -86,7 +90,7 @@ function generatePriceHistoryForRange(
 
   // Ensure last point is exactly current live spot
   if (history.length > 0) {
-    history[history.length - 1].price = curSpot;
+    history[history.length - 1].price = effectiveSpot;
     history[history.length - 1].time = now;
   }
   return history;
@@ -177,6 +181,10 @@ export const EventContractChart: React.FC<EventContractChartProps> = ({
   useEffect(() => {
     if (!spot || isNaN(spot) || market.status === 'Resolving') return;
     setPriceHistory((prev) => {
+      // Re-anchor and regenerate if priceHistory was empty or initialized to 0s before ticker arrival
+      if (spot > 0 && (prev.length === 0 || prev[0].price === 0 || prev.some((p) => p.price === 0))) {
+        return generatePriceHistoryForRange(timeRange, strike, spot, market.windowDuration);
+      }
       const now = Date.now();
       const last = prev[prev.length - 1];
       const throttleMs = timeRange === 'RTC' ? 1000 : timeRange === '15m' ? 3000 : 8000;
@@ -191,7 +199,7 @@ export const EventContractChart: React.FC<EventContractChartProps> = ({
       if (next.length > maxPts) next.shift();
       return next;
     });
-  }, [spot, timeRange]);
+  }, [spot, timeRange, strike, market.windowDuration, market.status]);
 
   // Handle responsive canvas sizing
   useEffect(() => {
@@ -224,14 +232,15 @@ export const EventContractChart: React.FC<EventContractChartProps> = ({
 
   // Dynamic Min/Max range calculation centered on strike and spot
   const { minPrice, priceRange } = useMemo(() => {
-    const prices = priceHistory.map((p) => p.price);
-    prices.push(strike);
-    prices.push(spot);
-    const min = Math.min(...prices);
-    const max = Math.max(...prices);
-    const diff = Math.max(max - min, strike * 0.002);
+    const validPrices = priceHistory.map((p) => p.price).filter((p) => p > 0);
+    if (strike > 0) validPrices.push(strike);
+    if (spot > 0) validPrices.push(spot);
+    const fallbackBase = strike > 0 ? strike : spot > 0 ? spot : 100;
+    const min = validPrices.length > 0 ? Math.min(...validPrices) : fallbackBase * 0.99;
+    const max = validPrices.length > 0 ? Math.max(...validPrices) : fallbackBase * 1.01;
+    const diff = Math.max(max - min, fallbackBase * 0.002);
     const buffer = diff * 0.35;
-    const finalMin = min - buffer;
+    const finalMin = Math.max(0, min - buffer);
     const finalMax = max + buffer;
     return {
       minPrice: finalMin,

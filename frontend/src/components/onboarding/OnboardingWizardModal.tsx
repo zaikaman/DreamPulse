@@ -258,7 +258,7 @@ export const OnboardingWizardModal: React.FC<OnboardingWizardModalProps> = ({
                   Claim Test Trading Fuel
                 </h4>
                 <p className="text-xs text-muted-foreground leading-relaxed">
-                  DreamDEX Event Contracts settle in test USDC (tUSDC) with STT gas on Somnia. 
+                  DreamDEX Event Contracts settle in tUSDC collateral with STT gas on Somnia. 
                   Claim testnet tokens to immediately test AI Swarm copytrading and manual order execution.
                 </p>
               </div>

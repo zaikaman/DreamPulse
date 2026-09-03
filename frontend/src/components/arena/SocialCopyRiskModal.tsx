@@ -83,11 +83,11 @@ export const SocialCopyRiskModal: React.FC<SocialCopyRiskModalProps> = ({
   // Handle Submit
   const handleSubmit = async () => {
     if (maxTradeSize <= 0) {
-      setErrorMsg('Max trade size must be greater than 0 USDC');
+      setErrorMsg('Max trade size must be greater than 0 tUSDC');
       return;
     }
     if (dailyVolumeCap <= 0) {
-      setErrorMsg('Daily volume cap must be greater than 0 USDC');
+      setErrorMsg('Daily volume cap must be greater than 0 tUSDC');
       return;
     }
     if (maxTradeSize > dailyVolumeCap) {
@@ -177,7 +177,7 @@ export const SocialCopyRiskModal: React.FC<SocialCopyRiskModalProps> = ({
               <div>
                 <div className="text-[10px] text-muted-foreground uppercase">Realized PnL</div>
                 <div className={cn("text-xs font-semibold mt-0.5", pnl >= 0 ? "text-emerald-400" : "text-rose-400")}>
-                  {pnl >= 0 ? `+${pnl.toFixed(2)}` : pnl.toFixed(2)} USDC
+                  {pnl >= 0 ? `+${pnl.toFixed(2)}` : pnl.toFixed(2)} tUSDC
                 </div>
               </div>
               {trader.favoriteSymbol && (
@@ -209,12 +209,12 @@ export const SocialCopyRiskModal: React.FC<SocialCopyRiskModalProps> = ({
                   Max Position Size per Order
                 </label>
                 <p className="text-[11px] text-muted-foreground mt-0.5">
-                  Maximum USDC collateral allocated to each copied trade signal.
+                  Maximum tUSDC collateral allocated to each copied trade signal.
                 </p>
               </div>
               <div className="flex items-center gap-1 bg-secondary/30 border border-border/50 px-2 py-0.5 rounded font-mono text-xs">
                 <span className="font-semibold text-foreground">{maxTradeSize}</span>
-                <span className="text-[10px] text-muted-foreground">USDC</span>
+                <span className="text-[10px] text-muted-foreground">tUSDC</span>
               </div>
             </div>
 
@@ -251,7 +251,7 @@ export const SocialCopyRiskModal: React.FC<SocialCopyRiskModalProps> = ({
             <div className="text-[10px] text-muted-foreground font-mono flex items-center gap-1">
               <InformationCircleIcon className="w-3 h-3 text-muted-foreground/70 flex-shrink-0" />
               <span>
-                At ~0.50 USDC/contract, ${maxTradeSize} USDC buys up to ~{estimatedTypicalLots} lots.
+                At ~0.50 tUSDC/contract, ${maxTradeSize} tUSDC buys up to ~{estimatedTypicalLots} lots.
               </span>
             </div>
           </div>
@@ -269,7 +269,7 @@ export const SocialCopyRiskModal: React.FC<SocialCopyRiskModalProps> = ({
               </div>
               <div className="flex items-center gap-1 bg-secondary/30 border border-border/50 px-2 py-0.5 rounded font-mono text-xs">
                 <span className="font-semibold text-foreground">{dailyVolumeCap}</span>
-                <span className="text-[10px] text-muted-foreground">USDC</span>
+                <span className="text-[10px] text-muted-foreground">tUSDC</span>
               </div>
             </div>
 

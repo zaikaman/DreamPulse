@@ -33,7 +33,7 @@ export async function ensurePerPoolApprovalForCopyTrader(
       }).catch(() => 0n),
     ]);
 
-    // Minimum 100 USDC allowance to operator for active copy-trading
+    // Minimum 100 tUSDC allowance to operator for active copy-trading
     const isFunded = allowance >= 100n * 1_000_000n;
     return Boolean(isGlobal || isFunded);
   } catch (e: any) {

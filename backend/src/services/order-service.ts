@@ -187,7 +187,7 @@ export async function ensureOperatorCollateral(minCollateral: bigint = 5_000n * 
       if (currentBal < minCollateral) {
         isFauceting = true;
         console.log(`[OrderService] Operator balance (${currentBal} raw) is below required ${minCollateral} raw. Calling TestUSDC faucet...`);
-        const faucetAmount = 10_000n * 1_000_000n; // 10,000 USDC
+        const faucetAmount = 10_000n * 1_000_000n; // 10,000 tUSDC
         const hash = await executeOperatorWriteContract({
           address: SOMNIA_ADDRESSES.testUsdc,
           abi: testUsdcAbi,

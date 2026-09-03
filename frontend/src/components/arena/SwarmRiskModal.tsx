@@ -317,7 +317,7 @@ export const SwarmRiskModal: React.FC<SwarmRiskModalProps> = ({
               <div className="space-y-1.5">
                 <div className="flex justify-between items-center">
                   <label className="text-xs font-medium text-foreground">Max Capital Allocated per Trade</label>
-                  <span className="text-xs font-mono font-semibold text-foreground">${voltSliders.maxTradeSize} USDC</span>
+                  <span className="text-xs font-mono font-semibold text-foreground">${voltSliders.maxTradeSize} tUSDC</span>
                 </div>
                 <input
                   type="range"
@@ -391,7 +391,7 @@ export const SwarmRiskModal: React.FC<SwarmRiskModalProps> = ({
               <div className="space-y-1.5">
                 <div className="flex justify-between items-center">
                   <label className="text-xs font-medium text-foreground">Max Capital Allocated per Trade</label>
-                  <span className="text-xs font-mono font-semibold text-foreground">${oracleSliders.maxTradeSize} USDC</span>
+                  <span className="text-xs font-mono font-semibold text-foreground">${oracleSliders.maxTradeSize} tUSDC</span>
                 </div>
                 <input
                   type="range"

@@ -447,7 +447,7 @@ describe('Task T038 & T040: Session Management Service & Risk Guardrails', () =>
       dailyVolumeCap: 50,
     });
 
-    // Spend 50 USDC to hit daily cap
+    // Spend 50 tUSDC to hit daily cap
     expect(sessionService.validateTradeAllowance(session.id, 50).allowed).toBe(true);
     await sessionService.recordTradeSpend(session.id, 50);
     expect(session.spentToday).toBe(50);

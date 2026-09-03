@@ -604,7 +604,7 @@ export class LeaderboardService {
           }
         }
         if (agent.rules?.action) {
-          ruleChips.push(`${agent.rules.action.direction} (${agent.rules.action.stakeAmount} USDC)`);
+          ruleChips.push(`${agent.rules.action.direction} (${agent.rules.action.stakeAmount} tUSDC)`);
         }
 
         return {

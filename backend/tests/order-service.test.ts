@@ -284,12 +284,13 @@ describe('OrderService Comprehensive Suite', () => {
       orderId: 'quote-1',
       userAddress,
       marketId: mockMarket.id,
+      agentType: 'Manual',
       direction: 'BUY',
       outcome: 'YES',
       price: 0.45,
       lotSize: 10,
-      timestamp: Date.now(),
-    } as any);
+      createdAt: Date.now(),
+    });
 
     const quotes = service.getRestingMakerQuotes(mockMarket.id, userAddress);
     expect(quotes.length).toBe(1);
@@ -557,12 +558,13 @@ describe('OrderService Comprehensive Suite', () => {
     service.registerRestingMakerQuote({
       orderId: restingLimitOrder.id,
       marketId: mockMarket.id,
+      userAddress,
+      agentType: 'Manual',
       outcome: 'YES',
       direction: 'BUY',
       price: 0.10,
       lotSize: 10.0,
-      userAddress,
-      placedAt: Date.now(),
+      createdAt: Date.now(),
     });
 
     expect(service.getRestingMakerQuotes(mockMarket.id).length).toBe(1);

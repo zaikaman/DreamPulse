@@ -113,7 +113,7 @@ const MarketsDepthViewComponent: React.FC<MarketsDepthViewProps> = ({
               AVG CLOB SPREAD
             </span>
             <span className="text-base font-mono font-bold text-foreground mt-0.5">
-              ${avgSpread.toFixed(2)} USDC
+              ${avgSpread.toFixed(2)} tUSDC
             </span>
           </div>
           <ScaleIcon className="w-5 h-5 text-muted-foreground/60" />

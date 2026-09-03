@@ -194,7 +194,7 @@ describe('Social Forecaster Mirror Trading', () => {
   });
 
   it('caps copied position size according to configured maxTradeSize', async () => {
-    // Copier sets maxTradeSize of $2.50 USDC
+    // Copier sets maxTradeSize of $2.50 tUSDC
     await socialCopyService.toggleSocialCopy(copierAddress, forecasterAddress, true, 2.50, 500);
 
     // Forecaster places a large 20-lot order at $0.50 ($10 total cost)
@@ -223,7 +223,7 @@ describe('Social Forecaster Mirror Trading', () => {
   });
 
   it('respects per-forecaster daily volume cap and pauses copy trades when exceeded', async () => {
-    // Copier sets daily cap of $5.00 USDC
+    // Copier sets daily cap of $5.00 tUSDC
     await socialCopyService.toggleSocialCopy(copierAddress, forecasterAddress, true, 50, 5.00);
 
     // Trade 1: Forecaster places order costing $4.00 (8 lots at $0.50) -> should be mirrored

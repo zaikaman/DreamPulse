@@ -104,7 +104,7 @@ export const MarketsExplorerView: React.FC<MarketsExplorerViewProps> = ({
           </span>
           <div className="flex items-baseline justify-between mt-1">
             <span className="text-xl font-bold font-mono text-foreground">
-              ${avgSpread.toFixed(2)} USDC
+              ${avgSpread.toFixed(2)} tUSDC
             </span>
             <span className="text-[10px] font-mono text-muted-foreground">TIGHT MM</span>
           </div>

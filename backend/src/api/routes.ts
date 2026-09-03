@@ -1078,7 +1078,7 @@ apiRouter.get('/portfolio/summary', optionalWalletAuth, async (req: Request, res
 
     // Realized PnL is authoritative: sum of per-trade (payout - cost) for every expired market, handling BUY/SELL and VOID correctly via historically accurate settlement price
     const realizedPnl = await orderService.getTotalRealizedPnlAsync(undefined, targetAddress);
-    // Unclaimed is gross payout awaiting on-chain redemption (1 USDC per winning lot), NOT net profit - keep separate to avoid double counting
+    // Unclaimed is gross payout awaiting on-chain redemption (1 tUSDC per winning lot), NOT net profit - keep separate to avoid double counting
     const unclaimedPnl = sweeperSummary?.unclaimedAmount || 0;
     const totalClaimed = sweeperSummary?.totalClaimedAllTime || 0;
     // Total portfolio PnL = net realized profit (already includes wins even if not yet swept). Do NOT add gross unclaimed.
