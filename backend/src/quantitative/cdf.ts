@@ -73,7 +73,7 @@ export function calculateZScore(
   regularizeHorizon: boolean = true,
 ): number {
   if (spot <= 0 || strike <= 0) {
-    throw new Error(`Spot (${spot}) and Strike (${strike}) must be strictly positive.`);
+    return spot >= strike ? 10.0 : -10.0;
   }
   if (annualVolatility <= 0) {
     throw new Error(`Volatility (${annualVolatility}) must be strictly positive.`);

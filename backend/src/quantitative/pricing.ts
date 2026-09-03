@@ -331,6 +331,18 @@ export function calculateFairValue(
   }
   const timeYears = secondsToYears(Math.max(1, timeRemainingSeconds));
 
+  if (isNaN(spot) || isNaN(strike) || spot <= 0 || strike <= 0) {
+    const z = (spot >= strike) ? 10.0 : -10.0;
+    const fairYes = (spot >= strike) ? 0.999 : 0.001;
+    return {
+      fairValueYes: fairYes,
+      fairValueNo: Number((1.0 - fairYes).toFixed(4)),
+      zScore: z,
+      volatilityUsed: Number(vol.toFixed(4)),
+      timeRemainingSeconds: Math.max(0, Math.floor(timeRemainingSeconds)),
+    };
+  }
+
   const z = calculateZScore(spot, strike, vol, timeYears);
   const fairYes = calculateBinaryYesProbability(spot, strike, vol, timeYears);
   const fairNo = Number((1.0 - fairYes).toFixed(4));

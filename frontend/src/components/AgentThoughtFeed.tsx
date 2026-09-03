@@ -46,6 +46,8 @@ export const AgentThoughtFeed: React.FC<AgentThoughtFeedProps> = ({
   const [pageSize, setPageSize] = useState<number>(25);
   const [isPausedManual, setIsPausedManual] = useState<boolean>(false);
   const [isHovered, setIsHovered] = useState<boolean>(false);
+  const [isHoverPauseSuppressed, setIsHoverPauseSuppressed] = useState<boolean>(false);
+  const [frozenThoughts, setFrozenThoughts] = useState<AgentThoughtLog[] | null>(null);
   const [nowTime, setNowTime] = useState<number>(Date.now());
   const containerRef = useRef<HTMLDivElement>(null);
 
@@ -57,10 +59,10 @@ export const AgentThoughtFeed: React.FC<AgentThoughtFeedProps> = ({
     return () => clearInterval(timer);
   }, []);
 
-  const isPaused = isPausedManual || isHovered;
+  const isPaused = isPausedManual || (isHovered && !isHoverPauseSuppressed);
 
-  // Active pool of thoughts to display
-  const activeSourceList = useMemo(() => {
+  // Live pool of thoughts from WebSocket stream
+  const liveSourceList = useMemo(() => {
     if (selectedFilter === 'DEBUG_TRACE') {
       return debugThoughts;
     }
@@ -70,6 +72,45 @@ export const AgentThoughtFeed: React.FC<AgentThoughtFeedProps> = ({
     }
     return thoughts;
   }, [thoughts, debugThoughts, isDebugEnabled, selectedFilter]);
+
+  // When paused, freeze the displayed pool snapshot so new stream events do not push rows downward
+  useEffect(() => {
+    if (isPaused) {
+      setFrozenThoughts((prev) => prev ?? liveSourceList);
+    } else {
+      setFrozenThoughts(null);
+    }
+  }, [isPaused, liveSourceList]);
+
+  // Active pool: frozen snapshot if paused to inspect, otherwise live stream
+  const activeSourceList = useMemo(() => {
+    if (isPaused && frozenThoughts) {
+      return frozenThoughts;
+    }
+    return liveSourceList;
+  }, [isPaused, frozenThoughts, liveSourceList]);
+
+  // Number of buffered thoughts accumulated while stream is paused
+  const bufferedCount = useMemo(() => {
+    if (!isPaused || !frozenThoughts) return 0;
+    const frozenIds = new Set(frozenThoughts.map((t) => t.id));
+    return liveSourceList.reduce((acc, t) => acc + (frozenIds.has(t.id) ? 0 : 1), 0);
+  }, [isPaused, frozenThoughts, liveSourceList]);
+
+  const handleResume = () => {
+    setIsPausedManual(false);
+    setIsHoverPauseSuppressed(true);
+    setFrozenThoughts(null);
+  };
+
+  // Autoscroll: when streaming live (not paused) and user is at top of page 1, keep freshest thoughts visible
+  useEffect(() => {
+    if (!isPaused && currentPage === 1 && containerRef.current) {
+      if (containerRef.current.scrollTop < 60) {
+        containerRef.current.scrollTo({ top: 0, behavior: 'smooth' });
+      }
+    }
+  }, [liveSourceList, isPaused, currentPage]);
 
   // Snapshot of latest distinct thought per agent for Executive Digest
   const latestByAgent = useMemo(() => {
@@ -255,7 +296,10 @@ export const AgentThoughtFeed: React.FC<AgentThoughtFeedProps> = ({
     <div
       className="terminal-panel thought-feed-panel"
       onMouseEnter={() => setIsHovered(true)}
-      onMouseLeave={() => setIsHovered(false)}
+      onMouseLeave={() => {
+        setIsHovered(false);
+        setIsHoverPauseSuppressed(false);
+      }}
       style={{
         display: 'flex',
         flexDirection: 'column',
@@ -331,12 +375,19 @@ export const AgentThoughtFeed: React.FC<AgentThoughtFeedProps> = ({
           <button
             id="btn-pause-thought-stream"
             type="button"
-            onClick={() => setIsPausedManual(!isPausedManual)}
-            title={isPausedManual ? 'Resume streaming' : 'Pause autoscroll to inspect'}
-            className={`inline-flex items-center gap-1.5 px-2.5 py-1 text-[11px] font-mono font-medium rounded-md border transition-colors ${isPausedManual ? 'bg-secondary text-foreground border-border' : 'bg-secondary/40 text-muted-foreground border-border/50 hover:text-foreground hover:bg-secondary/60'}`}
+            onClick={() => {
+              if (isPaused) {
+                handleResume();
+              } else {
+                setIsPausedManual(true);
+                setIsHoverPauseSuppressed(false);
+              }
+            }}
+            title={isPaused ? 'Resume streaming' : 'Pause autoscroll to inspect'}
+            className={`inline-flex items-center gap-1.5 px-2.5 py-1 text-[11px] font-mono font-medium rounded-md border transition-colors cursor-pointer ${isPaused ? 'bg-secondary text-foreground border-border' : 'bg-secondary/40 text-muted-foreground border-border/50 hover:text-foreground hover:bg-secondary/60'}`}
           >
-            {isPausedManual ? <PlayIcon className="w-3 h-3" /> : <PauseIcon className="w-3 h-3" />}
-            <span>{isPausedManual ? 'Resume' : 'Pause'}</span>
+            {isPaused ? <PlayIcon className="w-3 h-3" /> : <PauseIcon className="w-3 h-3" />}
+            <span>{isPaused ? 'Resume' : 'Pause'}</span>
           </button>
         </div>
       </div>
@@ -432,7 +483,10 @@ export const AgentThoughtFeed: React.FC<AgentThoughtFeedProps> = ({
         ref={containerRef}
         className="thought-stream-container"
         onMouseEnter={() => setIsHovered(true)}
-        onMouseLeave={() => setIsHovered(false)}
+        onMouseLeave={() => {
+          setIsHovered(false);
+          setIsHoverPauseSuppressed(false);
+        }}
         style={{
           flex: 1,
           overflowY: 'auto',
@@ -440,8 +494,26 @@ export const AgentThoughtFeed: React.FC<AgentThoughtFeedProps> = ({
           display: 'flex',
           flexDirection: 'column',
           gap: '10px',
+          position: 'relative',
         }}
       >
+        {/* Sticky Pause / Buffered Pill */}
+        {isPaused && (
+          <div className="sticky top-0 z-20 flex justify-center py-1 -mt-1 pointer-events-auto">
+            <button
+              id="btn-resume-stream-pill"
+              type="button"
+              onClick={handleResume}
+              className="inline-flex items-center gap-1.5 px-3 py-1 text-[11px] font-mono font-medium rounded-full border shadow-lg bg-secondary/95 text-foreground border-border hover:bg-secondary hover:border-border/80 transition-all cursor-pointer backdrop-blur-sm"
+            >
+              <PauseIcon className="w-3 h-3 text-[#ffb700]" />
+              <span>
+                Stream paused — {bufferedCount} new {bufferedCount === 1 ? 'thought' : 'thoughts'} buffered (Click to resume)
+              </span>
+              <PlayIcon className="w-3 h-3 text-muted-foreground ml-0.5" />
+            </button>
+          </div>
+        )}
         {(isLoading || (!isConnected && thoughts.length === 0)) && filteredThoughts.length === 0 ? (
           <AgentThoughtFeedSkeleton />
         ) : filteredThoughts.length === 0 ? (

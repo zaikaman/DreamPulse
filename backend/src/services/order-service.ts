@@ -1368,18 +1368,20 @@ export class OrderService {
     }
 
     // Broadcast order fill event over WebSocket telemetry stream
-    telemetryWsGateway.broadcastOrderFilled({
-      userAddress: session.userAddress,
-      orderId,
-      marketId: decision.targetMarketId,
-      agentType: effectiveAgentType,
-      source,
-      outcome: orderExecution.outcome,
-      direction: orderExecution.direction,
-      price: quantizedPrice,
-      lotSize: orderExecution.lotSize,
-      txHash,
-    });
+    if (orderStatus === 'FILLED' || orderStatus === 'PARTIALLY_FILLED') {
+      telemetryWsGateway.broadcastOrderFilled({
+        userAddress: session.userAddress,
+        orderId,
+        marketId: decision.targetMarketId,
+        agentType: effectiveAgentType,
+        source,
+        outcome: orderExecution.outcome,
+        direction: orderExecution.direction,
+        price: quantizedPrice,
+        lotSize: orderExecution.lotSize,
+        txHash,
+      });
+    }
 
     this.notifyStateChange();
 
@@ -1519,18 +1521,20 @@ export class OrderService {
 
       this.insertIntoCache(orderExecution);
 
-      telemetryWsGateway.broadcastOrderFilled({
-        userAddress: params.userAddress,
-        orderId,
-        marketId: params.marketId,
-        agentType: 'Manual',
-        source: 'TERMINAL',
-        outcome,
-        direction,
-        price: quantizedPrice,
-        lotSize: actualSize,
-        txHash: params.txHash,
-      });
+      if (verifiedStatus === 'FILLED' || verifiedStatus === 'PARTIALLY_FILLED') {
+        telemetryWsGateway.broadcastOrderFilled({
+          userAddress: params.userAddress,
+          orderId,
+          marketId: params.marketId,
+          agentType: 'Manual',
+          source: 'TERMINAL',
+          outcome,
+          direction,
+          price: quantizedPrice,
+          lotSize: actualSize,
+          txHash: params.txHash,
+        });
+      }
 
       this.notifyStateChange();
 
@@ -1892,6 +1896,34 @@ export class OrderService {
     order.status = 'CANCELLED';
     if (cancelTxHash) {
       order.cancelTxHash = cancelTxHash;
+    }
+
+    // Refund locked collateral to user if the order was placed with operator-pulled collateral (swarm, session, or copy-trade)
+    if (
+      order.direction === 'BUY' &&
+      order.userAddress &&
+      order.userAddress.toLowerCase() !== (operatorAccount?.address || '').toLowerCase() &&
+      (order.source === 'SWARM' || Boolean(order.sessionId))
+    ) {
+      const refundAmount = BigInt(Math.floor((order.totalCost || 0) * 1e6));
+      if (refundAmount > 0n) {
+        try {
+          await executeOperatorWriteContract({
+            address: SOMNIA_ADDRESSES.testUsdc,
+            abi: ERC20_ABI,
+            functionName: 'transfer',
+            args: [order.userAddress, refundAmount],
+          });
+          console.info(
+            `[OrderService] Refunded ${refundAmount} tUSDC locked collateral to ${order.userAddress} for cancelled order ${order.id}`,
+          );
+        } catch (refundErr: any) {
+          console.error(
+            `[OrderService] CRITICAL: Collateral refund to ${order.userAddress} on order cancellation failed:`,
+            refundErr?.message || refundErr,
+          );
+        }
+      }
     }
 
     // Remove from resting maker quotes

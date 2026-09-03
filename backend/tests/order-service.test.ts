@@ -632,6 +632,28 @@ describe('OrderService Comprehensive Suite', () => {
     expect(res.message).toContain('already expired');
   });
 
+  it('cancels a resting swarm/session order and processes collateral refund', async () => {
+    const restingOrder = await service.submitUserOrder({
+      userAddress,
+      marketId: mockMarket.id,
+      outcome: 'YES',
+      direction: 'BUY',
+      orderType: 'LIMIT',
+      price: 0.50,
+      lotSize: 10.0,
+      txHash: '0x9999999999999999999999999999999999999999999999999999999999999999',
+    });
+    restingOrder.status = 'PENDING';
+    restingOrder.source = 'SWARM';
+    restingOrder.sessionId = 'test-session-id';
+    restingOrder.totalCost = 5.0;
+
+    const res = await service.cancelOrderFor(restingOrder.id, userAddress);
+    expect(res.success).toBe(true);
+    expect(res.order.status).toBe('CANCELLED');
+    expect(res.message).toContain('Locked collateral returned');
+  });
+
   it('throws if order ID is not found', async () => {
     await expect(
       service.cancelOrderFor('non-existent-order-id', userAddress),

@@ -76,6 +76,24 @@ describe('Quantitative CDF & Black-Scholes Math', () => {
     const otmZ = calculateZScore(90, 100, 0.5, 0);
     expect(otmZ).toBe(-10.0);
   });
+
+  it('handles zero or negative spot and strike without throwing in calculateZScore and calculateFairValue', () => {
+    // Zero strike (e.g. un-synced or low-priced altcoins)
+    expect(() => calculateZScore(100, 0, 0.5, 0.1)).not.toThrow();
+    expect(calculateZScore(100, 0, 0.5, 0.1)).toBe(10.0);
+    expect(calculateZScore(0, 100, 0.5, 0.1)).toBe(-10.0);
+    expect(calculateZScore(-5, 100, 0.5, 0.1)).toBe(-10.0);
+
+    // calculateFairValue should not throw
+    expect(() => calculateFairValue(0, 100, 300)).not.toThrow();
+    const fairZeroSpot = calculateFairValue(0, 100, 300);
+    expect(fairZeroSpot.fairValueYes).toBe(0.001);
+    expect(fairZeroSpot.fairValueNo).toBe(0.999);
+
+    const fairZeroStrike = calculateFairValue(100, 0, 300);
+    expect(fairZeroStrike.fairValueYes).toBe(0.999);
+    expect(fairZeroStrike.fairValueNo).toBe(0.001);
+  });
 });
 
 describe('Quantitative Pricing & Edge Calculation Engine', () => {
@@ -625,9 +643,9 @@ describe('Multi-Factor Confluence & High-Conviction AI Copilot Engine', () => {
     expect(Math.abs(result.edgePercentage)).toBe(0); // Deadband suppresses jitter
   });
 
-  it('covers cdf.ts error throwing on non-positive spot, strike, and volatility and expired contracts', () => {
-    expect(() => calculateZScore(0, 100, 0.5, 1)).toThrow('Spot (0) and Strike (100) must be strictly positive.');
-    expect(() => calculateZScore(100, 0, 0.5, 1)).toThrow('Spot (100) and Strike (0) must be strictly positive.');
+  it('covers cdf.ts safe fallback on non-positive spot/strike, error throwing on non-positive volatility and expired contracts', () => {
+    expect(calculateZScore(0, 100, 0.5, 1)).toBe(-10.0);
+    expect(calculateZScore(100, 0, 0.5, 1)).toBe(10.0);
     expect(() => calculateZScore(100, 100, 0, 1)).toThrow('Volatility (0) must be strictly positive.');
     expect(() => calculateZScore(100, 100, -0.2, 1)).toThrow('Volatility (-0.2) must be strictly positive.');
 
