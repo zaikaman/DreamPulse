@@ -191,7 +191,7 @@ apiRouter.get('/markets/pools/future', async (req: Request, res: Response) => {
         const multi = await (publicClient as any)
           .multicall({ contracts, allowFailure: true, multicallAddress: MULTICALL3_ADDRESS })
           .catch(() => null);
-        if (multi && Array.isArray(multi)) {
+        if (multi && Array.isArray(multi) && multi.some((entry: any) => entry?.status === 'success')) {
           for (const entry of multi) {
             if (entry?.status === 'success' && Array.isArray(entry.result)) {
               for (const p of entry.result as Address[]) {
@@ -374,6 +374,8 @@ apiRouter.post('/sessions/register', requireWalletAuth, async (req: Request, res
       copyTradeEnabled: typeof copyTradeEnabled === 'boolean' ? copyTradeEnabled : undefined,
     });
 
+    allowanceStatusCache.delete(userAddress.toLowerCase());
+
     // SECURITY: bind session to httpOnly cookie (defense-in-depth fingerprint).
     // Even if an attacker steals a SessionGrant snapshot via XSS, they cannot
     // replay it without the httpOnly dreampulse_session cookie which is never
@@ -492,6 +494,9 @@ apiRouter.post('/sessions/:id/revoke', requireWalletAuth, async (req: Request, r
       }
     }
     const revoked = await sessionService.revokeSession(id);
+    if (wallet) {
+      allowanceStatusCache.delete(wallet.toLowerCase());
+    }
     // Clear httpOnly session fingerprint cookie on revoke (prevents replay of stale sessionId)
     try {
       const { clearSessionCookie } = await import('../config/cookie.js');
@@ -520,8 +525,9 @@ apiRouter.get('/sessions/:userAddress/allowance-status', optionalWalletAuth, asy
     const normalized = getAddress(userAddress) as Address;
     const cacheKey = normalized.toLowerCase();
     const nowMs = Date.now();
+    const isFresh = req.query.fresh === 'true' || req.query.force === 'true';
     const cached = allowanceStatusCache.get(cacheKey);
-    if (cached && nowMs < cached.expiresAt) {
+    if (!isFresh && cached && nowMs < cached.expiresAt) {
       return res.json(cached.data);
     }
     const session = await sessionService.getUserActiveSession(normalized).catch(() => null);
@@ -534,27 +540,13 @@ apiRouter.get('/sessions/:userAddress/allowance-status', optionalWalletAuth, asy
     let balance: bigint = 0n;
     let isGlobal: boolean = false;
     try {
-      const contracts = [
-        { address: SOMNIA_ADDRESSES.testUsdc as Address, abi: erc20Abi, functionName: 'allowance', args: [normalized, operatorAddr] },
-        { address: SOMNIA_ADDRESSES.testUsdc as Address, abi: erc20Abi, functionName: 'balanceOf', args: [normalized] },
-        { address: SOMNIA_ADDRESSES.operatorPermissionsRegistry as Address, abi: registryAbi, functionName: 'isGloballyApproved', args: [normalized, operatorAddr, selector] },
-      ] as const;
-      const multi = await (publicClient as any)
-        .multicall({ contracts, allowFailure: true, multicallAddress: MULTICALL3_ADDRESS })
-        .catch(() => null);
-      if (multi && Array.isArray(multi) && multi.length === 3) {
-        allowanceOperator = multi[0]?.status === 'success' ? (multi[0].result as bigint) : 0n;
-        balance = multi[1]?.status === 'success' ? (multi[1].result as bigint) : 0n;
-        isGlobal = multi[2]?.status === 'success' ? Boolean(multi[2].result) : false;
-      } else {
-        throw new Error('multicall unavailable');
-      }
-    } catch {
       [allowanceOperator, balance, isGlobal] = await Promise.all([
         publicClient.readContract({ address: SOMNIA_ADDRESSES.testUsdc, abi: erc20Abi, functionName: 'allowance', args: [normalized, operatorAddr] }).catch(() => 0n) as Promise<bigint>,
         publicClient.readContract({ address: SOMNIA_ADDRESSES.testUsdc, abi: erc20Abi, functionName: 'balanceOf', args: [normalized] }).catch(() => 0n) as Promise<bigint>,
         publicClient.readContract({ address: SOMNIA_ADDRESSES.operatorPermissionsRegistry, abi: registryAbi, functionName: 'isGloballyApproved', args: [normalized, operatorAddr, selector] }).catch(() => false) as Promise<boolean>,
       ]) as [bigint, bigint, boolean];
+    } catch {
+      // safe fallback if RPC throws
     }
 
     const allowanceOperatorHuman = Number(allowanceOperator) / 1_000_000;

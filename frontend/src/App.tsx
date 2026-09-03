@@ -99,7 +99,8 @@ export const App: React.FC = () => {
   const handleOpenSessionModal = useCallback((options?: { revoke?: boolean }) => {
     setSessionModalInitialRevoke(Boolean(options?.revoke));
     setIsSessionModalOpen(true);
-  }, []);
+    refreshAllowanceStatus(true).catch(() => {});
+  }, [refreshAllowanceStatus]);
 
   const handleNavigateView = useCallback((view: DashboardViewType) => {
     setActiveNav(view);

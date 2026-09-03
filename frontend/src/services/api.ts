@@ -204,7 +204,7 @@ export const apiClient = {
     });
   },
 
-  async getAllowanceStatus(userAddress: string): Promise<{
+  async getAllowanceStatus(userAddress: string, forceFresh = false): Promise<{
     success: boolean;
     userAddress?: string;
     hasActiveSession?: boolean;
@@ -218,7 +218,8 @@ export const apiClient = {
     checks?: Array<{ pool: string; allowanceHuman: number; balanceHuman: number; vaultHuman: number; ready: boolean }>;
     guidance: string;
   }> {
-    return fetchJson(`/sessions/${encodeURIComponent(userAddress)}/allowance-status`);
+    const qs = forceFresh ? `?fresh=true&t=${Date.now()}` : '';
+    return fetchJson(`/sessions/${encodeURIComponent(userAddress)}/allowance-status${qs}`);
   },
 
   // Swarm Agents

@@ -70,7 +70,7 @@ export interface UseSessionKeyReturn {
   refreshSession: () => Promise<void>;
   setSessionCopyTrade: (enabled: boolean) => void;
   ensureAllowances: () => Promise<void>;
-  refreshAllowanceStatus: () => Promise<void>;
+  refreshAllowanceStatus: (forceFresh?: boolean) => Promise<void>;
   clearError: () => void;
 }
 
@@ -268,10 +268,10 @@ export function useSessionKey(): UseSessionKeyReturn {
   /**
    * Fetches allowance status for active copy-trade pools (to surface 0x3fb0ba2e fix).
    */
-  const refreshAllowanceStatus = useCallback(async () => {
+  const refreshAllowanceStatus = useCallback(async (forceFresh?: boolean) => {
     if (!wallet.address) return;
     try {
-      const res = await apiClient.getAllowanceStatus(wallet.address);
+      const res = await apiClient.getAllowanceStatus(wallet.address, Boolean(forceFresh));
       if (res.success) {
         const checks: AllowanceStatusCheck[] = Array.isArray(res.checks)
           ? res.checks
@@ -310,7 +310,7 @@ export function useSessionKey(): UseSessionKeyReturn {
     setError(null);
     try {
       await web3Service.ensureAllowancesForPools({ userAddress: wallet.address });
-      await refreshAllowanceStatus();
+      await refreshAllowanceStatus(true);
       await refreshBalances(wallet.address);
     } catch (err: any) {
       const parsed = parseWeb3Error(err);
@@ -581,6 +581,7 @@ export function useSessionKey(): UseSessionKeyReturn {
         }
         setActiveSession(createdSession);
         await refreshBalances(wallet.address);
+        await refreshAllowanceStatus(true).catch(() => {});
 
         return createdSession;
       } catch (err: any) {
@@ -592,7 +593,7 @@ export function useSessionKey(): UseSessionKeyReturn {
         setStepState('idle');
       }
     },
-    [wallet.isConnected, wallet.address, refreshBalances]
+    [wallet.isConnected, wallet.address, refreshBalances, refreshAllowanceStatus]
   );
 
   /**

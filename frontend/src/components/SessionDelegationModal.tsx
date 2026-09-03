@@ -118,6 +118,7 @@ export const SessionDelegationModal: React.FC<SessionDelegationModalProps> = ({
     if (isOpen) {
       setConfirmRevoke(Boolean(initialRevokeMode));
       setRevokeOnChainOption(true);
+      onRefreshAllowance?.();
 
       if (activeSession) {
         setEnableCopyTrading(Boolean(activeSession.copyTradeEnabled));
