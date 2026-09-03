@@ -26,10 +26,31 @@ export interface UsePersonalSwarmReturn {
   resetToCopy: () => Promise<boolean>;
 }
 
-export const usePersonalSwarm = (userAddress?: string): UsePersonalSwarmReturn => {
-  const [config, setConfig] = useState<PersonalSwarmConfig | null>(null);
-  const [status, setStatus] = useState<PersonalSwarmStatus | null>(null);
-  const [isLoading, setIsLoading] = useState<boolean>(false);
+export interface UsePersonalSwarmOptions {
+  initialCopyTradeEnabled?: boolean;
+}
+
+// In-memory module cache across page navigation (strictly JS heap memory, zero persistence in localStorage)
+const swarmConfigMemoryCache = new Map<string, PersonalSwarmConfig>();
+const swarmStatusMemoryCache = new Map<string, PersonalSwarmStatus>();
+
+export const usePersonalSwarm = (
+  userAddress?: string,
+  options?: UsePersonalSwarmOptions,
+): UsePersonalSwarmReturn => {
+  const normAddress = userAddress?.toLowerCase();
+  const [config, setConfig] = useState<PersonalSwarmConfig | null>(() => {
+    if (!normAddress) return null;
+    return swarmConfigMemoryCache.get(normAddress) || null;
+  });
+  const [status, setStatus] = useState<PersonalSwarmStatus | null>(() => {
+    if (!normAddress) return null;
+    return swarmStatusMemoryCache.get(normAddress) || null;
+  });
+  const [isLoading, setIsLoading] = useState<boolean>(() => {
+    if (normAddress && swarmConfigMemoryCache.has(normAddress)) return false;
+    return Boolean(normAddress);
+  });
   const [isSaving, setIsSaving] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -37,17 +58,27 @@ export const usePersonalSwarm = (userAddress?: string): UsePersonalSwarmReturn =
     if (!userAddress) {
       setConfig(null);
       setStatus(null);
+      setIsLoading(false);
       return;
     }
-    setIsLoading(true);
+    const lower = userAddress.toLowerCase();
+    if (!swarmConfigMemoryCache.has(lower)) {
+      setIsLoading(true);
+    }
     setError(null);
     try {
       const [cfgRes, statusRes] = await Promise.all([
         apiClient.getPersonalSwarmConfig(userAddress).catch(() => null),
         apiClient.getPersonalSwarmStatus(userAddress).catch(() => null),
       ]);
-      if (cfgRes?.config) setConfig(cfgRes.config);
-      if (statusRes?.status) setStatus(statusRes.status);
+      if (cfgRes?.config) {
+        swarmConfigMemoryCache.set(lower, cfgRes.config);
+        setConfig(cfgRes.config);
+      }
+      if (statusRes?.status) {
+        swarmStatusMemoryCache.set(lower, statusRes.status);
+        setStatus(statusRes.status);
+      }
     } catch (err: any) {
       setError(err.message || 'Failed to fetch personal swarm');
     } finally {
@@ -76,7 +107,7 @@ export const usePersonalSwarm = (userAddress?: string): UsePersonalSwarmReturn =
         // onInsert/update both upsert config
         (row: any) => {
           if (!row || !row.user_address || row.user_address.toLowerCase() !== lower) return;
-          setConfig({
+          const nextCfg: PersonalSwarmConfig = {
             userAddress: row.user_address,
             mode: row.mode || 'COPY',
             copyTradeEnabled: row.copy_trade_enabled === true,
@@ -90,11 +121,13 @@ export const usePersonalSwarm = (userAddress?: string): UsePersonalSwarmReturn =
             customizedAt: row.customized_at || undefined,
             createdAt: row.created_at,
             updatedAt: row.updated_at,
-          });
+          };
+          swarmConfigMemoryCache.set(lower, nextCfg);
+          setConfig(nextCfg);
         },
         (row: any) => {
           if (!row || !row.user_address || row.user_address.toLowerCase() !== lower) return;
-          setConfig({
+          const nextCfg: PersonalSwarmConfig = {
             userAddress: row.user_address,
             mode: row.mode || 'COPY',
             copyTradeEnabled: row.copy_trade_enabled === true,
@@ -108,7 +141,9 @@ export const usePersonalSwarm = (userAddress?: string): UsePersonalSwarmReturn =
             customizedAt: row.customized_at || undefined,
             createdAt: row.created_at,
             updatedAt: row.updated_at,
-          });
+          };
+          swarmConfigMemoryCache.set(lower, nextCfg);
+          setConfig(nextCfg);
         },
       );
       if (cancelled && channel) {
@@ -123,6 +158,34 @@ export const usePersonalSwarm = (userAddress?: string): UsePersonalSwarmReturn =
         supabase.removeChannel(channel);
       }
     };
+  }, [userAddress]);
+
+  // Synchronize with cross-component session updates (e.g. SessionStatusBar, SessionDelegationModal)
+  useEffect(() => {
+    if (!userAddress) return;
+    const lower = userAddress.toLowerCase();
+    const handleSessionUpdate = (e: Event) => {
+      const detail = (e as CustomEvent<{ copyTradeEnabled?: boolean }>).detail;
+      if (typeof detail?.copyTradeEnabled === 'boolean') {
+        const next = detail.copyTradeEnabled;
+        setConfig((prev) => {
+          if (!prev) {
+            const cached = swarmConfigMemoryCache.get(lower);
+            if (cached) {
+              const updated = { ...cached, copyTradeEnabled: next };
+              swarmConfigMemoryCache.set(lower, updated);
+              return updated;
+            }
+            return null;
+          }
+          const updated = { ...prev, copyTradeEnabled: next };
+          swarmConfigMemoryCache.set(lower, updated);
+          return updated;
+        });
+      }
+    };
+    window.addEventListener('dreampulse:session-update', handleSessionUpdate);
+    return () => window.removeEventListener('dreampulse:session-update', handleSessionUpdate);
   }, [userAddress]);
 
   // Light polling restores cross-tab near-realtime without Supabase realtime
@@ -153,26 +216,36 @@ export const usePersonalSwarm = (userAddress?: string): UsePersonalSwarmReturn =
   const setMode = useCallback(
     async (mode: 'COPY' | 'PERSONAL'): Promise<boolean> => {
       if (!userAddress) return false;
+      const lower = userAddress.toLowerCase();
       let snapshotConfig: PersonalSwarmConfig | null = null;
       setConfig((prev) => {
         snapshotConfig = prev;
-        return prev ? { ...prev, mode } : null;
+        const updated = prev ? { ...prev, mode } : null;
+        if (updated) swarmConfigMemoryCache.set(lower, updated);
+        return updated;
       });
       setIsSaving(true);
       try {
         const res = await apiClient.setPersonalSwarmMode(userAddress, mode);
         if (res?.config) {
+          swarmConfigMemoryCache.set(lower, res.config);
           setConfig(res.config);
           // refresh status in background without blocking
           void apiClient.getPersonalSwarmStatus(userAddress)
             .then((s) => {
-              if (s?.status) setStatus(s.status);
+              if (s?.status) {
+                swarmStatusMemoryCache.set(lower, s.status);
+                setStatus(s.status);
+              }
             })
             .catch(() => {});
         }
         return true;
       } catch (err: any) {
-        if (snapshotConfig) setConfig(snapshotConfig);
+        if (snapshotConfig) {
+          swarmConfigMemoryCache.set(lower, snapshotConfig);
+          setConfig(snapshotConfig);
+        }
         setError(err.message || 'Failed to switch mode');
         return false;
       } finally {
@@ -185,11 +258,14 @@ export const usePersonalSwarm = (userAddress?: string): UsePersonalSwarmReturn =
   const toggleCopyTrade = useCallback(
     async (enabled: boolean): Promise<boolean> => {
       if (!userAddress) return false;
+      const lower = userAddress.toLowerCase();
       let snapshotConfig: PersonalSwarmConfig | null = null;
-      // Optimistic update: instantly reflect in React state and in-memory event
+      // Optimistic update: instantly reflect in React state, memory cache, and in-memory event
       setConfig((prev) => {
         snapshotConfig = prev;
-        return prev ? { ...prev, copyTradeEnabled: enabled } : null;
+        const updated = prev ? { ...prev, copyTradeEnabled: enabled } : null;
+        if (updated) swarmConfigMemoryCache.set(lower, updated);
+        return updated;
       });
       if (typeof window !== 'undefined') {
         window.dispatchEvent(new CustomEvent('dreampulse:session-update', { detail: { copyTradeEnabled: enabled } }));
@@ -198,18 +274,25 @@ export const usePersonalSwarm = (userAddress?: string): UsePersonalSwarmReturn =
       try {
         const res = await apiClient.toggleCopyTrade(userAddress, enabled);
         if (res?.config) {
+          swarmConfigMemoryCache.set(lower, res.config);
           setConfig(res.config);
         }
         // Non-blocking background sync of status so UI transition remains instant
         void apiClient.getPersonalSwarmStatus(userAddress)
           .then((s) => {
-            if (s?.status) setStatus(s.status);
+            if (s?.status) {
+              swarmStatusMemoryCache.set(lower, s.status);
+              setStatus(s.status);
+            }
           })
           .catch(() => {});
         return true;
       } catch (err: any) {
         // Rollback optimistic update
-        if (snapshotConfig) setConfig(snapshotConfig);
+        if (snapshotConfig) {
+          swarmConfigMemoryCache.set(lower, snapshotConfig);
+          setConfig(snapshotConfig);
+        }
         if (typeof window !== 'undefined') {
           window.dispatchEvent(new CustomEvent('dreampulse:session-update', { detail: { copyTradeEnabled: !enabled } }));
         }
@@ -225,24 +308,33 @@ export const usePersonalSwarm = (userAddress?: string): UsePersonalSwarmReturn =
   const toggleAgent = useCallback(
     async (agentType: AgentType, enabled: boolean): Promise<boolean> => {
       if (!userAddress) return false;
+      const lower = userAddress.toLowerCase();
       let snapshotConfig: PersonalSwarmConfig | null = null;
       const key = agentType.toLowerCase();
       setConfig((prev) => {
         snapshotConfig = prev;
         if (!prev) return null;
-        if (key === 'volt') return { ...prev, voltEnabled: enabled };
-        if (key === 'oracle') return { ...prev, oracleEnabled: enabled };
-        if (key === 'titan') return { ...prev, titanEnabled: enabled };
-        if (key === 'sweeper') return { ...prev, sweeperEnabled: enabled };
-        return prev;
+        let updated = { ...prev };
+        if (key === 'volt') updated = { ...prev, voltEnabled: enabled };
+        else if (key === 'oracle') updated = { ...prev, oracleEnabled: enabled };
+        else if (key === 'titan') updated = { ...prev, titanEnabled: enabled };
+        else if (key === 'sweeper') updated = { ...prev, sweeperEnabled: enabled };
+        swarmConfigMemoryCache.set(lower, updated);
+        return updated;
       });
       setIsSaving(true);
       try {
         const res = await apiClient.togglePersonalAgent(userAddress, agentType, enabled);
-        if (res?.config) setConfig(res.config);
+        if (res?.config) {
+          swarmConfigMemoryCache.set(lower, res.config);
+          setConfig(res.config);
+        }
         return true;
       } catch (err: any) {
-        if (snapshotConfig) setConfig(snapshotConfig);
+        if (snapshotConfig) {
+          swarmConfigMemoryCache.set(lower, snapshotConfig);
+          setConfig(snapshotConfig);
+        }
         setError(err.message || 'Failed to toggle agent');
         return false;
       } finally {
@@ -255,10 +347,14 @@ export const usePersonalSwarm = (userAddress?: string): UsePersonalSwarmReturn =
   const updateAgentConfig = useCallback(
     async (agentType: AgentType, cfg: Record<string, any>): Promise<boolean> => {
       if (!userAddress) return false;
+      const lower = userAddress.toLowerCase();
       setIsSaving(true);
       try {
         const res = await apiClient.updatePersonalAgentConfig(userAddress, agentType, cfg);
-        if (res?.config) setConfig(res.config);
+        if (res?.config) {
+          swarmConfigMemoryCache.set(lower, res.config);
+          setConfig(res.config);
+        }
         return true;
       } catch (err: any) {
         setError(err.message || 'Failed to update config');
@@ -277,10 +373,14 @@ export const usePersonalSwarm = (userAddress?: string): UsePersonalSwarmReturn =
       titan?: Record<string, any>;
     }): Promise<boolean> => {
       if (!userAddress) return false;
+      const lower = userAddress.toLowerCase();
       setIsSaving(true);
       try {
         const res = await apiClient.updateFleetConfig(userAddress, configs);
-        if (res?.config) setConfig(res.config);
+        if (res?.config) {
+          swarmConfigMemoryCache.set(lower, res.config);
+          setConfig(res.config);
+        }
         return true;
       } catch (err: any) {
         setError(err.message || 'Failed to update fleet config');
@@ -294,12 +394,19 @@ export const usePersonalSwarm = (userAddress?: string): UsePersonalSwarmReturn =
 
   const resetToCopy = useCallback(async (): Promise<boolean> => {
     if (!userAddress) return false;
+    const lower = userAddress.toLowerCase();
     setIsSaving(true);
     try {
       const res = await apiClient.resetPersonalSwarm(userAddress);
-      if (res?.config) setConfig(res.config);
+      if (res?.config) {
+        swarmConfigMemoryCache.set(lower, res.config);
+        setConfig(res.config);
+      }
       const s = await apiClient.getPersonalSwarmStatus(userAddress).catch(() => null);
-      if (s?.status) setStatus(s.status);
+      if (s?.status) {
+        swarmStatusMemoryCache.set(lower, s.status);
+        setStatus(s.status);
+      }
       return true;
     } catch (err: any) {
       setError(err.message || 'Failed to reset');
@@ -309,9 +416,11 @@ export const usePersonalSwarm = (userAddress?: string): UsePersonalSwarmReturn =
     }
   }, [userAddress]);
 
-  // SECURITY: copyTradeEnabled is determined solely by backend config.
-  // Legacy localStorage fallback removed — prevented XSS from injecting copyTradeEnabled via dreampulse_active_session.
-  const copyEnabled = config ? config.copyTradeEnabled === true : false;
+  // SECURITY: copyTradeEnabled is determined by backend config or initial verified session state.
+  // In-memory module cache keeps UI persistent across tab switching with zero flash to copilot.
+  const copyEnabled = config
+    ? config.copyTradeEnabled === true
+    : (options?.initialCopyTradeEnabled ?? false);
 
   return {
     config,

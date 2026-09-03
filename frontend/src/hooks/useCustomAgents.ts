@@ -91,16 +91,44 @@ function removeLocalDraftFromStorage(id: string): void {
   }
 }
 
+// In-memory module cache across page navigation (strictly JS heap memory, zero persistence in localStorage)
+const customAgentsMemoryCache = new Map<string, CustomAgentDefinition[]>();
+const customSwarmsMemoryCache = new Map<string, CustomSwarmDefinition[]>();
+
 export const useCustomAgents = (userAddress?: string): UseCustomAgentsReturn => {
-  const [agents, setAgents] = useState<CustomAgentDefinition[]>([]);
-  const [swarms, setSwarms] = useState<CustomSwarmDefinition[]>([]);
-  const [isLoading, setIsLoading] = useState<boolean>(false);
+  const cacheKey = (userAddress || 'anon').toLowerCase();
+  const [agents, setAgents] = useState<CustomAgentDefinition[]>(() => {
+    const cached = customAgentsMemoryCache.get(cacheKey);
+    if (cached && cached.length > 0) return cached;
+    return loadLocalDrafts();
+  });
+  const [swarms, setSwarms] = useState<CustomSwarmDefinition[]>(() => {
+    return customSwarmsMemoryCache.get(cacheKey) || [];
+  });
+  const [isLoading, setIsLoading] = useState<boolean>(() => {
+    return !customAgentsMemoryCache.has(cacheKey);
+  });
   const [isSaving, setIsSaving] = useState<boolean>(false);
   const [isGenerating, setIsGenerating] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
 
+  // Sync state mutations to memory cache for zero-flash tab navigation
+  useEffect(() => {
+    if (agents.length > 0) {
+      customAgentsMemoryCache.set(cacheKey, agents);
+    }
+  }, [cacheKey, agents]);
+
+  useEffect(() => {
+    if (swarms.length > 0) {
+      customSwarmsMemoryCache.set(cacheKey, swarms);
+    }
+  }, [cacheKey, swarms]);
+
   const fetchAll = useCallback(async () => {
-    setIsLoading(true);
+    if (!customAgentsMemoryCache.has(cacheKey)) {
+      setIsLoading(true);
+    }
     setError(null);
     try {
       const localDrafts = loadLocalDrafts();
@@ -117,8 +145,10 @@ export const useCustomAgents = (userAddress?: string): UseCustomAgentsReturn => 
         }
       }
 
+      customAgentsMemoryCache.set(cacheKey, combined);
       setAgents(combined);
       if (swarmsRes?.data) {
+        customSwarmsMemoryCache.set(cacheKey, swarmsRes.data);
         setSwarms(swarmsRes.data);
       }
     } catch (err: any) {
@@ -126,7 +156,7 @@ export const useCustomAgents = (userAddress?: string): UseCustomAgentsReturn => 
     } finally {
       setIsLoading(false);
     }
-  }, [userAddress]);
+  }, [userAddress, cacheKey]);
 
   // Synchronizes agent/swarm definitions via REST. Supabase Realtime subscriptions
   // for active swarms and sessions are handled by usePersonalSwarm/useSessionKey,

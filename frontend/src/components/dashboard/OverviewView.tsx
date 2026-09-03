@@ -113,7 +113,10 @@ const OverviewViewComponent: React.FC<OverviewViewProps> = ({
 
   const { detailed: swarmDetailed, summary: swarmSummary, orders } = useAgentSwarm();
   const { portfolio } = useUserPortfolio(wallet);
-  const { isCopyTradeEnabled, toggleCopyTrade } = usePersonalSwarm(wallet?.address || undefined);
+  const { isCopyTradeEnabled, toggleCopyTrade } = usePersonalSwarm(
+    wallet?.address || undefined,
+    { initialCopyTradeEnabled: activeSession?.copyTradeEnabled }
+  );
   const { agents: customAgents } = useCustomAgents(wallet?.address || undefined);
   const deployedCustomCount = useMemo(() => customAgents.filter((a) => a.isDeployed).length, [customAgents]);
 

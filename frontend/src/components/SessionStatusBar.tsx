@@ -60,7 +60,15 @@ export const SessionStatusBar: React.FC<SessionStatusBarProps> = ({
   const isSessionActive = isConnected && isCorrectNetwork && activeSession?.isActive;
   const [copied, setCopied] = useState<boolean>(false);
   const [timeRemaining, setTimeRemaining] = useState<string>('');
-  const [localCopyEnabled, setLocalCopyEnabled] = useState<boolean | null>(null);
+  const [localCopyEnabled, setLocalCopyEnabled] = useState<boolean | null>(() => {
+    if (typeof activeSession?.copyTradeEnabled === 'boolean') {
+      return activeSession.copyTradeEnabled;
+    }
+    if (typeof isCopyTradeEnabled === 'boolean') {
+      return isCopyTradeEnabled;
+    }
+    return null;
+  });
   const [optimisticCopyEnabled, setOptimisticCopyEnabled] = useState<boolean | null>(null);
   const [isTogglingCopy, setIsTogglingCopy] = useState<boolean>(false);
 
@@ -81,7 +89,7 @@ export const SessionStatusBar: React.FC<SessionStatusBarProps> = ({
 
   const activeCopyTrade = optimisticCopyEnabled !== null
     ? optimisticCopyEnabled
-    : (isCopyTradeEnabled !== undefined
+    : (typeof isCopyTradeEnabled === 'boolean'
         ? isCopyTradeEnabled
         : (localCopyEnabled ?? activeSession?.copyTradeEnabled ?? false));
 
