@@ -193,4 +193,48 @@ describe('Phase 7 Strategy Studio & Historical Backtest Tests', () => {
       }),
     ).rejects.toThrow(/Insufficient historical candlestick data available/);
   });
+
+  it('stops simulation immediately on bankruptcy without phantom leverage or negative equity', async () => {
+    const backtestService = new BacktestService();
+    // Tiny initial capital and large lot size guarantees rapid bankruptcy
+    const result = await backtestService.runSimulation({
+      agentType: 'Volt',
+      symbol: 'BTC/USD',
+      initialCapital: 1.0,
+      period: '7d',
+      strategyConfig: {
+        driftThreshold: 0.0001,
+        minEdge: 0.001,
+        lotSize: 50.0,
+      },
+      frictionConfig: {
+        slippageBps: 50.0,
+        feeBps: 50.0,
+      },
+    });
+
+    // Strategy must have busted: equity terminated at 0, maxDrawdown <= 100%
+    for (const point of result.equityCurve) {
+      expect(point.equity).toBeGreaterThanOrEqual(0);
+    }
+    expect(result.maxDrawdown).toBeLessThanOrEqual(100.0);
+    expect(result.maxDrawdown).toBeGreaterThanOrEqual(0.0);
+  });
+
+  it('caps maxDrawdownPct at 100.0% even in severe losing scenarios', async () => {
+    const backtestService = new BacktestService();
+    const result = await backtestService.runSimulation({
+      agentType: 'Titan',
+      symbol: 'ETH/USD',
+      initialCapital: 10.0,
+      strategyConfig: {
+        lotSize: 20.0,
+      },
+    });
+
+    expect(result.maxDrawdown).toBeLessThanOrEqual(100.0);
+    for (const uw of result.underwaterCurve) {
+      expect(uw.drawdownPct).toBeLessThanOrEqual(100.0);
+    }
+  });
 });

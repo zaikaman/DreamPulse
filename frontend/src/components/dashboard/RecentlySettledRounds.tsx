@@ -3,6 +3,7 @@ import {
   ArrowTrendingUpIcon,
   ArrowTrendingDownIcon,
   ArrowPathIcon,
+  MinusCircleIcon,
 } from '@heroicons/react/24/outline';
 import { apiClient } from '../../services/api.js';
 import { cn } from '../../lib/utils.js';
@@ -20,7 +21,7 @@ interface SettledRoundItem {
   strikePrice: number;
   settlementPrice: number;
   settledAt: string;
-  winningOutcome: 'YES' | 'NO';
+  winningOutcome: 'YES' | 'NO' | 'VOID';
   isUp: boolean;
 }
 
@@ -39,7 +40,9 @@ export const RecentlySettledRounds: React.FC<RecentlySettledRoundsProps> = ({
         const formatted: SettledRoundItem[] = res.data
           .filter((m) => m.status === 'Finalized' || m.settlementPrice !== undefined)
           .map((m) => {
-            const isUp = (m.winningOutcome === 'YES') || (m.settlementPrice !== undefined && m.settlementPrice >= m.strikePrice);
+            const isVoid = m.winningOutcome === 'VOID';
+            const isUp = (m.winningOutcome === 'YES') || (!isVoid && m.settlementPrice !== undefined && m.settlementPrice >= m.strikePrice);
+            const winningOutcome: 'YES' | 'NO' | 'VOID' = isVoid ? 'VOID' : (isUp ? 'YES' : 'NO');
             const closeDate = m.resolutionTimestamp || m.closeTimestamp ? new Date(m.resolutionTimestamp || m.closeTimestamp) : new Date();
             const timeStr = closeDate.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false });
 
@@ -50,7 +53,7 @@ export const RecentlySettledRounds: React.FC<RecentlySettledRoundsProps> = ({
               strikePrice: m.strikePrice || 0,
               settlementPrice: m.settlementPrice || m.strikePrice || 0,
               settledAt: timeStr,
-              winningOutcome: isUp ? 'YES' : 'NO',
+              winningOutcome,
               isUp,
             };
           });
@@ -120,11 +123,17 @@ export const RecentlySettledRounds: React.FC<RecentlySettledRoundsProps> = ({
             onClick={() => onSelectMarket?.(round.id)}
             className={cn(
               "flex-shrink-0 flex items-center justify-between gap-3 px-3 py-1.5 rounded-lg border bg-background/70 hover:bg-secondary/40 transition-all cursor-pointer text-xs",
-              round.isUp
+              round.winningOutcome === 'VOID'
+                ? "border-amber-500/20 hover:border-amber-500/40"
+                : round.isUp
                 ? "border-[#00e676]/20 hover:border-[#00e676]/40"
                 : "border-[#ff3366]/20 hover:border-[#ff3366]/40"
             )}
-            title={`Settled at $${round.settlementPrice.toLocaleString()} at ${round.settledAt}. Strike was $${round.strikePrice.toLocaleString()}.`}
+            title={
+              round.winningOutcome === 'VOID'
+                ? `Round voided / refunded at ${round.settledAt}. Strike was $${round.strikePrice.toLocaleString()}.`
+                : `Settled at $${round.settlementPrice.toLocaleString()} at ${round.settledAt}. Strike was $${round.strikePrice.toLocaleString()}.`
+            }
           >
             {/* Left: Asset Icon & Window */}
             <div className="flex flex-col">
@@ -146,12 +155,19 @@ export const RecentlySettledRounds: React.FC<RecentlySettledRoundsProps> = ({
             <div
               className={cn(
                 "px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider flex items-center gap-0.5",
-                round.isUp
+                round.winningOutcome === 'VOID'
+                  ? "bg-amber-500/15 text-amber-500 border border-amber-500/30"
+                  : round.isUp
                   ? "bg-[#00e676]/15 text-[#00e676] border border-[#00e676]/30"
                   : "bg-[#ff3366]/15 text-[#ff3366] border border-[#ff3366]/30"
               )}
             >
-              {round.isUp ? (
+              {round.winningOutcome === 'VOID' ? (
+                <>
+                  <MinusCircleIcon className="w-2.5 h-2.5" />
+                  <span>VOID</span>
+                </>
+              ) : round.isUp ? (
                 <>
                   <ArrowTrendingUpIcon className="w-2.5 h-2.5" />
                   <span>UP</span>

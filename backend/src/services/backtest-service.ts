@@ -466,6 +466,9 @@ export class BacktestService {
     let processedBars = 0;
 
     for (let w = 0; w < totalWindows; w++) {
+      if (currentEquity <= 0) {
+        break; // Strategy busted: stop simulation across windows
+      }
       const windowStartIdx = w * windowBars;
       const windowEndIdx = Math.min(candles.length - 1, windowStartIdx + windowBars - 1);
       const startCandle = candles[windowStartIdx];
@@ -847,6 +850,9 @@ export class BacktestService {
 
           const netPnlPerTrade = Number((grossPnl - totalTradeFriction).toFixed(2));
           currentEquity = Number((currentEquity + netPnlPerTrade).toFixed(2));
+          if (currentEquity <= 0) {
+            currentEquity = 0;
+          }
 
           if (currentEquity > peakEquity) {
             peakEquity = currentEquity;
@@ -874,7 +880,7 @@ export class BacktestService {
           });
         }
 
-        const currentDrawdownPct = peakEquity > 0 ? Number((((peakEquity - currentEquity) / peakEquity) * 100).toFixed(2)) : 0;
+        const currentDrawdownPct = peakEquity > 0 ? Math.min(100, Number((((peakEquity - currentEquity) / peakEquity) * 100).toFixed(2))) : 0;
 
         equityCurve.push({
           timestamp: timestampIso,
@@ -886,6 +892,15 @@ export class BacktestService {
           timestamp: timestampIso,
           drawdownPct: currentDrawdownPct,
         });
+
+        if (currentEquity <= 0) {
+          currentEquity = 0;
+          break; // Strategy busted: stop simulation
+        }
+      }
+
+      if (currentEquity <= 0) {
+        break; // Strategy busted: stop simulation across all windows
       }
     }
 
@@ -897,7 +912,7 @@ export class BacktestService {
 
     const winRate = totalTrades > 0 ? Number(((totalWins / totalTrades) * 100).toFixed(1)) : 0;
     const netPnl = Number((currentEquity - initialCapital).toFixed(2));
-    const maxDrawdownPct = peakEquity > 0 ? Number(((maxDrawdownAbs / peakEquity) * 100).toFixed(2)) : 0;
+    const maxDrawdownPct = peakEquity > 0 ? Math.min(100, Number(((maxDrawdownAbs / peakEquity) * 100).toFixed(2))) : 0;
 
     const grossProfit = winningFills.reduce((acc, t) => acc + t.pnl, 0);
     const grossLoss = Math.abs(losingFills.reduce((acc, t) => acc + t.pnl, 0));
@@ -940,7 +955,7 @@ export class BacktestService {
       if (downsideStd > 0.0001) {
         sortinoRatio = Number(Math.max(-4.0, Math.min(6.5, (mean / downsideStd) * annualizeFactor)).toFixed(2));
       } else if (mean > 0) {
-        sortinoRatio = Math.min(3.0, Number((mean * 140).toFixed(2)));
+        sortinoRatio = Math.min(6.5, sharpeRatio > 0 ? Number((sharpeRatio * 1.5).toFixed(2)) : 6.5);
       }
     }
 

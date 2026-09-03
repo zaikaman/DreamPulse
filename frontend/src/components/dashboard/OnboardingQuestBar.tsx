@@ -45,6 +45,15 @@ export const OnboardingQuestBar: React.FC<OnboardingQuestBarProps> = ({
   onOpenTour,
   onDismiss,
 }) => {
+  const handleClaimFaucet = async () => {
+    if (!onClaimFaucet) return;
+    try {
+      await onClaimFaucet(1000);
+    } catch {
+      // User rejected or transaction error handled gracefully
+    }
+  };
+
   if (isDismissed) return null;
 
   return (
@@ -153,7 +162,7 @@ export const OnboardingQuestBar: React.FC<OnboardingQuestBarProps> = ({
 
           {!quests[1]?.isCompleted && onClaimFaucet && (
             <button
-              onClick={() => onClaimFaucet(1000)}
+              onClick={handleClaimFaucet}
               disabled={isFauceting || !wallet?.isConnected}
               className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-primary text-primary-foreground hover:bg-primary/90 transition-colors shrink-0 flex items-center gap-1 cursor-pointer disabled:opacity-50"
             >
