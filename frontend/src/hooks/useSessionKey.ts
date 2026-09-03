@@ -226,6 +226,7 @@ export function useSessionKey(): UseSessionKeyReturn {
    * Claims 1,000 TestUSDC collateral tokens from testnet faucet.
    */
   const claimCollateralFaucet = useCallback(async (amount: number = 1000) => {
+    const claimAmount = typeof amount === 'number' && !isNaN(amount) ? amount : 1000;
     if (!wallet.address) {
       setError('Please connect your wallet first');
       return;
@@ -233,13 +234,12 @@ export function useSessionKey(): UseSessionKeyReturn {
     setError(null);
     setIsFauceting(true);
     try {
-      await web3Service.claimTestUsdcFaucet(wallet.address, amount);
+      await web3Service.claimTestUsdcFaucet(wallet.address, claimAmount);
       await refreshBalances(wallet.address);
     } catch (err: any) {
       console.error('[useSessionKey] Faucet claim error:', err);
       const parsed = parseWeb3Error(err);
       setError(parsed.message);
-      throw err;
     } finally {
       setIsFauceting(false);
     }

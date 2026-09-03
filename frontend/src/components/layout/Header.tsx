@@ -42,7 +42,7 @@ interface HeaderProps {
   };
   activeSession: any | null;
   isFauceting?: boolean;
-  onClaimFaucet?: () => void;
+  onClaimFaucet?: () => void | Promise<void>;
   onOpenSessionModal?: () => void;
   onConnectWallet?: () => void;
   onDisconnectWallet?: () => void;
@@ -198,7 +198,13 @@ export const Header: React.FC<HeaderProps> = ({
 
                 {/* Claim Faucet */}
                 <DropdownMenuItem
-                  onClick={onClaimFaucet}
+                  onClick={async () => {
+                    try {
+                      await onClaimFaucet?.();
+                    } catch {
+                      // Handled by hook error banner
+                    }
+                  }}
                   disabled={isFauceting}
                   className="gap-2 cursor-pointer"
                 >
