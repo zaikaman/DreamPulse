@@ -4,14 +4,12 @@ import {
   EyeIcon,
   EyeSlashIcon,
   SparklesIcon,
-  BoltIcon,
   ArrowPathIcon,
 } from '@heroicons/react/24/outline';
 import type { Market, SessionGrant, AgentThoughtLog } from '../../types/index.js';
 import type { MarketTickData, DepthUpdateData } from '../../hooks/useTelemetry.js';
 import type { WalletState } from '../../hooks/useSessionKey.js';
 import { useMarketCountdown } from '../../hooks/useMarketCountdown.js';
-import { useCustomAgents } from '../../hooks/useCustomAgents.js';
 import { evaluateTradeConfluence } from '../../lib/confluence.js';
 import { EventContractChart } from './EventContractChart.js';
 import { TraderCockpitTicket, type LadderPrefillData } from './TraderCockpitTicket.js';
@@ -59,8 +57,6 @@ export const TradeTerminalView: React.FC<TradeTerminalViewProps> = ({
   const [isDropdownOpen, setIsDropdownOpen] = useState<boolean>(false);
   const [isBookVisible, setIsBookVisible] = useState<boolean>(false);
 
-  const { agents: customAgents } = useCustomAgents(wallet.address || undefined);
-
   // Active contract telemetry — strict selection (no silent fallback to wrong contract)
   const market = selectedMarket ?? null;
   const isResolving = market?.status === 'Resolving';
@@ -83,14 +79,6 @@ export const TradeTerminalView: React.FC<TradeTerminalViewProps> = ({
 
   const spot = isResolving ? (market?.settlementPrice ?? localFrozenSpot ?? liveSpot) : liveSpot;
   const strike = market?.strikePrice || 0;
-
-  const activeCustomForSymbol = useMemo(() => {
-    if (!market) return [];
-    const baseSymbol = market.symbol.split('/')[0];
-    return customAgents.filter((a) => a.isDeployed && a.symbol.includes(baseSymbol));
-  }, [customAgents, market?.symbol]);
-
-  const fleetMonitoringCount = 2 + activeCustomForSymbol.length; // Volt + Oracle (+ Custom)
 
   // Multi-Factor Confluence evaluation
   const confluence = useMemo(() => {
@@ -251,18 +239,6 @@ export const TradeTerminalView: React.FC<TradeTerminalViewProps> = ({
               </div>
             )}
 
-            {/* Fleet Monitoring Status Pill */}
-            <button
-              type="button"
-              onClick={() => {
-                window.location.hash = '#cockpit';
-              }}
-              className="hidden md:inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full border border-[#ffb700]/30 bg-[#ffb700]/10 hover:bg-[#ffb700]/20 text-[#ffb700] text-[11px] font-mono transition-colors cursor-pointer"
-              title="View autonomous fleet agents executing on this market in Swarm Cockpit"
-            >
-              <BoltIcon className="w-3 h-3 text-[#ffb700]" />
-              <span>{fleetMonitoringCount} Fleet Agents Active</span>
-            </button>
 
             {/* Show Book Toggle */}
             <button
