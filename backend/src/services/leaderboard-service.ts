@@ -354,12 +354,12 @@ export class LeaderboardService {
       const mean = returns.reduce((a, b) => a + b, 0) / returns.length;
       const variance = returns.reduce((a, b) => a + Math.pow(b - mean, 2), 0) / returns.length;
       const stdev = Math.sqrt(variance);
-      sharpeRatio = stdev > 0 ? Number(((mean / stdev) * Math.sqrt(252)).toFixed(2)) : 0;
+      sharpeRatio = stdev > 0 ? Number(((mean / stdev) * Math.sqrt(365)).toFixed(2)) : 0;
 
       const downsideDiffs = returns.filter((r) => r < 0).map((r) => Math.pow(r, 2));
       const downsideVar = downsideDiffs.length > 0 ? downsideDiffs.reduce((a, b) => a + b, 0) / returns.length : 0;
       const downsideDev = Math.sqrt(downsideVar);
-      sortinoRatio = downsideDev > 0 ? Number(((mean / downsideDev) * Math.sqrt(252)).toFixed(2)) : (sharpeRatio > 0 ? Number((sharpeRatio * 1.3).toFixed(2)) : 0);
+      sortinoRatio = downsideDev > 0 ? Number(((mean / downsideDev) * Math.sqrt(365)).toFixed(2)) : (sharpeRatio > 0 ? Number((sharpeRatio * 1.3).toFixed(2)) : 0);
     }
 
     return {

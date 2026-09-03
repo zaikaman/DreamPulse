@@ -271,5 +271,47 @@ describe('AnalyticsService & AnomalyService Comprehensive Suite', () => {
       expect(history.equityCurve).toBeDefined();
       expect(history.swarmEquityCurve).toBeDefined();
     });
+
+    it('uses 365-day annualization (sqrt(365)) for 24/7 crypto Sharpe calculation', async () => {
+      const dayMs = 24 * 3600 * 1000;
+      const multiDayOrders: OrderExecution[] = [
+        {
+          ...mockOrders[0],
+          id: 'day-1',
+          createdAt: new Date(now - 3 * dayMs).toISOString(),
+          settledAt: new Date(now - 3 * dayMs).toISOString(),
+          pnl: 10,
+        },
+        {
+          ...mockOrders[0],
+          id: 'day-2',
+          createdAt: new Date(now - 2 * dayMs).toISOString(),
+          settledAt: new Date(now - 2 * dayMs).toISOString(),
+          pnl: 20,
+        },
+        {
+          ...mockOrders[0],
+          id: 'day-3',
+          createdAt: new Date(now - 1 * dayMs).toISOString(),
+          settledAt: new Date(now - 1 * dayMs).toISOString(),
+          pnl: 30,
+        },
+      ];
+      vi.spyOn(orderService, 'getOrders').mockReturnValue(multiDayOrders);
+
+      const res = await analyticsService.getAnalytics(userAddress, '7d', 'ALL', true);
+      expect(res.summary.sharpeApprox).toBeGreaterThan(0);
+
+      // Verify the annualization multiplier matches sqrt(365) and NOT TradFi sqrt(252)
+      const dailyPnls = res.equityCurve.map((e) => e.dailyPnl);
+      const mean = dailyPnls.reduce((a, b) => a + b, 0) / dailyPnls.length;
+      const variance = dailyPnls.reduce((a, b) => a + Math.pow(b - mean, 2), 0) / dailyPnls.length;
+      const stdev = Math.sqrt(variance);
+      const expectedSharpe365 = Number(((mean / stdev) * Math.sqrt(365)).toFixed(2));
+      const tradFiSharpe252 = Number(((mean / stdev) * Math.sqrt(252)).toFixed(2));
+
+      expect(res.summary.sharpeApprox).toBe(expectedSharpe365);
+      expect(res.summary.sharpeApprox).toBeGreaterThan(tradFiSharpe252);
+    });
   });
 });

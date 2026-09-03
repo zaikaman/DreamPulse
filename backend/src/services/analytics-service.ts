@@ -256,7 +256,7 @@ function computeEquityAndDaily(orders: OrderExecution[], cutoffMs: number): { eq
     const mean = dailyPnls.reduce((a, b) => a + b, 0) / dailyPnls.length;
     const variance = dailyPnls.reduce((a, b) => a + Math.pow(b - mean, 2), 0) / dailyPnls.length;
     const stdev = Math.sqrt(variance);
-    sharpeApprox = stdev > 0 ? Number(((mean / stdev) * Math.sqrt(252)).toFixed(2)) : 0;
+    sharpeApprox = stdev > 0 ? Number(((mean / stdev) * Math.sqrt(365)).toFixed(2)) : 0;
   }
 
   const summary: AnalyticsSummary = {
