@@ -18,6 +18,7 @@ import {
   FireIcon,
   CommandLineIcon,
   SparklesIcon,
+  UserIcon,
 } from '@heroicons/react/24/outline';
 import {
   useAnalytics,
@@ -568,10 +569,13 @@ export const AnalyticsView: React.FC<AnalyticsViewProps> = ({ wallet, onConnectW
                       const isPos = a.pnl >= 0;
                       const barPct = Math.min(100, (Math.abs(a.pnl) / maxAbs) * 100);
                       const isManual = a.agentType === 'Manual';
+                      const isCopyTrade = a.agentType === 'Autonomous Copy Trade' || a.agentType === 'CopyTrade';
                       const isCustom = a.agentType.startsWith('Custom:');
                       const customObj = isCustom ? customAgents.find((ca) => a.agentType.includes(ca.name)) : null;
                       const color = isCustom
                         ? (customObj?.color || '#00ffcc')
+                        : isCopyTrade
+                        ? '#38bdf8'
                         : isManual
                         ? ' #00ffcc'
                         : a.agentType === 'Volt'
@@ -581,8 +585,8 @@ export const AnalyticsView: React.FC<AnalyticsViewProps> = ({ wallet, onConnectW
                         : a.agentType === 'Titan'
                         ? '#7928ca'
                         : '#00e676';
-                      const Icon = isCustom ? SparklesIcon : isManual ? CommandLineIcon : a.agentType === 'Volt' ? BoltIcon : a.agentType === 'Oracle' ? CpuChipIcon : a.agentType === 'Titan' ? ShieldCheckIcon : ChartBarIcon;
-                      const displayName = isManual ? 'MANUAL (TERMINAL)' : a.agentType.toUpperCase();
+                      const Icon = isCustom ? SparklesIcon : isCopyTrade ? UserIcon : isManual ? CommandLineIcon : a.agentType === 'Volt' ? BoltIcon : a.agentType === 'Oracle' ? CpuChipIcon : a.agentType === 'Titan' ? ShieldCheckIcon : ChartBarIcon;
+                      const displayName = isCopyTrade ? 'AUTONOMOUS COPY TRADE' : isManual ? 'MANUAL (TERMINAL)' : a.agentType.toUpperCase();
                       return (
                         <div key={a.agentType} className="flex flex-col gap-1.5">
                           <div className="flex items-center justify-between">

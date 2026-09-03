@@ -306,7 +306,7 @@ function computeSourceBreakdownSinglePass(
     const isWin = isSettled && pnl > 0.01;
     const isLoss = isSettled && pnl < -0.01;
     const vol = o.totalCost || 0;
-    const isTerminal = o.source === 'TERMINAL' || o.agentType === 'Manual';
+    const isTerminal = o.source === 'TERMINAL' || (o.source !== 'COPY_TRADE' && o.agentType === 'Manual');
     buckets.ALL.pnl += pnl;
     buckets.ALL.trades += 1;
     buckets.ALL.volume += vol;
@@ -358,7 +358,7 @@ function computeBreakdownsSinglePass(orders: OrderExecution[]): {
     const isWin = isSettled && pnl > 0.01;
     const isLoss = isSettled && pnl < -0.01;
 
-    const agentKey = o.agentType === 'Manual' && o.source === 'TERMINAL' ? 'Manual' : o.agentType;
+    const agentKey = o.source === 'COPY_TRADE' ? 'Autonomous Copy Trade' : (o.agentType === 'Manual' && o.source === 'TERMINAL' ? 'Manual' : o.agentType);
     // Normalize agent key: keep as is, but ensure buckets exist
     if (!agentMap.has(agentKey)) agentMap.set(agentKey, { pnl: 0, trades: 0, wins: 0, losses: 0, volume: 0, settled: 0 });
     const ag = agentMap.get(agentKey)!;
@@ -622,7 +622,7 @@ export class AnalyticsService {
         const isTerminal = source === 'TERMINAL';
         primaryOrders = [];
         for (const o of allTargetOrders) {
-          const term = o.source === 'TERMINAL' || o.agentType === 'Manual';
+          const term = o.source === 'TERMINAL' || (o.source !== 'COPY_TRADE' && o.agentType === 'Manual');
           if (term === isTerminal) primaryOrders.push(o);
         }
       }
@@ -631,7 +631,7 @@ export class AnalyticsService {
       const terminalOrdersAll: OrderExecution[] = [];
       const swarmOrdersAll: OrderExecution[] = [];
       for (const o of allTargetOrders) {
-        const isTerm = o.source === 'TERMINAL' || o.agentType === 'Manual';
+        const isTerm = o.source === 'TERMINAL' || (o.source !== 'COPY_TRADE' && o.agentType === 'Manual');
         if (isTerm) terminalOrdersAll.push(o);
         else swarmOrdersAll.push(o);
       }

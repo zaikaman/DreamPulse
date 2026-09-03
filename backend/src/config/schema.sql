@@ -497,6 +497,8 @@ CREATE TABLE IF NOT EXISTS public.social_copy_trades (
     is_active BOOLEAN NOT NULL DEFAULT TRUE,
     max_trade_size NUMERIC(18, 4),
     daily_volume_cap NUMERIC(18, 4),
+    spent_today NUMERIC(18, 4) DEFAULT 0,
+    last_spend_reset_timestamp BIGINT,
     total_copied_trades INTEGER NOT NULL DEFAULT 0,
     total_copied_volume NUMERIC(18, 4) NOT NULL DEFAULT 0,
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),

@@ -18,7 +18,7 @@ import {
   XMarkIcon,
   SparklesIcon,
 } from '@heroicons/react/24/outline';
-import type { OrderExecution, AgentType, OutcomeType } from '../types/index.js';
+import type { OrderExecution, AgentType, OutcomeType, OrderSource } from '../types/index.js';
 import { apiClient } from '../services/api.js';
 import { telemetryClient } from '../services/telemetry-client.js';
 import { OrderHistoryTableSkeleton } from './ui/Skeleton.js';
@@ -701,7 +701,27 @@ function resolveCustomAgentDetails(
   return null;
 }
 
-function getAgentBadge(agentType: AgentType, customDetails?: { name: string; subtext: string; color?: string } | null) {
+function getAgentBadge(
+  agentType: AgentType,
+  customDetails?: { name: string; subtext: string; color?: string } | null,
+  source?: OrderSource,
+) {
+  if (source === 'COPY_TRADE') {
+    return (
+      <span style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', padding: '2px 6px', borderRadius: '4px', background: 'rgba(56, 189, 248, 0.12)', border: '1px solid rgba(56, 189, 248, 0.3)', color: '#38bdf8', fontSize: '11px', fontWeight: 700 }}>
+        <UserIcon className="w-3 h-3" />
+        <span>Autonomous Copy Trade</span>
+      </span>
+    );
+  }
+  if (source === 'TERMINAL' || agentType === 'Manual') {
+    return (
+      <span style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', padding: '2px 6px', borderRadius: '4px', background: 'rgba(255, 255, 255, 0.08)', border: '1px solid rgba(255, 255, 255, 0.2)', color: 'var(--muted-foreground)', fontSize: '11px', fontWeight: 700 }}>
+        <UserIcon className="w-3 h-3" />
+        <span>Manual User</span>
+      </span>
+    );
+  }
   switch (agentType) {
     case 'Volt':
       return (
@@ -881,13 +901,17 @@ const OrderRowItem = React.memo<{
 
   const rawSub = customDetails?.subtext;
   const healedSub = rawSub && !isGenericAgentName(rawSub) ? rawSub : formatStrategySubtext(undefined, marketInfo.symbol, marketInfo.windowDuration);
-  const agentSubtitle = order.agentType === 'CUSTOM'
-    ? (customDetails ? healedSub : `${marketInfo.symbol} • ${marketInfo.windowDuration} • archived`)
-    : (agentRoleMap[order.agentType] || 'Swarm');
+  const agentSubtitle = order.source === 'COPY_TRADE'
+    ? 'Social Forecaster Mirror'
+    : (order.agentType === 'CUSTOM'
+      ? (customDetails ? healedSub : `${marketInfo.symbol} • ${marketInfo.windowDuration} • archived`)
+      : (agentRoleMap[order.agentType] || (order.source === 'TERMINAL' || order.agentType === 'Manual' ? 'Terminal Discretionary' : 'Swarm')));
   const rawDisplay = customDetails?.name;
-  const agentDisplayName = order.agentType === 'CUSTOM'
-    ? (rawDisplay && !isGenericAgentName(rawDisplay) ? rawDisplay.trim() : (customDetails ? 'Archived Agent' : 'Unknown Custom Agent'))
-    : order.agentType;
+  const agentDisplayName = order.source === 'COPY_TRADE'
+    ? 'Autonomous Copy Trade'
+    : (order.agentType === 'CUSTOM'
+      ? (rawDisplay && !isGenericAgentName(rawDisplay) ? rawDisplay.trim() : (customDetails ? 'Archived Agent' : 'Unknown Custom Agent'))
+      : (order.source === 'TERMINAL' || order.agentType === 'Manual' ? 'Manual User' : order.agentType));
 
   const tooltipTitle = `[Order Execution Breakdown]
 Asset: ${marketInfo.assetName} (${marketInfo.symbol}) ${marketInfo.windowDuration}
@@ -956,7 +980,7 @@ Tx Hash: ${order.txHash || 'N/A'}`;
       {/* 2. AGENT */}
       <td style={{ padding: '10px 16px' }}>
         <div style={{ display: 'flex', flexDirection: 'column', gap: '3px', minWidth: 0, maxWidth: '184px' }}>
-          <div style={{ minWidth: 0 }}>{getAgentBadge(order.agentType, customDetails)}</div>
+          <div style={{ minWidth: 0 }}>{getAgentBadge(order.agentType, customDetails, order.source)}</div>
           <span
             style={{
               fontSize: '9.5px',

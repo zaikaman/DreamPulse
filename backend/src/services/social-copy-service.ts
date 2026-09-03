@@ -32,6 +32,8 @@ function toRelationRecord(row: any): SocialCopyRelation {
     isActive: row.is_active === true,
     maxTradeSize: row.max_trade_size ? Number(row.max_trade_size) : undefined,
     dailyVolumeCap: row.daily_volume_cap ? Number(row.daily_volume_cap) : undefined,
+    spentToday: row.spent_today !== undefined && row.spent_today !== null ? Number(row.spent_today) : 0,
+    lastSpendResetTimestamp: row.last_spend_reset_timestamp ? Number(row.last_spend_reset_timestamp) : undefined,
     totalCopiedTrades: Number(row.total_copied_trades || 0),
     totalCopiedVolume: Number(row.total_copied_volume || 0),
     createdAt: row.created_at,
@@ -89,6 +91,10 @@ export class SocialCopyService {
     } catch {}
   }
 
+  public clearRelationsForTesting(): void {
+    this.relations.clear();
+  }
+
   private getCacheKey(copier: string, target: string): string {
     return `${copier.toLowerCase()}:${target.toLowerCase()}`;
   }
@@ -122,6 +128,8 @@ export class SocialCopyService {
       isActive: enabled,
       maxTradeSize: maxTradeSize !== undefined ? maxTradeSize : existing?.maxTradeSize,
       dailyVolumeCap: dailyVolumeCap !== undefined ? dailyVolumeCap : existing?.dailyVolumeCap,
+      spentToday: existing?.spentToday ?? 0,
+      lastSpendResetTimestamp: existing?.lastSpendResetTimestamp,
       totalCopiedTrades: existing?.totalCopiedTrades || 0,
       totalCopiedVolume: existing?.totalCopiedVolume || 0,
       createdAt: existing?.createdAt || now,
@@ -140,6 +148,8 @@ export class SocialCopyService {
             is_active: relation.isActive,
             max_trade_size: relation.maxTradeSize ?? null,
             daily_volume_cap: relation.dailyVolumeCap ?? null,
+            spent_today: relation.spentToday ?? 0,
+            last_spend_reset_timestamp: relation.lastSpendResetTimestamp ?? null,
             total_copied_trades: relation.totalCopiedTrades,
             total_copied_volume: relation.totalCopiedVolume,
             updated_at: relation.updatedAt,
@@ -246,13 +256,15 @@ export class SocialCopyService {
           continue;
         }
 
+        // Rolling 24-hour daily volume reset check
+        const nowMs = Date.now();
+        if (!copierRel.lastSpendResetTimestamp || nowMs - copierRel.lastSpendResetTimestamp > 24 * 3600 * 1000) {
+          copierRel.spentToday = 0;
+          copierRel.lastSpendResetTimestamp = nowMs;
+        }
+
         // Validate copier relation daily volume cap if set
         if (copierRel.dailyVolumeCap && copierRel.dailyVolumeCap > 0) {
-          const nowMs = Date.now();
-          if (!copierRel.lastSpendResetTimestamp || nowMs - copierRel.lastSpendResetTimestamp > 24 * 3600 * 1000) {
-            copierRel.spentToday = 0;
-            copierRel.lastSpendResetTimestamp = nowMs;
-          }
           if ((copierRel.spentToday || 0) + totalCost > copierRel.dailyVolumeCap) {
             console.warn(`[SocialCopyService] Mirror skipped for ${copierRel.copierAddress}: Daily volume cap of ${copierRel.dailyVolumeCap} tUSDC reached for Forecaster ${copierRel.targetAddress}`);
             continue;
@@ -290,7 +302,7 @@ export class SocialCopyService {
         const copiedExecution = await orderService.executeAgentDecision(
           decision,
           session as unknown as SessionGrant,
-          'TERMINAL',
+          'COPY_TRADE',
         );
 
         if (copiedExecution) {
@@ -298,6 +310,9 @@ export class SocialCopyService {
 
           // Update copier statistics & daily spend
           copierRel.spentToday = (copierRel.spentToday || 0) + totalCost;
+          if (!copierRel.lastSpendResetTimestamp) {
+            copierRel.lastSpendResetTimestamp = nowMs;
+          }
           copierRel.totalCopiedTrades += 1;
           copierRel.totalCopiedVolume += totalCost;
           copierRel.updatedAt = new Date().toISOString();
@@ -308,6 +323,8 @@ export class SocialCopyService {
                 await supabase
                   .from('social_copy_trades')
                   .update({
+                    spent_today: copierRel.spentToday,
+                    last_spend_reset_timestamp: copierRel.lastSpendResetTimestamp,
                     total_copied_trades: copierRel.totalCopiedTrades,
                     total_copied_volume: copierRel.totalCopiedVolume,
                     updated_at: copierRel.updatedAt,

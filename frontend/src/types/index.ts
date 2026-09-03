@@ -7,7 +7,7 @@ export type OutcomeType = 'YES' | 'NO' | 'VOID';
 export type OrderDirection = 'BUY' | 'SELL';
 export type OrderType = 'LIMIT' | 'IOC' | 'POST_ONLY';
 export type OrderStatus = 'PENDING' | 'FILLED' | 'PARTIALLY_FILLED' | 'CANCELLED' | 'REJECTED' | 'EXPIRED';
-export type OrderSource = 'SWARM' | 'TERMINAL';
+export type OrderSource = 'SWARM' | 'TERMINAL' | 'COPY_TRADE';
 export type SwarmAgentType = 'Volt' | 'Oracle' | 'Titan' | 'Sweeper';
 export type AgentType = SwarmAgentType | 'Manual' | 'CUSTOM';
 
@@ -357,6 +357,8 @@ export interface SocialCopyConfig {
   isActive: boolean;
   maxTradeSize?: number;
   dailyVolumeCap?: number;
+  spentToday?: number;
+  lastSpendResetTimestamp?: number;
   totalCopiedTrades?: number;
   totalCopiedVolume?: number;
   createdAt?: string;

@@ -946,7 +946,7 @@ apiRouter.get('/orders', optionalWalletAuth, async (req: Request, res: Response)
     searchQuery: typeof search === 'string' ? search : undefined,
     scope: scope === 'SWARM' || scope === 'MY_ORDERS' || scope === 'ALL' ? (scope as any) : undefined,
     swarmOnly: swarmOnly === 'true' || scope === 'SWARM',
-    source: source === 'SWARM' || source === 'TERMINAL' || source === 'ALL' ? (source as any) : undefined,
+    source: source === 'SWARM' || source === 'TERMINAL' || source === 'COPY_TRADE' || source === 'ALL' ? (source as any) : undefined,
     limit: limit !== undefined ? parseInt(limit as string, 10) : undefined,
     page: page !== undefined ? parseInt(page as string, 10) : undefined,
     pageSize: pageSize !== undefined ? parseInt(pageSize as string, 10) : undefined,

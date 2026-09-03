@@ -59,7 +59,7 @@ export interface QueryOrdersParams {
   searchQuery?: string;
   scope?: 'SWARM' | 'MY_ORDERS' | 'ALL';
   swarmOnly?: boolean;
-  source?: 'SWARM' | 'TERMINAL' | 'ALL';
+  source?: 'SWARM' | 'TERMINAL' | 'COPY_TRADE' | 'ALL';
   limit?: number;
   offset?: number;
 }
@@ -564,8 +564,9 @@ export class OrderService {
   private rowToOrder(row: any): OrderExecution {
     const pnlVal = row.pnl !== null && row.pnl !== undefined ? Number(row.pnl) : 0;
     const isSettled = row.is_settled === true || (row.is_settled !== false && (row.settled_at != null || (row.pnl != null && pnlVal !== 0)));
-    const isManual = row.source === 'TERMINAL' || row.agent_type === 'Manual' || row.agent_type === 'MANUAL';
-    const orderSource: OrderSource = isManual ? 'TERMINAL' : ((row.source as OrderSource) || 'SWARM');
+    const isCopyTrade = row.source === 'COPY_TRADE';
+    const isManual = !isCopyTrade && (row.source === 'TERMINAL' || row.agent_type === 'Manual' || row.agent_type === 'MANUAL');
+    const orderSource: OrderSource = isCopyTrade ? 'COPY_TRADE' : (isManual ? 'TERMINAL' : ((row.source as OrderSource) || 'SWARM'));
     const agentType: AgentType = isManual ? 'Manual' : ((row.agent_type as AgentType) || 'Titan');
     const customAgentId = row.custom_agent_id || undefined;
     const rawCustomName: string | undefined = row.custom_agent_name || undefined;
@@ -1968,6 +1969,7 @@ export class OrderService {
     o: OrderExecution,
     criteria: {
       isTerminal: boolean;
+      isCopyTrade?: boolean;
       isSwarm: boolean;
       swarmOnly: boolean;
       opAddr: string;
@@ -1980,9 +1982,11 @@ export class OrderService {
     },
   ): boolean {
     if (criteria.isTerminal) {
-      if (o.source !== 'TERMINAL' && o.agentType !== 'Manual') return false;
+      if (o.source !== 'TERMINAL' && (o.source === 'COPY_TRADE' || o.agentType !== 'Manual')) return false;
+    } else if (criteria.isCopyTrade) {
+      if (o.source !== 'COPY_TRADE') return false;
     } else if (criteria.isSwarm) {
-      if (o.source === 'TERMINAL' || o.agentType === 'Manual') return false;
+      if (o.source === 'TERMINAL' || (o.source !== 'COPY_TRADE' && o.agentType === 'Manual')) return false;
       if (criteria.swarmOnly) {
         if (!o.userAddress || o.userAddress.toLowerCase() !== criteria.opAddr) return false;
       }
@@ -2036,6 +2040,7 @@ export class OrderService {
     const opAddr = (operatorAccount?.address || SOMNIA_ADDRESSES.operatorAccount).toLowerCase();
     const criteria = {
       isTerminal: params?.source === 'TERMINAL',
+      isCopyTrade: params?.source === 'COPY_TRADE',
       isSwarm: params?.source === 'SWARM' || params?.swarmOnly || params?.scope === 'SWARM',
       swarmOnly: params?.swarmOnly || params?.scope === 'SWARM',
       opAddr,
@@ -2094,10 +2099,12 @@ export class OrderService {
       if (params?.outcome) query = query.eq('outcome', params.outcome);
       // source filter maps to agent_type/source columns; handle via eq/in where possible
       if (params?.source === 'TERMINAL') {
-        // TERMINAL = source TERMINAL OR agent_type Manual; Supabase OR filter
-        query = query.or('source.eq.TERMINAL,agent_type.eq.Manual,agent_type.eq.MANUAL');
+        // TERMINAL = source TERMINAL OR (source != COPY_TRADE AND agent_type Manual)
+        query = query.or('source.eq.TERMINAL,agent_type.eq.Manual,agent_type.eq.MANUAL').neq('source', 'COPY_TRADE');
+      } else if (params?.source === 'COPY_TRADE') {
+        query = query.eq('source', 'COPY_TRADE');
       } else if (params?.source === 'SWARM' || params?.swarmOnly || params?.scope === 'SWARM') {
-        query = query.neq('source', 'TERMINAL').neq('agent_type', 'Manual');
+        query = query.neq('source', 'TERMINAL');
         if (params?.swarmOnly || params?.scope === 'SWARM') {
           const opAddr = getAddress(operatorAccount.address);
           query = query.eq('user_address', opAddr);
@@ -2248,7 +2255,7 @@ export class OrderService {
     searchQuery?: string;
     scope?: 'SWARM' | 'MY_ORDERS' | 'ALL';
     swarmOnly?: boolean;
-    source?: 'SWARM' | 'TERMINAL' | 'ALL';
+    source?: 'SWARM' | 'TERMINAL' | 'COPY_TRADE' | 'ALL';
     limit?: number;
     page?: number;
     pageSize?: number;
@@ -2310,6 +2317,7 @@ export class OrderService {
     const opAddr = (operatorAccount?.address || SOMNIA_ADDRESSES.operatorAccount).toLowerCase();
     const criteria = {
       isTerminal: params?.source === 'TERMINAL',
+      isCopyTrade: params?.source === 'COPY_TRADE',
       isSwarm: params?.source === 'SWARM' || params?.swarmOnly || params?.scope === 'SWARM',
       swarmOnly: params?.swarmOnly || params?.scope === 'SWARM',
       opAddr,
@@ -2356,7 +2364,7 @@ export class OrderService {
     searchQuery?: string;
     scope?: 'SWARM' | 'MY_ORDERS' | 'ALL';
     swarmOnly?: boolean;
-    source?: 'SWARM' | 'TERMINAL' | 'ALL';
+    source?: 'SWARM' | 'TERMINAL' | 'COPY_TRADE' | 'ALL';
     limit?: number;
     page?: number;
     pageSize?: number;
@@ -2387,6 +2395,7 @@ export class OrderService {
     const opAddr = (operatorAccount?.address || SOMNIA_ADDRESSES.operatorAccount).toLowerCase();
     const criteria = {
       isTerminal: params?.source === 'TERMINAL',
+      isCopyTrade: params?.source === 'COPY_TRADE',
       isSwarm: params?.source === 'SWARM' || params?.swarmOnly || params?.scope === 'SWARM',
       swarmOnly: params?.swarmOnly || params?.scope === 'SWARM',
       opAddr,
@@ -3158,7 +3167,7 @@ export class OrderService {
         if (!o.userAddress || !isAddress(o.userAddress)) continue;
         const day = (o.settledAt ? new Date(o.settledAt) : new Date(o.createdAt)).toISOString().slice(0, 10);
         const userLower = getAddress(o.userAddress);
-        const sources: Array<'ALL' | 'SWARM' | 'TERMINAL'> = ['ALL', (o.source === 'TERMINAL' || o.agentType === 'Manual' ? 'TERMINAL' : 'SWARM') as any];
+        const sources: Array<'ALL' | 'SWARM' | 'TERMINAL'> = ['ALL', (o.source === 'TERMINAL' || (o.source !== 'COPY_TRADE' && o.agentType === 'Manual') ? 'TERMINAL' : 'SWARM') as any];
         for (const src of sources) {
           const key = `${userLower.toLowerCase()}|${src}|${day}`;
           const entry = bucket.get(key) || { user_address: userLower, source: src, day, pnl: 0, volume: 0, trades: 0, wins: 0, losses: 0 };
@@ -3197,7 +3206,7 @@ export class OrderService {
               if (!o.userAddress || o.userAddress.toLowerCase() !== entry.user_address.toLowerCase()) return false;
               const d = (o.settledAt ? new Date(o.settledAt) : new Date(o.createdAt)).toISOString().slice(0, 10);
               if (d !== entry.day) return false;
-              const src = o.source === 'TERMINAL' || o.agentType === 'Manual' ? 'TERMINAL' : 'SWARM';
+              const src = o.source === 'TERMINAL' || (o.source !== 'COPY_TRADE' && o.agentType === 'Manual') ? 'TERMINAL' : 'SWARM';
               return entry.source === 'ALL' || src === entry.source;
             });
             // Also include settledOrders that are the just-settled batch (they are already in this.orders at this point if called after insertion, but for settle path they are mutated in place)
