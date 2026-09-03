@@ -541,6 +541,95 @@ describe('OrderService Comprehensive Suite', () => {
     expect(res.message).toContain('already cancelled');
   });
 
+  it('transitions unfilled resting PENDING limit orders to EXPIRED with pnl: 0 upon market settlement', async () => {
+    // Trader places a resting limit order at $0.10 that was never filled
+    const restingLimitOrder = await service.submitUserOrder({
+      userAddress,
+      marketId: mockMarket.id,
+      outcome: 'YES',
+      direction: 'BUY',
+      orderType: 'LIMIT',
+      price: 0.10,
+      lotSize: 10.0,
+      txHash: '0x9999999999999999999999999999999999999999999999999999999999999999',
+    });
+    restingLimitOrder.status = 'PENDING';
+    service.registerRestingMakerQuote({
+      orderId: restingLimitOrder.id,
+      marketId: mockMarket.id,
+      outcome: 'YES',
+      direction: 'BUY',
+      price: 0.10,
+      lotSize: 10.0,
+      userAddress,
+      placedAt: Date.now(),
+    });
+
+    expect(service.getRestingMakerQuotes(mockMarket.id).length).toBe(1);
+
+    // Settle market with winning outcome YES.
+    // Unmatched order should NOT be marked FILLED and credited with phantom +$0.90/lot (+$9.00)!
+    const settledCount = await service.settleOrdersForMarket(mockMarket.id, 'YES');
+    expect(settledCount).toBeGreaterThanOrEqual(1);
+
+    const updated = service.getOrderById(restingLimitOrder.id);
+    expect(updated?.status).toBe('EXPIRED');
+    expect(updated?.pnl).toBe(0);
+    expect(updated?.isSettled).toBe(true);
+
+    // Resting quote should have been cleaned up
+    expect(service.getRestingMakerQuotes(mockMarket.id).length).toBe(0);
+
+    // Total realized PnL should be 0 for this user (no phantom credit)
+    const totalPnl = await service.getTotalRealizedPnlAsync(undefined, userAddress);
+    expect(totalPnl).toBe(0);
+  });
+
+  it('transitions unfilled resting PENDING limit orders to EXPIRED with pnl: 0 when winning outcome is opposite (no false loss)', async () => {
+    // Trader places a resting limit order at $0.10 that was never filled
+    const restingLimitOrder = await service.submitUserOrder({
+      userAddress,
+      marketId: mockMarket.id,
+      outcome: 'YES',
+      direction: 'BUY',
+      orderType: 'LIMIT',
+      price: 0.10,
+      lotSize: 10.0,
+      txHash: '0x8888888888888888888888888888888888888888888888888888888888888888',
+    });
+    restingLimitOrder.status = 'PENDING';
+
+    // Settle market with winning outcome NO.
+    // Unmatched order should NOT be debited with false -$0.10/lot (-$1.00)!
+    await service.settleOrdersForMarket(mockMarket.id, 'NO');
+
+    const updated = service.getOrderById(restingLimitOrder.id);
+    expect(updated?.status).toBe('EXPIRED');
+    expect(updated?.pnl).toBe(0);
+    expect(updated?.isSettled).toBe(true);
+
+    const totalPnl = await service.getTotalRealizedPnlAsync(undefined, userAddress);
+    expect(totalPnl).toBe(0);
+  });
+
+  it('returns idempotent success if order is already expired', async () => {
+    const order = await service.submitUserOrder({
+      userAddress,
+      marketId: mockMarket.id,
+      outcome: 'YES',
+      direction: 'BUY',
+      orderType: 'LIMIT',
+      price: 0.50,
+      lotSize: 1.0,
+      txHash: '0x1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef',
+    });
+    order.status = 'EXPIRED';
+
+    const res = await service.cancelOrderFor(order.id, userAddress);
+    expect(res.success).toBe(true);
+    expect(res.message).toContain('already expired');
+  });
+
   it('throws if order ID is not found', async () => {
     await expect(
       service.cancelOrderFor('non-existent-order-id', userAddress),

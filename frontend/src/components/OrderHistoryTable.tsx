@@ -795,7 +795,11 @@ const OrderRowItem = React.memo<{
   let pnlColor = 'var(--muted-foreground)';
   let settlementSubText = 'Settled';
 
-  if (pnl !== 0) {
+  if (order.status === 'EXPIRED') {
+    pnlMainText = '0.00 tUSDC';
+    pnlColor = 'var(--muted-foreground)';
+    settlementSubText = 'Expired (Unfilled)';
+  } else if (pnl !== 0) {
     pnlMainText = pnl > 0 ? `+${pnl.toFixed(2)} tUSDC` : `${pnl.toFixed(2)} tUSDC`;
     pnlColor = pnl > 0 ? 'var(--trade-buy)' : 'var(--trade-sell)';
     if (marketInfo.settlementPrice) {
@@ -845,7 +849,7 @@ Condition: Price > ${formatCurrencyAmount(marketInfo.strikePrice)} at Expiry
 Order: ${order.direction} ${order.lotSize.toFixed(1)} lots @ ${order.price.toFixed(2)} tUSDC
 Cost: ${order.totalCost.toFixed(2)} tUSDC (Implied: ${(order.price * 100).toFixed(0)}%)
 Settlement: ${marketInfo.settlementPrice ? `Settled @ ${formatCurrencyAmount(marketInfo.settlementPrice)}` : (isOpen ? 'Open (Pending Expiry)' : 'Finalized')}
-Realized PnL: ${pnl !== 0 ? (pnl > 0 ? `+${pnl.toFixed(2)} tUSDC (Win)` : `${pnl.toFixed(2)} tUSDC (Loss)`) : (isOpen ? 'Open in progress' : '0.00 tUSDC')}
+Realized PnL: ${order.status === 'EXPIRED' ? '0.00 tUSDC (Expired Unfilled)' : (pnl !== 0 ? (pnl > 0 ? `+${pnl.toFixed(2)} tUSDC (Win)` : `${pnl.toFixed(2)} tUSDC (Loss)`) : (isOpen ? 'Open in progress' : '0.00 tUSDC'))}
 Agent: ${agentDisplayName} (${agentSubtitle})
 Tx Hash: ${order.txHash || 'N/A'}`;
 
@@ -855,6 +859,8 @@ Tx Hash: ${order.txHash || 'N/A'}`;
     ? 'rgba(0, 240, 255, 0.1)'
     : (order.status === 'CANCELLED' || order.status === 'REJECTED')
     ? 'rgba(255, 51, 102, 0.1)'
+    : order.status === 'EXPIRED'
+    ? 'rgba(148, 163, 184, 0.1)'
     : 'rgba(255, 170, 0, 0.1)';
 
   const statusBorder = order.status === 'FILLED'
@@ -863,6 +869,8 @@ Tx Hash: ${order.txHash || 'N/A'}`;
     ? '1px solid rgba(0, 240, 255, 0.25)'
     : (order.status === 'CANCELLED' || order.status === 'REJECTED')
     ? '1px solid rgba(255, 51, 102, 0.25)'
+    : order.status === 'EXPIRED'
+    ? '1px solid rgba(148, 163, 184, 0.25)'
     : '1px solid rgba(255, 170, 0, 0.25)';
 
   const statusColor = order.status === 'FILLED'
@@ -871,6 +879,8 @@ Tx Hash: ${order.txHash || 'N/A'}`;
     ? 'var(--brand-cyan)'
     : (order.status === 'CANCELLED' || order.status === 'REJECTED')
     ? 'var(--trade-sell)'
+    : order.status === 'EXPIRED'
+    ? 'var(--muted-foreground)'
     : 'var(--trade-anomaly)';
 
   const statusSubLabel = order.status === 'FILLED'
@@ -879,6 +889,8 @@ Tx Hash: ${order.txHash || 'N/A'}`;
     ? 'Partial Fill'
     : order.status === 'PENDING'
     ? 'Resting Book'
+    : order.status === 'EXPIRED'
+    ? 'Unfilled Expired'
     : order.status;
 
   return (

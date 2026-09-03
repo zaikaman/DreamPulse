@@ -719,7 +719,7 @@ export class SettlementService {
             }
             if (!isOperator && yesBal === 0n && noBal === 0n) {
               const matchedOrders = orderService.getOrders({ userAddress: normalizedUser }).filter(
-                (o) => o.marketId.toLowerCase() === marketId.toLowerCase() && !o.isSettled && (o.status === 'FILLED' || o.status === 'PARTIALLY_FILLED' || o.status === 'PENDING'),
+                (o) => o.marketId.toLowerCase() === marketId.toLowerCase() && !o.isSettled && (o.status === 'FILLED' || o.status === 'PARTIALLY_FILLED'),
               );
               let totalVoidLots = 0;
               let validTxHash: Hex | undefined;
@@ -786,7 +786,7 @@ export class SettlementService {
             }
           } else if (!isOperator) {
             const matchedOrders = orderService.getOrders({ userAddress: normalizedUser }).filter(
-              (o) => (o.marketId.toLowerCase() === marketId.toLowerCase() || (targetHex && o.marketId.toLowerCase() === targetHex.toLowerCase())) && !o.isSettled && (o.status === 'FILLED' || o.status === 'PARTIALLY_FILLED' || o.status === 'PENDING'),
+              (o) => (o.marketId.toLowerCase() === marketId.toLowerCase() || (targetHex && o.marketId.toLowerCase() === targetHex.toLowerCase())) && !o.isSettled && (o.status === 'FILLED' || o.status === 'PARTIALLY_FILLED'),
             );
             let totalWinningLots = 0;
             let validTxHash: Hex | undefined;
@@ -839,7 +839,7 @@ export class SettlementService {
         const winningOrdersByMarket = new Map<string, typeof userOrders>();
 
         for (const order of userOrders) {
-          if (order.status !== 'FILLED' && order.status !== 'PARTIALLY_FILLED' && order.status !== 'PENDING') continue;
+          if (order.status !== 'FILLED' && order.status !== 'PARTIALLY_FILLED') continue;
 
           const market = marketService.getMarketById(order.marketId);
           const winningOutcome = market?.winningOutcome || order.marketSnapshot?.winningOutcome;
@@ -1381,7 +1381,7 @@ export class SettlementService {
           if (isCopyTrader) {
             if (txHash || process.env.NODE_ENV === 'test') {
               const userOrders = orderService.getOrders({ userAddress: normalizedUser }).filter(
-                (o) => (o.marketId.toLowerCase() === marketId.toLowerCase() || (targetHex && o.marketId.toLowerCase() === targetHex.toLowerCase())) && !o.isSettled && (o.status === 'FILLED' || o.status === 'PARTIALLY_FILLED' || o.status === 'PENDING'),
+                (o) => (o.marketId.toLowerCase() === marketId.toLowerCase() || (targetHex && o.marketId.toLowerCase() === targetHex.toLowerCase())) && !o.isSettled && (o.status === 'FILLED' || o.status === 'PARTIALLY_FILLED'),
               );
               let totalWinningLots = 0;
               for (const uo of userOrders) {

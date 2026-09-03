@@ -1775,6 +1775,15 @@ export class OrderService {
       };
     }
 
+    if (order.status === 'EXPIRED') {
+      return {
+        success: true,
+        message: 'Order is already expired.',
+        txHash: order.cancelTxHash || order.txHash,
+        order,
+      };
+    }
+
     if (order.status === 'FILLED') {
       throw new Error(`Cannot cancel order '${orderId}': order is already filled.`);
     }
@@ -2481,10 +2490,68 @@ export class OrderService {
 
     for (const order of targetOrders) {
       if (order.isSettled) continue;
+
+      // Unmatched resting limit orders at expiration hold collateral, not outcome tokens.
+      // Transition to EXPIRED with 0 PnL, prune resting quotes, and trigger on-chain collateral release.
+      if (order.status === 'PENDING') {
+        order.status = 'EXPIRED';
+        order.pnl = 0;
+        order.isSettled = true;
+        order.settledAt = order.settledAt || nowIso;
+        this.restingMakerQuotes.delete(order.id);
+
+        // Attempt on-chain cancellation to unlock collateral if order was resting on-chain
+        if (order.marketId.startsWith('0x') && order.onchainOrderId && process.env.NODE_ENV !== 'test') {
+          void (async () => {
+            try {
+              const onchain = await somniaExchange.client.getMarketOnchain(order.marketId as Hex).catch(() => null);
+              if (onchain?.pool && /^\d+$/.test(order.onchainOrderId!)) {
+                await executeOperatorWriteContract({
+                  address: onchain.pool as Address,
+                  abi: SPOT_POOL_ABI,
+                  functionName: 'cancelOrderFor',
+                  args: [getAddress(order.userAddress || operatorAccount.address), BigInt(order.onchainOrderId!)],
+                }).catch(() => {});
+              }
+            } catch {}
+          })();
+        }
+
+        updatedEvents.push({
+          orderId: order.id,
+          marketId: order.marketId,
+          pnl: 0,
+          outcome: order.outcome,
+          winningOutcome: isVoid ? 'VOID' : winningOutcome,
+        });
+
+        if (this.isPersistenceEnabled()) {
+          dbUpdates.push(
+            (async () => {
+              try {
+                const res = await supabase
+                  .from('orders')
+                  .update({
+                    pnl: 0,
+                    status: 'EXPIRED',
+                    is_settled: true,
+                    settled_at: order.settledAt,
+                  })
+                  .eq('id', order.id);
+                if (res.error && res.error.message.includes('is_settled')) {
+                  await supabase.from('orders').update({ pnl: 0, status: 'EXPIRED' }).eq('id', order.id);
+                }
+              } catch {}
+            })(),
+          );
+        }
+        continue;
+      }
+
       const newPnl = computeRealizedPnl(order, winningOutcome, isVoid);
 
       const pnlChanged = Math.abs((order.pnl || 0) - newPnl) > 0.001;
-      const statusChanged = !order.isSettled || order.status === 'PENDING';
+      const statusChanged = !order.isSettled;
 
       if (!pnlChanged && !statusChanged) {
         continue;
@@ -2493,7 +2560,7 @@ export class OrderService {
       order.pnl = newPnl;
       order.isSettled = true;
       order.settledAt = order.settledAt || nowIso;
-      if (order.status === 'PENDING') order.status = 'FILLED';
+      this.restingMakerQuotes.delete(order.id);
 
       updatedEvents.push({
         orderId: order.id,
@@ -2563,6 +2630,7 @@ export class OrderService {
       // Autonomously trigger instant settlement sweeps for winning users (Trade Terminal & personal swarms)
       const winningUserAddresses = new Set<string>();
       for (const order of targetOrders) {
+        if (order.status === 'EXPIRED') continue;
         const isWin = isVoid || (order.outcome === winningOutcome) || ((order.pnl ?? 0) > 0);
         if (isWin && order.userAddress) {
           winningUserAddresses.add(order.userAddress);
@@ -2625,6 +2693,37 @@ export class OrderService {
       const onchain = onchainCache.get(order.marketId.toLowerCase());
       if (!onchain) continue;
 
+      if (order.status === 'PENDING') {
+        const needsExpiring = !order.isSettled || (order.pnl || 0) !== 0;
+        if (needsExpiring) {
+          correctedCount++;
+          order.pnl = 0;
+          order.status = 'EXPIRED';
+          order.isSettled = true;
+          order.settledAt = order.settledAt || nowIso;
+          this.restingMakerQuotes.delete(order.id);
+          dbUpdates.push(
+            (async () => {
+              try {
+                const res = await supabase
+                  .from('orders')
+                  .update({
+                    pnl: 0,
+                    status: 'EXPIRED',
+                    is_settled: true,
+                    settled_at: order.settledAt,
+                  })
+                  .eq('id', order.id);
+                if (res.error && res.error.message.includes('is_settled')) {
+                  await supabase.from('orders').update({ pnl: 0, status: 'EXPIRED' }).eq('id', order.id);
+                }
+              } catch {}
+            })(),
+          );
+        }
+        continue;
+      }
+
       const onchainWinner = resolveOnchainWinningOutcome(onchain);
       if (!onchainWinner) continue;
       const truePnl = computeRealizedPnl(order, onchainWinner);
@@ -2635,7 +2734,6 @@ export class OrderService {
         order.pnl = truePnl;
         order.isSettled = true;
         order.settledAt = order.settledAt || nowIso;
-        if (order.status === 'PENDING') order.status = 'FILLED';
 
         dbUpdates.push(
           (async () => {
@@ -2867,13 +2965,63 @@ export class OrderService {
         }
 
         if (!shouldResolve || !winningOutcome) continue;
+
+        if (order.status === 'PENDING') {
+          order.pnl = 0;
+          order.status = 'EXPIRED';
+          order.isSettled = true;
+          order.settledAt = new Date().toISOString();
+          this.restingMakerQuotes.delete(order.id);
+
+          // Best-effort on-chain unlock
+          if (order.marketId.startsWith('0x') && order.onchainOrderId && process.env.NODE_ENV !== 'test') {
+            void (async () => {
+              try {
+                const onchain = await somniaExchange.client.getMarketOnchain(order.marketId as Hex).catch(() => null);
+                if (onchain?.pool && /^\d+$/.test(order.onchainOrderId!)) {
+                  await executeOperatorWriteContract({
+                    address: onchain.pool as Address,
+                    abi: SPOT_POOL_ABI,
+                    functionName: 'cancelOrderFor',
+                    args: [getAddress(order.userAddress || operatorAccount.address), BigInt(order.onchainOrderId!)],
+                  }).catch(() => {});
+                }
+              } catch {}
+            })();
+          }
+
+          updatedOrderPnlEvents.push({
+            orderId: order.id,
+            marketId: order.marketId,
+            pnl: 0,
+            outcome: order.outcome,
+            winningOutcome,
+          });
+
+          if (this.isPersistenceEnabled()) {
+            void (async () => {
+              try {
+                const res = await supabase.from('orders').update({
+                  pnl: 0,
+                  status: 'EXPIRED',
+                  is_settled: true,
+                  settled_at: order.settledAt,
+                }).eq('id', order.id);
+                if (res.error && res.error.message.includes('is_settled')) {
+                  await supabase.from('orders').update({ pnl: 0, status: 'EXPIRED' }).eq('id', order.id);
+                }
+              } catch {}
+            })();
+          }
+          continue;
+        }
+
         const newPnl = computeRealizedPnl(order, winningOutcome, isVoided);
 
         order.pnl = newPnl;
         order.isSettled = true;
         order.settledAt = new Date().toISOString();
         this.restingMakerQuotes.delete(order.id);
-        if (order.status === 'PENDING') order.status = 'FILLED';
         updatedOrderPnlEvents.push({ orderId: order.id, marketId: order.marketId, pnl: order.pnl, outcome: order.outcome, winningOutcome });
         if (this.isPersistenceEnabled()) {
           void (async () => {
