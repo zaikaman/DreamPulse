@@ -110,6 +110,10 @@ if (!process.env.VITEST) {
     console.log(`[DreamPulse Engine] REST API: http://localhost:${env.PORT}/api/v1`);
     console.log(`[DreamPulse Engine] WebSocket Stream: ws://localhost:${env.PORT}/ws/telemetry`);
 
+    // Probe database schema readiness
+    const { checkDatabaseSchemaReady } = await import('./config/supabase.js');
+    await checkDatabaseSchemaReady();
+
     // Restore persistent Groq key index from database
     const { initPersistentKeyIndex } = await import('./llm/client.js');
     await initPersistentKeyIndex();

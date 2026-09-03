@@ -24,6 +24,9 @@ import {
   getServiceSupabase,
   getAnonSupabase,
   isPersistenceEnabled,
+  checkDatabaseSchemaReady,
+  isSchemaReady,
+  setSchemaReady,
 } from '../src/config/supabase.js';
 import {
   OPERATOR_SELECTORS,
@@ -195,6 +198,65 @@ describe('Config, Cookies, Blockchain & System Bootstrap Suite', () => {
 
     it('identifies test runner persistence behavior', () => {
       expect(isPersistenceEnabled()).toBe(false);
+    });
+
+    it('returns false during test runner without force option', async () => {
+      const ready = await checkDatabaseSchemaReady();
+      expect(ready).toBe(false);
+    });
+
+    it('detects missing table 42P01 error and logs notice to run schema.sql', async () => {
+      const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+      const mockClient: any = {
+        from: vi.fn().mockReturnValue({
+          select: vi.fn().mockReturnValue({
+            limit: vi.fn().mockResolvedValue({
+              data: null,
+              error: {
+                code: '42P01',
+                message: 'relation "orders" does not exist',
+              },
+            }),
+          }),
+        }),
+      };
+
+      const result = await checkDatabaseSchemaReady(mockClient, { force: true });
+      expect(result).toBe(false);
+      expect(isSchemaReady()).toBe(false);
+      expect(warnSpy).toHaveBeenCalledWith(
+        '[Database] Notice: Tables not detected in Supabase. Please run backend/src/config/schema.sql in the Supabase SQL editor to enable persistent order storage.'
+      );
+      warnSpy.mockRestore();
+    });
+
+    it('detects successful schema readiness probe and logs readiness', async () => {
+      const logSpy = vi.spyOn(console, 'log').mockImplementation(() => {});
+      const mockClient: any = {
+        from: vi.fn().mockReturnValue({
+          select: vi.fn().mockReturnValue({
+            limit: vi.fn().mockResolvedValue({
+              data: [{ id: '00000000-0000-0000-0000-000000000001' }],
+              error: null,
+            }),
+          }),
+        }),
+      };
+
+      const result = await checkDatabaseSchemaReady(mockClient, { force: true });
+      expect(result).toBe(true);
+      expect(isSchemaReady()).toBe(true);
+      expect(logSpy).toHaveBeenCalledWith(
+        '[Database] Supabase schema verified: persistent storage ready.'
+      );
+      logSpy.mockRestore();
+      setSchemaReady(null);
+    });
+
+    it('falls back to disabled persistence when schema is marked unready', () => {
+      setSchemaReady(false);
+      expect(isPersistenceEnabled()).toBe(false);
+      setSchemaReady(null);
     });
   });
 

@@ -1,6 +1,16 @@
 -- ==============================================================================
 -- DreamPulse - Supabase PostgreSQL Schema & Realtime Configuration
 -- ==============================================================================
+-- Quick Setup for Evaluators & Judges:
+-- If running DreamPulse with a new or custom Supabase deployment:
+-- 1. Open your Supabase Project Dashboard -> SQL Editor -> "New query".
+-- 2. Paste the full contents of this file (backend/src/config/schema.sql) and execute.
+-- 3. This provisions all core tables (markets, sessions, orders, sweeps,
+--    custom_agents, custom_swarms, daily_pnl, etc.), RLS security policies,
+--    and realtime CDC publications.
+-- 4. On server boot, checkDatabaseSchemaReady() automatically detects these tables
+--    and enables persistent order and telemetry storage.
+-- ==============================================================================
 
 -- Enable UUID extension
 CREATE EXTENSION IF NOT EXISTS "uuid-ossp";

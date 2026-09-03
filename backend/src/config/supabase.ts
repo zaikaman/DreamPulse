@@ -55,13 +55,91 @@ export function getAnonSupabase(): SupabaseClient {
 /** Default backend client = service_role (bypasses hardened RLS). */
 export const supabase = getServiceSupabase();
 
+let schemaReady: boolean | null = null;
+
 /**
- * Returns true if Supabase persistence is enabled and we are not in a test runner (Vitest/test).
+ * Returns whether the database schema is confirmed ready, false if probed and missing, or null if unprobed.
  */
-export function isPersistenceEnabled(): boolean {
+export function isSchemaReady(): boolean | null {
+  return schemaReady;
+}
+
+/**
+ * Manually override or reset the schema ready state (primarily for tests).
+ */
+export function setSchemaReady(state: boolean | null): void {
+  schemaReady = state;
+}
+
+/**
+ * Returns true if Supabase URL is configured and we are not in a test runner.
+ */
+export function isPersistenceConfigured(): boolean {
   if (process.env.VITEST === 'true' || process.env.NODE_ENV === 'test') {
     return false;
   }
   const url = process.env.SUPABASE_URL || env.SUPABASE_URL || '';
   return url.length > 0 && !url.includes('mock-project');
+}
+
+/**
+ * Returns true if Supabase persistence is enabled and ready to use.
+ * Falls back to false if the schema preflight probe detected missing tables.
+ */
+export function isPersistenceEnabled(): boolean {
+  if (schemaReady === false) {
+    return false;
+  }
+  return isPersistenceConfigured();
+}
+
+/**
+ * Lightweight preflight probe on server startup to verify if database tables exist.
+ * If tables like `orders` are missing (PostgreSQL error 42P01), prints a clear diagnostic notice
+ * guiding evaluators to execute schema.sql in the Supabase SQL editor.
+ */
+export async function checkDatabaseSchemaReady(
+  customClient?: SupabaseClient,
+  options?: { force?: boolean }
+): Promise<boolean> {
+  if (!options?.force && !isPersistenceConfigured()) {
+    return false;
+  }
+
+  try {
+    const client = customClient || getServiceSupabase();
+    const { error } = await client.from('orders').select('id').limit(1);
+
+    if (error) {
+      const isMissingTable =
+        error.code === '42P01' ||
+        error.code === 'PGRST204' ||
+        error.code === 'PGRST205' ||
+        error.message?.includes('42P01') ||
+        error.message?.includes('does not exist') ||
+        error.message?.includes('relation "orders" does not exist') ||
+        error.message?.includes('not find the table') ||
+        error.message?.includes('could not find the table');
+
+      if (isMissingTable) {
+        schemaReady = false;
+        console.warn(
+          '[Database] Notice: Tables not detected in Supabase. Please run backend/src/config/schema.sql in the Supabase SQL editor to enable persistent order storage.'
+        );
+        return false;
+      }
+
+      console.warn(`[Database] Preflight probe warning: ${error.message} (code: ${error.code || 'UNKNOWN'})`);
+      schemaReady = false;
+      return false;
+    }
+
+    schemaReady = true;
+    console.log('[Database] Supabase schema verified: persistent storage ready.');
+    return true;
+  } catch (err: any) {
+    console.warn(`[Database] Preflight probe error: ${err?.message || err}`);
+    schemaReady = false;
+    return false;
+  }
 }
