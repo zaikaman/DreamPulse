@@ -343,8 +343,8 @@ export const ActivePositionsDrawer: React.FC<ActivePositionsDrawerProps> = ({
 Asset: ${marketInfo.assetName} (${marketInfo.symbol}) ${marketInfo.windowDuration}
 Target Condition: Price > ${formatCurrencyAmount(marketInfo.strikePrice)} at Expiry
 Position: BUY ${pos.lotSize.toFixed(1)} Lots ${pos.outcome} @ $${pos.price.toFixed(2)}
-Total Cost: $${pos.totalCost.toFixed(2)} USDC (Max Risk)
-Max Payout: $${payout.toFixed(2)} USDC (Net: +$${netPotentialProfit.toFixed(2)} | ROI: +${roiPct.toFixed(1)}%)
+Total Cost: $${pos.totalCost.toFixed(2)} tUSDC (Max Risk)
+Max Payout: $${payout.toFixed(2)} tUSDC (Net: +$${netPotentialProfit.toFixed(2)} | ROI: +${roiPct.toFixed(1)}%)
 Tx: ${pos.txHash || 'N/A'}`;
 
                     return (
@@ -410,7 +410,7 @@ Tx: ${pos.txHash || 'N/A'}`;
                         </td>
                         <td className="py-2">
                           <div className="flex flex-col">
-                            <span className="text-[#00e676] font-bold">${payout.toFixed(2)} USDC</span>
+                            <span className="text-[#00e676] font-bold">${payout.toFixed(2)} tUSDC</span>
                             <span className="text-[9.5px] text-[#00e676]/80">+{roiPct.toFixed(0)}% ROI</span>
                           </div>
                         </td>
@@ -580,7 +580,7 @@ Asset: ${marketInfo.assetName} (${marketInfo.symbol}) ${marketInfo.windowDuratio
 Condition: Price > ${formatCurrencyAmount(marketInfo.strikePrice)} at Expiry
 Entry: ${hist.direction} ${hist.lotSize} Lots @ $${hist.price.toFixed(2)}
 Settlement: ${marketInfo.settlementPrice ? `Settled @ ${formatCurrencyAmount(marketInfo.settlementPrice)}` : 'Resolved'}
-PnL: ${isProfitable ? '+' : ''}$${pnlVal.toFixed(2)} USDC
+PnL: ${isProfitable ? '+' : ''}$${pnlVal.toFixed(2)} tUSDC
 Tx: ${hist.txHash || 'N/A'}`;
 
                     return (
@@ -626,7 +626,7 @@ Tx: ${hist.txHash || 'N/A'}`;
                                 isProfitable ? "text-[#00e676]" : "text-[#ff3366]"
                               )}
                             >
-                              {isProfitable ? '+' : ''}${pnlVal.toFixed(2)} USDC
+                              {isProfitable ? '+' : ''}${pnlVal.toFixed(2)} tUSDC
                             </span>
                             <div className="flex items-center gap-1.5">
                               <span className="text-[9.5px] text-muted-foreground">
