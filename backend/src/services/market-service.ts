@@ -246,7 +246,7 @@ export class MarketService extends EventEmitter {
             }
           } else {
             // ATM market ("closes at or above opening price"): lock in fixed spot at creation time
-            strike = Math.round(spot);
+            strike = spot >= 10 ? Math.round(spot) : Number(spot.toPrecision(4));
           }
         }
 

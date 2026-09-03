@@ -65,7 +65,7 @@ function formatAssetWindow(symbol?: string, timeframe?: string): string {
 export const SwarmArenaView: React.FC<SwarmArenaViewProps> = ({
   wallet,
   activeSession,
-  onOpenSessionModal: _onOpenSessionModal,
+  onOpenSessionModal,
   onConnectWallet,
   onNavigateToStudio,
   onNavigateToBacktester,
@@ -1166,7 +1166,7 @@ export const SwarmArenaView: React.FC<SwarmArenaViewProps> = ({
           await handleToggleCopyTrading(targetAddress, false);
         }}
         hasActiveSession={Boolean(activeSession && activeSession.isActive && new Date(activeSession.expiresAt).getTime() > Date.now())}
-        onOpenSessionModal={_onOpenSessionModal}
+        onOpenSessionModal={onOpenSessionModal}
       />
     </div>
   );

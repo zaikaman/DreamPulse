@@ -58,7 +58,7 @@ export const TraderCockpitTicket: React.FC<TraderCockpitTicketProps> = ({
   wallet,
   activeSession,
   agentThoughts = [],
-  onOpenSessionModal: _onOpenSessionModal,
+  onOpenSessionModal,
   onConnectWallet,
   bestBidYes,
   bestAskYes,
@@ -251,7 +251,18 @@ export const TraderCockpitTicket: React.FC<TraderCockpitTicketProps> = ({
         }
       } else {
         // Path 2: MetaMask Direct Wallet Signing Fallback
-        const poolAddr = (market.poolAddress || SOMNIA_ADDRESSES.marketsCore) as `0x${string}`;
+        const isValidPool = Boolean(
+          market.poolAddress &&
+          market.poolAddress.toLowerCase() !== SOMNIA_ADDRESSES.marketsCore.toLowerCase() &&
+          /^0x[a-fA-F0-9]{40}$/.test(market.poolAddress)
+        );
+
+        if (!isValidPool) {
+          setExecutionError('Market pool contract is not yet deployed or synced on-chain. Please wait for market sync before executing a direct wallet order.');
+          return;
+        }
+
+        const poolAddr = market.poolAddress as `0x${string}`;
         const walletRes = await web3Service.placeBinaryOrderWithWallet({
           userAddress: wallet.address,
           poolAddress: poolAddr,
@@ -723,11 +734,25 @@ export const TraderCockpitTicket: React.FC<TraderCockpitTicketProps> = ({
         </div>
         <div className="flex items-center justify-between text-muted-foreground pt-1 border-t border-border/20 text-[10px]">
           <span>Execution Path</span>
-          <span className={cn("font-bold", activeSession?.isActive ? "text-[#00e676]" : "text-muted-foreground")}>
-            {activeSession?.isActive
-              ? "1-Click Gasless (Session Active)"
-              : "Direct Wallet Signing"}
-          </span>
+          {activeSession?.isActive ? (
+            <span className="font-bold text-[#00e676]">
+              1-Click Gasless (Session Active)
+            </span>
+          ) : (
+            <div className="flex items-center gap-1.5">
+              <span className="font-bold text-muted-foreground">Direct Wallet Signing</span>
+              {onOpenSessionModal && (
+                <button
+                  type="button"
+                  onClick={onOpenSessionModal}
+                  className="text-brand-cyan hover:underline cursor-pointer font-medium text-[9px]"
+                  title="Enable 1-Click Gasless Execution"
+                >
+                  (Enable 1-Click)
+                </button>
+              )}
+            </div>
+          )}
         </div>
       </div>
 
