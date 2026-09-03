@@ -444,6 +444,9 @@ export const apiClient = {
   async updatePersonalAgentConfig(userAddress: string, agentType: string, config: Record<string, unknown>): Promise<{ success: boolean; config: import('../types/index.js').PersonalSwarmConfig }> {
     return fetchJson('/swarm/config', { method: 'POST', body: JSON.stringify({ userAddress, agentType, config }) });
   },
+  async updateFleetConfig(userAddress: string, configs: { volt?: Record<string, unknown>; oracle?: Record<string, unknown>; titan?: Record<string, unknown> }): Promise<{ success: boolean; config: import('../types/index.js').PersonalSwarmConfig }> {
+    return fetchJson('/swarm/fleet-config', { method: 'POST', body: JSON.stringify({ userAddress, configs }) });
+  },
   async toggleCopyTrade(userAddress: string, enabled: boolean): Promise<{ success: boolean; config: import('../types/index.js').PersonalSwarmConfig; message: string }> {
     return fetchJson('/swarm/toggle-copytrade', { method: 'POST', body: JSON.stringify({ userAddress, enabled }) });
   },

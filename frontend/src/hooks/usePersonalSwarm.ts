@@ -22,6 +22,7 @@ export interface UsePersonalSwarmReturn {
   toggleCopyTrade: (enabled: boolean) => Promise<boolean>;
   toggleAgent: (agentType: AgentType, enabled: boolean) => Promise<boolean>;
   updateAgentConfig: (agentType: AgentType, config: Record<string, any>) => Promise<boolean>;
+  updateFleetConfig: (configs: { volt?: Record<string, any>; oracle?: Record<string, any>; titan?: Record<string, any> }) => Promise<boolean>;
   resetToCopy: () => Promise<boolean>;
 }
 
@@ -235,6 +236,28 @@ export const usePersonalSwarm = (userAddress?: string): UsePersonalSwarmReturn =
     [userAddress],
   );
 
+  const updateFleetConfig = useCallback(
+    async (configs: {
+      volt?: Record<string, any>;
+      oracle?: Record<string, any>;
+      titan?: Record<string, any>;
+    }): Promise<boolean> => {
+      if (!userAddress) return false;
+      setIsSaving(true);
+      try {
+        const res = await apiClient.updateFleetConfig(userAddress, configs);
+        if (res?.config) setConfig(res.config);
+        return true;
+      } catch (err: any) {
+        setError(err.message || 'Failed to update fleet config');
+        return false;
+      } finally {
+        setIsSaving(false);
+      }
+    },
+    [userAddress],
+  );
+
   const resetToCopy = useCallback(async (): Promise<boolean> => {
     if (!userAddress) return false;
     setIsSaving(true);
@@ -272,6 +295,7 @@ export const usePersonalSwarm = (userAddress?: string): UsePersonalSwarmReturn =
     toggleCopyTrade,
     toggleAgent,
     updateAgentConfig,
+    updateFleetConfig,
     resetToCopy,
   };
 };

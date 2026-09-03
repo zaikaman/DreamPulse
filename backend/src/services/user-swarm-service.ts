@@ -62,6 +62,7 @@ function toRecord(row: any): PersonalSwarmConfig {
 
 export class UserSwarmService {
   private cache = new Map<string, PersonalSwarmConfig>();
+  private userLocks = new Map<string, Promise<any>>();
   private readyPromise: Promise<void>;
 
   constructor() {
@@ -216,7 +217,40 @@ export class UserSwarmService {
   ): Promise<PersonalSwarmConfig> {
     const normalized = this.normalizeAddress(userAddress);
     const key = normalized.toLowerCase();
-    const current = this.getConfig(userAddress);
+
+    // Serialize per-user updates to prevent concurrent read-modify-write race conditions
+    const prev = this.userLocks.get(key) ?? Promise.resolve();
+    const task = (async () => {
+      await prev.catch(() => {});
+      return this.executeUpsert(normalized, key, updates);
+    })();
+
+    this.userLocks.set(key, task);
+    try {
+      return await task;
+    } finally {
+      if (this.userLocks.get(key) === task) {
+        this.userLocks.delete(key);
+      }
+    }
+  }
+
+  private async executeUpsert(
+    normalized: Address,
+    key: string,
+    updates: Partial<{
+      mode: SwarmMode;
+      copyTradeEnabled: boolean;
+      voltEnabled: boolean;
+      oracleEnabled: boolean;
+      titanEnabled: boolean;
+      sweeperEnabled: boolean;
+      voltConfig: Partial<PersonalSwarmConfig['voltConfig']>;
+      oracleConfig: Partial<PersonalSwarmConfig['oracleConfig']>;
+      titanConfig: Partial<PersonalSwarmConfig['titanConfig']>;
+    }>,
+  ): Promise<PersonalSwarmConfig> {
+    const current = this.getConfig(normalized);
     const now = new Date().toISOString();
 
     let next: PersonalSwarmConfig = {
@@ -362,6 +396,21 @@ export class UserSwarmService {
     if (normalizedAgent === 'oracle') return this.upsertConfig(userAddress, { oracleConfig: config });
     if (normalizedAgent === 'titan') return this.upsertConfig(userAddress, { titanConfig: config });
     throw new Error(`Unknown agentType for config: ${agentType}`);
+  }
+
+  public async updateFleetConfig(
+    userAddress: string,
+    configs: {
+      volt?: Partial<PersonalSwarmConfig['voltConfig']>;
+      oracle?: Partial<PersonalSwarmConfig['oracleConfig']>;
+      titan?: Partial<PersonalSwarmConfig['titanConfig']>;
+    },
+  ): Promise<PersonalSwarmConfig> {
+    return this.upsertConfig(userAddress, {
+      voltConfig: configs.volt,
+      oracleConfig: configs.oracle,
+      titanConfig: configs.titan,
+    });
   }
 
   public async resetToCopy(userAddress: string): Promise<PersonalSwarmConfig> {

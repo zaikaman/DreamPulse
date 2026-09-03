@@ -162,6 +162,28 @@ describe('PriceFeedService, UserSwarmService & OperatorApprovalService Suite', (
       expect(afterConfigUpdate.oracleConfig.minEdge).toBe(0.04);
       expect(afterConfigUpdate.titanConfig.targetSpread).toBe(0.05);
 
+      // Test updateFleetConfig batch atomic save
+      await service.updateFleetConfig(testUser, {
+        volt: { driftThreshold: 0.003, minEdge: 0.04, lotSize: 12 },
+        oracle: { minEdge: 0.06, lotSize: 14, maxTradeSize: 60 },
+        titan: { targetSpread: 0.06, inventoryAversion: 0.03, lotSize: 6 },
+      });
+      const afterFleetUpdate = service.getConfig(testUser);
+      expect(afterFleetUpdate.voltConfig.driftThreshold).toBe(0.003);
+      expect(afterFleetUpdate.oracleConfig.minEdge).toBe(0.06);
+      expect(afterFleetUpdate.titanConfig.targetSpread).toBe(0.06);
+
+      // Test concurrent Promise.all updateAgentConfig to verify per-user lock serialization
+      await Promise.all([
+        service.updateAgentConfig(testUser, 'Volt', { minEdge: 0.08 }),
+        service.updateAgentConfig(testUser, 'Oracle', { minEdge: 0.09 }),
+        service.updateAgentConfig(testUser, 'Titan', { targetSpread: 0.07 }),
+      ]);
+      const afterConcurrent = service.getConfig(testUser);
+      expect(afterConcurrent.voltConfig.minEdge).toBe(0.08);
+      expect(afterConcurrent.oracleConfig.minEdge).toBe(0.09);
+      expect(afterConcurrent.titanConfig.targetSpread).toBe(0.07);
+
       // Test resetToCopy
       const reset = await service.resetToCopy(testUser);
       expect(reset.mode).toBe('COPY');

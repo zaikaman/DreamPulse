@@ -30,6 +30,7 @@ export const SwarmRiskModal: React.FC<SwarmRiskModalProps> = ({
     toggleCopyTrade,
     toggleAgent,
     updateAgentConfig,
+    updateFleetConfig,
     resetToCopy,
   } = usePersonalSwarm(userAddress);
 
@@ -103,26 +104,44 @@ export const SwarmRiskModal: React.FC<SwarmRiskModalProps> = ({
   const handleSaveAllSettings = async () => {
     setSaveSuccessMsg(null);
     try {
-      await Promise.all([
-        updateAgentConfig('Volt', {
+      const fleetUpdates = {
+        volt: {
           driftThreshold: voltSliders.driftThreshold / 100,
           minEdge: voltSliders.minEdge / 100,
           lotSize: voltSliders.lotSize,
           maxTradeSize: voltSliders.maxTradeSize,
-        }),
-        updateAgentConfig('Oracle', {
+        },
+        oracle: {
           minEdge: oracleSliders.minEdge / 100,
           lotSize: oracleSliders.lotSize,
           maxTradeSize: oracleSliders.maxTradeSize,
-        }),
-        updateAgentConfig('Titan', {
+        },
+        titan: {
           targetSpread: titanSliders.targetSpread / 100,
           inventoryAversion: titanSliders.inventoryAversion,
           lotSize: titanSliders.lotSize,
-        }),
-      ]);
-      setSaveSuccessMsg('Swarm fleet risk and position settings saved.');
-      setTimeout(() => setSaveSuccessMsg(null), 3000);
+        },
+      };
+
+      let ok = false;
+      try {
+        ok = await updateFleetConfig(fleetUpdates);
+      } catch {
+        // Fallback: sequential execution to prevent concurrent read-modify-write race condition
+        for (const [agent, cfg] of [
+          ['Volt', fleetUpdates.volt] as const,
+          ['Oracle', fleetUpdates.oracle] as const,
+          ['Titan', fleetUpdates.titan] as const,
+        ]) {
+          await updateAgentConfig(agent, cfg);
+        }
+        ok = true;
+      }
+
+      if (ok) {
+        setSaveSuccessMsg('Swarm fleet risk and position settings saved.');
+        setTimeout(() => setSaveSuccessMsg(null), 3000);
+      }
     } catch {}
   };
 

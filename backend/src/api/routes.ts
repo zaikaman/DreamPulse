@@ -863,14 +863,34 @@ apiRouter.post('/swarm/toggle', requireWalletAuth, async (req: Request, res: Res
 
 apiRouter.post('/swarm/config', requireWalletAuth, async (req: Request, res: Response) => {
   try {
-    const { userAddress, agentType, config } = req.body;
+    const { userAddress, agentType, config, configs } = req.body;
     if (!userAddress || !isAddress(userAddress)) {
       return res.status(400).json({ success: false, error: 'Missing or invalid userAddress' });
+    }
+    if (configs && typeof configs === 'object') {
+      const updated = await userSwarmService.updateFleetConfig(userAddress, configs);
+      return res.json({ success: true, config: updated });
     }
     if (!agentType || !config || typeof config !== 'object') {
       return res.status(400).json({ success: false, error: 'Missing agentType or config' });
     }
     const updated = await userSwarmService.updateAgentConfig(userAddress, agentType as AgentType, config);
+    return res.json({ success: true, config: updated });
+  } catch (err: any) {
+    return res.status(400).json({ success: false, error: err.message });
+  }
+});
+
+apiRouter.post('/swarm/fleet-config', requireWalletAuth, async (req: Request, res: Response) => {
+  try {
+    const { userAddress, configs } = req.body;
+    if (!userAddress || !isAddress(userAddress)) {
+      return res.status(400).json({ success: false, error: 'Missing or invalid userAddress' });
+    }
+    if (!configs || typeof configs !== 'object') {
+      return res.status(400).json({ success: false, error: 'Missing or invalid configs object' });
+    }
+    const updated = await userSwarmService.updateFleetConfig(userAddress, configs);
     return res.json({ success: true, config: updated });
   } catch (err: any) {
     return res.status(400).json({ success: false, error: err.message });
