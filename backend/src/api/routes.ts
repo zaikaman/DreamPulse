@@ -1200,8 +1200,8 @@ apiRouter.get('/sweeper/history', optionalWalletAuth, async (req: Request, res: 
     ? userAddress.trim()
     : operatorAccount.address;
   const parsedLimit = typeof limit === 'string' && !isNaN(parseInt(limit, 10))
-    ? Math.min(Math.max(1, parseInt(limit, 10)), 500)
-    : 100;
+    ? Math.max(1, parseInt(limit, 10))
+    : undefined;
   await settlementService.ensureUserSweepsLoaded(targetAddress);
   const history = settlementService.getSweepHistory(targetAddress, parsedLimit);
   res.json({

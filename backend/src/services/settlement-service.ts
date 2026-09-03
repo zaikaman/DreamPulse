@@ -172,9 +172,8 @@ export class SettlementService {
 
     try {
       let page = 0;
-      const pageSize = 500;
-      const maxPages = 2; // Up to 1,000 confirmed sweeps max per user
-      while (page < maxPages) {
+      const pageSize = 1000;
+      while (true) {
         const { data, error } = await supabase
           .from('sweeps')
           .select('*')
@@ -251,7 +250,7 @@ export class SettlementService {
   public recordSweep(sweep: SettlementSweep, persist: boolean = true): void {
     this.sweepsMap.set(sweep.id, sweep);
     this.sweeps.unshift(sweep);
-    if (this.sweeps.length > 2000) {
+    if (this.sweeps.length > 50000) {
       const evicted = this.sweeps.pop();
       if (evicted) this.sweepsMap.delete(evicted.id);
     }
@@ -296,9 +295,8 @@ export class SettlementService {
 
     try {
       let page = 0;
-      const pageSize = 500;
-      const maxPages = 2; // Up to 1,000 confirmed sweeps on startup
-      while (page < maxPages) {
+      const pageSize = 1000;
+      while (page < 10) {
         const { data, error } = await supabase
           .from('sweeps')
           .select('*')
@@ -1627,9 +1625,8 @@ export class SettlementService {
       }
     }
 
-    const maxItems = typeof limit === 'number' && limit > 0 ? limit : 200;
     const sorted = uniqueSweeps.sort((a, b) => new Date(b.claimedAt).getTime() - new Date(a.claimedAt).getTime());
-    const boundedSweeps = sorted.slice(0, maxItems);
+    const boundedSweeps = typeof limit === 'number' && limit > 0 ? sorted.slice(0, limit) : sorted;
 
     const mappedSweeps = boundedSweeps.map((s) => {
       if (s.txHash && s.txHash.startsWith('0x') && s.txHash.length === 66) {

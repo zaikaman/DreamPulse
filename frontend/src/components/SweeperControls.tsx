@@ -40,6 +40,7 @@ interface CachedSweeperData {
   unclaimedAmount: number;
   totalClaimedAllTime: number;
   claimableMarketsCount: number;
+  confirmedSweepsCount?: number;
 }
 
 export const SweeperControls: React.FC<SweeperControlsProps> = ({
@@ -75,6 +76,7 @@ export const SweeperControls: React.FC<SweeperControlsProps> = ({
   const [unclaimedAmount, setUnclaimedAmount] = useState<number>(initialCache?.unclaimedAmount || 0);
   const [totalClaimedAllTime, setTotalClaimedAllTime] = useState<number>(initialCache?.totalClaimedAllTime || 0);
   const [claimableMarketsCount, setClaimableMarketsCount] = useState<number>(initialCache?.claimableMarketsCount || 0);
+  const [confirmedSweepsCount, setConfirmedSweepsCount] = useState<number>(initialCache?.confirmedSweepsCount || 0);
 
   const [selectedOutcome, setSelectedOutcome] = useState<'ALL' | 'YES' | 'NO'>('ALL');
   const [searchQuery, setSearchQuery] = useState<string>('');
@@ -100,8 +102,9 @@ export const SweeperControls: React.FC<SweeperControlsProps> = ({
   }, [history, selectedOutcome, searchQuery]);
 
   const confirmedCount = useMemo(() => {
-    return history.filter((s) => s.status !== 'FAILED' && s.claimableAmount > 0).length;
-  }, [history]);
+    const listCount = history.filter((s) => s.status !== 'FAILED' && s.claimableAmount > 0).length;
+    return Math.max(confirmedSweepsCount, listCount);
+  }, [history, confirmedSweepsCount]);
 
   useEffect(() => {
     setCurrentPage(1);
@@ -137,18 +140,28 @@ export const SweeperControls: React.FC<SweeperControlsProps> = ({
         const uAmount = summaryRes.data.unclaimedAmount || 0;
         const tClaimed = summaryRes.data.totalClaimedAllTime || 0;
         const cCount = summaryRes.data.claimableMarketsCount || 0;
+        const sCount = summaryRes.data.confirmedSweepsCount || 0;
         setUnclaimedAmount(uAmount);
         setTotalClaimedAllTime(tClaimed);
         setClaimableMarketsCount(cCount);
+        setConfirmedSweepsCount(sCount);
         try {
-          localStorage.setItem(`${SWEEPER_SUMMARY_CACHE_KEY}${addr}`, JSON.stringify({ unclaimedAmount: uAmount, totalClaimedAllTime: tClaimed, claimableMarketsCount: cCount }));
+          localStorage.setItem(
+            `${SWEEPER_SUMMARY_CACHE_KEY}${addr}`,
+            JSON.stringify({
+              unclaimedAmount: uAmount,
+              totalClaimedAllTime: tClaimed,
+              claimableMarketsCount: cCount,
+              confirmedSweepsCount: sCount,
+            }),
+          );
         } catch {}
       }
       if (historyRes?.success && Array.isArray(historyRes.data)) {
         const validSweeps = historyRes.data.filter((s) => s.status !== 'FAILED' && s.claimableAmount > 0);
         setHistory(validSweeps);
         try {
-          localStorage.setItem(`${SWEEPER_HISTORY_CACHE_KEY}${addr}`, JSON.stringify(validSweeps.slice(0, 100)));
+          localStorage.setItem(`${SWEEPER_HISTORY_CACHE_KEY}${addr}`, JSON.stringify(validSweeps.slice(0, 1000)));
         } catch {}
       }
     } catch (err: any) {
