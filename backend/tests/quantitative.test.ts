@@ -214,6 +214,21 @@ describe('Quantitative Pricing & Edge Calculation Engine', () => {
     // Friction: 0.50 * 0.001 (0.0005) + 0.002 = 0.0025 -> Net = 0.05 - 0.0025 = 0.0475
     expect(customNetEdge).toBe(0.0475);
 
+    // Negative raw edge: fair value 0.50 vs execution price 0.55 -> raw edge -0.05
+    // Friction must shrink absolute edge toward zero, never expand it away from zero
+    // Total friction: 0.55 * 0.003 (0.00165) + 0.004 = 0.00565
+    // Net edge = -(0.05 - 0.00565) = -0.04435 -> rounded to -0.0444
+    const negativeNetEdge = calculateNetExecutableEdge(0.50, 0.55);
+    expect(negativeNetEdge).toBe(-0.0444);
+    expect(Math.abs(negativeNetEdge)).toBeLessThan(0.05);
+
+    // Negative raw edge smaller than friction should clamp to 0
+    // rawEdge = 0.50 - 0.502 = -0.002, friction ~0.0055 > 0.002 -> net edge 0
+    expect(calculateNetExecutableEdge(0.50, 0.502)).toBe(0);
+
+    // Zero edge
+    expect(calculateNetExecutableEdge(0.50, 0.50)).toBe(0);
+
     // Invalid prices
     expect(calculateNetExecutableEdge(0, 0.50)).toBe(-1);
     expect(calculateNetExecutableEdge(0.55, 0)).toBe(-1);

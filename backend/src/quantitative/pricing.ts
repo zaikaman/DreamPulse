@@ -288,7 +288,9 @@ export function calculateNetExecutableEdge(
   if (executionPrice <= 0 || fairValue <= 0) return -1;
   const rawEdge = fairValue - executionPrice;
   const totalCostFriction = executionPrice * takerFeeRate + gasHurdle;
-  return Number((rawEdge - totalCostFriction).toFixed(4));
+  const sign = Math.sign(rawEdge);
+  const netAbsEdge = Math.max(0, Math.abs(rawEdge) - totalCostFriction);
+  return Number((sign * netAbsEdge).toFixed(4));
 }
 
 /**
