@@ -58,7 +58,7 @@ function generatePriceHistoryForRange(
 
   // Realistic starting drift offset per timeframe
   const maxOffsetPct = range === 'RTC' ? 0.0008 : range === '15m' ? 0.0025 : range === '1h' ? 0.006 : 0.015;
-  const seed = (Math.sin(basePrice * 100 + durationSec) * 10000) % 1;
+  const seed = Math.abs(Math.sin(basePrice * 100 + durationSec) * 10000) % 1;
   const startPrice = basePrice * (1 + (seed - 0.5) * maxOffsetPct);
 
   // Multi-frequency harmonic counts: higher timeframes exhibit denser multi-wave structure
