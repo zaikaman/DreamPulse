@@ -848,6 +848,7 @@ export class OrderService {
             settlementPrice: m.settlement_price ? Number(m.settlement_price) : undefined,
             winningOutcome: m.winning_outcome as OutcomeType | undefined,
             windowDuration: m.window_duration,
+            recommendedOutcome: (m as any).recommended_outcome || (m as any).recommendedOutcome || undefined,
           };
         } else if (order.marketId.includes('-')) {
           const parts = order.marketId.split('-');
@@ -1336,6 +1337,7 @@ export class OrderService {
             settlementPrice: market.settlementPrice,
             winningOutcome: market.winningOutcome,
             windowDuration: market.windowDuration,
+            recommendedOutcome: market.recommendedOutcome,
           }
         : undefined,
     };
@@ -1510,6 +1512,7 @@ export class OrderService {
               settlementPrice: market.settlementPrice,
               winningOutcome: market.winningOutcome,
               windowDuration: market.windowDuration,
+              recommendedOutcome: market.recommendedOutcome,
             }
           : undefined,
       };

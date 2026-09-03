@@ -278,6 +278,56 @@ describe('Swarm Arena & Strategy Leaderboard Tests', () => {
       expect(topTrader.userAddress).toMatch(/^0x[a-fA-F0-9]{40}$/);
     });
 
+    it('computes Copilot synergy score based on recommendation alignment decoupled from win rate', async () => {
+      const synergyUser = '0x8888888888888888888888888888888888888888';
+      const nowIso = new Date().toISOString();
+
+      const injectUserOrder = (outcome: 'YES' | 'NO', recOutcome: 'YES' | 'NO', pnl: number) => {
+        const id = randomUUID();
+        const order: any = {
+          id,
+          userAddress: synergyUser as `0x${string}`,
+          marketId: `0x${randomUUID().replace(/-/g, '')}`,
+          agentType: 'Manual',
+          source: 'TERMINAL' as const,
+          outcome,
+          direction: 'BUY' as const,
+          orderType: 'IOC' as const,
+          price: 0.5,
+          lotSize: 10,
+          totalCost: 5.0,
+          status: 'FILLED' as const,
+          txHash: `0x${'e'.repeat(64)}` as `0x${string}`,
+          pnl,
+          isSettled: true,
+          settledAt: nowIso,
+          createdAt: nowIso,
+          filledAt: nowIso,
+          marketSnapshot: {
+            symbol: 'BTC/USD',
+            strikePrice: 65000,
+            closeTimestamp: new Date(Date.now() + 300000).toISOString(),
+            windowDuration: '5m',
+            recommendedOutcome: recOutcome,
+          },
+        };
+        (orderService as any).orders.unshift(order);
+        (orderService as any).orderMap.set(id, order);
+      };
+
+      injectUserOrder('YES', 'YES', -10); // Followed copilot, lost
+      injectUserOrder('YES', 'YES', 20);  // Followed copilot, won
+      (orderService as any).notifyStateChange?.();
+
+      const profile = await leaderboardService.getTraderProfile(synergyUser);
+      expect(profile).not.toBeNull();
+      // Win rate is 1 win out of 2 = 50.0%
+      expect(profile!.summary.winRate).toBe(50.0);
+      // Copilot synergy is 2 matches out of 2 = 100% (NOT 50%!)
+      expect(profile!.summary.copilotSynergyScore).toBe(100);
+      expect(profile!.summary.copilotSynergyScore).not.toBe(Math.round(profile!.summary.winRate));
+    });
+
     it('retrieves detailed trader profile with distribution and equity curve', async () => {
       const profile = await leaderboardService.getTraderProfile(testUser);
       expect(profile).not.toBeNull();

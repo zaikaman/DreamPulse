@@ -117,6 +117,7 @@ export interface OrderExecution {
     settlementPrice?: number;
     winningOutcome?: OutcomeType;
     windowDuration?: string;
+    recommendedOutcome?: 'YES' | 'NO' | 'NONE';
   };
 }
 

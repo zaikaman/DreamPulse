@@ -751,6 +751,7 @@ export class LeaderboardService {
           symbolCounts: Map<string, number>;
           windowCounts: Map<string, number>;
           synergyMatches: number;
+          synergyEvaluated: number;
         }
       >();
 
@@ -767,6 +768,7 @@ export class LeaderboardService {
             symbolCounts: new Map(),
             windowCounts: new Map(),
             synergyMatches: 0,
+            synergyEvaluated: 0,
           });
         }
         const record = traderMap.get(addr)!;
@@ -779,11 +781,22 @@ export class LeaderboardService {
         const win = order.marketSnapshot?.windowDuration || '5m';
         record.windowCounts.set(win, (record.windowCounts.get(win) || 0) + 1);
 
+        // Copilot synergy: did the trader follow the AI Copilot's recommendation when entering the trade?
+        const recOutcome =
+          order.marketSnapshot?.recommendedOutcome ||
+          marketService.getMarketById(order.marketId)?.recommendedOutcome;
+
+        if (recOutcome && (recOutcome === 'YES' || recOutcome === 'NO')) {
+          record.synergyEvaluated += 1;
+          if (order.outcome === recOutcome) {
+            record.synergyMatches += 1;
+          }
+        }
+
         if (order.isSettled) {
           record.realizedPnl += order.pnl || 0;
           if ((order.pnl || 0) > 0) {
             record.wins += 1;
-            record.synergyMatches += 1;
           } else if ((order.pnl || 0) < 0) {
             record.losses += 1;
           }
@@ -837,9 +850,11 @@ export class LeaderboardService {
         const winRate = settledTrades > 0 ? Number(((data.wins / settledTrades) * 100).toFixed(1)) : 0;
         const pnlPct = data.volume > 0 ? Number(((data.realizedPnl / data.volume) * 100).toFixed(2)) : 0;
 
-        // Copilot synergy: alignment with swarm positions
+        // Copilot synergy: alignment with swarm recommendations
         const copilotSynergyScore =
-          settledTrades > 0 ? Math.min(100, Math.round((data.synergyMatches / settledTrades) * 100)) : 100;
+          data.synergyEvaluated > 0
+            ? Math.min(100, Math.max(0, Math.round((data.synergyMatches / data.synergyEvaluated) * 100)))
+            : 100;
 
         // Real sparkline from real user cumulative PnL
         let runningPnl = 0;
