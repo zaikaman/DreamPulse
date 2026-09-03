@@ -102,7 +102,7 @@ export const StatCardsGrid: React.FC<StatCardsGridProps> = ({
   const userCollateral = wallet?.balanceCollateral || '0.00';
   const userNativeGas = wallet?.balanceSTT || '0.000';
   const isCollateralZero = parseFloat(userCollateral) === 0;
-  const activeMarketsCount = markets.filter((m) => m.status === 'Open').length || markets.length;
+  const activeMarketsCount = markets.filter((m) => m.status === 'Open' || m.status === 'Resolving').length || markets.length;
 
   // Operator on-chain balance calculations
   const [operatorCollateral, setOperatorCollateral] = useState<string>('0.00');
