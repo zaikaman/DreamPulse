@@ -4,11 +4,13 @@ import type {
   Market,
   SessionGrant,
   OutcomeType,
+  OrderExecution,
 } from '../types/index.js';
 import type { IAgentContext, IAgentDecision } from './base-agent.js';
 import { quantizePrice, quantizeLotSize } from '../quantitative/quantizer.js';
 import { backtestService, type HistoricalCandle } from '../services/backtest-service.js';
 import { priceFeedService } from '../services/price-feed-service.js';
+import { orderService } from '../services/order-service.js';
 
 export function calculateSeriesRSI(candles: HistoricalCandle[], period = 14): number {
   if (candles.length < period + 1) return 50;
@@ -278,6 +280,26 @@ export function calculateSeriesWilliamsR(candles: HistoricalCandle[], period = 1
   return ((highestHigh - currentClose) / diff) * -100;
 }
 
+export function calculateConsecutiveStreak(
+  orders: Array<{ isSettled?: boolean; pnl?: number; settledAt?: string; createdAt?: string }>
+): number {
+  const settled = orders
+    .filter((o) => o.isSettled)
+    .sort((a, b) => new Date(a.settledAt || a.createdAt || 0).getTime() - new Date(b.settledAt || b.createdAt || 0).getTime());
+
+  let currentStreak = 0;
+  for (const o of settled) {
+    const pnl = o.pnl ?? 0;
+    if (Math.abs(pnl) < 0.01) continue;
+    if (pnl > 0) {
+      currentStreak = currentStreak >= 0 ? currentStreak + 1 : 1;
+    } else if (pnl < 0) {
+      currentStreak = currentStreak <= 0 ? currentStreak - 1 : -1;
+    }
+  }
+  return currentStreak;
+}
+
 export class CustomAgentEvaluator {
   private candleCache = new Map<string, { candles: HistoricalCandle[]; fetchedAt: number }>();
   private lastTradeTimes = new Map<string, number>(); // key: agentId
@@ -446,6 +468,37 @@ export class CustomAgentEvaluator {
           rationale: `Agent "${agent.name}" daily drawdown circuit breaker triggered (${pnlPct.toFixed(1)}% vs max -${Math.abs(agent.rules.risk.dailyDrawdownLimitPct)}%).`,
         };
       }
+    }
+
+    // Consecutive Loss Circuit Breaker
+    const maxConsecutiveLosses = agent.rules?.risk?.maxConsecutiveLosses;
+    let currentStreak = 0;
+    if (
+      (maxConsecutiveLosses !== undefined && maxConsecutiveLosses > 0) ||
+      (agent.rules?.risk?.martingaleMultiplier && agent.rules.risk.martingaleMultiplier > 1.0)
+    ) {
+      let recentOrders: OrderExecution[] = [];
+      try {
+        recentOrders = await orderService.getOrdersForCustomAgent(agent.id, agent.userAddress);
+      } catch {
+        recentOrders = [];
+      }
+      const agentOrders = recentOrders.filter((o) => {
+        if (o.customAgentId) return o.customAgentId === agent.id;
+        if (o.sessionId) return o.sessionId === agent.id;
+        return true;
+      });
+      currentStreak = calculateConsecutiveStreak(agentOrders);
+    }
+
+    if (maxConsecutiveLosses !== undefined && maxConsecutiveLosses > 0 && currentStreak <= -maxConsecutiveLosses) {
+      return {
+        agentType: 'CUSTOM',
+        action: 'HOLD',
+        targetMarketId: market.id,
+        confidence: 0.5,
+        rationale: `Consecutive loss limit reached (streak: ${Math.abs(currentStreak)} >= ${maxConsecutiveLosses}). Halting to protect capital.`,
+      };
     }
 
     // 4. Cooldown Risk Rule
@@ -784,7 +837,7 @@ export class CustomAgentEvaluator {
     let dynamicStake = requestedStake;
     if (rules.risk?.martingaleMultiplier && rules.risk.martingaleMultiplier > 1.0) {
       // If consecutive losses occurred, scale stake safely up to remaining allowance
-      const consecutiveLosses = agent.rules?.risk?.maxConsecutiveLosses || 0;
+      const consecutiveLosses = currentStreak < 0 ? Math.abs(currentStreak) : (agent.rules?.risk?.maxConsecutiveLosses || 0);
       if (consecutiveLosses > 0) {
         dynamicStake = requestedStake * Math.min(3.0, Math.pow(rules.risk.martingaleMultiplier, Math.min(2, consecutiveLosses)));
       }

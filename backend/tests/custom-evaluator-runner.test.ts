@@ -2,6 +2,7 @@ import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { MultiAgentSwarmRunner } from '../src/agents/swarm-runner.js';
 import {
   CustomAgentEvaluator,
+  calculateConsecutiveStreak,
   calculateSeriesRSI,
   calculateSeriesEMA,
   calculateSeriesSMA,
@@ -15,6 +16,7 @@ import {
   calculateSeriesCCI,
   calculateSeriesWilliamsR,
 } from '../src/agents/custom-agent-evaluator.js';
+import { orderService } from '../src/services/order-service.js';
 import { marketService } from '../src/services/market-service.js';
 import { sessionService, type SessionRecord } from '../src/services/session-service.js';
 import { operatorAccount } from '../src/config/somnia.js';
@@ -326,6 +328,142 @@ describe('SwarmRunner, CustomAgentEvaluator & Agent System Suite', () => {
       const ddDecision = await evaluator.evaluate(drawdownAgent, context, mockSession);
       expect(ddDecision.action).toBe('HOLD');
       expect(ddDecision.rationale).toContain('drawdown circuit breaker');
+    });
+
+    it('calculates consecutive streak correctly across various trade sequences', () => {
+      // Empty
+      expect(calculateConsecutiveStreak([])).toBe(0);
+
+      // Unsettled orders are ignored
+      expect(
+        calculateConsecutiveStreak([
+          { isSettled: false, pnl: -10, createdAt: new Date(1000).toISOString() },
+        ])
+      ).toBe(0);
+
+      // Winning streak
+      expect(
+        calculateConsecutiveStreak([
+          { isSettled: true, pnl: 5, createdAt: new Date(1000).toISOString() },
+          { isSettled: true, pnl: 10, createdAt: new Date(2000).toISOString() },
+          { isSettled: true, pnl: 2, createdAt: new Date(3000).toISOString() },
+        ])
+      ).toBe(3);
+
+      // Winning streak then losing streak
+      expect(
+        calculateConsecutiveStreak([
+          { isSettled: true, pnl: 10, createdAt: new Date(1000).toISOString() },
+          { isSettled: true, pnl: -5, createdAt: new Date(2000).toISOString() },
+          { isSettled: true, pnl: -3, createdAt: new Date(3000).toISOString() },
+        ])
+      ).toBe(-2);
+
+      // Losing streak then winning
+      expect(
+        calculateConsecutiveStreak([
+          { isSettled: true, pnl: -5, createdAt: new Date(1000).toISOString() },
+          { isSettled: true, pnl: -3, createdAt: new Date(2000).toISOString() },
+          { isSettled: true, pnl: 8, createdAt: new Date(3000).toISOString() },
+        ])
+      ).toBe(1);
+    });
+
+    it('enforces consecutive loss circuit breaker and halts trading when streak limit reached', async () => {
+      const streakAgent: CustomAgentDefinition = {
+        ...mockCustomAgent,
+        rules: {
+          ...mockCustomAgent.rules,
+          risk: {
+            ...mockCustomAgent.rules.risk,
+            maxConsecutiveLosses: 3,
+          },
+        },
+      };
+
+      const context: IAgentContext = {
+        market: mockMarket,
+        spotTicker: {
+          symbol: 'BTC/USD',
+          price: 96500,
+          change1m: 0.002,
+          change5m: 0.005,
+          timestamp: Date.now(),
+        },
+        depth: { yesBids: [], yesAsks: [] },
+        activeSessions: [mockSession],
+      };
+
+      // 3 consecutive settled losses
+      const losingOrders = [
+        {
+          id: 'ord-loss-1',
+          userAddress: streakAgent.userAddress as any,
+          marketId: mockMarket.id,
+          agentType: 'CUSTOM' as const,
+          customAgentId: streakAgent.id,
+          outcome: 'YES' as const,
+          direction: 'BUY' as const,
+          orderType: 'MARKET' as const,
+          price: 0.5,
+          lotSize: 10,
+          totalCost: 5,
+          status: 'SETTLED' as const,
+          isSettled: true,
+          pnl: -5.0,
+          createdAt: new Date(Date.now() - 300000).toISOString(),
+          settledAt: new Date(Date.now() - 250000).toISOString(),
+        },
+        {
+          id: 'ord-loss-2',
+          userAddress: streakAgent.userAddress as any,
+          marketId: mockMarket.id,
+          agentType: 'CUSTOM' as const,
+          customAgentId: streakAgent.id,
+          outcome: 'YES' as const,
+          direction: 'BUY' as const,
+          orderType: 'MARKET' as const,
+          price: 0.5,
+          lotSize: 10,
+          totalCost: 5,
+          status: 'SETTLED' as const,
+          isSettled: true,
+          pnl: -5.0,
+          createdAt: new Date(Date.now() - 200000).toISOString(),
+          settledAt: new Date(Date.now() - 150000).toISOString(),
+        },
+        {
+          id: 'ord-loss-3',
+          userAddress: streakAgent.userAddress as any,
+          marketId: mockMarket.id,
+          agentType: 'CUSTOM' as const,
+          customAgentId: streakAgent.id,
+          outcome: 'YES' as const,
+          direction: 'BUY' as const,
+          orderType: 'MARKET' as const,
+          price: 0.5,
+          lotSize: 10,
+          totalCost: 5,
+          status: 'SETTLED' as const,
+          isSettled: true,
+          pnl: -5.0,
+          createdAt: new Date(Date.now() - 100000).toISOString(),
+          settledAt: new Date(Date.now() - 50000).toISOString(),
+        },
+      ];
+
+      vi.spyOn(orderService, 'getOrdersForCustomAgent').mockResolvedValue(losingOrders as any);
+
+      const decision = await evaluator.evaluate(streakAgent, context, mockSession);
+      expect(decision.action).toBe('HOLD');
+      expect(decision.rationale).toBe(
+        'Consecutive loss limit reached (streak: 3 >= 3). Halting to protect capital.'
+      );
+
+      // If there are only 2 losses and max is 3, circuit breaker should not trip
+      vi.spyOn(orderService, 'getOrdersForCustomAgent').mockResolvedValue(losingOrders.slice(0, 2) as any);
+      const decision2 = await evaluator.evaluate(streakAgent, context, mockSession);
+      expect(decision2.rationale).not.toContain('Consecutive loss limit reached');
     });
   });
 });
