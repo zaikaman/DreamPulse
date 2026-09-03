@@ -1174,7 +1174,7 @@ export class Web3Service {
     const rawQuantity = BigInt(Math.floor(params.lotSize * 1_000_000));
     const rawPrice = BigInt(Math.floor(params.price * 1_000_000));
     const priceYes = params.outcome === 'YES' ? rawPrice : one - rawPrice;
-    const kind = params.outcome === 'YES' ? 0 : 1;
+    const kind = params.outcome === 'YES' ? 0 : 2; // 0 = BUY_YES, 2 = BUY_NO
     // 0 = LIMIT (NormalOrder: fill or rest), 2 = MARKET (ImmediateOrCancel: fill or cancel)
     const orderTypeEnum = params.orderType === 'IOC' ? 2 : 0;
     const expireTimestampNs = BigInt(Math.floor(Date.now() / 1000) + 3600) * 1_000_000_000n;
