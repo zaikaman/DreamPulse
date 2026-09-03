@@ -3,6 +3,7 @@ import { AnomalyService, anomalyService } from '../src/services/anomaly-service.
 import { analyticsService } from '../src/services/analytics-service.js';
 import { orderService } from '../src/services/order-service.js';
 import { settlementService } from '../src/services/settlement-service.js';
+import { priceFeedService } from '../src/services/price-feed-service.js';
 import type { Market, OrderExecution } from '../src/types/index.js';
 
 describe('AnalyticsService & AnomalyService Comprehensive Suite', () => {
@@ -16,15 +17,15 @@ describe('AnalyticsService & AnomalyService Comprehensive Suite', () => {
       strikePrice: 2500,
       openTimestamp: new Date(Date.now() - 60000).toISOString(),
       closeTimestamp: new Date(Date.now() + 180000).toISOString(), // 3 min left
+      resolutionTimestamp: new Date(Date.now() + 180000).toISOString(),
       status: 'Open',
       bestBidYes: 0.30,
       bestAskYes: 0.32,
       bestBidNo: 0.68,
       bestAskNo: 0.70,
+      impliedProbYes: 0.31,
       fairValueYes: 0.50,
       edgePercentage: 0.18,
-      volume: 5000,
-      tradeCount: 20,
     };
 
     beforeEach(() => {
@@ -115,6 +116,30 @@ describe('AnalyticsService & AnomalyService Comprehensive Suite', () => {
       service.setThreshold(0.08);
       expect(service.getThreshold()).toBe(0.08);
     });
+
+    it('passes dynamic priceHistory from priceFeedService to fair value calculation', () => {
+      const getSpotTickerSpy = vi.spyOn(priceFeedService, 'getSpotTicker').mockReturnValue({
+        symbol: 'ETH/USD',
+        price: 2500,
+        change1m: 0.1,
+        change5m: 0.3,
+        high24h: 2600,
+        low24h: 2400,
+        volume24h: 100000,
+        timestamp: Date.now(),
+        priceHistory: [
+          { timestamp: Date.now() - 4000, price: 2500 },
+          { timestamp: Date.now() - 3000, price: 2510 },
+          { timestamp: Date.now() - 2000, price: 2490 },
+          { timestamp: Date.now() - 1000, price: 2520 },
+          { timestamp: Date.now(), price: 2500 },
+        ],
+      });
+
+      service.evaluateMarket(mockOpenMarket, 2500);
+      expect(getSpotTickerSpy).toHaveBeenCalledWith('ETH/USD');
+      getSpotTickerSpy.mockRestore();
+    });
   });
 
   describe('analytics-service.ts', () => {
@@ -185,11 +210,16 @@ describe('AnalyticsService & AnomalyService Comprehensive Suite', () => {
       vi.spyOn(orderService, 'getOrders').mockReturnValue(mockOrders);
       vi.spyOn(settlementService, 'getSweeperSummary').mockResolvedValue({
         unclaimedAmount: 0,
-        unclaimedMarketsCount: 0,
         totalClaimedAllTime: 50.0,
-        autoCompoundEnabled: true,
-        compoundingStreak: 3,
-        positions: [],
+        claimableMarketsCount: 0,
+        confirmedSweepsCount: 0,
+        unclaimedPositions: [],
+        autoCompound: true,
+        compoundedStats: {
+          totalCompoundedAmount: 0,
+          reinvestedCycles: 3,
+          lastCompoundedAt: new Date().toISOString(),
+        },
       });
       vi.spyOn(settlementService, 'getSweepHistory').mockReturnValue([]);
     });

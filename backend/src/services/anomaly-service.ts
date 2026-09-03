@@ -57,7 +57,14 @@ export class AnomalyService extends EventEmitter {
       return null;
     }
 
-    const fair = calculateFairValue(currentSpot, market.strikePrice, timeLeft, market.symbol);
+    const fair = calculateFairValue(
+      currentSpot,
+      market.strikePrice,
+      timeLeft,
+      market.symbol,
+      undefined,
+      priceFeedService.getSpotTicker(market.symbol)?.priceHistory,
+    );
     const edge = calculateEdge(fair.fairValueYes, market.bestBidYes, market.bestAskYes, threshold);
 
     const absEdge = Math.abs(edge.edgePercentage);

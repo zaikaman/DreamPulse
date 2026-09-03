@@ -298,8 +298,12 @@ const OverviewViewComponent: React.FC<OverviewViewProps> = ({
                             className="h-6 text-xs text-muted-foreground hover:text-foreground gap-1 font-normal"
                             onClick={(e) => {
                               e.stopPropagation();
-                              onSelectMarket(market.id);
-                              onNavigateToTab('Markets & Depth');
+                              if (onOpenTradeTerminal) {
+                                onOpenTradeTerminal(market.id);
+                              } else {
+                                onSelectMarket(market.id);
+                                onNavigateToTab('Trade Terminal');
+                              }
                             }}
                           >
                             <span>Inspect</span>
