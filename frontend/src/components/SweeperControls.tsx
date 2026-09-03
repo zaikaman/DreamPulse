@@ -209,8 +209,10 @@ export const SweeperControls: React.FC<SweeperControlsProps> = ({
     try {
       const res = await apiClient.triggerSweep(activeAddress);
       if (res.success) {
-        setCelebrationState({ isOpen: true, amount: res.totalClaimedAmount, txHash: res.txHash });
         const claimedNum = parseFloat(res.totalClaimedAmount.replace(/[^0-9.]/g, '')) || 0;
+        if (claimedNum > 0) {
+          setCelebrationState({ isOpen: true, amount: res.totalClaimedAmount, txHash: res.txHash });
+        }
         setTotalClaimedAllTime((prev) => Number((prev + claimedNum).toFixed(2)));
         setUnclaimedAmount(0);
         await fetchSweeperData();

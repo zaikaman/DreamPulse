@@ -195,6 +195,28 @@ describe('SwarmRunner, CustomAgentEvaluator & Agent System Suite', () => {
       expect(rsi).toBeGreaterThanOrEqual(0);
       expect(rsi).toBeLessThanOrEqual(100);
 
+      // Stagnant price action (flat market) evaluates to 50
+      const flatCandles = Array.from({ length: 20 }, (_, idx) => ({
+        timestamp: 1000 + idx * 60,
+        open: 100,
+        high: 100,
+        low: 100,
+        close: 100,
+        volume: 10,
+      }));
+      expect(calculateSeriesRSI(flatCandles, 14)).toBe(50);
+
+      // Monotonically falling candles evaluate to 0
+      const fallingCandles = Array.from({ length: 20 }, (_, idx) => ({
+        timestamp: 1000 + idx * 60,
+        open: 100 - idx,
+        high: 100 - idx,
+        low: 99 - idx,
+        close: 99 - idx,
+        volume: 10,
+      }));
+      expect(calculateSeriesRSI(fallingCandles, 14)).toBe(0);
+
       const ema = calculateSeriesEMA(mockCandles, 20);
       expect(ema).toBeGreaterThan(90000);
 
@@ -536,7 +558,7 @@ describe('SwarmRunner, CustomAgentEvaluator & Agent System Suite', () => {
       expect(singleLossDecision.action).not.toBe('HOLD');
       expect(evaluator.getActiveLossStreak(martingaleAgent.id)).toBe(1);
       // singleLoss lotSize should be higher than maiden trade lotSize (1.5x stake vs 1.0x stake)
-      expect(singleLossDecision.lotSize).toBeGreaterThan(maidenDecision.lotSize);
+      expect(singleLossDecision.lotSize!).toBeGreaterThan(maidenDecision.lotSize!);
 
       // Trade #3: 2 consecutive losses -> 2.25x stake
       const doubleLossOrders = [
@@ -564,7 +586,7 @@ describe('SwarmRunner, CustomAgentEvaluator & Agent System Suite', () => {
       const doubleLossDecision = await evaluator.evaluate(martingaleAgent, context, mockSession);
       expect(doubleLossDecision.action).not.toBe('HOLD');
       expect(evaluator.getActiveLossStreak(martingaleAgent.id)).toBe(2);
-      expect(doubleLossDecision.lotSize).toBeGreaterThan(singleLossDecision.lotSize);
+      expect(doubleLossDecision.lotSize!).toBeGreaterThan(singleLossDecision.lotSize!);
 
       // Trade #4: Followed by a win -> streak resets to 0, stake reverts to base
       const winAfterLossOrders = [

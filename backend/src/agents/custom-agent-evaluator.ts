@@ -21,7 +21,9 @@ export function calculateSeriesRSI(candles: HistoricalCandle[], period = 14): nu
     if (diff >= 0) gains += diff;
     else losses += Math.abs(diff);
   }
+  if (losses === 0 && gains === 0) return 50;
   if (losses === 0) return 100;
+  if (gains === 0) return 0;
   const rs = (gains / period) / (losses / period);
   return 100 - (100 / (1 + rs));
 }

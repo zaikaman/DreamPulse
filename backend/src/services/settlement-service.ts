@@ -1542,15 +1542,18 @@ export class SettlementService {
       );
 
       const userSweeps = await this.getSweepHistory(normalized);
+      const completedSweeps = userSweeps.filter(
+        (s) => s.status === 'COMPLETED' || s.status === 'CONFIRMED',
+      );
       const totalClaimedAllTime = Number(
-        userSweeps.reduce((acc, s) => acc + s.claimableAmount, 0).toFixed(4),
+        completedSweeps.reduce((acc, s) => acc + s.claimableAmount, 0).toFixed(4),
       );
 
       const result: SweeperSummary = {
         unclaimedAmount,
         totalClaimedAllTime,
         claimableMarketsCount: unclaimedPositions.length,
-        confirmedSweepsCount: userSweeps.length,
+        confirmedSweepsCount: completedSweeps.length,
         unclaimedPositions: unclaimedPositions.map((p) => ({
           marketId: p.marketId,
           symbol: p.symbol,

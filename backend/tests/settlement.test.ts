@@ -154,6 +154,44 @@ describe('Phase 6 Settlement Sweeper Tests', () => {
       expect(Array.isArray(summary.unclaimedPositions)).toBe(true);
     });
 
+    it('excludes FAILED sweeps from totalClaimedAllTime and confirmedSweepsCount', async () => {
+      const settlementService = new SettlementService();
+      const userAddress = '0x70997970C51812dc3A010C7d01b50e0d17dc79C8';
+
+      vi.spyOn(somniaExchange.client, 'getClaimable').mockResolvedValue([]);
+      vi.spyOn(somniaExchange.client, 'listBinaryMarkets').mockResolvedValue([]);
+      vi.spyOn(somniaExchange.client, 'listPastBinaryMarkets').mockResolvedValue([]);
+      vi.spyOn(somniaExchange.client, 'getMarketOnchain').mockResolvedValue(null as any);
+      vi.spyOn(orderService, 'getOrders').mockReturnValue([]);
+
+      vi.spyOn(settlementService, 'getSweepHistory').mockReturnValue([
+        {
+          id: 'sweep-1',
+          userAddress: userAddress as `0x${string}`,
+          marketId: '0xmarket1',
+          winningOutcome: 'YES',
+          claimableAmount: 15.5,
+          payoutToken: 'tUSDC',
+          status: 'CONFIRMED',
+          claimedAt: new Date().toISOString(),
+        },
+        {
+          id: 'sweep-2',
+          userAddress: userAddress as `0x${string}`,
+          marketId: '0xmarket2',
+          winningOutcome: 'NO',
+          claimableAmount: 25.0,
+          payoutToken: 'tUSDC',
+          status: 'FAILED',
+          claimedAt: new Date().toISOString(),
+        },
+      ]);
+
+      const summary = await settlementService.getSweeperSummary(userAddress, true);
+      expect(summary.totalClaimedAllTime).toBe(15.5);
+      expect(summary.confirmedSweepsCount).toBe(1);
+    });
+
     it('includes indexer getClaimable positions even when the resolved-market list is full of unrelated rows', async () => {
       const settlementService = new SettlementService();
       const userAddress = '0x70997970C51812dc3A010C7d01b50e0d17dc79C8';
