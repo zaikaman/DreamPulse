@@ -83,6 +83,8 @@ export const SweeperControls: React.FC<SweeperControlsProps> = ({
 
   const filteredHistory = useMemo(() => {
     const list = history.filter((sweep) => {
+      // Exclude failed or zero sweeps — only show successful confirmed redemptions
+      if (sweep.status === 'FAILED' || sweep.claimableAmount <= 0) return false;
       if (selectedOutcome !== 'ALL' && sweep.winningOutcome !== selectedOutcome) return false;
       if (searchQuery.trim()) {
         const q = searchQuery.trim().toLowerCase();
@@ -96,6 +98,10 @@ export const SweeperControls: React.FC<SweeperControlsProps> = ({
 
     return list.sort((a, b) => new Date(b.claimedAt).getTime() - new Date(a.claimedAt).getTime());
   }, [history, selectedOutcome, searchQuery]);
+
+  const confirmedCount = useMemo(() => {
+    return history.filter((s) => s.status !== 'FAILED' && s.claimableAmount > 0).length;
+  }, [history]);
 
   useEffect(() => {
     setCurrentPage(1);
@@ -139,9 +145,10 @@ export const SweeperControls: React.FC<SweeperControlsProps> = ({
         } catch {}
       }
       if (historyRes?.success && Array.isArray(historyRes.data)) {
-        setHistory(historyRes.data);
+        const validSweeps = historyRes.data.filter((s) => s.status !== 'FAILED' && s.claimableAmount > 0);
+        setHistory(validSweeps);
         try {
-          localStorage.setItem(`${SWEEPER_HISTORY_CACHE_KEY}${addr}`, JSON.stringify(historyRes.data));
+          localStorage.setItem(`${SWEEPER_HISTORY_CACHE_KEY}${addr}`, JSON.stringify(validSweeps.slice(0, 100)));
         } catch {}
       }
     } catch (err: any) {
@@ -372,16 +379,16 @@ export const SweeperControls: React.FC<SweeperControlsProps> = ({
               <div className="text-xl font-mono font-bold mt-2" style={{ color: totalClaimedAllTime > 0 ? '#00e676' : 'var(--muted-foreground)' }}>
                 +{totalClaimedAllTime.toFixed(2)} <span className="text-xs font-semibold">tUSDC</span>
               </div>
-              <div className="text-[10px] font-mono text-muted-foreground mt-1">{history.length} settlements • verified on-chain</div>
+              <div className="text-[10px] font-mono text-muted-foreground mt-1">{confirmedCount} settlements • verified on-chain</div>
             </div>
             {/* Sweeps */}
             <div className="terminal-panel p-3.5 flex flex-col justify-between">
               <div className="flex items-center justify-between">
                 <span className="text-[10px] font-mono font-semibold tracking-wider text-muted-foreground uppercase">Settlement Claims</span>
-                <Badge variant="outline" className="text-[10px] font-mono px-1.5 py-0 bg-secondary/30 border-border/40 text-muted-foreground">{history.length} COMPLETED</Badge>
+                <Badge variant="outline" className="text-[10px] font-mono px-1.5 py-0 bg-secondary/30 border-border/40 text-muted-foreground">{confirmedCount} COMPLETED</Badge>
               </div>
               <div className="text-xl font-mono font-bold mt-2 text-foreground">
-                {history.length} <span className="text-sm font-semibold">Sweeps</span>
+                {confirmedCount} <span className="text-sm font-semibold">Sweeps</span>
               </div>
               <div className="text-[10px] font-mono text-muted-foreground mt-1">Automated batch claims • 100% direct payout</div>
             </div>
@@ -400,7 +407,7 @@ export const SweeperControls: React.FC<SweeperControlsProps> = ({
               {isViewingSelf ? 'My Settlement Redemption History' : 'Protocol Settlement Redemption History'}
             </h3>
             <Badge variant="outline" className="font-mono text-[10px] px-1.5 py-0 bg-secondary/30 border-border/40 text-muted-foreground">
-              ({filteredHistory.length}{isFiltered ? ` of ${history.length}` : ''} confirmed)
+              ({filteredHistory.length}{isFiltered ? ` of ${confirmedCount}` : ''} confirmed)
             </Badge>
           </div>
           <div className="flex items-center gap-2 flex-wrap">

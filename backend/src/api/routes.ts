@@ -1195,12 +1195,15 @@ apiRouter.post('/sweeper/trigger', requireWalletAuth, async (req: Request, res: 
 });
 
 apiRouter.get('/sweeper/history', optionalWalletAuth, async (req: Request, res: Response) => {
-  const { userAddress } = req.query;
+  const { userAddress, limit } = req.query;
   const targetAddress = typeof userAddress === 'string' && userAddress.trim().length > 0
     ? userAddress.trim()
     : operatorAccount.address;
+  const parsedLimit = typeof limit === 'string' && !isNaN(parseInt(limit, 10))
+    ? Math.min(Math.max(1, parseInt(limit, 10)), 500)
+    : 100;
   await settlementService.ensureUserSweepsLoaded(targetAddress);
-  const history = settlementService.getSweepHistory(targetAddress);
+  const history = settlementService.getSweepHistory(targetAddress, parsedLimit);
   res.json({
     success: true,
     count: history.length,

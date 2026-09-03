@@ -172,12 +172,14 @@ export class SettlementService {
 
     try {
       let page = 0;
-      const pageSize = 1000;
-      while (true) {
+      const pageSize = 500;
+      const maxPages = 2; // Up to 1,000 confirmed sweeps max per user
+      while (page < maxPages) {
         const { data, error } = await supabase
           .from('sweeps')
           .select('*')
           .ilike('user_address', normalized)
+          .neq('status', 'FAILED')
           .order('claimed_at', { ascending: false })
           .range(page * pageSize, (page + 1) * pageSize - 1);
 
@@ -249,7 +251,7 @@ export class SettlementService {
   public recordSweep(sweep: SettlementSweep, persist: boolean = true): void {
     this.sweepsMap.set(sweep.id, sweep);
     this.sweeps.unshift(sweep);
-    if (this.sweeps.length > 50000) {
+    if (this.sweeps.length > 2000) {
       const evicted = this.sweeps.pop();
       if (evicted) this.sweepsMap.delete(evicted.id);
     }
@@ -294,11 +296,13 @@ export class SettlementService {
 
     try {
       let page = 0;
-      const pageSize = 1000;
-      while (page < 10) {
+      const pageSize = 500;
+      const maxPages = 2; // Up to 1,000 confirmed sweeps on startup
+      while (page < maxPages) {
         const { data, error } = await supabase
           .from('sweeps')
           .select('*')
+          .neq('status', 'FAILED')
           .order('claimed_at', { ascending: false })
           .range(page * pageSize, (page + 1) * pageSize - 1);
 
@@ -825,6 +829,11 @@ export class SettlementService {
 
         for (const order of userOrders) {
           if (order.status !== 'FILLED' && order.status !== 'PARTIALLY_FILLED') continue;
+          // Skip historical orders that have already been settled for more than 15 minutes
+          if (order.isSettled && order.settledAt) {
+            const settledAgeMs = Date.now() - new Date(order.settledAt).getTime();
+            if (settledAgeMs > 15 * 60 * 1000) continue;
+          }
 
           const market = marketService.getMarketById(order.marketId);
           const winningOutcome = market?.winningOutcome || order.marketSnapshot?.winningOutcome;
@@ -845,6 +854,11 @@ export class SettlementService {
           const isVoid = winningOutcome === 'VOID';
 
           const targetMarketHex = market?.marketIdHex ? market.marketIdHex.toLowerCase() : undefined;
+          if (this.isKnownFinalizedZeroBalance(cacheKey, firstOrder.marketId.toLowerCase()) ||
+              (targetMarketHex && this.isKnownFinalizedZeroBalance(cacheKey, targetMarketHex.toLowerCase()))) {
+            continue;
+          }
+
           const totalExpectedPayout = orders.reduce((sum, o) => {
             return sum + (isVoid ? o.lotSize * 0.5 : o.lotSize * 1.0);
           }, 0);
@@ -995,8 +1009,19 @@ export class SettlementService {
           } else {
             // Settle locally so the scanner never loops on un-redeemable or already-handled positions
             settleUnclaimedPosition(pos);
+            this.setKnownFinalizedZeroBalance(cacheKey, pos.marketId.toLowerCase());
+            if (pos.marketIdHex) {
+              this.setKnownFinalizedZeroBalance(cacheKey, pos.marketIdHex.toLowerCase());
+            }
 
-            // Suppress scanner from re-queueing by recording an idempotent sweep entry
+            // Suppress scanner from re-queueing by updating userSweptTotals in-memory
+            const mKey = `${normalizedUser.toLowerCase()}:${pos.marketId.toLowerCase()}`;
+            this.userSweptTotals.set(mKey, (this.userSweptTotals.get(mKey) || 0) + pos.claimableAmount);
+            if (pos.marketIdHex && pos.marketIdHex.toLowerCase() !== pos.marketId.toLowerCase()) {
+              const hexKey = `${normalizedUser.toLowerCase()}:${pos.marketIdHex.toLowerCase()}`;
+              this.userSweptTotals.set(hexKey, (this.userSweptTotals.get(hexKey) || 0) + pos.claimableAmount);
+            }
+
             const sweepId = crypto.randomUUID();
             const fallbackTxHash: Hex | undefined = pos.txHash && pos.txHash.startsWith('0x') && pos.txHash.length === 66
               ? (pos.txHash as Hex)
@@ -1028,7 +1053,8 @@ export class SettlementService {
               status: 'FAILED',
               claimedAt: sweepTimestamp,
             };
-            this.recordSweep(zeroSweep, true);
+            // In-memory record only (do not persist failed zero-payout sweeps to Supabase DB)
+            this.recordSweep(zeroSweep, false);
           }
         }
 
@@ -1584,7 +1610,7 @@ export class SettlementService {
   /**
    * Lists historical settlement redemptions.
    */
-  public getSweepHistory(userAddress?: string): SettlementSweep[] {
+  public getSweepHistory(userAddress?: string, limit?: number): SettlementSweep[] {
     const rawList = !userAddress
       ? [...this.sweeps]
       : !isAddress(userAddress)
@@ -1594,20 +1620,28 @@ export class SettlementService {
     const seenIds = new Set<string>();
     const uniqueSweeps: SettlementSweep[] = [];
     for (const s of rawList) {
+      if (s.status === 'FAILED' && s.claimableAmount <= 0) continue;
       if (!seenIds.has(s.id)) {
         seenIds.add(s.id);
         uniqueSweeps.push(s);
       }
     }
 
-    const mappedSweeps = uniqueSweeps.map((s) => {
+    const maxItems = typeof limit === 'number' && limit > 0 ? limit : 200;
+    const sorted = uniqueSweeps.sort((a, b) => new Date(b.claimedAt).getTime() - new Date(a.claimedAt).getTime());
+    const boundedSweeps = sorted.slice(0, maxItems);
+
+    const mappedSweeps = boundedSweeps.map((s) => {
       if (s.txHash && s.txHash.startsWith('0x') && s.txHash.length === 66) {
+        return s;
+      }
+      if (s.status === 'FAILED') {
         return s;
       }
       try {
         const userOrders = orderService.getOrders({
           userAddress: (s.userAddress as Address) || undefined,
-          limit: 200,
+          limit: 50,
         });
         const matched = userOrders.find(
           (o) =>
@@ -1627,7 +1661,7 @@ export class SettlementService {
       return s;
     });
 
-    return mappedSweeps.sort((a, b) => new Date(b.claimedAt).getTime() - new Date(a.claimedAt).getTime());
+    return mappedSweeps;
   }
 
   /**
