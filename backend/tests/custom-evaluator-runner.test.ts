@@ -465,5 +465,134 @@ describe('SwarmRunner, CustomAgentEvaluator & Agent System Suite', () => {
       const decision2 = await evaluator.evaluate(streakAgent, context, mockSession);
       expect(decision2.rationale).not.toContain('Consecutive loss limit reached');
     });
+
+    it('does not apply Martingale multiplier on Trade #1 (0 losses) and scales lotSize only on active loss streak', async () => {
+      const martingaleAgent: CustomAgentDefinition = {
+        ...mockCustomAgent,
+        rules: {
+          ...mockCustomAgent.rules,
+          conditions: [
+            {
+              id: 'cond-1',
+              indicator: 'RSI',
+              operator: 'GREATER_THAN',
+              value: 0,
+            },
+          ],
+          action: {
+            ...mockCustomAgent.rules.action,
+            stakeAmount: 10,
+          },
+          risk: {
+            ...mockCustomAgent.rules.risk,
+            maxConsecutiveLosses: 3,
+            martingaleMultiplier: 1.5,
+          },
+        },
+      };
+
+      const context: IAgentContext = {
+        market: mockMarket,
+        spotTicker: {
+          symbol: 'BTC/USD',
+          price: 96500,
+          change1m: 0.002,
+          change5m: 0.005,
+          timestamp: Date.now(),
+        },
+        depth: { yesBids: [], yesAsks: [] },
+        activeSessions: [mockSession],
+      };
+
+      // Trade #1: 0 previous trades / 0 losses
+      vi.spyOn(orderService, 'getOrdersForCustomAgent').mockResolvedValue([]);
+      const maidenDecision = await evaluator.evaluate(martingaleAgent, context, mockSession);
+      expect(maidenDecision.action).not.toBe('HOLD');
+      expect(evaluator.getActiveLossStreak(martingaleAgent.id)).toBe(0);
+
+      // Trade #2: 1 consecutive loss -> 1.5x stake
+      const singleLossOrder = [
+        {
+          id: 'ord-loss-1',
+          userAddress: martingaleAgent.userAddress as any,
+          marketId: mockMarket.id,
+          agentType: 'CUSTOM' as const,
+          customAgentId: martingaleAgent.id,
+          outcome: 'YES' as const,
+          direction: 'BUY' as const,
+          orderType: 'MARKET' as const,
+          price: 0.5,
+          lotSize: 10,
+          totalCost: 5,
+          status: 'SETTLED' as const,
+          isSettled: true,
+          pnl: -5.0,
+          createdAt: new Date(Date.now() - 60000).toISOString(),
+          settledAt: new Date(Date.now() - 30000).toISOString(),
+        },
+      ];
+      vi.spyOn(orderService, 'getOrdersForCustomAgent').mockResolvedValue(singleLossOrder as any);
+      const singleLossDecision = await evaluator.evaluate(martingaleAgent, context, mockSession);
+      expect(singleLossDecision.action).not.toBe('HOLD');
+      expect(evaluator.getActiveLossStreak(martingaleAgent.id)).toBe(1);
+      // singleLoss lotSize should be higher than maiden trade lotSize (1.5x stake vs 1.0x stake)
+      expect(singleLossDecision.lotSize).toBeGreaterThan(maidenDecision.lotSize);
+
+      // Trade #3: 2 consecutive losses -> 2.25x stake
+      const doubleLossOrders = [
+        ...singleLossOrder,
+        {
+          id: 'ord-loss-2',
+          userAddress: martingaleAgent.userAddress as any,
+          marketId: mockMarket.id,
+          agentType: 'CUSTOM' as const,
+          customAgentId: martingaleAgent.id,
+          outcome: 'YES' as const,
+          direction: 'BUY' as const,
+          orderType: 'MARKET' as const,
+          price: 0.5,
+          lotSize: 15,
+          totalCost: 7.5,
+          status: 'SETTLED' as const,
+          isSettled: true,
+          pnl: -7.5,
+          createdAt: new Date(Date.now() - 20000).toISOString(),
+          settledAt: new Date(Date.now() - 10000).toISOString(),
+        },
+      ];
+      vi.spyOn(orderService, 'getOrdersForCustomAgent').mockResolvedValue(doubleLossOrders as any);
+      const doubleLossDecision = await evaluator.evaluate(martingaleAgent, context, mockSession);
+      expect(doubleLossDecision.action).not.toBe('HOLD');
+      expect(evaluator.getActiveLossStreak(martingaleAgent.id)).toBe(2);
+      expect(doubleLossDecision.lotSize).toBeGreaterThan(singleLossDecision.lotSize);
+
+      // Trade #4: Followed by a win -> streak resets to 0, stake reverts to base
+      const winAfterLossOrders = [
+        ...doubleLossOrders,
+        {
+          id: 'ord-win-3',
+          userAddress: martingaleAgent.userAddress as any,
+          marketId: mockMarket.id,
+          agentType: 'CUSTOM' as const,
+          customAgentId: martingaleAgent.id,
+          outcome: 'YES' as const,
+          direction: 'BUY' as const,
+          orderType: 'MARKET' as const,
+          price: 0.5,
+          lotSize: 22,
+          totalCost: 11,
+          status: 'SETTLED' as const,
+          isSettled: true,
+          pnl: 11.0,
+          createdAt: new Date(Date.now() - 5000).toISOString(),
+          settledAt: new Date(Date.now() - 2000).toISOString(),
+        },
+      ];
+      vi.spyOn(orderService, 'getOrdersForCustomAgent').mockResolvedValue(winAfterLossOrders as any);
+      const winDecision = await evaluator.evaluate(martingaleAgent, context, mockSession);
+      expect(winDecision.action).not.toBe('HOLD');
+      expect(evaluator.getActiveLossStreak(martingaleAgent.id)).toBe(0);
+      expect(winDecision.lotSize).toBe(maidenDecision.lotSize);
+    });
   });
 });

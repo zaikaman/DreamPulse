@@ -303,6 +303,7 @@ export function calculateConsecutiveStreak(
 export class CustomAgentEvaluator {
   private candleCache = new Map<string, { candles: HistoricalCandle[]; fetchedAt: number }>();
   private lastTradeTimes = new Map<string, number>(); // key: agentId
+  private activeLossStreaks = new Map<string, number>(); // key: agentId -> count of active consecutive losses
 
   public getLastTradeTime(agentId: string): number {
     return this.lastTradeTimes.get(agentId) || 0;
@@ -310,6 +311,14 @@ export class CustomAgentEvaluator {
 
   public recordTradeAttempt(agentId: string, timestamp: number = Date.now()): void {
     this.lastTradeTimes.set(agentId, timestamp);
+  }
+
+  public getActiveLossStreak(agentId: string): number {
+    return this.activeLossStreaks.get(agentId) || 0;
+  }
+
+  public setActiveLossStreak(agentId: string, streak: number): void {
+    this.activeLossStreaks.set(agentId, Math.max(0, streak));
   }
 
   /**
@@ -489,6 +498,9 @@ export class CustomAgentEvaluator {
         return true;
       });
       currentStreak = calculateConsecutiveStreak(agentOrders);
+      // Track active loss streak in runtime state
+      const activeLosses = currentStreak < 0 ? Math.abs(currentStreak) : 0;
+      this.setActiveLossStreak(agent.id, activeLosses);
     }
 
     if (maxConsecutiveLosses !== undefined && maxConsecutiveLosses > 0 && currentStreak <= -maxConsecutiveLosses) {
@@ -836,8 +848,8 @@ export class CustomAgentEvaluator {
     // 8. Lot Sizing (scale to requested stakeAmount with optional Martingale multiplier)
     let dynamicStake = requestedStake;
     if (rules.risk?.martingaleMultiplier && rules.risk.martingaleMultiplier > 1.0) {
-      // If consecutive losses occurred, scale stake safely up to remaining allowance
-      const consecutiveLosses = currentStreak < 0 ? Math.abs(currentStreak) : (agent.rules?.risk?.maxConsecutiveLosses || 0);
+      // If consecutive losses occurred, scale stake safely up to remaining allowance using actual active loss streak
+      const consecutiveLosses = currentStreak < 0 ? Math.abs(currentStreak) : (this.getActiveLossStreak(agent.id) || 0);
       if (consecutiveLosses > 0) {
         dynamicStake = requestedStake * Math.min(3.0, Math.pow(rules.risk.martingaleMultiplier, Math.min(2, consecutiveLosses)));
       }
