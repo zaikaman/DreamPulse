@@ -541,6 +541,7 @@ export function useSessionKey(): UseSessionKeyReturn {
         });
 
         // Register session on backend
+        const effectiveVaultDeposit = (params.depositAmount && params.depositAmount > 0 && params.targetPool) ? params.depositAmount : undefined;
         setStepState('registering_backend');
         const res = await apiClient.registerSession({
           userAddress: wallet.address,
@@ -551,7 +552,7 @@ export function useSessionKey(): UseSessionKeyReturn {
           signature,
           nonce,
           onChainTxHash,
-          vaultDepositAmount: params.depositAmount,
+          vaultDepositAmount: effectiveVaultDeposit,
           targetPoolAddress: params.targetPool,
           onChainAuthorized: true,
           copyTradeEnabled: params.copyTradeEnabled,
@@ -569,7 +570,7 @@ export function useSessionKey(): UseSessionKeyReturn {
           isActive: true,
           nonce: res.session.nonce ?? nonce,
           onChainTxHash,
-          vaultDepositAmount: params.depositAmount,
+          vaultDepositAmount: effectiveVaultDeposit,
           targetPoolAddress: params.targetPool,
           onChainAuthorized: true,
           copyTradeEnabled: params.copyTradeEnabled ?? false,

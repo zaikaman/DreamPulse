@@ -389,7 +389,7 @@ export const TraderProfileView: React.FC<TraderProfileViewProps> = ({
               </div>
               <div className="mt-2 font-mono">
                 <div className="text-xl font-bold text-foreground">
-                  ${summary.volume.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                  ${(summary?.volume ?? 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                 </div>
                 <div className="text-[10px] text-muted-foreground mt-0.5">
                   {summary.tradesCount} total filled orders
@@ -596,7 +596,7 @@ export const TraderProfileView: React.FC<TraderProfileViewProps> = ({
                     Asset Volume Breakdown
                   </span>
                   <span className="text-[10px] text-muted-foreground font-mono">
-                    ${summary.volume.toLocaleString()} Total
+                    ${(summary?.volume ?? 0).toLocaleString()} Total
                   </span>
                 </div>
 
@@ -606,7 +606,7 @@ export const TraderProfileView: React.FC<TraderProfileViewProps> = ({
                       <div className="flex items-center justify-between text-xs font-mono">
                         <span className="text-foreground font-medium">{asset.symbol}</span>
                         <span className="text-muted-foreground">
-                          {asset.percentage}% (${asset.volume.toLocaleString()})
+                          {asset.percentage}% (${(asset?.volume ?? 0).toLocaleString()})
                         </span>
                       </div>
                       <div className="w-full h-1.5 rounded-full bg-secondary/50 overflow-hidden">

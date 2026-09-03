@@ -150,6 +150,33 @@ export const OrderHistoryTable: React.FC<OrderHistoryTableProps> = ({
   const [scopeTotals, setScopeTotals] = useState<{ totalFills: number; totalVolume: number }>({ totalFills: 0, totalVolume: 0 });
   const [customAgentsMap, setCustomAgentsMap] = useState<Map<string, { name: string; strategyType?: string; color?: string }>>(new Map());
 
+  // Cancellation state for resting limit orders
+  const [refreshKey, setRefreshKey] = useState<number>(0);
+  const [cancellingOrderId, setCancellingOrderId] = useState<string | null>(null);
+  const [cancelError, setCancelError] = useState<string | null>(null);
+
+  const handleCancelOrder = async (order: OrderExecution) => {
+    const targetAddress = userAddress || order.userAddress;
+    if (!targetAddress) return;
+    setCancellingOrderId(order.id);
+    setCancelError(null);
+    try {
+      const res = await apiClient.cancelOrder(order.id, targetAddress);
+      if (res.success) {
+        setOrders((prev) =>
+          prev.map((o) => (o.id === order.id ? { ...o, status: 'CANCELLED' } : o)),
+        );
+        setRefreshKey((k) => k + 1);
+      } else {
+        setCancelError(res.message || 'Failed to cancel order');
+      }
+    } catch (err: any) {
+      setCancelError(err?.message || 'Error cancelling order');
+    } finally {
+      setCancellingOrderId(null);
+    }
+  };
+
   // Truthful resolution: only show names for *actually deployed* custom agents — never hallucinate starters.
   const OPERATOR_ADDRESS = '0x93e300607c363E7D7a47e50f5c9fDf1723e859Cf';
   useEffect(() => {
@@ -295,7 +322,7 @@ export const OrderHistoryTable: React.FC<OrderHistoryTableProps> = ({
       // Don't decrement here — finally will handle it. Just ensure abort triggers cleanup.
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [scope, userAddress, selectedAgent, selectedOutcome, debouncedSearch, pageSize, currentPage]);
+  }, [scope, userAddress, selectedAgent, selectedOutcome, debouncedSearch, pageSize, currentPage, refreshKey]);
 
   // Lightweight scope totals when filtered
   useEffect(() => {
@@ -508,6 +535,14 @@ export const OrderHistoryTable: React.FC<OrderHistoryTableProps> = ({
               </span>
             </div>
           )}
+          {cancelError && (
+            <div style={{ margin: '8px 16px', padding: '6px 12px', borderRadius: '4px', background: 'rgba(255, 51, 102, 0.1)', border: '1px solid rgba(255, 51, 102, 0.3)', color: 'var(--trade-sell)', fontSize: '11px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+              <span>{cancelError}</span>
+              <button type="button" onClick={() => setCancelError(null)} style={{ background: 'none', border: 'none', color: 'var(--trade-sell)', cursor: 'pointer', padding: 0 }}>
+                <XMarkIcon className="w-3.5 h-3.5" />
+              </button>
+            </div>
+          )}
           <table className="terminal-table" style={{ width: '100%', minWidth: '760px', borderCollapse: 'collapse', opacity: isFetching && orders.length > 0 ? 0.55 : 1, transition: 'opacity 0.15s ease' }}>
             <thead>
               <tr style={{ background: 'rgba(255, 255, 255, 0.02)', borderBottom: '1px solid var(--border)' }}>
@@ -521,6 +556,7 @@ export const OrderHistoryTable: React.FC<OrderHistoryTableProps> = ({
                 <th style={{ padding: '10px 16px', textAlign: 'right', fontSize: '10px', color: 'var(--muted-foreground)', textTransform: 'uppercase', letterSpacing: '0.04em' }}>Realized PnL & Settlement</th>
                 <th style={{ padding: '10px 16px', textAlign: 'center', fontSize: '10px', color: 'var(--muted-foreground)', textTransform: 'uppercase', letterSpacing: '0.04em' }}>Status</th>
                 <th style={{ padding: '10px 16px', textAlign: 'right', fontSize: '10px', color: 'var(--muted-foreground)', textTransform: 'uppercase', letterSpacing: '0.04em' }}>On-Chain Tx</th>
+                <th style={{ padding: '10px 16px', textAlign: 'center', fontSize: '10px', color: 'var(--muted-foreground)', textTransform: 'uppercase', letterSpacing: '0.04em' }}>Action</th>
               </tr>
             </thead>
             {isInitialLoading ? (
@@ -529,7 +565,7 @@ export const OrderHistoryTable: React.FC<OrderHistoryTableProps> = ({
               <tbody>
                 {fetchError ? (
                   <tr>
-                    <td colSpan={10} style={{ textAlign: 'center', padding: '36px' }}>
+                    <td colSpan={11} style={{ textAlign: 'center', padding: '36px' }}>
                       <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '10px' }}>
                         <span style={{ color: 'var(--trade-sell)', fontSize: '12px' }}>{fetchError}</span>
                         <button type="button" onClick={() => { setFetchError(null); setIsInitialLoading(orders.length === 0); setIsFetching(false); fetchIdRef.current++; setCurrentPage((p) => p); }} className="btn-secondary" style={{ fontSize: '11px', padding: '4px 10px' }}>Retry</button>
@@ -538,14 +574,22 @@ export const OrderHistoryTable: React.FC<OrderHistoryTableProps> = ({
                   </tr>
                 ) : total === 0 || orders.length === 0 ? (
                   <tr>
-                    <td colSpan={10} style={{ textAlign: 'center', padding: '36px', color: 'var(--muted-foreground)', fontSize: '12px' }}>
+                    <td colSpan={11} style={{ textAlign: 'center', padding: '36px', color: 'var(--muted-foreground)', fontSize: '12px' }}>
                       {scope === 'MY_ORDERS' ? 'No personal orders or bot executions found for this wallet.' : 'No orders match the selected filters.'}
                     </td>
                   </tr>
                 ) : (
                   orders.map((order) => {
                     const customDetails = order.agentType === 'CUSTOM' ? resolveCustomAgentDetails(order, customAgentsMap) : null;
-                    return <OrderRowItem key={order.id} order={order} customDetails={customDetails} />;
+                    return (
+                      <OrderRowItem
+                        key={order.id}
+                        order={order}
+                        customDetails={customDetails}
+                        onCancelOrder={handleCancelOrder}
+                        isCancelling={cancellingOrderId === order.id}
+                      />
+                    );
                   })
                 )}
               </tbody>
@@ -769,7 +813,9 @@ function getOutcomeBadge(outcome: OutcomeType) {
 const OrderRowItem = React.memo<{
   order: OrderExecution;
   customDetails: { name: string; subtext: string; color?: string } | null;
-}>(({ order, customDetails }) => {
+  onCancelOrder?: (order: OrderExecution) => void;
+  isCancelling?: boolean;
+}>(({ order, customDetails, onCancelOrder, isCancelling }) => {
   const dateObj = new Date(order.createdAt);
   const timeStr = dateObj.toLocaleTimeString();
   const dateStr = dateObj.toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
@@ -1049,6 +1095,47 @@ Tx Hash: ${order.txHash || 'N/A'}`;
             Somnia 50312
           </span>
         </div>
+      </td>
+
+      {/* 11. ACTION (Cancel resting limit orders) */}
+      <td style={{ padding: '10px 16px', textAlign: 'center' }}>
+        {order.status === 'PENDING' ? (
+          <button
+            type="button"
+            onClick={() => onCancelOrder?.(order)}
+            disabled={isCancelling}
+            title="Cancel resting limit order and reclaim collateral"
+            style={{
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: '4px',
+              padding: '3px 8px',
+              borderRadius: '4px',
+              fontSize: '10px',
+              fontWeight: 600,
+              border: '1px solid rgba(255, 51, 102, 0.4)',
+              color: '#ff3366',
+              backgroundColor: 'rgba(255, 51, 102, 0.1)',
+              cursor: isCancelling ? 'not-allowed' : 'pointer',
+              transition: 'all 0.15s ease',
+            }}
+            className="hover:bg-[#ff3366]/20 hover:border-[#ff3366]/60 active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            {isCancelling ? (
+              <>
+                <ArrowPathIcon className="w-2.5 h-2.5 animate-spin" />
+                <span>Cancelling...</span>
+              </>
+            ) : (
+              <>
+                <XMarkIcon className="w-2.5 h-2.5 text-[#ff3366]" />
+                <span>Cancel</span>
+              </>
+            )}
+          </button>
+        ) : (
+          <span style={{ fontSize: '11px', color: 'var(--muted-foreground)' }}>—</span>
+        )}
       </td>
     </tr>
   );

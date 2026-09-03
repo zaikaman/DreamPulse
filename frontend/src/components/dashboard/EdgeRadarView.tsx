@@ -75,7 +75,7 @@ const EdgeRadarViewComponent: React.FC<EdgeRadarViewProps> = ({
                   PRICING MODEL INSPECTOR: {selectedMarket.symbol}
                 </h4>
                 <p className="text-[11px] text-muted-foreground font-mono">
-                  Strike: ${selectedMarket.strikePrice.toLocaleString()} • Window: {selectedMarket.windowDuration} • Live Spot: ${(selectedTick?.spotPrice ?? selectedMarket.strikePrice).toLocaleString()}
+                  Strike: ${(selectedMarket.strikePrice ?? 0).toLocaleString()} • Window: {selectedMarket.windowDuration} • Live Spot: ${(selectedTick?.spotPrice ?? selectedMarket.strikePrice ?? 0).toLocaleString()}
                 </p>
               </div>
             </div>

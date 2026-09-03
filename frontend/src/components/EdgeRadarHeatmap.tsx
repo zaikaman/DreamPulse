@@ -156,7 +156,7 @@ const EdgeRadarHeatmapComponent: React.FC<EdgeRadarHeatmapProps> = ({
                     {/* Top Row: Strike price & Edge Delta */}
                     <div className="flex items-center justify-between gap-1">
                       <span className="font-mono text-xs font-semibold text-foreground">
-                        ${bestMarket.strikePrice.toLocaleString()}
+                        ${(bestMarket?.strikePrice ?? 0).toLocaleString()}
                       </span>
                       <span
                         className={cn(
@@ -203,7 +203,7 @@ const EdgeRadarHeatmapComponent: React.FC<EdgeRadarHeatmapProps> = ({
               <Badge variant="outline" className="text-[10px] px-1.5 py-0 text-muted-foreground border-border/50">
                 {activeInspectionMarket.windowDuration}
               </Badge>
-              <span className="text-muted-foreground">Strike: ${activeInspectionMarket.strikePrice.toLocaleString()}</span>
+              <span className="text-muted-foreground">Strike: ${(activeInspectionMarket.strikePrice ?? 0).toLocaleString()}</span>
             </div>
             <div className="flex items-center gap-4 text-muted-foreground text-[11px] flex-wrap">
               <span>CLOB Mid: <strong className="text-foreground">{(inspectionImplied * 100).toFixed(1)}%</strong></span>

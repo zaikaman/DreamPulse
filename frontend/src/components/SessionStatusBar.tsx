@@ -61,6 +61,7 @@ export const SessionStatusBar: React.FC<SessionStatusBarProps> = ({
   const [copied, setCopied] = useState<boolean>(false);
   const [timeRemaining, setTimeRemaining] = useState<string>('');
   const [localCopyEnabled, setLocalCopyEnabled] = useState<boolean | null>(null);
+  const [optimisticCopyEnabled, setOptimisticCopyEnabled] = useState<boolean | null>(null);
   const [isTogglingCopy, setIsTogglingCopy] = useState<boolean>(false);
 
   useEffect(() => {
@@ -69,9 +70,20 @@ export const SessionStatusBar: React.FC<SessionStatusBarProps> = ({
     }
   }, [activeSession?.copyTradeEnabled]);
 
-  const activeCopyTrade = isCopyTradeEnabled !== undefined
-    ? isCopyTradeEnabled
-    : (localCopyEnabled ?? activeSession?.copyTradeEnabled ?? false);
+  // Once the parent prop synchronizes to the optimistic target, clear optimistic override
+  useEffect(() => {
+    if (isCopyTradeEnabled !== undefined && optimisticCopyEnabled !== null) {
+      if (isCopyTradeEnabled === optimisticCopyEnabled) {
+        setOptimisticCopyEnabled(null);
+      }
+    }
+  }, [isCopyTradeEnabled, optimisticCopyEnabled]);
+
+  const activeCopyTrade = optimisticCopyEnabled !== null
+    ? optimisticCopyEnabled
+    : (isCopyTradeEnabled !== undefined
+        ? isCopyTradeEnabled
+        : (localCopyEnabled ?? activeSession?.copyTradeEnabled ?? false));
 
   const collateralNum = parseFloat(wallet.balanceCollateral || '0');
   const isCollateralZero = isConnected && isCorrectNetwork && collateralNum === 0;
@@ -197,7 +209,7 @@ export const SessionStatusBar: React.FC<SessionStatusBarProps> = ({
                 <span className="budget-numbers tabular-num font-mono">
                   {isUnlimitedDaily
                     ? `${spent.toFixed(1)} / Unlimited`
-                    : `${spent.toFixed(1)} / ${cap.toLocaleString()} tUSDC (${spentPercent.toFixed(0)}%)`}
+                    : `${spent.toFixed(1)} / ${(cap ?? 0).toLocaleString()} tUSDC (${spentPercent.toFixed(0)}%)`}
                 </span>
               </div>
               <div className="budget-progress-track">
@@ -261,27 +273,49 @@ export const SessionStatusBar: React.FC<SessionStatusBarProps> = ({
                     disabled={isTogglingCopy}
                     onClick={async () => {
                       const next = !activeCopyTrade;
+                      // Immediate 0ms optimistic switch: label, colors, and icons change instantly
+                      setOptimisticCopyEnabled(next);
                       setIsTogglingCopy(true);
+                      if (activeSession) {
+                        activeSession.copyTradeEnabled = next;
+                      }
+                      if (typeof window !== 'undefined') {
+                        window.dispatchEvent(new CustomEvent('dreampulse:session-update', { detail: { copyTradeEnabled: next } }));
+                      }
                       try {
+                        let success = true;
                         if (onToggleCopyTrade) {
-                          await onToggleCopyTrade(next);
+                          success = await onToggleCopyTrade(next);
                         } else if (wallet.address) {
-                          await apiClient.toggleCopyTrade(wallet.address, next);
+                          const res = await apiClient.toggleCopyTrade(wallet.address, next);
+                          success = res?.success ?? true;
                         }
-                        if (activeSession) {
-                          activeSession.copyTradeEnabled = next;
+                        if (success === false) {
+                          // Rollback on failure
+                          setOptimisticCopyEnabled(!next);
+                          if (activeSession) {
+                            activeSession.copyTradeEnabled = !next;
+                          }
+                          if (typeof window !== 'undefined') {
+                            window.dispatchEvent(new CustomEvent('dreampulse:session-update', { detail: { copyTradeEnabled: !next } }));
+                          }
+                        } else {
+                          setLocalCopyEnabled(next);
                         }
-                            if (typeof window !== 'undefined') {
-                          window.dispatchEvent(new CustomEvent('dreampulse:session-update', { detail: { copyTradeEnabled: next } }));
-                        }
-                        setLocalCopyEnabled(next);
                       } catch (e) {
                         console.error('Failed to toggle copy-trade:', e);
+                        setOptimisticCopyEnabled(!next);
+                        if (activeSession) {
+                          activeSession.copyTradeEnabled = !next;
+                        }
+                        if (typeof window !== 'undefined') {
+                          window.dispatchEvent(new CustomEvent('dreampulse:session-update', { detail: { copyTradeEnabled: !next } }));
+                        }
                       } finally {
                         setIsTogglingCopy(false);
                       }
                     }}
-                    className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[10px] font-mono font-bold border transition-all cursor-pointer hover:opacity-90 disabled:opacity-50"
+                    className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[10px] font-mono font-bold border transition-all duration-150 cursor-pointer hover:opacity-90 disabled:opacity-85 select-none active:scale-95"
                     style={{
                       background: modeBg,
                       color: modeColor,
@@ -289,8 +323,11 @@ export const SessionStatusBar: React.FC<SessionStatusBarProps> = ({
                     }}
                     title={tooltipText}
                   >
-                    {isTogglingCopy ? <Spinner size="xs" /> : modeIcon}
+                    {modeIcon}
                     <span>{modeLabel}</span>
+                    {isTogglingCopy && (
+                      <span className="inline-block w-1.5 h-1.5 rounded-full bg-current animate-ping ml-0.5" title="Syncing..." />
+                    )}
                   </button>
                 );
               })()}
@@ -315,7 +352,11 @@ export const SessionStatusBar: React.FC<SessionStatusBarProps> = ({
                   <Button
                     variant="outline"
                     size="xs"
-                    onClick={() => onClaimFaucet(1000)}
+                    onClick={async () => {
+                      try {
+                        await onClaimFaucet(1000);
+                      } catch {}
+                    }}
                     disabled={isFauceting}
                     className="h-6 text-[10px] px-2 gap-1 border-border/60 bg-secondary/80 text-foreground hover:bg-secondary ml-1"
                   >
@@ -387,7 +428,11 @@ export const SessionStatusBar: React.FC<SessionStatusBarProps> = ({
           <Button
             variant="outline"
             size="sm"
-            onClick={() => onClaimFaucet(1000)}
+            onClick={async () => {
+              try {
+                await onClaimFaucet(1000);
+              } catch {}
+            }}
             disabled={isFauceting}
             className="h-7 text-xs px-2.5 gap-1.5 border-amber-500/30 bg-amber-500/10 text-amber-400 hover:bg-amber-500/20"
           >

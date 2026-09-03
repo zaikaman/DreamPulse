@@ -241,7 +241,7 @@ export const SwarmArenaView: React.FC<SwarmArenaViewProps> = ({
           <div className="px-3.5 py-2 rounded-lg bg-card/60 border border-border/50">
             <div className="text-[10px] text-muted-foreground uppercase font-mono">Arena Volume</div>
             <div className="text-xs font-semibold text-foreground font-mono mt-0.5">
-              ${stats ? stats.totalArenaVolume.toLocaleString(undefined, { minimumFractionDigits: 2 }) : '13,551.23'}
+              ${stats && typeof stats.totalArenaVolume === 'number' && !isNaN(stats.totalArenaVolume) ? stats.totalArenaVolume.toLocaleString(undefined, { minimumFractionDigits: 2 }) : '13,551.23'}
             </div>
           </div>
 
@@ -251,7 +251,7 @@ export const SwarmArenaView: React.FC<SwarmArenaViewProps> = ({
               "text-xs font-semibold font-mono mt-0.5",
               (stats?.totalCommunityPnl ?? 9929.21) >= 0 ? "text-[#00e676]" : "text-[#ff3366]"
             )}>
-              {stats
+              {stats && typeof stats.totalCommunityPnl === 'number' && !isNaN(stats.totalCommunityPnl)
                 ? (stats.totalCommunityPnl >= 0
                     ? `+$${stats.totalCommunityPnl.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
                     : `-$${Math.abs(stats.totalCommunityPnl).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`)
@@ -1051,7 +1051,7 @@ export const SwarmArenaView: React.FC<SwarmArenaViewProps> = ({
                             {trader.realizedPnl >= 0 ? `+${trader.realizedPnl.toFixed(2)}` : trader.realizedPnl.toFixed(2)} tUSDC
                           </div>
                           <div className="text-[10px] text-muted-foreground">
-                            ${trader.volume.toLocaleString()} Vol
+                            ${(trader.volume ?? 0).toLocaleString()} Vol
                           </div>
                         </td>
 

@@ -796,7 +796,7 @@ export const StrategyStudio: React.FC<StrategyStudioProps> = ({
             <div>
               <div className="flex items-center justify-between mb-2">
                 <span className="text-[10px] font-mono font-semibold tracking-wider text-muted-foreground uppercase">Replay Capital</span>
-                <span className="text-[11px] font-mono font-bold px-1.5 py-0.5 rounded border" style={{ background: `${theme.color}14`, color: theme.color, borderColor: `${theme.color}28` }}>${initialCapital.toLocaleString()}</span>
+                <span className="text-[11px] font-mono font-bold px-1.5 py-0.5 rounded border" style={{ background: `${theme.color}14`, color: theme.color, borderColor: `${theme.color}28` }}>${(initialCapital ?? 10000).toLocaleString()}</span>
               </div>
               <input type="range" min={200} max={10000} step={100} value={initialCapital} onChange={(e) => setInitialCapital(parseFloat(e.target.value))} style={{ width: '100%', accentColor: theme.color }} />
             </div>

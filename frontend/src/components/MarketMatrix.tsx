@@ -433,12 +433,16 @@ export const MarketMatrix: React.FC<MarketMatrixProps> = ({
                 {paginatedMarkets.map((market) => {
                   const tick = liveTicks.get(market.id);
                   const isSelected = market.id === selectedMarketId;
-                  const spot = currentSpotPrices[market.symbol] || tick?.spotPrice || market.strikePrice;
-                  const fairValue = tick?.fairValue ?? market.fairValueYes;
-                  const impliedProb = tick?.impliedProb ?? market.impliedProbYes;
-                  const edge = tick?.edge ?? market.edgePercentage;
-                  const strikeDelta = spot - market.strikePrice;
-                  const isITM = spot >= market.strikePrice;
+                  const strikePrice = typeof market?.strikePrice === 'number' && !isNaN(market.strikePrice)
+                    ? market.strikePrice
+                    : Number(market?.strikePrice ?? (market as any)?.strike_price ?? 0) || 0;
+                  const rawSpot = currentSpotPrices[market.symbol] ?? tick?.spotPrice ?? strikePrice;
+                  const spot = typeof rawSpot === 'number' && !isNaN(rawSpot) ? rawSpot : strikePrice;
+                  const fairValue = tick?.fairValue ?? market.fairValueYes ?? 0.5;
+                  const impliedProb = tick?.impliedProb ?? market.impliedProbYes ?? 0.5;
+                  const edge = tick?.edge ?? market.edgePercentage ?? 0;
+                  const strikeDelta = spot - strikePrice;
+                  const isITM = spot >= strikePrice;
 
                   return (
                     <tr
@@ -460,7 +464,7 @@ export const MarketMatrix: React.FC<MarketMatrixProps> = ({
                         </div>
                       </td>
                       <td className="px-3.5 py-3 font-bold text-foreground">
-                        ${market.strikePrice.toLocaleString()}
+                        ${strikePrice.toLocaleString()}
                       </td>
                       <td className="px-3.5 py-3">
                         <div className="flex items-center gap-1.5">
@@ -531,12 +535,16 @@ export const MarketMatrix: React.FC<MarketMatrixProps> = ({
               const tick = liveTicks.get(market.id);
               const isSelected = market.id === selectedMarketId;
 
-              const spot = currentSpotPrices[market.symbol] || tick?.spotPrice || market.strikePrice;
-              const fairValue = tick?.fairValue ?? market.fairValueYes;
-              const impliedProb = tick?.impliedProb ?? market.impliedProbYes;
-              const edge = tick?.edge ?? market.edgePercentage;
-              const strikeDelta = spot - market.strikePrice;
-              const isITM = spot >= market.strikePrice;
+              const strikePrice = typeof market?.strikePrice === 'number' && !isNaN(market.strikePrice)
+                ? market.strikePrice
+                : Number(market?.strikePrice ?? (market as any)?.strike_price ?? 0) || 0;
+              const rawSpot = currentSpotPrices[market.symbol] ?? tick?.spotPrice ?? strikePrice;
+              const spot = typeof rawSpot === 'number' && !isNaN(rawSpot) ? rawSpot : strikePrice;
+              const fairValue = tick?.fairValue ?? market.fairValueYes ?? 0.5;
+              const impliedProb = tick?.impliedProb ?? market.impliedProbYes ?? 0.5;
+              const edge = tick?.edge ?? market.edgePercentage ?? 0;
+              const strikeDelta = spot - strikePrice;
+              const isITM = spot >= strikePrice;
 
               return (
                 <div
@@ -585,7 +593,7 @@ export const MarketMatrix: React.FC<MarketMatrixProps> = ({
                         STRIKE PRICE
                       </span>
                       <span className="text-sm font-mono font-bold text-foreground block mt-0.5">
-                        ${market.strikePrice.toLocaleString()}
+                        ${strikePrice.toLocaleString()}
                       </span>
                     </div>
                     <div>

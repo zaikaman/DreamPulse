@@ -153,17 +153,26 @@ export const usePersonalSwarm = (userAddress?: string): UsePersonalSwarmReturn =
   const setMode = useCallback(
     async (mode: 'COPY' | 'PERSONAL'): Promise<boolean> => {
       if (!userAddress) return false;
+      let snapshotConfig: PersonalSwarmConfig | null = null;
+      setConfig((prev) => {
+        snapshotConfig = prev;
+        return prev ? { ...prev, mode } : null;
+      });
       setIsSaving(true);
       try {
         const res = await apiClient.setPersonalSwarmMode(userAddress, mode);
         if (res?.config) {
           setConfig(res.config);
-          // refresh status too
-          const s = await apiClient.getPersonalSwarmStatus(userAddress).catch(() => null);
-          if (s?.status) setStatus(s.status);
+          // refresh status in background without blocking
+          void apiClient.getPersonalSwarmStatus(userAddress)
+            .then((s) => {
+              if (s?.status) setStatus(s.status);
+            })
+            .catch(() => {});
         }
         return true;
       } catch (err: any) {
+        if (snapshotConfig) setConfig(snapshotConfig);
         setError(err.message || 'Failed to switch mode');
         return false;
       } finally {
@@ -176,21 +185,34 @@ export const usePersonalSwarm = (userAddress?: string): UsePersonalSwarmReturn =
   const toggleCopyTrade = useCallback(
     async (enabled: boolean): Promise<boolean> => {
       if (!userAddress) return false;
+      let snapshotConfig: PersonalSwarmConfig | null = null;
+      // Optimistic update: instantly reflect in React state and in-memory event
+      setConfig((prev) => {
+        snapshotConfig = prev;
+        return prev ? { ...prev, copyTradeEnabled: enabled } : null;
+      });
+      if (typeof window !== 'undefined') {
+        window.dispatchEvent(new CustomEvent('dreampulse:session-update', { detail: { copyTradeEnabled: enabled } }));
+      }
       setIsSaving(true);
       try {
         const res = await apiClient.toggleCopyTrade(userAddress, enabled);
         if (res?.config) {
           setConfig(res.config);
-          const s = await apiClient.getPersonalSwarmStatus(userAddress).catch(() => null);
-          if (s?.status) setStatus(s.status);
         }
-        // SECURITY: no localStorage SessionGrant mutation — session is memory-only + backend truth.
-        // Notify other hooks via in-memory event only.
-        if (typeof window !== 'undefined') {
-          window.dispatchEvent(new CustomEvent('dreampulse:session-update', { detail: { copyTradeEnabled: enabled } }));
-        }
+        // Non-blocking background sync of status so UI transition remains instant
+        void apiClient.getPersonalSwarmStatus(userAddress)
+          .then((s) => {
+            if (s?.status) setStatus(s.status);
+          })
+          .catch(() => {});
         return true;
       } catch (err: any) {
+        // Rollback optimistic update
+        if (snapshotConfig) setConfig(snapshotConfig);
+        if (typeof window !== 'undefined') {
+          window.dispatchEvent(new CustomEvent('dreampulse:session-update', { detail: { copyTradeEnabled: !enabled } }));
+        }
         setError(err.message || 'Failed to toggle copy trading');
         return false;
       } finally {
@@ -203,12 +225,24 @@ export const usePersonalSwarm = (userAddress?: string): UsePersonalSwarmReturn =
   const toggleAgent = useCallback(
     async (agentType: AgentType, enabled: boolean): Promise<boolean> => {
       if (!userAddress) return false;
+      let snapshotConfig: PersonalSwarmConfig | null = null;
+      const key = agentType.toLowerCase();
+      setConfig((prev) => {
+        snapshotConfig = prev;
+        if (!prev) return null;
+        if (key === 'volt') return { ...prev, voltEnabled: enabled };
+        if (key === 'oracle') return { ...prev, oracleEnabled: enabled };
+        if (key === 'titan') return { ...prev, titanEnabled: enabled };
+        if (key === 'sweeper') return { ...prev, sweeperEnabled: enabled };
+        return prev;
+      });
       setIsSaving(true);
       try {
         const res = await apiClient.togglePersonalAgent(userAddress, agentType, enabled);
         if (res?.config) setConfig(res.config);
         return true;
       } catch (err: any) {
+        if (snapshotConfig) setConfig(snapshotConfig);
         setError(err.message || 'Failed to toggle agent');
         return false;
       } finally {

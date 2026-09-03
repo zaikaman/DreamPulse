@@ -238,7 +238,7 @@ const OverviewViewComponent: React.FC<OverviewViewProps> = ({
                   opportunities.map(({ market, edge, implied, fair, action }) => {
                     const isSelected = selectedMarketId === market.id;
                     const isYesEdge = (edge ?? 0) > 0;
-                    const formattedStrike = typeof market?.strikePrice === 'number'
+                    const formattedStrike = typeof market?.strikePrice === 'number' && !isNaN(market.strikePrice)
                       ? `$${market.strikePrice.toLocaleString()}`
                       : market?.strikePrice
                       ? `$${market.strikePrice}`
@@ -375,7 +375,7 @@ const OverviewViewComponent: React.FC<OverviewViewProps> = ({
                 const tick = liveTicks.get(m.id);
                 const implied = tick?.impliedProb ?? m.impliedProbYes;
                 const isSelected = selectedMarketId === m.id;
-                const formattedStrike = typeof m?.strikePrice === 'number'
+                const formattedStrike = typeof m?.strikePrice === 'number' && !isNaN(m.strikePrice)
                   ? `$${m.strikePrice.toLocaleString()}`
                   : m?.strikePrice
                   ? `$${m.strikePrice}`

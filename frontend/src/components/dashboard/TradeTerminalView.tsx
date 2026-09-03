@@ -168,7 +168,7 @@ export const TradeTerminalView: React.FC<TradeTerminalViewProps> = ({
                             </span>
                           )}
                         </div>
-                        <span className="text-[11px] text-muted-foreground">${m.strikePrice.toLocaleString()}</span>
+                        <span className="text-[11px] text-muted-foreground">${(m.strikePrice ?? 0).toLocaleString()}</span>
                       </button>
                     );
                   })}
@@ -179,7 +179,7 @@ export const TradeTerminalView: React.FC<TradeTerminalViewProps> = ({
             {/* Live or Frozen Spot Price */}
             <div className="flex items-baseline gap-1.5 font-mono">
               <span className="text-sm font-bold text-foreground">
-                ${spot.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                ${(spot ?? 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
               </span>
               {isResolving ? (
                 <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-[#ffb700]/20 text-[#ffb700] border border-[#ffb700]/30 animate-pulse">
@@ -201,11 +201,11 @@ export const TradeTerminalView: React.FC<TradeTerminalViewProps> = ({
               {isResolving ? (
                 <span className="text-[#ffb700] flex items-center gap-1.5 font-semibold">
                   <ArrowPathIcon className="w-3.5 h-3.5 animate-spin text-[#ffb700]" />
-                  <span>Settlement window: frozen at <strong>${spot.toLocaleString('en-US', { minimumFractionDigits: 2 })}</strong> vs strike <strong>${strike.toLocaleString('en-US', { minimumFractionDigits: 2 })}</strong></span>
+                  <span>Settlement window: frozen at <strong>${(spot ?? 0).toLocaleString('en-US', { minimumFractionDigits: 2 })}</strong> vs strike <strong>${(strike ?? 0).toLocaleString('en-US', { minimumFractionDigits: 2 })}</strong></span>
                 </span>
               ) : (
                 <span>Will {market.symbol.split('/')[0]} settle above{' '}
-                  <strong className="text-foreground">${strike.toLocaleString('en-US', { minimumFractionDigits: 2 })}</strong>{' '}
+                  <strong className="text-foreground">${(strike ?? 0).toLocaleString('en-US', { minimumFractionDigits: 2 })}</strong>{' '}
                   at {formattedExpiry}?
                 </span>
               )}
@@ -303,13 +303,13 @@ export const TradeTerminalView: React.FC<TradeTerminalViewProps> = ({
             <div className="flex items-center gap-1.5 text-[11px]">
               <span className="text-muted-foreground">Frozen Spot:</span>
               <span className="font-bold text-foreground">
-                ${spot.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                ${(spot ?? 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
               </span>
             </div>
             <div className="flex items-center gap-1.5 text-[11px]">
               <span className="text-muted-foreground">Strike:</span>
               <span className="font-bold text-foreground">
-                ${strike.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                ${(strike ?? 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
               </span>
             </div>
             <span
@@ -357,7 +357,7 @@ export const TradeTerminalView: React.FC<TradeTerminalViewProps> = ({
                   </div>
                 </div>
                 <div className="flex items-center justify-between text-[11px] font-mono text-muted-foreground">
-                  <span>Strike: ${m.strikePrice.toLocaleString()}</span>
+                  <span>Strike: ${(m.strikePrice ?? 0).toLocaleString()}</span>
                   <span className="text-brand-cyan font-bold">{((m.impliedProbYes ?? 0.5) * 100).toFixed(0)}% YES</span>
                 </div>
               </button>

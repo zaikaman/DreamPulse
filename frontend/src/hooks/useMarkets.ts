@@ -12,13 +12,52 @@ export interface UseMarketsOptions {
   pollIntervalMs?: number;
 }
 
+export function normalizeMarket(raw: any): Market {
+  const strike = Number(raw?.strikePrice ?? raw?.strike_price ?? 0);
+  const settlement = raw?.settlementPrice ?? (raw?.settlement_price != null ? Number(raw.settlement_price) : undefined);
+  return {
+    id: String(raw?.id || ''),
+    symbol: raw?.symbol || 'BTC/USD',
+    strikePrice: isNaN(strike) ? 0 : strike,
+    windowDuration: raw?.windowDuration || raw?.window_duration || '5m',
+    openTimestamp: raw?.openTimestamp || raw?.open_timestamp || new Date().toISOString(),
+    closeTimestamp: raw?.closeTimestamp || raw?.close_timestamp || new Date().toISOString(),
+    resolutionTimestamp: raw?.resolutionTimestamp || raw?.resolution_timestamp || new Date().toISOString(),
+    status: raw?.status || 'Open',
+    settlementPrice: settlement !== undefined && !isNaN(settlement) ? settlement : undefined,
+    winningOutcome: raw?.winningOutcome || raw?.winning_outcome,
+    bestBidYes: Number(raw?.bestBidYes ?? raw?.best_bid_yes ?? 0),
+    bestAskYes: Number(raw?.bestAskYes ?? raw?.best_ask_yes ?? 0),
+    bestBidNo: Number(raw?.bestBidNo ?? raw?.best_bid_no ?? 0),
+    bestAskNo: Number(raw?.bestAskNo ?? raw?.best_ask_no ?? 0),
+    impliedProbYes: Number(raw?.impliedProbYes ?? raw?.implied_prob_yes ?? 0.5),
+    fairValueYes: Number(raw?.fairValueYes ?? raw?.fair_value_yes ?? 0.5),
+    edgePercentage: Number(raw?.edgePercentage ?? raw?.edge_percentage ?? 0),
+    poolAddress: raw?.poolAddress || raw?.pool_address,
+    marketIdHex: raw?.marketIdHex || raw?.market_id_hex,
+    isSynthetic: Boolean(raw?.isSynthetic ?? raw?.is_synthetic),
+    isSeedDepth: Boolean(raw?.isSeedDepth ?? raw?.is_seed_depth),
+    convictionState: raw?.convictionState,
+    recommendedAction: raw?.recommendedAction,
+    recommendedOutcome: raw?.recommendedOutcome,
+    winProbability: raw?.winProbability,
+    confidenceScore: raw?.confidenceScore,
+    priceActionTrend: raw?.priceActionTrend,
+    priceActionScore: raw?.priceActionScore,
+    confluenceRationale: raw?.confluenceRationale,
+  };
+}
+
 const LOCAL_MARKETS_CACHE_KEY = 'dreampulse_markets_cache';
 
 export function useMarkets(options?: UseMarketsOptions) {
   const [markets, setMarkets] = useState<Market[]>(() => {
     try {
       const cached = localStorage.getItem(LOCAL_MARKETS_CACHE_KEY);
-      if (cached) return JSON.parse(cached);
+      if (cached) {
+        const parsed = JSON.parse(cached);
+        if (Array.isArray(parsed)) return parsed.map(normalizeMarket);
+      }
     } catch {}
     return [];
   });
@@ -56,11 +95,12 @@ export function useMarkets(options?: UseMarketsOptions) {
       });
 
       if (isMountedRef.current && response.success) {
-        setMarkets(response.data);
+        const normalized = (response.data || []).map(normalizeMarket);
+        setMarkets(normalized);
         setError(null);
         try {
           if (!options?.symbol && !options?.window && !options?.status) {
-            localStorage.setItem(LOCAL_MARKETS_CACHE_KEY, JSON.stringify(response.data));
+            localStorage.setItem(LOCAL_MARKETS_CACHE_KEY, JSON.stringify(normalized));
           }
         } catch {}
 
@@ -129,11 +169,12 @@ export function useMarkets(options?: UseMarketsOptions) {
 
   // Supabase Realtime Subscription for Postgres table 'markets'
   useEffect(() => {
-    const channel = subscribeToTable<Market>(
+    const channel = subscribeToTable<any>(
       'markets',
       // On Insert
-      (newMarket) => {
+      (rawMarket) => {
         if (!isMountedRef.current) return;
+        const newMarket = normalizeMarket(rawMarket);
         setMarkets((prev) => {
           const exists = prev.some((m) => m.id === newMarket.id);
           if (exists) return prev;
@@ -141,8 +182,9 @@ export function useMarkets(options?: UseMarketsOptions) {
         });
       },
       // On Update
-      (updatedMarket) => {
+      (rawMarket) => {
         if (!isMountedRef.current) return;
+        const updatedMarket = normalizeMarket(rawMarket);
         setMarkets((prev) =>
           prev.map((m) => (m.id === updatedMarket.id ? { ...m, ...updatedMarket } : m)),
         );

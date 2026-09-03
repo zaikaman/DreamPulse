@@ -349,7 +349,8 @@ export class UserSwarmService {
     }
 
     this.cache.set(key, next);
-    await this.persistConfig(next);
+
+    const persistTasks: Promise<any>[] = [this.persistConfig(next)];
 
     // Sync copy_trade_enabled with active sessions (in-memory + Supabase)
     if (typeof updates.copyTradeEnabled === 'boolean') {
@@ -358,17 +359,23 @@ export class UserSwarmService {
       }).catch(() => {});
 
       if (isPersistenceEnabled()) {
-        try {
-          await supabase
-            .from('sessions')
-            .update({ copy_trade_enabled: updates.copyTradeEnabled, updated_at: now })
-            .eq('user_address', normalized)
-            .eq('is_active', true);
-        } catch (err: any) {
-          console.warn('[UserSwarmService] Sync with sessions table notice:', err?.message || err);
-        }
+        persistTasks.push(
+          (async () => {
+            try {
+              await supabase
+                .from('sessions')
+                .update({ copy_trade_enabled: updates.copyTradeEnabled, updated_at: now })
+                .eq('user_address', normalized)
+                .eq('is_active', true);
+            } catch (err: any) {
+              console.warn('[UserSwarmService] Sync with sessions table notice:', err?.message || err);
+            }
+          })()
+        );
       }
     }
+
+    await Promise.all(persistTasks);
 
     return { ...next };
   }

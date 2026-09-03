@@ -100,9 +100,6 @@ export const SessionDelegationModal: React.FC<SessionDelegationModalProps> = ({
   const [isUnlimitedDailyCap, setIsUnlimitedDailyCap] = useState<boolean>(false);
   const [customDailyCapStr, setCustomDailyCapStr] = useState<string>('100');
 
-  // Working Capital Vault Deposit state
-  const [depositAmount, setDepositAmount] = useState<number>(10);
-  const [customDepositStr, setCustomDepositStr] = useState<string>('10');
 
   // Duration state
   const [durationHours, setDurationHours] = useState<number>(24);
@@ -147,10 +144,6 @@ export const SessionDelegationModal: React.FC<SessionDelegationModalProps> = ({
           setCustomDailyCapStr(String(activeSession.dailyVolumeCap));
         }
 
-        // Working Capital Vault Deposit
-        const activeDeposit = activeSession.vaultDepositAmount ?? 0;
-        setDepositAmount(activeDeposit);
-        setCustomDepositStr(String(activeDeposit));
 
         // Duration pre-population
         if (isUnlimitedExpiry(activeSession.expiresAt)) {
@@ -197,7 +190,7 @@ export const SessionDelegationModal: React.FC<SessionDelegationModalProps> = ({
         maxTradeSize: effectiveMaxTrade,
         dailyVolumeCap: effectiveDailyCap,
         durationHours: effectiveDuration,
-        depositAmount: depositAmount > 0 ? depositAmount : undefined,
+        depositAmount: undefined,
         copyTradeEnabled: enableCopyTrading,
       });
       onClose();
@@ -245,16 +238,6 @@ export const SessionDelegationModal: React.FC<SessionDelegationModalProps> = ({
     }
   };
 
-  // Deposit input handler
-  const handleDepositChange = (valStr: string) => {
-    setCustomDepositStr(valStr);
-    const parsed = parseFloat(valStr);
-    if (!isNaN(parsed) && parsed >= 0) {
-      setDepositAmount(parsed);
-    } else if (valStr === '') {
-      setDepositAmount(0);
-    }
-  };
 
   // Max Trade Size input handler
   const handleMaxTradeChange = (valStr: string) => {
@@ -280,7 +263,8 @@ export const SessionDelegationModal: React.FC<SessionDelegationModalProps> = ({
     }
   };
 
-  const collateralBalance = parseFloat(wallet.balanceCollateral || '0');
+  const parsedCollateral = parseFloat(wallet.balanceCollateral || '0');
+  const collateralBalance = isNaN(parsedCollateral) ? 0 : parsedCollateral;
 
   return (
     <div className="modal-backdrop" onClick={onClose}>
@@ -444,7 +428,7 @@ export const SessionDelegationModal: React.FC<SessionDelegationModalProps> = ({
                   <span className="stat-pill-value font-mono">{formatSessionTimeRemaining(activeSession.expiresAt)}</span>
                 </div>
 
-                {activeSession.vaultDepositAmount !== undefined && activeSession.vaultDepositAmount > 0 && (
+                {activeSession.vaultDepositAmount !== undefined && activeSession.vaultDepositAmount > 0 && activeSession.targetPoolAddress && (
                   <div className="stat-pill">
                     <span className="stat-pill-label">Vault Capital:</span>
                     <span className="stat-pill-value font-mono">{activeSession.vaultDepositAmount} tUSDC</span>
@@ -712,70 +696,20 @@ export const SessionDelegationModal: React.FC<SessionDelegationModalProps> = ({
               </span>
             </div>
 
-            {/* 1. Working Capital Vault Deposit */}
-            <div className="config-group">
-              <div className="config-header-row">
-                <label htmlFor="deposit-amount-input" className="config-label" style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
-                  <CurrencyDollarIcon className="w-3.5 h-3.5" style={{ color: 'hsl(var(--muted-foreground))' }} />
-                  <span>Working Capital Vault Deposit</span>
-                </label>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                  <input
-                    id="deposit-amount-input"
-                    type="number"
-                    min={0}
-                    step="any"
-                    value={customDepositStr}
-                    onChange={(e) => handleDepositChange(e.target.value)}
-                    className="custom-numeric-input"
-                    placeholder="0"
-                    aria-label="Working Capital Vault Deposit in tUSDC"
-                  />
-                  <span className="config-unit-label">tUSDC</span>
+            {/* 1. Non-Custodial Direct Allowance Notice */}
+            <div style={{ padding: '12px 14px', borderRadius: '8px', background: 'rgba(255, 255, 255, 0.03)', border: '1px solid var(--border)', marginBottom: '16px' }}>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '8px', marginBottom: '6px' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '6px', color: 'var(--foreground)', fontSize: '12px', fontWeight: 600 }}>
+                  <ShieldCheckIcon className="w-4 h-4 text-brand-cyan" />
+                  <span>Non-Custodial Direct ERC-20 Allowance</span>
                 </div>
+                <span style={{ fontSize: '11px', fontFamily: 'var(--font-mono)', color: 'var(--muted-foreground)' }}>
+                  Wallet Collateral: <strong style={{ color: 'var(--foreground)' }}>{collateralBalance.toLocaleString()} tUSDC</strong>
+                </span>
               </div>
-              <input
-                id="deposit-amount-slider"
-                type="range"
-                min={0}
-                max={Math.max(500, depositAmount)}
-                step={5}
-                value={depositAmount}
-                onChange={(e) => {
-                  const val = Number(e.target.value);
-                  setDepositAmount(val);
-                  setCustomDepositStr(String(val));
-                }}
-                className="custom-range-slider"
-              />
-              <div className="preset-pill-row">
-                {[0, 50, 100, 500, 1000, 5000].map((val) => (
-                  <button
-                    key={val}
-                    type="button"
-                    className={`preset-pill ${depositAmount === val ? 'active' : ''}`}
-                    onClick={() => {
-                      setDepositAmount(val);
-                      setCustomDepositStr(String(val));
-                    }}
-                  >
-                    {val === 0 ? '0 (Skip)' : `${val.toLocaleString()} tUSDC`}
-                  </button>
-                ))}
-                {collateralBalance > 0 && (
-                  <button
-                    type="button"
-                    className={`preset-pill ${depositAmount === collateralBalance ? 'active' : ''}`}
-                    onClick={() => {
-                      setDepositAmount(collateralBalance);
-                      setCustomDepositStr(String(collateralBalance));
-                    }}
-                    style={{ borderColor: 'rgba(0, 255, 204, 0.4)', color: 'var(--brand-cyan)' }}
-                  >
-                    MAX ({collateralBalance.toLocaleString()} tUSDC)
-                  </button>
-                )}
-              </div>
+              <p style={{ margin: 0, fontSize: '11px', color: 'var(--muted-foreground)', lineHeight: 1.5 }}>
+                Binary prediction markets settle directly from your wallet balance via standard ERC-20 approvals. No funds are transferred to a vault contract. Automated session trades are constrained strictly by the cryptographically signed Max Trade Size and Daily Volume Cap below.
+              </p>
             </div>
 
             {/* 2. Max Trade Size Limit */}

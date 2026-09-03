@@ -335,7 +335,7 @@ export const StatCardsGrid: React.FC<StatCardsGridProps> = ({
                 <span className="stat-card-title truncate">Operator Balance</span>
               </div>
               <div className="stat-card-value font-mono text-cyan-400 truncate">
-                {Number(operatorCollateral).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}{' '}
+                {Number(operatorCollateral || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}{' '}
                 <span className="text-xs font-normal text-muted-foreground">tUSDC</span>
               </div>
               <div className="stat-card-footer">

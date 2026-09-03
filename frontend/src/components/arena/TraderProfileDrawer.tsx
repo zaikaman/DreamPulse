@@ -176,14 +176,14 @@ export const TraderProfileDrawer: React.FC<TraderProfileDrawerProps> = ({
                 <div className="p-3.5 rounded-lg bg-card/60 border border-border/50">
                   <div className="flex items-center justify-between mb-2">
                     <span className="text-xs font-semibold text-foreground">Asset Volume Allocation</span>
-                    <span className="text-[10px] text-muted-foreground font-mono">${summary.volume.toLocaleString()} Total</span>
+                    <span className="text-[10px] text-muted-foreground font-mono">${(summary?.volume ?? 0).toLocaleString()} Total</span>
                   </div>
                   <div className="space-y-2">
                     {profile.assetDistribution.map((asset) => (
                       <div key={asset.symbol} className="space-y-1">
                         <div className="flex items-center justify-between text-xs font-mono">
                           <span className="text-foreground">{asset.symbol}</span>
-                          <span className="text-muted-foreground">{asset.percentage}% (${asset.volume.toLocaleString()})</span>
+                          <span className="text-muted-foreground">{asset.percentage}% (${(asset?.volume ?? 0).toLocaleString()})</span>
                         </div>
                         <div className="w-full h-1.5 rounded-full bg-secondary/50 overflow-hidden">
                           <div

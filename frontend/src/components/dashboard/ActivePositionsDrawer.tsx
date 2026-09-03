@@ -392,8 +392,8 @@ Tx: ${pos.txHash || 'N/A'}`;
                         </td>
                         <td className="py-2">
                           <div className="flex flex-col">
-                            <span className="text-foreground font-semibold">{pos.lotSize.toLocaleString()} lots</span>
-                            <span className="text-[9.5px] text-muted-foreground">{pos.lotSize.toFixed(0)} contracts</span>
+                            <span className="text-foreground font-semibold">{(pos.lotSize ?? 0).toLocaleString()} lots</span>
+                            <span className="text-[9.5px] text-muted-foreground">{Number(pos.lotSize ?? 0).toFixed(0)} contracts</span>
                           </div>
                         </td>
                         <td className="py-2">

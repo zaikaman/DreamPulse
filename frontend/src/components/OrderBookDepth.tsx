@@ -139,7 +139,7 @@ export const OrderBookDepth: React.FC<OrderBookDepthProps> = ({
   const handleLadderAskClick = (askPrice: number, askQty: number) => {
     soundEngine.playTradeFill();
     const data: LadderPrefillData = {
-      outcome: 'YES',
+      outcome: activeLeg,
       price: askPrice,
       lotSize: askQty,
       source: 'ask',
@@ -154,11 +154,12 @@ export const OrderBookDepth: React.FC<OrderBookDepthProps> = ({
 
   const handleLadderBidClick = (bidPrice: number, bidQty: number) => {
     soundEngine.playTradeFill();
-    // Buying the counterpart NO outcome
-    const noPrice = Number((1.0 - bidPrice).toFixed(2));
+    // Buying counterpart outcome: YES tab bids counterpart is NO, NO tab bids counterpart is YES
+    const counterpartOutcome: 'YES' | 'NO' = activeLeg === 'YES' ? 'NO' : 'YES';
+    const counterpartPrice = Number((1.0 - bidPrice).toFixed(2));
     const data: LadderPrefillData = {
-      outcome: 'NO',
-      price: noPrice,
+      outcome: counterpartOutcome,
+      price: counterpartPrice,
       lotSize: bidQty,
       source: 'bid',
       timestamp: Date.now(),
@@ -277,13 +278,13 @@ export const OrderBookDepth: React.FC<OrderBookDepthProps> = ({
       <div className="grid grid-cols-3 gap-2 px-3 py-2 bg-secondary/15 border-b border-border/30 text-xs font-mono flex-shrink-0">
         <div>
           <span className="text-[9px] text-muted-foreground uppercase font-semibold block">STRIKE</span>
-          <span className="font-bold text-foreground block mt-0.5">${selectedMarket.strikePrice.toLocaleString()}</span>
+          <span className="font-bold text-foreground block mt-0.5">${(selectedMarket?.strikePrice ?? 0).toLocaleString()}</span>
         </div>
         <div>
           <span className="text-[9px] text-muted-foreground uppercase font-semibold block">LIVE SPOT</span>
           <div className="flex items-center gap-1 mt-0.5">
             <span className={cn("font-bold", isITM ? "text-emerald-400" : "text-rose-400")}>
-              ${spot.toLocaleString()}
+              ${(spot ?? 0).toLocaleString()}
             </span>
             <span className="text-[10px] text-muted-foreground flex items-center">
               {strikeDelta >= 0 ? <ArrowTrendingUpIcon className="w-2.5 h-2.5 text-emerald-400" /> : <ArrowTrendingDownIcon className="w-2.5 h-2.5 text-rose-400" />}
@@ -297,8 +298,8 @@ export const OrderBookDepth: React.FC<OrderBookDepthProps> = ({
             variant="outline"
             title={
               isITM
-                ? `In-The-Money: Live spot ($${spot.toLocaleString()}) >= strike ($${selectedMarket.strikePrice.toLocaleString()}). YES outcome currently leads.`
-                : `Out-of-The-Money: Live spot ($${spot.toLocaleString()}) < strike ($${selectedMarket.strikePrice.toLocaleString()}). NO outcome currently leads.`
+                ? `In-The-Money: Live spot ($${(spot ?? 0).toLocaleString()}) >= strike ($${(selectedMarket?.strikePrice ?? 0).toLocaleString()}). YES outcome currently leads.`
+                : `Out-of-The-Money: Live spot ($${(spot ?? 0).toLocaleString()}) < strike ($${(selectedMarket?.strikePrice ?? 0).toLocaleString()}). NO outcome currently leads.`
             }
             className={cn(
               "text-[9px] font-bold px-1.5 py-0 mt-0.5 inline-block cursor-help",
@@ -338,7 +339,7 @@ export const OrderBookDepth: React.FC<OrderBookDepthProps> = ({
 
             {/* Ladder Content */}
             <div className="p-2.5 flex flex-col justify-between flex-1 min-h-0 overflow-y-auto">
-              {/* ASKS (Sells) - 1-Click to BUY YES */}
+              {/* ASKS (Sells) - 1-Click to BUY active outcome */}
               <div className="flex flex-col gap-1">
                 {asks.length === 0 && isFetchingDepth ? (
                   [1, 2, 3, 4, 5].map((i) => (
@@ -364,7 +365,7 @@ export const OrderBookDepth: React.FC<OrderBookDepthProps> = ({
                         <div
                           key={`ask-${idx}`}
                           onClick={() => handleLadderAskClick(displayPrice, ask.quantity)}
-                          title={`Click to 1-Click Pre-fill BUY YES @ $${displayPrice.toFixed(2)}`}
+                          title={`Click to 1-Click Pre-fill BUY ${activeLeg} @ $${displayPrice.toFixed(2)}`}
                           className="relative grid grid-cols-3 items-center px-2 py-1 rounded text-xs font-mono overflow-hidden hover:bg-rose-500/10 cursor-pointer transition-colors group"
                         >
                           {/* Depth Bar */}
@@ -375,10 +376,10 @@ export const OrderBookDepth: React.FC<OrderBookDepthProps> = ({
                           <span className="relative text-rose-400 font-bold text-left flex items-center gap-1">
                             {displayPrice.toFixed(2)}
                             <span className="opacity-0 group-hover:opacity-100 text-[9px] text-rose-300 font-normal transition-opacity hidden sm:inline">
-                              BUY YES
+                              BUY {activeLeg}
                             </span>
                           </span>
-                          <span className="relative text-foreground text-right">{ask.quantity.toLocaleString()}</span>
+                          <span className="relative text-foreground text-right">{(ask.quantity ?? 0).toLocaleString()}</span>
                           <span className="relative text-muted-foreground text-right">${ask.total.toFixed(1)}</span>
                         </div>
                       );
@@ -408,7 +409,7 @@ export const OrderBookDepth: React.FC<OrderBookDepthProps> = ({
                 </div>
               </div>
 
-              {/* BIDS (Buys) - 1-Click to BUY NO */}
+              {/* BIDS (Buys) - 1-Click to BUY Counterpart outcome */}
               <div className="flex flex-col gap-1">
                 {bids.length === 0 && isFetchingDepth ? (
                   [1, 2, 3, 4, 5].map((i) => (
@@ -425,13 +426,15 @@ export const OrderBookDepth: React.FC<OrderBookDepthProps> = ({
                 ) : (
                   bids.slice(0, 5).map((bid, idx) => {
                     const displayPrice = activeLeg === 'YES' ? bid.price : Number((1.0 - bid.price).toFixed(2));
+                    const counterpartOutcome = activeLeg === 'YES' ? 'NO' : 'YES';
+                    const counterpartPrice = Number((1.0 - displayPrice).toFixed(2));
                     const barWidth = Math.min(100, Math.max(4, (bid.total / maxTotal) * 100));
 
                     return (
                       <div
                         key={`bid-${idx}`}
                         onClick={() => handleLadderBidClick(displayPrice, bid.quantity)}
-                        title={`Click to 1-Click Pre-fill BUY NO @ $${(1.0 - displayPrice).toFixed(2)}`}
+                        title={`Click to 1-Click Pre-fill BUY ${counterpartOutcome} @ $${counterpartPrice.toFixed(2)}`}
                         className="relative grid grid-cols-3 items-center px-2 py-1 rounded text-xs font-mono overflow-hidden hover:bg-emerald-500/10 cursor-pointer transition-colors group"
                       >
                         {/* Depth Bar */}
@@ -442,10 +445,10 @@ export const OrderBookDepth: React.FC<OrderBookDepthProps> = ({
                         <span className="relative text-emerald-400 font-bold text-left flex items-center gap-1">
                           {displayPrice.toFixed(2)}
                           <span className="opacity-0 group-hover:opacity-100 text-[9px] text-emerald-300 font-normal transition-opacity hidden sm:inline">
-                            BUY NO
+                            BUY {counterpartOutcome}
                           </span>
                         </span>
-                        <span className="relative text-foreground text-right">{bid.quantity.toLocaleString()}</span>
+                        <span className="relative text-foreground text-right">{(bid.quantity ?? 0).toLocaleString()}</span>
                         <span className="relative text-muted-foreground text-right">${bid.total.toFixed(1)}</span>
                       </div>
                     );

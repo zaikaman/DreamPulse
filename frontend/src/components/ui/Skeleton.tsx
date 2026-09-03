@@ -338,6 +338,7 @@ export const OrderHistoryTableSkeleton: React.FC<{ rows?: number }> = ({ rows = 
           <td style={{ padding: '12px 16px', textAlign: 'right' }}><Skeleton variant="text" width={50} height={13} style={{ marginLeft: 'auto' }} /></td>
           <td style={{ padding: '12px 16px', textAlign: 'center' }}><Skeleton variant="badge" width={45} height={18} style={{ margin: '0 auto' }} /></td>
           <td style={{ padding: '12px 16px', textAlign: 'right' }}><Skeleton variant="text" width={65} height={12} style={{ marginLeft: 'auto' }} /></td>
+          <td style={{ padding: '12px 16px', textAlign: 'center' }}><Skeleton variant="badge" width={50} height={18} style={{ margin: '0 auto' }} /></td>
         </tr>
       ))}
     </tbody>

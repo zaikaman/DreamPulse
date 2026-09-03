@@ -38,10 +38,15 @@ export const RecentlySettledRounds: React.FC<RecentlySettledRoundsProps> = ({
       const res = await apiClient.getHistoricalMarkets(15);
       if (res.success && res.data && res.data.length > 0) {
         const formatted: SettledRoundItem[] = res.data
-          .filter((m) => m.status === 'Finalized' || m.settlementPrice !== undefined)
+          .filter((m) => m.status === 'Finalized' || m.settlementPrice !== undefined || (m as any).settlement_price !== undefined)
           .map((m) => {
+            const rawStrike = Number(m.strikePrice ?? (m as any).strike_price ?? 0);
+            const rawSettlement = Number(m.settlementPrice ?? (m as any).settlement_price ?? rawStrike);
+            const strikePrice = isNaN(rawStrike) ? 0 : rawStrike;
+            const settlementPrice = isNaN(rawSettlement) ? strikePrice : rawSettlement;
+
             const isVoid = m.winningOutcome === 'VOID';
-            const isUp = (m.winningOutcome === 'YES') || (!isVoid && m.settlementPrice !== undefined && m.settlementPrice >= m.strikePrice);
+            const isUp = (m.winningOutcome === 'YES') || (!isVoid && settlementPrice >= strikePrice);
             const winningOutcome: 'YES' | 'NO' | 'VOID' = isVoid ? 'VOID' : (isUp ? 'YES' : 'NO');
             const closeDate = m.resolutionTimestamp || m.closeTimestamp ? new Date(m.resolutionTimestamp || m.closeTimestamp) : new Date();
             const timeStr = closeDate.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false });
@@ -50,8 +55,8 @@ export const RecentlySettledRounds: React.FC<RecentlySettledRoundsProps> = ({
               id: m.id,
               symbol: m.symbol || currentSymbol,
               windowDuration: m.windowDuration || '15m',
-              strikePrice: m.strikePrice || 0,
-              settlementPrice: m.settlementPrice || m.strikePrice || 0,
+              strikePrice,
+              settlementPrice,
               settledAt: timeStr,
               winningOutcome,
               isUp,
@@ -131,8 +136,8 @@ export const RecentlySettledRounds: React.FC<RecentlySettledRoundsProps> = ({
             )}
             title={
               round.winningOutcome === 'VOID'
-                ? `Round voided / refunded at ${round.settledAt}. Strike was $${round.strikePrice.toLocaleString()}.`
-                : `Settled at $${round.settlementPrice.toLocaleString()} at ${round.settledAt}. Strike was $${round.strikePrice.toLocaleString()}.`
+                ? `Round voided / refunded at ${round.settledAt}. Strike was $${(round.strikePrice ?? 0).toLocaleString()}.`
+                : `Settled at $${(round.settlementPrice ?? 0).toLocaleString()} at ${round.settledAt}. Strike was $${(round.strikePrice ?? 0).toLocaleString()}.`
             }
           >
             {/* Left: Asset Icon & Window */}
@@ -146,7 +151,7 @@ export const RecentlySettledRounds: React.FC<RecentlySettledRoundsProps> = ({
             {/* Middle: Settlement Price */}
             <div className="flex flex-col text-right">
               <span className="font-bold text-foreground text-[11px]">
-                ${round.settlementPrice.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                ${(round.settlementPrice ?? 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
               </span>
               <span className="text-[9px] text-muted-foreground">settlement</span>
             </div>
