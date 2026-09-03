@@ -382,6 +382,7 @@ export const App: React.FC = () => {
           <React.Suspense fallback={<div className="glass-card" style={{ minHeight: '340px', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: '12px' }}><Spinner size="lg" /><span style={{ fontSize: '13px', color: 'var(--muted-foreground)' }}>Loading Swarm Arena & Leaderboard...</span></div>}>
             <SwarmArenaView
               wallet={wallet}
+              activeSession={activeSession}
               onOpenSessionModal={handleOpenSessionModal}
               onConnectWallet={connectWallet}
               onNavigateToStudio={(customDraft) => {
@@ -417,6 +418,7 @@ export const App: React.FC = () => {
           <React.Suspense fallback={<div className="glass-card" style={{ minHeight: '340px', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: '12px' }}><Spinner size="lg" /><span style={{ fontSize: '13px', color: 'var(--muted-foreground)' }}>Loading Forecaster Profile...</span></div>}>
             <TraderProfileView
               wallet={wallet}
+              activeSession={activeSession}
               targetAddress={selectedProfileAddress}
               onBack={() => {
                 setActiveNav('Swarm Arena');

@@ -15,7 +15,7 @@ import {
   CheckIcon,
   AdjustmentsHorizontalIcon,
 } from '@heroicons/react/24/outline';
-import type { TraderProfileDetail, ProofOfAlphaCardConfig, SocialCopyConfig } from '../../types/index.js';
+import type { TraderProfileDetail, ProofOfAlphaCardConfig, SocialCopyConfig, SessionGrant } from '../../types/index.js';
 import { apiClient } from '../../services/api.js';
 import { ProofOfAlphaModal } from './ProofOfAlphaModal.js';
 import { SocialCopyRiskModal } from './SocialCopyRiskModal.js';
@@ -28,6 +28,7 @@ const SOMNIA_SHANNON_EXPLORER = 'https://shannon-explorer.somnia.network';
 
 export interface TraderProfileViewProps {
   wallet?: any;
+  activeSession?: SessionGrant | null;
   targetAddress: string | null;
   onBack: () => void;
   onConnectWallet?: () => Promise<void>;
@@ -36,6 +37,7 @@ export interface TraderProfileViewProps {
 
 export const TraderProfileView: React.FC<TraderProfileViewProps> = ({
   wallet,
+  activeSession,
   targetAddress,
   onBack,
   onConnectWallet,
@@ -693,7 +695,7 @@ export const TraderProfileView: React.FC<TraderProfileViewProps> = ({
         isLoading={isCopyTradeLoading}
         onConfirm={handleConfirmRisk}
         onStopMirroring={handleStopMirror}
-        hasActiveSession={Boolean(wallet?.isConnected)}
+        hasActiveSession={Boolean(activeSession && activeSession.isActive && new Date(activeSession.expiresAt).getTime() > Date.now())}
         onOpenSessionModal={onOpenSessionModal ? () => onOpenSessionModal() : undefined}
       />
     </div>

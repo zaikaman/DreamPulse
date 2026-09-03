@@ -21,6 +21,7 @@ import type {
   ArenaTraderEntry,
   ProofOfAlphaCardConfig,
   CustomAgentDefinition,
+  SessionGrant,
 } from '../../types/index.js';
 import type { WalletState } from '../../hooks/useSessionKey.js';
 import { useArenaLeaderboard } from '../../hooks/useArenaLeaderboard.js';
@@ -34,6 +35,7 @@ import { soundEngine } from '../../services/soundEngine.js';
 
 export interface SwarmArenaViewProps {
   wallet?: WalletState;
+  activeSession?: SessionGrant | null;
   onOpenSessionModal?: () => void;
   onConnectWallet?: () => Promise<void>;
   onNavigateToStudio?: (customDraft?: Partial<CustomAgentDefinition>) => void;
@@ -62,6 +64,7 @@ function formatAssetWindow(symbol?: string, timeframe?: string): string {
 
 export const SwarmArenaView: React.FC<SwarmArenaViewProps> = ({
   wallet,
+  activeSession,
   onOpenSessionModal: _onOpenSessionModal,
   onConnectWallet,
   onNavigateToStudio,
@@ -1162,7 +1165,7 @@ export const SwarmArenaView: React.FC<SwarmArenaViewProps> = ({
         onStopMirroring={async (targetAddress) => {
           await handleToggleCopyTrading(targetAddress, false);
         }}
-        hasActiveSession={Boolean(wallet?.isConnected)}
+        hasActiveSession={Boolean(activeSession && activeSession.isActive && new Date(activeSession.expiresAt).getTime() > Date.now())}
         onOpenSessionModal={_onOpenSessionModal}
       />
     </div>

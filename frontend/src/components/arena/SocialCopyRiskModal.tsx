@@ -50,7 +50,7 @@ export const SocialCopyRiskModal: React.FC<SocialCopyRiskModalProps> = ({
   isLoading = false,
   onConfirm,
   onStopMirroring,
-  hasActiveSession = true,
+  hasActiveSession = false,
   onOpenSessionModal,
 }) => {
   const [maxTradeSize, setMaxTradeSize] = useState<number>(50);
