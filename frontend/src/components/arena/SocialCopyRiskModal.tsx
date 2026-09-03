@@ -338,7 +338,10 @@ export const SocialCopyRiskModal: React.FC<SocialCopyRiskModalProps> = ({
                 <Button
                   variant="outline"
                   size="sm"
-                  onClick={onOpenSessionModal}
+                  onClick={() => {
+                    onClose();
+                    onOpenSessionModal();
+                  }}
                   className="h-6 text-[10px] font-mono mt-1.5 border-border/60"
                 >
                   <span>Authorize Session</span>
