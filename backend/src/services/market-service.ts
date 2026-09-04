@@ -288,10 +288,18 @@ export class MarketService extends EventEmitter {
           status = 'Finalized';
         } else if (rawStatus === 'Settling' || rawStatus === '3' || timeLeftSeconds <= 0) {
           status = 'Resolving';
-        } else if (rawStatus === 'Trading' || rawStatus === '1' || (!m.status && timeLeftSeconds > 0)) {
+        } else if (
+          rawStatus === 'Trading' ||
+          rawStatus === 'Listed' ||
+          rawStatus === '1' ||
+          rawStatus === '0' ||
+          (!m.status && timeLeftSeconds > 0)
+        ) {
           status = 'Open';
+        } else if (rawStatus === 'Locked' || rawStatus === '2') {
+          status = timeLeftSeconds <= 0 ? 'Resolving' : 'Closed';
         } else {
-          status = 'Resolving';
+          status = timeLeftSeconds <= 0 ? 'Resolving' : 'Open';
         }
 
         // Populate unified representation

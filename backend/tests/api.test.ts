@@ -4,10 +4,14 @@ import { app } from '../src/index.js';
 import { settlementService } from '../src/services/settlement-service.js';
 import { marketService } from '../src/services/market-service.js';
 import { orderService } from '../src/services/order-service.js';
+import { somniaExchange, publicClient } from '../src/config/somnia.js';
 import type { Market } from '../src/types/index.js';
 
 describe('Express REST API Endpoints', () => {
   beforeAll(() => {
+    vi.spyOn(somniaExchange.client, 'listBinaryMarkets').mockResolvedValue([] as any);
+    vi.spyOn(publicClient as any, 'multicall').mockResolvedValue([] as any);
+
     const testOnchainMarket: Market = {
       id: '0x1111111111111111111111111111111111111111111111111111111111111111',
       symbol: 'BTC/USD',

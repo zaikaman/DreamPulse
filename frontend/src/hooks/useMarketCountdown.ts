@@ -69,14 +69,43 @@ export function useMarketCountdown(
   let formattedExpiry: string;
 
   if (hasValidCloseTime) {
-    const m = Math.floor(diff / 60);
-    const s = diff % 60;
-    formattedCountdown = `${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
+    if (diff <= 0) {
+      formattedCountdown = '00:00';
+    } else {
+      const days = Math.floor(diff / 86400);
+      const hours = Math.floor((diff % 86400) / 3600);
+      const m = Math.floor((diff % 3600) / 60);
+      const s = diff % 60;
+
+      if (days > 0) {
+        formattedCountdown = `${days}d ${hours}h ${String(m).padStart(2, '0')}m`;
+      } else if (hours > 0) {
+        formattedCountdown = `${String(hours).padStart(2, '0')}:${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
+      } else {
+        formattedCountdown = `${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
+      }
+    }
 
     const expiryDate = new Date(closeTime);
     const hours = String(expiryDate.getHours()).padStart(2, '0');
     const minutes = String(expiryDate.getMinutes()).padStart(2, '0');
-    formattedExpiry = `${hours}:${minutes}`;
+    const timeStr = `${hours}:${minutes}`;
+
+    const nowDate = new Date(now);
+    const isToday = expiryDate.toDateString() === nowDate.toDateString();
+    const tomorrowDate = new Date(now);
+    tomorrowDate.setDate(tomorrowDate.getDate() + 1);
+    const isTomorrow = expiryDate.toDateString() === tomorrowDate.toDateString();
+
+    if (isToday) {
+      formattedExpiry = timeStr;
+    } else if (isTomorrow) {
+      formattedExpiry = `Tomorrow ${timeStr}`;
+    } else {
+      const month = expiryDate.toLocaleDateString([], { month: 'short' });
+      const day = expiryDate.getDate();
+      formattedExpiry = `${month} ${day} ${timeStr}`;
+    }
   } else {
     formattedCountdown = '--:--';
     formattedExpiry = '—';

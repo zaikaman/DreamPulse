@@ -403,11 +403,12 @@ export const TradeTerminalView: React.FC<TradeTerminalViewProps> = ({
                 bestBidYes={market.bestBidYes}
                 bestAskYes={market.bestAskYes}
                 availableDurations={markets
-                  .filter((m) => m.symbol === market.symbol && m.status === 'Open')
+                  .filter((m) => m.symbol === market.symbol && (m.status === 'Open' || m.status === 'Resolving'))
                   .map((m) => m.windowDuration)}
                 onSelectDuration={(duration) => {
-                  // Find matching duration market if available
-                  const match = markets.find((m) => m.symbol === market.symbol && m.windowDuration === duration && m.status === 'Open');
+                  // Find matching duration market if available (prefer Open)
+                  const match = markets.find((m) => m.symbol === market.symbol && m.windowDuration === duration && m.status === 'Open')
+                    || markets.find((m) => m.symbol === market.symbol && m.windowDuration === duration);
                   if (match) onSelectMarket(match.id);
                 }}
               />

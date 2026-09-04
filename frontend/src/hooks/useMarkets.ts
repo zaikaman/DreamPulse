@@ -113,12 +113,21 @@ export function useMarkets(options?: UseMarketsOptions) {
           const targetSym = selectedSymbolRef.current;
           const targetWin = selectedWindowRef.current;
           if (targetSym) {
-            const sameSymAndWin = response.data.find((m) => m.symbol === targetSym && (!targetWin || m.windowDuration === targetWin));
+            const sameSymAndWin = response.data.find(
+              (m) => m.symbol === targetSym && (!targetWin || m.windowDuration === targetWin) && m.status === 'Open'
+            ) || response.data.find(
+              (m) => m.symbol === targetSym && (!targetWin || m.windowDuration === targetWin)
+            );
             if (sameSymAndWin) return sameSymAndWin.id;
-            const sameSym = response.data.find((m) => m.symbol === targetSym);
+            const sameSym = response.data.find((m) => m.symbol === targetSym && m.status === 'Open')
+              || response.data.find((m) => m.symbol === targetSym);
             if (sameSym) return sameSym.id;
           }
-          return response.data.length > 0 ? response.data[0].id : null;
+          // Prioritize active Open intraday markets (15m/5m) over Resolving/Closed rounds on initial load
+          const preferredOpen = response.data.find((m) => m.status === 'Open' && (m.windowDuration === '15m' || m.windowDuration === '5m'))
+            || response.data.find((m) => m.status === 'Open')
+            || (response.data.length > 0 ? response.data[0] : null);
+          return preferredOpen ? preferredOpen.id : null;
         });
       }
     } catch (err) {

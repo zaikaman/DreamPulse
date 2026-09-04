@@ -46,8 +46,21 @@ interface TraderCockpitTicketProps {
   bestBidYes?: number;
   bestAskYes?: number;
   availableDurations?: string[];
-  onSelectDuration?: (duration: '1m' | '5m' | '15m' | '1h') => void;
+  onSelectDuration?: (duration: string) => void;
 }
+
+const formatWindowDurationLabel = (dur?: string): string => {
+  switch (dur?.toLowerCase()) {
+    case '1m': return '1-minute';
+    case '5m': return '5-minute';
+    case '15m': return '15-minute';
+    case '1h': return '1-hour';
+    case '4h': return '4-hour';
+    case '24h': return '24-hour';
+    case '7d': return '7-day';
+    default: return dur ? `${dur}` : '15-minute';
+  }
+};
 
 export const TraderCockpitTicket: React.FC<TraderCockpitTicketProps> = ({
   market,
@@ -68,6 +81,15 @@ export const TraderCockpitTicket: React.FC<TraderCockpitTicketProps> = ({
   // Real-time dynamic countdown & formatted expiry (30s lock removed — trading open until expiry)
   const { formattedCountdown, formattedExpiry, isExpired } = useMarketCountdown(market.closeTimestamp, market.windowDuration);
   const isTradingLocked = isExpired || market.status !== 'Open';
+  const statusBadgeText = market.status === 'Resolving'
+    ? 'RESOLVING'
+    : market.status === 'Closed'
+    ? 'CLOSED'
+    : isExpired
+    ? 'EXPIRED'
+    : isTradingLocked
+    ? 'LOCKED'
+    : null;
 
   // Order Configuration State
   const [outcome, setOutcome] = useState<'YES' | 'NO'>('YES');
@@ -308,6 +330,22 @@ export const TraderCockpitTicket: React.FC<TraderCockpitTicketProps> = ({
 
   const isYes = outcome === 'YES';
 
+  const switcherDurations = useMemo(() => {
+    const list = ['1m', '5m', '15m', '1h'];
+    const cur = market.windowDuration || '15m';
+    if (!list.includes(cur)) {
+      list.push(cur);
+    }
+    if (availableDurations) {
+      for (const d of availableDurations) {
+        if (['4h', '24h', '7d'].includes(d) && !list.includes(d)) {
+          list.push(d);
+        }
+      }
+    }
+    return list;
+  }, [market.windowDuration, availableDurations]);
+
   return (
     <div
       className={cn(
@@ -330,20 +368,20 @@ export const TraderCockpitTicket: React.FC<TraderCockpitTicketProps> = ({
             isTradingLocked ? "text-[#ffb700] animate-pulse" : "text-brand-cyan"
           )}>
             {isTradingLocked ? <LockClosedIcon className="w-3.5 h-3.5 text-[#ffb700]" /> : <ClockIcon className="w-3.5 h-3.5" />}
-            <span>{isTradingLocked ? `${formattedCountdown} (CLOSED)` : formattedCountdown}</span>
+            <span>{statusBadgeText ? `${formattedCountdown} (${statusBadgeText})` : formattedCountdown}</span>
           </div>
         </div>
 
         <div className="flex items-center justify-between text-[11px] text-muted-foreground">
-          <span>{market.windowDuration === '1h' ? '1-hour' : market.windowDuration === '15m' ? '15-minute' : market.windowDuration === '5m' ? '5-minute' : market.windowDuration === '1m' ? '1-minute' : '15-minute'} market</span>
+          <span>{formatWindowDurationLabel(market.windowDuration)} market</span>
           <span className="text-[10px]">
             strike ${strike.toLocaleString('en-US', { minimumFractionDigits: 2 })} · expires {formattedExpiry}
           </span>
         </div>
 
-        {/* Timeframe Switcher (1m / 5m / 15m / 1h) */}
-        <div className="flex items-center gap-1.5 mt-2.5">
-          {(['1m', '5m', '15m', '1h'] as const).map((duration) => {
+        {/* Timeframe Switcher (Supports 1m / 5m / 15m / 1h / 4h / 24h) */}
+        <div className="flex items-center gap-1.5 mt-2.5 flex-wrap">
+          {switcherDurations.map((duration) => {
             const isCur = (market.windowDuration || '15m') === duration;
             const isAvailable = !availableDurations || availableDurations.length === 0 || availableDurations.includes(duration);
             return (
