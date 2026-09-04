@@ -415,7 +415,7 @@ export const MarketMatrix: React.FC<MarketMatrixProps> = ({
           </div>
         ) : viewMode === 'table' ? (
           /* Table View */
-          <div className="overflow-x-auto rounded-lg border border-border/40 bg-secondary/10">
+          <div className="overflow-x-auto touch-scroll rounded-lg border border-border/40 bg-secondary/10">
             <table className="w-full min-w-[640px] text-left text-xs font-mono">
               <thead className="border-b border-border/40 bg-secondary/30 text-[10px] uppercase tracking-wider text-muted-foreground font-semibold">
                 <tr>

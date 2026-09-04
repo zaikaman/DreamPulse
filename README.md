@@ -28,7 +28,6 @@
 * **Somnia OperatorPermissionsRegistry**: [`0x15C7e8CE38F021c5b45d098AaD788f63090bF20A`](https://shannon-explorer.somnia.network/address/0x15C7e8CE38F021c5b45d098AaD788f63090bF20A)
 * **Machine-Readable Evidence Artifact**: [`evidence.json`](./evidence.json) *(Full audit trail, on-chain tx hashes, and JSON schemas)*
 * **SDK & Documentation Developer Feedback Report**: [Jump to Feedback Report](#developer-feedback-report-somnia--dreamdex-sdk)
-* **2–3 Minute Judging Demo Script**: [Jump to Video Walkthrough](#23-minute-demo-video-walkthrough)
 * **Automated Verification Suite**: `npm run verify` *(302/302 Unit & Integration Tests Passing, 100% Type Safety)*
 
 ---
@@ -814,36 +813,6 @@ npm run verify
       Tests  302 passed (302)
    Duration  26.12s
 ```
-
----
-
-## 2–3 Minute Demo Video Walkthrough
-
-A structured script demonstrating all capabilities during the hackathon judging evaluation:
-
-* **0:00 – 0:30 (The Problem & Full Platform Vision)**:
-  * Open with DreamDEX Event Contracts challenge: order book liquidity cold-start, quote staleness, and fragmented UI.
-  * Introduce **DreamPulse AI** as the comprehensive institutional prediction ecosystem: Pro Trade Terminal, No-Code Agent Studio, and Autonomous Swarms on Somnia.
-* **0:30 – 1:00 (Non-Custodial Onboarding & BatchApprove)**:
-  * Connect MetaMask on Somnia Shannon Testnet.
-  * Open **Session Delegation Modal**: showcase 1-click batch delegation via `BatchApprove.sol` and EIP-712 signature.
-  * Demonstrate strict risk parameters: single-trade cap ($20) and daily volume cap ($200) with zero withdrawal privileges.
-* **1:00 – 1:40 (Pro Trade Terminal with AI Alpha Copilot)**:
-  * Navigate to **Trade Terminal**: show real-time visual binary settlement chart with strike price line, live spot price trail, and UP/DOWN payout zones.
-  * Toggle between visual settlement chart and CLOB Order Book Depth Ladder with 1-click book toggle.
-  * Highlight **AI Alpha Copilot**: Black-Scholes fair value, mathematical edge (+12.7%), and 1-click follow trade execution.
-* **1:40 – 2:10 (Visual Strategy Studio & Quant Backtesting)**:
-  * Switch to **Strategy Studio**: build a custom binary agent using the Notion-style capsule builder (`WHEN -> IF -> THEN -> RISK LEASH`) and dedicated Gemini natural language prompt.
-  * Set a granular tUSDC bankroll allowance ($50) and deploy the custom agent.
-  * Jump to **Backtester**: run a historical simulation against Binance tick data with 4 bps slippage and 25ms execution latency, reviewing Sortino ratio and drawdown curves.
-* **2:10 – 2:40 (Autonomous Swarm Execution & Live AI Thoughts)**:
-  * Open **Fleet Cockpit** & **AI Swarm Feed**: show real-time cognitive reasoning stream from Volt, Oracle, and Titan with sub-second latencies and tx hashes on Somnia Explorer.
-  * Showcase `COPY ↔ PERSONAL` mode toggle for isolated per-wallet swarm execution.
-* **2:40 – 3:00 (Swarm Arena, Proof-of-Alpha & Autonomous Settlement)**:
-  * Check **Swarm Arena**: show dual-track leaderboards, 1-click strategy cloning, and export a 4x Ultra-HD Proof-of-Alpha Card.
-  * Matured market resolution: show **Sweeper** detecting finalized contract and directly transferring winning collateral.
-  * Highlight production readiness (302/302 tests, 0 `any` types) and Somnia ecosystem impact.
-
 ---
 
 ## Future Roadmap Beyond Hackathon

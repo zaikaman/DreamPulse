@@ -132,7 +132,7 @@ const OverviewViewComponent: React.FC<OverviewViewProps> = ({
   } = useOnboarding({ wallet, activeSession, ordersCount: orders.length });
 
   return (
-    <div className="overview-container flex flex-col gap-2.5 flex-1 min-h-0 overflow-y-auto lg:overflow-hidden pb-4">
+    <div className="overview-container flex flex-col gap-2.5 flex-1 min-h-0 overflow-y-auto xl:overflow-hidden terminal-panel-adaptive pb-4">
       {/* Onboarding & Quick-Start Quest Checklist */}
       <OnboardingQuestBar
         quests={quests}
@@ -217,8 +217,8 @@ const OverviewViewComponent: React.FC<OverviewViewProps> = ({
         {isLoading && opportunities.length === 0 ? (
           <OpportunityTableSkeleton rows={5} />
         ) : (
-          <div style={{ overflowX: 'auto' }}>
-            <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '12px' }}>
+          <div className="overflow-x-auto touch-scroll">
+            <table style={{ width: '100%', minWidth: '640px', borderCollapse: 'collapse', fontSize: '12px' }}>
               <thead>
                 <tr className="border-b border-border/60 text-muted-foreground text-[10px] font-mono uppercase tracking-wider" style={{ background: 'transparent', textAlign: 'left' }}>
                   <th style={{ padding: '9px 18px', fontWeight: 500 }}>ASSET & STRIKE</th>
@@ -324,9 +324,9 @@ const OverviewViewComponent: React.FC<OverviewViewProps> = ({
       </div>
 
       {/* 3. Secondary Split: compact, fills remainder, inline scroll */}
-      <div className="flex-1 min-h-0 grid grid-cols-1 lg:grid-cols-[1.2fr_1fr] gap-2.5 overflow-hidden">
+      <div className="flex-1 min-h-[280px] lg:min-h-0 grid grid-cols-1 lg:grid-cols-[1.2fr_1fr] gap-2.5 overflow-hidden">
         {/* Left: Quick Active Markets - 3 items, internal scroll */}
-        <div className="terminal-panel flex flex-col min-h-0 overflow-hidden" style={{ padding: '12px 14px' }}>
+        <div className="terminal-panel flex flex-col min-h-[220px] lg:min-h-0 overflow-hidden" style={{ padding: '12px 14px' }}>
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '12px' }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}> <span style={{ fontWeight: 600, fontSize: '13px' }} className="text-foreground">Active Prediction Catalog</span>
               <Badge variant="outline" className="font-mono text-[10px] text-muted-foreground bg-secondary/40 border-border/50">
@@ -435,7 +435,7 @@ const OverviewViewComponent: React.FC<OverviewViewProps> = ({
 
         {/* Right: Live AI Reasoning Snapshot - 3 items, internal scroll */}
         <div
-          className="terminal-panel flex flex-col min-h-0 overflow-hidden"
+          className="terminal-panel flex flex-col min-h-[220px] lg:min-h-0 overflow-hidden"
           style={{ padding: '12px 14px' }}
           onMouseEnter={() => setIsHovered(true)}
           onMouseLeave={() => setIsHovered(false)}

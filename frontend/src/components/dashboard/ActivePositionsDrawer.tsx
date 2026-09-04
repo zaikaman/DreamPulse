@@ -205,10 +205,10 @@ export const ActivePositionsDrawer: React.FC<ActivePositionsDrawerProps> = ({
   return (
     <div className="border-t border-border/40 bg-background/90 backdrop-blur-md flex flex-col flex-shrink-0 transition-all duration-200">
       {/* Header Bar */}
-      <div className="flex items-center justify-between px-4 py-2 border-b border-border/30 text-xs font-mono">
-        <div className="flex items-center gap-3">
+      <div className="flex items-center justify-between px-4 py-2 border-b border-border/30 text-xs font-mono flex-wrap gap-2">
+        <div className="flex items-center gap-3 flex-wrap">
             <div className="flex items-center gap-1.5 text-foreground font-bold">
-              <BriefcaseIcon className="w-4 h-4 text-brand-cyan" />
+              <BriefcaseIcon className="w-4 h-4 text-brand-cyan shrink-0" />
               <span className="hidden sm:inline">Terminal Activity</span>
               <Badge variant="outline" className="text-[9px] px-1.5 py-0 border-brand-cyan/30 text-brand-cyan bg-brand-cyan/5">
                 MANUAL
@@ -224,7 +224,7 @@ export const ActivePositionsDrawer: React.FC<ActivePositionsDrawerProps> = ({
             </div>
 
           {/* Sub-Tabs */}
-          <div className="flex items-center gap-1 bg-secondary/30 p-0.5 rounded-lg border border-border/40">
+          <div className="flex items-center gap-1 bg-secondary/30 p-0.5 rounded-lg border border-border/40 overflow-x-auto">
             <button
               type="button"
               onClick={() => {
@@ -308,7 +308,7 @@ export const ActivePositionsDrawer: React.FC<ActivePositionsDrawerProps> = ({
 
       {/* Expanded Content Area */}
       {isExpanded && (
-        <div className="max-h-56 min-h-[11rem] overflow-y-auto overflow-x-auto p-2 font-mono text-xs">
+        <div className="max-h-56 min-h-[11rem] overflow-y-auto overflow-x-auto touch-scroll p-2 font-mono text-xs">
           {!wallet.isConnected ? (
             <div className="flex flex-col items-center justify-center h-full text-muted-foreground py-6">
               <span>Connect your wallet to monitor open positions and resting limit orders.</span>

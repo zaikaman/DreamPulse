@@ -202,14 +202,14 @@ export const SessionStatusBar: React.FC<SessionStatusBarProps> = ({
               </Button>
             </div>
 
-            <div className="session-metric-divider"></div>
+            <div className="session-metric-divider hidden sm:block"></div>
 
             <div className="session-metric-item">
               <span className="metric-label">SINGLE CAP</span>
               <span className="metric-value tabular-num font-mono">{formatCapAmount(activeSession.maxTradeSize)}</span>
             </div>
 
-            <div className="session-metric-divider"></div>
+            <div className="session-metric-divider hidden sm:block"></div>
 
             <div className="session-metric-item budget-meter-item">
               <div className="budget-label-row">
@@ -237,7 +237,7 @@ export const SessionStatusBar: React.FC<SessionStatusBarProps> = ({
               </div>
             </div>
 
-            <div className="session-metric-divider"></div>
+            <div className="session-metric-divider hidden sm:block"></div>
 
             <div className="session-metric-item">
               <span className="metric-label">EXECUTION MODE</span>
@@ -341,7 +341,7 @@ export const SessionStatusBar: React.FC<SessionStatusBarProps> = ({
               })()}
             </div>
 
-            <div className="session-metric-divider"></div>
+            <div className="session-metric-divider hidden sm:block"></div>
 
             <div className="session-metric-item">
               <span className="metric-label">EXPIRES</span>
@@ -353,7 +353,7 @@ export const SessionStatusBar: React.FC<SessionStatusBarProps> = ({
 
             {isCollateralZero && onClaimFaucet && (
               <>
-                <div className="session-metric-divider"></div>
+                <div className="session-metric-divider hidden sm:block"></div>
                 <div className="session-metric-item" style={{ color: 'var(--muted-foreground)', display: 'flex', alignItems: 'center', gap: '6px' }}>
                   <ExclamationTriangleIcon className="w-3 h-3 text-amber-400" />
                   <span style={{ fontSize: '11px', fontWeight: 500 }} className="font-mono text-muted-foreground">0.00 tUSDC Collateral</span>

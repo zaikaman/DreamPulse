@@ -2195,6 +2195,8 @@ select.terminal-select option {
   display: flex;
   align-items: center;
   justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 12px;
   padding: 8px 16px;
   border-radius: var(--radius-lg);
   margin-bottom: 12px;
@@ -2301,7 +2303,7 @@ select.terminal-select option {
 .session-banner-metrics {
   display: flex;
   align-items: center;
-  gap: 14px;
+  gap: 12px;
   flex-wrap: wrap;
 }
 
@@ -2309,12 +2311,20 @@ select.terminal-select option {
   display: flex;
   flex-direction: column;
   gap: 2px;
+  min-width: 0;
 }
 
 .session-metric-divider {
   width: 1px;
   height: 24px;
   background: hsl(var(--border));
+  display: none;
+}
+
+@media (min-width: 640px) {
+  .session-metric-divider {
+    display: block;
+  }
 }
 
 .metric-label {
@@ -2681,5 +2691,25 @@ select.terminal-select option {
   to {
     opacity: 1;
     transform: translateY(0);
+  }
+}
+
+/* ==============================================================================
+   Responsive Touch & Safe-Area Inset Utilities
+   ============================================================================== */
+.touch-scroll {
+  -webkit-overflow-scrolling: touch;
+  overscroll-behavior: contain;
+}
+
+@supports (padding-bottom: env(safe-area-inset-bottom)) {
+  .pb-safe {
+    padding-bottom: env(safe-area-inset-bottom);
+  }
+}
+
+@media (max-height: 860px) {
+  .terminal-panel-adaptive {
+    overflow-y: auto !important;
   }
 }

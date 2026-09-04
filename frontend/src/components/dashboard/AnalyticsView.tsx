@@ -235,7 +235,7 @@ export const AnalyticsView: React.FC<AnalyticsViewProps> = ({ wallet, onConnectW
           <Spinner size="sm" variant="cyan" />
           <span className="text-xs text-muted-foreground">Aggregating transparent on-chain ledger & swarm telemetry…</span>
         </div>
-        <div className="grid grid-cols-4 gap-3">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
           {[1, 2, 3, 4].map((i) => <div key={i} className="terminal-panel h-[84px]" />)}
         </div>
       </div>
@@ -685,8 +685,8 @@ export const AnalyticsView: React.FC<AnalyticsViewProps> = ({ wallet, onConnectW
                   <div className="flex items-center gap-1.5"><span className="text-xs font-bold">Daily Balance Ledger</span><Badge variant="outline" className="font-mono text-[10px] bg-secondary/30 border-border/40 text-muted-foreground">{ledgerRows.length} days</Badge></div>
                   <button type="button" onClick={exportCsv} className="inline-flex items-center gap-1 px-2 py-1 rounded-md border bg-secondary/30 border-border/50 text-[11px] font-medium text-muted-foreground hover:text-foreground"><ArrowDownTrayIcon className="w-3 h-3" /> CSV</button>
                 </div>
-                <div className="max-h-[320px] overflow-y-auto">
-                  <table className="w-full border-collapse text-xs">
+                <div className="max-h-[320px] overflow-y-auto overflow-x-auto touch-scroll">
+                  <table className="w-full min-w-[560px] border-collapse text-xs">
                     <thead className="sticky top-0 z-10 bg-[#111114] border-b border-border/60">
                       <tr className="text-[10px] font-mono text-muted-foreground uppercase">
                         <th className="px-2.5 py-2 text-left font-semibold">Date (UTC)</th><th className="px-2 py-2 text-right">Start</th><th className="px-2 py-2 text-right">Daily PnL</th><th className="px-2 py-2 text-right">End Bal</th><th className="px-2 py-2 text-center">Trades</th><th className="px-2 py-2 text-center">W/L</th><th className="px-2 py-2 text-right">Volume</th>

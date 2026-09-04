@@ -159,9 +159,9 @@ export const Shell: React.FC<ShellProps> = ({
 
         <main
           className={cn(
-            "flex-1 min-w-0 transition-all duration-200 relative z-10",
+            "flex-1 min-w-0 transition-all duration-200 relative z-10 touch-scroll pb-safe",
             currentView === 'Trade Terminal'
-              ? "overflow-y-auto lg:overflow-hidden p-1.5 sm:p-2 md:p-2.5"
+              ? "overflow-y-auto xl:overflow-hidden terminal-panel-adaptive p-1.5 sm:p-2 md:p-2.5"
               : "overflow-y-auto p-2.5 sm:p-4 md:p-6"
           )}
         >

@@ -85,7 +85,7 @@ const EdgeRadarHeatmapComponent: React.FC<EdgeRadarHeatmapProps> = ({
       </div>
 
       {/* Heatmap Matrix Table */}
-      <div className="overflow-x-auto">
+      <div className="overflow-x-auto touch-scroll">
         <div className="min-w-[700px] flex flex-col gap-2">
           {/* Header Row */}
           <div className="grid grid-cols-[100px_repeat(4,1fr)] gap-2.5 px-1 text-[11px] font-mono text-muted-foreground font-medium uppercase tracking-wider">

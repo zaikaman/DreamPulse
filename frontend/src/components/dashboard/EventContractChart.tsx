@@ -226,7 +226,8 @@ export const EventContractChart: React.FC<EventContractChartProps> = ({
 
   // Scaler functions for SVG chart
   const { width, height } = dimensions;
-  const padding = { top: 42, right: 90, bottom: 35, left: 15 };
+  const isMobileWidth = width < 600;
+  const padding = { top: 42, right: isMobileWidth ? 60 : 90, bottom: 35, left: 15 };
   const chartWidth = Math.max(10, width - padding.left - padding.right);
   const chartHeight = Math.max(10, height - padding.top - padding.bottom);
 
@@ -317,7 +318,7 @@ export const EventContractChart: React.FC<EventContractChartProps> = ({
   return (
     <div className="relative flex flex-col h-full w-full select-none overflow-hidden rounded-xl border border-border/40 bg-background/80 backdrop-blur-md">
       {/* Top Chart Header & Navigation Bar */}
-      <div className="flex items-center justify-between px-3 py-2 border-b border-border/30 bg-background/60 text-xs font-mono">
+      <div className="flex items-center justify-between px-3 py-2 border-b border-border/30 bg-background/60 text-xs font-mono flex-wrap gap-2">
         {/* Left: Event Question & Status */}
         <div className="flex items-center gap-2.5 flex-wrap">
           <div className="flex items-center gap-1.5 font-bold text-foreground">
