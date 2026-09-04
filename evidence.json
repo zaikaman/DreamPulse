@@ -20,8 +20,8 @@
     "canonicalOperator": "0x93e300607c363E7D7a47e50f5c9fDf1723e859Cf"
   },
   "verificationSuite": {
-    "totalTests": 275,
-    "testSuites": 23,
+    "totalTests": 302,
+    "testSuites": 22,
     "passingRate": "100%",
     "zeroAnyTypes": true,
     "runner": "Vitest v3.2.7"
