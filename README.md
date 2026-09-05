@@ -23,6 +23,7 @@
 ## Somnia × DreamDEX Hackathon Quick Links
 
 * **Live Demo Web App**: [https://dreampulse-ai.vercel.app/](https://dreampulse-ai.vercel.app/) *(or local `http://localhost:5174`)*
+* **Official 2:55 Demo Video**: [Watch Demo Video on YouTube (2m 55s)](https://youtu.be/SW0iNoZHMzw)
 * **Somnia Shannon Testnet Chain ID**: `50312`
 * **Custom `BatchApprove.sol` Deployment**: [`0x12c9c45fa740ce7469dacff368b08ca7edcaac26`](https://shannon-explorer.somnia.network/address/0x12c9c45fa740ce7469dacff368b08ca7edcaac26)
 * **Somnia OperatorPermissionsRegistry**: [`0x15C7e8CE38F021c5b45d098AaD788f63090bF20A`](https://shannon-explorer.somnia.network/address/0x15C7e8CE38F021c5b45d098AaD788f63090bF20A)
@@ -813,6 +814,25 @@ npm run verify
       Tests  302 passed (302)
    Duration  26.12s
 ```
+---
+
+## 2–3 Minute Demo Video Walkthrough
+
+<p align="center">
+  <a href="https://youtu.be/SW0iNoZHMzw">
+    <img src="https://img.shields.io/badge/YouTube-Watch%20Demo%20Video%20(2m%2055s)-red?style=for-the-badge&logo=youtube&logoColor=white" alt="Watch Demo Video" />
+  </a>
+</p>
+
+* **Direct Video URL**: [https://youtu.be/SW0iNoZHMzw](https://youtu.be/SW0iNoZHMzw)
+* **Duration**: ~2 Minutes 55 Seconds (strictly within the hackathon's 2–3 minute requirement)
+* **Demonstrated Capabilities**:
+  1. **Non-Custodial Session Delegation**: 1-click batch authorization across rolling pools via `BatchApprove.sol` & `OperatorPermissionsRegistry` with zero custody transfer.
+  2. **Pro CLOB Trade Terminal & AI Alpha Copilot**: Visual binary settlement chart, strike price lines, Black-Scholes mathematical edge detection, and 1-click execution.
+  3. **Visual Strategy Studio & Quantitative Backtester**: No-code sentence rule AST builder with 14 indicators, dedicated Google Gemini copilot, and Binance historical backtesting.
+  4. **Autonomous Multi-Agent Swarms & Sweeper**: Protocol vs. Personal Swarms (`Volt`, `Oracle`, `Titan`), real-time sub-50ms WebSocket telemetry, and zero-loss automated payout sweeping.
+  5. **Swarm Arena & Social Alpha**: Dual-track leaderboards, 1-click strategy cloning, and Proof-of-Alpha cards.
+
 ---
 
 ## Future Roadmap Beyond Hackathon
