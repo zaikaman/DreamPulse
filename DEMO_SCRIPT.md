@@ -90,7 +90,7 @@
   5. Switch to **Settlement Sweeper** (`#settlement`), click **"Batch Sweep Winning Rounds"** — show direct tUSDC transfer to the user's wallet.
 
 > **Voiceover (56 words)**:  
-> *"Behind the scenes, four autonomous agents run a 100-millisecond loop: Volt snipes stale quotes, Oracle trades volatility mispricings, Titan provides two-sided liquidity, and Groq streams their live reasoning. Traders can mirror the swarm or run isolated personal configs.*  
+> *"Behind the scenes, DreamPulse has four autonomous agents running a 100-millisecond loop: Volt snipes stale quotes, Oracle trades volatility mispricings, Titan provides two-sided liquidity, and Groq streams their live reasoning. Traders can mirror the swarm or run isolated personal configs.*  
 > 
 > *And our Settlement Sweeper automatically batch-redeems winning shares from finalized pools, transferring payouts directly to your wallet."*
 
