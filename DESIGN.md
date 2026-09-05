@@ -1,5 +1,5 @@
 ---
-name: DreamPulse AI
+name: DreamPulse
 description: Institutional quantitative trading swarm for Somnia Shannon Testnet & DreamDEX CLOB Event Contracts
 colors:
   primary: "#00ffcc"
@@ -73,13 +73,13 @@ components:
     padding: "6px 12px"
 ---
 
-# Design System: DreamPulse AI
+# Design System: DreamPulse
 
 ## Overview
 
 **Creative North Star: "The Cyber-Quantitative Cockpit"**
 
-DreamPulse AI embodies an institutional cyber-financial trading terminal engineered for high-frequency prediction markets and autonomous swarm intelligence on Somnia Shannon Testnet. The interface balances extreme data density, sub-second telemetry streams, and surgical visual clarity. High-contrast typography and monospaced tabular data sit over deep obsidian glass panels, delivering immediate scannability across multi-asset order books, probability heatmaps, and AI reasoning streams.
+DreamPulse embodies an institutional cyber-financial trading terminal engineered for high-frequency prediction markets and autonomous swarm intelligence on Somnia Shannon Testnet. The interface balances extreme data density, sub-second telemetry streams, and surgical visual clarity. High-contrast typography and monospaced tabular data sit over deep obsidian glass panels, delivering immediate scannability across multi-asset order books, probability heatmaps, and AI reasoning streams.
 
 Every visual element communicates real-time mathematical state: pricing anomalies glow in luminous amber, Black-Scholes edge deltas highlight in emerald or crimson, and active execution signals illuminate in quantum cyan. Unnecessary visual noise, generic web3 gradients, and playful emoji decorations are strictly rejected in favor of functional financial engineering craft.
 
@@ -139,7 +139,7 @@ The typographical hierarchy pairs a crisp geometric sans-serif for high-level st
 
 ## Layout
 
-DreamPulse AI employs a modular, high-density dashboard grid designed for multi-tasking quant traders.
+DreamPulse employs a modular, high-density dashboard grid designed for multi-tasking quant traders.
 
 - **Global Shell**: Fixed top navigation header (live connectivity, sub-second latency badge, gas balances, wallet/session indicator) with collapsible left sidebar navigation.
 - **Spatial Grid**: CSS Grid and Flexbox layouts with standardized 10px (`gap-2.5`) or 16px (`gap-4`) gaps between panels.

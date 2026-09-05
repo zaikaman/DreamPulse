@@ -8,7 +8,7 @@ web
 
 ## Users
 
-DreamPulse AI serves two primary user archetypes operating on Somnia Shannon Testnet:
+DreamPulse serves two primary user archetypes operating on Somnia Shannon Testnet:
 
 1. **Institutional & Quantitative Traders / Liquidity Providers**:
    - **Situation**: Operating in high-volatility, fast-decaying binary prediction markets (1m, 5m, and 15m horizons on BTC and ETH).
@@ -20,7 +20,7 @@ DreamPulse AI serves two primary user archetypes operating on Somnia Shannon Tes
 
 ## Product Purpose
 
-DreamPulse AI is an institutional-grade, decentralized autonomous trading swarm and cyber-financial terminal built for **DreamDEX Central Limit Order Book (CLOB) Event Contracts** on **Somnia Shannon Testnet** (Chain ID `50312`).
+DreamPulse is an institutional-grade, decentralized autonomous trading swarm and cyber-financial terminal built for **DreamDEX Central Limit Order Book (CLOB) Event Contracts** on **Somnia Shannon Testnet** (Chain ID `50312`).
 
 It eliminates the structural hurdles of decentralized prediction markets — wide cold-start spreads, stale quote latency, theoretical volatility mispricing, approval fatigue across rolling round addresses, and stranded payout capital — by orchestrating four specialized micro-agents:
 - **Volt**: Latency drift & spot velocity momentum sniper (IOC taker).
@@ -32,7 +32,7 @@ Success means providing sub-second mathematical market efficiency, seamless non-
 
 ## Positioning
 
-Unlike conventional monolithic trading bots or static prediction market frontends, DreamPulse AI provides a cohesive cyber-financial suite:
+Unlike conventional monolithic trading bots or static prediction market frontends, DreamPulse provides a cohesive cyber-financial suite:
 
 1. **Coordinated 4-Agent Micro-Architecture**: Four decoupled personas executing on a 100ms evaluation loop rather than a single generalized script.
 2. **Non-Custodial Session Delegation with 1-Click `BatchApprove.sol`**: Leverages Somnia's native `OperatorPermissionsRegistry` and custom smart contract `BatchApprove.sol` to allow 1-click approval across all rolling event pools while guaranteeing that users retain complete custody of funds with hardcoded single-trade caps, spend ceilings, and instant revocation.
@@ -99,7 +99,7 @@ Unlike conventional monolithic trading bots or static prediction market frontend
 
 ## Brand Commitments
 
-- **Name**: DreamPulse AI
+- **Name**: DreamPulse
 - **Identity & Aesthetics**: Dark institutional cyber-financial terminal — high-density information architecture, sleek glassmorphic surfaces, subtle grid backdrops, and focused visual hierarchy.
 - **Color Tokens**:
   - Core Background: Deep slate/zinc `#09090b` and `#12141a`

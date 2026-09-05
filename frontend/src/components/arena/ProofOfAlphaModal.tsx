@@ -554,7 +554,7 @@ export const ProofOfAlphaModal: React.FC<ProofOfAlphaModalProps> = ({
   const handleShareToTwitter = () => {
     if (!config) return;
     const text = encodeURIComponent(
-      `Check out ${config.title} on @DreamPulse_AI on @Somnia_Network Shannon!\n\n` +
+      `Check out ${config.title} on @DreamPulse on @Somnia_Network Shannon!\n\n` +
       `[ALPHA] ${config.primaryMetricLabel}: ${config.primaryMetricValue}\n` +
       `[TARGET] ${config.secondaryMetricLabel}: ${config.secondaryMetricValue}\n` +
       `>> ${customTagline}\n\n`

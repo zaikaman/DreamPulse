@@ -1,4 +1,4 @@
-# DreamPulse AI — Strategic Roadmap & Hackathon Enhancement Proposals
+# DreamPulse — Strategic Roadmap & Hackathon Enhancement Proposals
 **Date:** August 27, 2026  
 **Target:** Somnia × DreamDEX Event Contracts Hackathon (Aug 25 – Sep 8, 2026)  
 **Remaining Runway:** ~12–13 Days  
@@ -8,7 +8,7 @@
 
 ## 1. Executive Summary & Context
 
-DreamPulse AI has already established a high-frequency, mathematically grounded multi-agent trading swarm on **Somnia Shannon Testnet** (Chain ID `50312`) and **DreamDEX CLOB Event Contracts**. With sub-second Black-Scholes pricing $\Phi(z)$, Bayesian EWMA realized volatility, non-custodial session delegation via Somnia's native `OperatorPermissionsRegistry` and custom `BatchApprove.sol`, and a 97/97 passing test suite, the technical core is institutional-grade.
+DreamPulse has already established a high-frequency, mathematically grounded multi-agent trading swarm on **Somnia Shannon Testnet** (Chain ID `50312`) and **DreamDEX CLOB Event Contracts**. With sub-second Black-Scholes pricing $\Phi(z)$, Bayesian EWMA realized volatility, non-custodial session delegation via Somnia's native `OperatorPermissionsRegistry` and custom `BatchApprove.sol`, and a 97/97 passing test suite, the technical core is institutional-grade.
 
 However, based on the official [hackathon brief](file:///d:/DreamPulse/hackathon.md), hackathons are not judged purely on technical algorithms alone. They evaluate:
 1. **Innovation & Originality (20%)**

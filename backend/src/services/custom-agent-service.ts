@@ -1113,7 +1113,7 @@ export class CustomAgentService {
   // AI Prompt-to-Agent Generator
   // ----------------------------------------------------------------------------
   public async generateAgentFromPrompt(prompt: string): Promise<Partial<CustomAgentDefinition>> {
-    const systemPrompt = `You are the DreamPulse AI Quant Architect. You design autonomous binary options trading strategies for the Somnia blockchain.
+    const systemPrompt = `You are the DreamPulse Quant Architect. You design autonomous binary options trading strategies for the Somnia blockchain.
 Given a trader's natural language concept, generate a structured strategy specification matching this JSON format exactly:
 {
   "name": "Strategy Title",

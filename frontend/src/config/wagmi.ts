@@ -52,7 +52,7 @@ const walletConnectProjectId =
  * RainbowKit & Wagmi v2 client configuration.
  */
 export const wagmiConfig = getDefaultConfig({
-  appName: 'DreamPulse AI',
+  appName: 'DreamPulse',
   projectId: walletConnectProjectId,
   chains: [somniaShannonTestnet],
   transports: {

@@ -1,4 +1,4 @@
-# DreamPulse AI — Official Hackathon Demo Video Script
+# DreamPulse — Official Hackathon Demo Video Script
 **Target Duration**: ~2 Minutes 20 Seconds (Comfortably under the 3:00 minute hard ceiling)  
 **Total Word Count**: ~285 Words (~130–140 words/min = ~2m 10s of natural speech + 15s visual breathing room)  
 **Target Venue**: Somnia × DreamDEX Event Contracts Hackathon  
@@ -29,7 +29,7 @@
   2. Smoothly click **"Enter Console"** / **"Launch Terminal"**, transitioning into the live **Overview** dashboard.
 
 > **Voiceover (31 words)**:  
-> *"On-chain prediction markets suffer from wide spreads, stale quotes, and constant approval popups. DreamPulse AI solves this for DreamDEX and Somnia with an autonomous, multi-agent trading ecosystem and institutional execution terminal."*
+> *"On-chain prediction markets suffer from wide spreads, stale quotes, and constant approval popups. DreamPulse solves this for DreamDEX and Somnia with an autonomous, multi-agent trading ecosystem and institutional execution terminal."*
 
 ---
 
@@ -107,13 +107,13 @@
 > **Voiceover (35 words)**:  
 > *"In the Swarm Arena, track AI and forecaster leaderboards, clone winning strategies in one click, and export Proof-of-Alpha cards.*  
 > 
-> *With 302 automated tests passing and custom testnet contracts, DreamPulse AI accelerates the future of prediction markets on Somnia."*
+> *With 302 automated tests passing and custom testnet contracts, DreamPulse accelerates the future of prediction markets on Somnia."*
 
 ---
 
 ## Complete Verbatim Voiceover Script (Teleprompter View)
 
-> *"On-chain prediction markets suffer from wide spreads, stale quotes, and constant approval popups. DreamPulse AI solves this for DreamDEX and Somnia with an autonomous, multi-agent trading ecosystem and institutional execution terminal.  
+> *"On-chain prediction markets suffer from wide spreads, stale quotes, and constant approval popups. DreamPulse solves this for DreamDEX and Somnia with an autonomous, multi-agent trading ecosystem and institutional execution terminal.  
 > 
 > Onboarding takes seconds. In one seamless flow, traders authorize non-custodial session delegation. Our custom BatchApprove contract authorizes all rolling prediction pools at once, while Somnia's Operator Registry enforces strict trade and volume caps with zero withdrawal privileges. Custody never leaves your wallet.  
 > 
@@ -123,7 +123,7 @@
 > 
 > Behind the scenes, four autonomous agents run a 100-millisecond loop: Volt snipes stale quotes, Oracle trades volatility mispricings, Titan provides two-sided liquidity, and Groq streams their live reasoning. Traders can mirror the swarm or run isolated personal configs. And our Settlement Sweeper automatically batch-redeems winning shares from finalized pools, transferring payouts directly to your wallet.  
 > 
-> In the Swarm Arena, track AI and forecaster leaderboards, clone winning strategies in one click, and export Proof-of-Alpha cards. With 302 automated tests passing and custom testnet contracts, DreamPulse AI accelerates the future of prediction markets on Somnia."*
+> In the Swarm Arena, track AI and forecaster leaderboards, clone winning strategies in one click, and export Proof-of-Alpha cards. With 302 automated tests passing and custom testnet contracts, DreamPulse accelerates the future of prediction markets on Somnia."*
 
 ---
 

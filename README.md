@@ -1,7 +1,7 @@
-# DreamPulse AI
+# DreamPulse
 
 <p align="center">
-  <img src="./assets/logo.svg" alt="DreamPulse AI Logo" width="240" />
+  <img src="./assets/logo.svg" alt="DreamPulse Logo" width="240" />
 </p>
 
 <p align="center">
@@ -65,13 +65,13 @@
 
 ## Executive Summary & Vision
 
-**DreamPulse AI** is an institutional-grade, full-stack cyber-financial platform engineered specifically for **DreamDEX Event Contracts** on the **Somnia Shannon Testnet** (Chain ID `50312`).
+**DreamPulse** is an institutional-grade, full-stack cyber-financial platform engineered specifically for **DreamDEX Event Contracts** on the **Somnia Shannon Testnet** (Chain ID `50312`).
 
 Built to answer the Somnia × DreamDEX Hackathon challenge across **all tracks** — consumer-facing trading applications, AI trading agents, analytics tools, social prediction products, and settlement infrastructure — DreamPulse replaces fragmented bot scripts with an end-to-end decentralized exchange ecosystem.
 
 ### Platform Architecture Overview
 
-DreamPulse AI is structured into four tightly integrated operational layers:
+DreamPulse is structured into four tightly integrated operational layers:
 
 1. **Client Application Layer (`React` · `Vite` · `TypeScript`)**
    * **Pro Trade Terminal**: CLOB order book, real-time depth ladders, interactive binary charts, and AI Alpha Copilot guidance.
@@ -102,7 +102,7 @@ Whether you are a **manual retail trader** seeking real-time Black-Scholes edge 
 
 Decentralized Central Limit Order Book (CLOB) prediction markets are the fastest-growing primitive in Web3, yet venues like DreamDEX encounter five severe structural hurdles:
 
-| Challenge | Impact on Event Contracts | DreamPulse AI Solution |
+| Challenge | Impact on Event Contracts | DreamPulse Solution |
 | :--- | :--- | :--- |
 | **1. Cold-Start Liquidity** | Markets open with zero bids/asks or $>15\%$ spreads, alienating organic retail traders. | **Titan MM** seeds continuous two-sided liquidity within 2.5%–4.0% spreads scaled by real-time EWMA volatility. |
 | **2. Quote Staleness & Latency** | Underlying spot prices (e.g. BTC, ETH) jump violently, but resting limit orders take seconds to adjust. | **Volt Sniper** monitors 100ms spot velocity against order book VWAP to eliminate stale mispricings. |
@@ -495,7 +495,7 @@ All DreamPulse interactions execute on the **Somnia Shannon Testnet**:
 
 ## Hackathon Judging Criteria Alignment
 
-| Criteria & Weight | How DreamPulse AI Exceeds Expectations |
+| Criteria & Weight | How DreamPulse Exceeds Expectations |
 | :--- | :--- |
 | **Innovation & Originality (20%)** | • Unifies consumer-facing trading, no-code agent creation, multi-agent swarms, quantitative simulation, and social prediction in a single cohesive platform.<br />• First implementation combining dual-engine LLM reasoning (Groq Qwen 3.8 + dedicated Google Gemini) with analytical Black-Scholes binary option mathematics.<br />• Solves the prediction market cold-start problem through automated, inventory-skewed market making. |
 | **Technical Implementation (25%)** | • Deep integration with `@somnia-chain/markets-sdk` across orders, depth ladders, cancellations, and settlement redemptions.<br />• **Battle-Tested On-Chain Performance**: Swarm has processed **over 1,000 verified fills** with a sub-100ms loop and 1ms average evaluation latency on Somnia Shannon.<br />• 302/302 unit and integration tests passing with 100% type safety and zero `any` types across 22 test suites.<br />• Built custom `BatchApprove.sol` smart contract deployed on Shannon Testnet to overcome protocol-level multi-pool approval barriers.<br />• Dynamic `NonceManager` handling sub-second on-chain concurrency and automated revert circuit breakers. |
