@@ -177,9 +177,17 @@ export const EventContractChart: React.FC<EventContractChartProps> = ({
     setPriceHistory(history);
   }, [market.id, market.symbol, timeRange]);
 
+  // Real-time dynamic countdown & formatted expiry (30s lock removed)
+  const { formattedCountdown, formattedExpiry, isExpired } = useMarketCountdown(
+    market.closeTimestamp,
+    market.windowDuration,
+    onExpire
+  );
+  const isResolving = (market.status === 'Resolving' || isExpired) && market.status !== 'Finalized' && isExpired;
+
   // Track live spot price changes (frozen if round ended / resolving)
   useEffect(() => {
-    if (!spot || isNaN(spot) || market.status === 'Resolving') return;
+    if (!spot || isNaN(spot) || isResolving) return;
     setPriceHistory((prev) => {
       // Re-anchor and regenerate if priceHistory was empty or initialized to 0s before ticker arrival
       if (spot > 0 && (prev.length === 0 || prev[0].price === 0 || prev.some((p) => p.price === 0))) {
@@ -199,7 +207,7 @@ export const EventContractChart: React.FC<EventContractChartProps> = ({
       if (next.length > maxPts) next.shift();
       return next;
     });
-  }, [spot, timeRange, strike, market.windowDuration, market.status]);
+  }, [spot, timeRange, strike, market.windowDuration, isResolving]);
 
   // Handle responsive canvas sizing
   useEffect(() => {
@@ -216,13 +224,6 @@ export const EventContractChart: React.FC<EventContractChartProps> = ({
     window.addEventListener('resize', handleResize);
     return () => window.removeEventListener('resize', handleResize);
   }, []);
-
-  // Real-time dynamic countdown & formatted expiry (30s lock removed)
-  const { formattedCountdown, formattedExpiry } = useMarketCountdown(
-    market.closeTimestamp,
-    market.windowDuration,
-    onExpire
-  );
 
   // Scaler functions for SVG chart
   const { width, height } = dimensions;
@@ -638,7 +639,7 @@ export const EventContractChart: React.FC<EventContractChartProps> = ({
         <div
           className={cn(
             "absolute z-20 flex flex-col items-center gap-0.5 px-2.5 py-1 rounded-lg border shadow-lg backdrop-blur-md transition-all",
-            market.status === 'Resolving'
+            isResolving
               ? "bg-[#ffb700]/10 border-[#ffb700]/40 text-[#ffb700]"
               : "bg-background/90 border-border/70 text-brand-cyan"
           )}
@@ -647,16 +648,16 @@ export const EventContractChart: React.FC<EventContractChartProps> = ({
             top: '8px',
           }}
         >
-          <div className={cn("flex items-center gap-1.5 text-xs font-mono font-bold", market.status === 'Resolving' ? "text-[#ffb700]" : "text-brand-cyan")}>
-            {market.status === 'Resolving' ? (
+          <div className={cn("flex items-center gap-1.5 text-xs font-mono font-bold", isResolving ? "text-[#ffb700]" : "text-brand-cyan")}>
+            {isResolving ? (
               <ArrowPathIcon className="w-3.5 h-3.5 animate-spin text-[#ffb700]" />
             ) : (
               <ClockIcon className="w-3.5 h-3.5 animate-pulse text-brand-cyan" />
             )}
-            <span>{market.status === 'Resolving' ? 'Resolving Outcome...' : formattedCountdown}</span>
+            <span>{isResolving ? 'Resolving Outcome...' : formattedCountdown}</span>
           </div>
           <div className="text-[8px] font-mono text-muted-foreground tracking-wider uppercase">
-            {market.status === 'Resolving' ? 'Oracle Settlement' : 'Time to Settlement'}
+            {isResolving ? 'Oracle Settlement' : 'Time to Settlement'}
           </div>
         </div>
 

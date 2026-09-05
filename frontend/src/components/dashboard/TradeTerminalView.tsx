@@ -59,7 +59,9 @@ export const TradeTerminalView: React.FC<TradeTerminalViewProps> = ({
 
   // Active contract telemetry — strict selection (no silent fallback to wrong contract)
   const market = selectedMarket ?? null;
-  const isResolving = market?.status === 'Resolving';
+  const closeTime = market?.closeTimestamp ? new Date(market.closeTimestamp).getTime() : 0;
+  const isTimeExpired = closeTime > 0 && !isNaN(closeTime) ? Date.now() >= closeTime : false;
+  const isResolving = (market?.status === 'Resolving' || isTimeExpired) && market?.status !== 'Finalized' && isTimeExpired;
   const tick = market ? liveTicks.get(market.id) : undefined;
 
   const [localFrozenSpot, setLocalFrozenSpot] = useState<number | null>(null);

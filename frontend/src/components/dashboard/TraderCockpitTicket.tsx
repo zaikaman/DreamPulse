@@ -80,8 +80,9 @@ export const TraderCockpitTicket: React.FC<TraderCockpitTicketProps> = ({
 }) => {
   // Real-time dynamic countdown & formatted expiry (30s lock removed — trading open until expiry)
   const { formattedCountdown, formattedExpiry, isExpired } = useMarketCountdown(market.closeTimestamp, market.windowDuration);
-  const isTradingLocked = isExpired || market.status !== 'Open';
-  const statusBadgeText = market.status === 'Resolving'
+  const isResolving = (market.status === 'Resolving' || isExpired) && market.status !== 'Finalized' && isExpired;
+  const isTradingLocked = isExpired || (market.status !== 'Open' && isExpired);
+  const statusBadgeText = isResolving
     ? 'RESOLVING'
     : market.status === 'Closed'
     ? 'CLOSED'
@@ -737,8 +738,8 @@ export const TraderCockpitTicket: React.FC<TraderCockpitTicketProps> = ({
         </div>
         <div className="flex items-center justify-between text-muted-foreground">
           <span>Market expiry</span>
-          <span className={market.status === 'Resolving' ? "text-[#ffb700] font-bold" : "text-foreground"}>
-            {market.status === 'Resolving' ? 'Resolving Outcome...' : formattedExpiry}
+          <span className={isResolving ? "text-[#ffb700] font-bold" : "text-foreground"}>
+            {isResolving ? 'Resolving Outcome...' : formattedExpiry}
           </span>
         </div>
         <div className="flex items-center justify-between text-muted-foreground pt-1 border-t border-border/20">
@@ -831,7 +832,7 @@ export const TraderCockpitTicket: React.FC<TraderCockpitTicketProps> = ({
           >
             Connect Wallet
           </button>
-        ) : market.status === 'Resolving' ? (
+        ) : isResolving ? (
           <button
             type="button"
             disabled={true}

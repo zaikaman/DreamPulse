@@ -160,13 +160,28 @@ export class MarketService extends EventEmitter {
   public async pollOnChainMarkets(timeoutMs = 8000): Promise<void> {
     if (this.isPolling) return;
     this.isPolling = true;
-
     try {
-      const fetchMarketsPromise = somniaExchange.client.listBinaryMarkets({ limit: 60 });
+      const fetchLiveMarketsPromise = somniaExchange.client.listLiveBinaryMarkets({ limit: 100 });
+      const fetchRecentMarketsPromise = somniaExchange.client.listBinaryMarkets({ limit: 60 });
       const timeoutPromise = new Promise<BinaryMarket[]>((_, reject) =>
         setTimeout(() => reject(new Error('SomniaMarkets indexer timeout')), timeoutMs),
       );
-      const binaryMarkets = await Promise.race([fetchMarketsPromise, timeoutPromise]);
+      const [liveRes, recentRes] = await Promise.allSettled([
+        Promise.race([fetchLiveMarketsPromise, timeoutPromise]),
+        Promise.race([fetchRecentMarketsPromise, timeoutPromise]),
+      ]);
+      const rawLive = liveRes.status === 'fulfilled' ? liveRes.value : [];
+      const rawRecent = recentRes.status === 'fulfilled' ? recentRes.value : [];
+      const marketDedupeMap = new Map<string, BinaryMarket>();
+      for (const m of rawLive) {
+        if (m?.marketId) marketDedupeMap.set(String(m.marketId).toLowerCase(), m);
+      }
+      for (const m of rawRecent) {
+        if (m?.marketId && !marketDedupeMap.has(String(m.marketId).toLowerCase())) {
+          marketDedupeMap.set(String(m.marketId).toLowerCase(), m);
+        }
+      }
+      const binaryMarkets = Array.from(marketDedupeMap.values());
 
       // Filter active markets from the Somnia DreamDEX venues (strictly genuine on-chain markets)
       const targetVenueId = env.DREAMDEX_VENUE_ID.toLowerCase();
@@ -378,12 +393,15 @@ export class MarketService extends EventEmitter {
         const bestBidNo = bestAskYes > 0 ? Number((1.0 - bestAskYes).toFixed(2)) : 0;
         const bestAskNo = bestBidYes > 0 ? Number((1.0 - bestBidYes).toFixed(2)) : 0;
 
-        const frozenSpot = existingMarket?.settlementPrice || (status === 'Resolving' ? spot : undefined);
-        const settlementPrice = (status === 'Finalized' || status === 'Resolving') && (m as any).settlementPrice
-          ? Number((m as any).settlementPrice)
-          : frozenSpot;
+        const settlementPrice = (status === 'Finalized' || status === 'Resolving')
+          ? (
+              (m as any).settlementPrice
+                ? Number((m as any).settlementPrice)
+                : (existingMarket?.settlementPrice || spot)
+            )
+          : undefined;
 
-        const isAlreadyResolving = existingMarket?.status === 'Resolving' || status === 'Resolving';
+        const isAlreadyResolving = (existingMarket?.status === 'Resolving' && timeLeftSeconds <= 0) || status === 'Resolving';
         const fairValueYes = (isAlreadyResolving && existingMarket?.fairValueYes !== undefined)
           ? existingMarket.fairValueYes
           : evalResult.fairValueYes;
@@ -445,12 +463,21 @@ export class MarketService extends EventEmitter {
           if (!discoveredIds.has(id)) {
             const stale = this.markets.get(id);
             if (stale) {
+              const closeMs = new Date(stale.closeTimestamp).getTime();
               const resMs = stale.resolutionTimestamp
                 ? new Date(stale.resolutionTimestamp).getTime()
-                : new Date(stale.closeTimestamp).getTime() + 60000;
+                : closeMs + 60000;
               const nowMs = Date.now();
-              // If within resolution window (~60s after close), keep in this.markets with Resolving status
-              if (nowMs < resMs && stale.status !== 'Finalized') {
+
+              // If market has NOT closed yet (closeTimestamp is in the future), it is still active and open!
+              if (nowMs < closeMs) {
+                if (stale.status === 'Resolving') {
+                  stale.status = 'Open';
+                  stale.settlementPrice = undefined;
+                }
+                this.markets.set(id, stale);
+              } else if (nowMs < resMs && stale.status !== 'Finalized') {
+                // Round ended, within resolution window (~60s after close)
                 stale.status = 'Resolving';
                 if (!stale.settlementPrice) {
                   const ticker = this.spotPrices.get(stale.symbol);
@@ -617,8 +644,12 @@ export class MarketService extends EventEmitter {
           void mod.orderService.syncResolvedOrdersPnLAsync({ force: true });
         }).catch(() => {});
       } else if (market.status === 'Resolving') {
-        // If resolution window expired without on-chain finalize event, transition to Finalized and archive
-        if (now >= resTime) {
+        // Self-heal: If market was prematurely marked Resolving before expiry, restore to Open
+        if (timeLeftSeconds > 0) {
+          market.status = 'Open';
+          market.settlementPrice = undefined;
+        } else if (now >= resTime) {
+          // If resolution window expired without on-chain finalize event, transition to Finalized and archive
           market.status = 'Finalized';
           market.winningOutcome = market.winningOutcome || (
             (market.settlementPrice ?? market.strikePrice) >= market.strikePrice ? 'YES' : 'NO'

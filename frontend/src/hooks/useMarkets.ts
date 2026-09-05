@@ -15,16 +15,30 @@ export interface UseMarketsOptions {
 export function normalizeMarket(raw: any): Market {
   const strike = Number(raw?.strikePrice ?? raw?.strike_price ?? 0);
   const settlement = raw?.settlementPrice ?? (raw?.settlement_price != null ? Number(raw.settlement_price) : undefined);
+  const closeTimestamp = raw?.closeTimestamp || raw?.close_timestamp || new Date().toISOString();
+  const closeMs = new Date(closeTimestamp).getTime();
+  const isTimeExpired = closeMs > 0 && !isNaN(closeMs) && Date.now() >= closeMs;
+
+  let status: MarketStatus = raw?.status || 'Open';
+  let cleanSettlement = settlement !== undefined && !isNaN(settlement) ? settlement : undefined;
+
+  // Sanity guard: A market can NEVER be in Resolving state if its closeTimestamp is still in the future.
+  // If the server or cache provided a premature Resolving status before close, sanitize to Open and clear premature settlement price.
+  if (status === 'Resolving' && !isTimeExpired) {
+    status = 'Open';
+    cleanSettlement = undefined;
+  }
+
   return {
     id: String(raw?.id || ''),
     symbol: raw?.symbol || 'BTC/USD',
     strikePrice: isNaN(strike) ? 0 : strike,
     windowDuration: raw?.windowDuration || raw?.window_duration || '5m',
     openTimestamp: raw?.openTimestamp || raw?.open_timestamp || new Date().toISOString(),
-    closeTimestamp: raw?.closeTimestamp || raw?.close_timestamp || new Date().toISOString(),
+    closeTimestamp,
     resolutionTimestamp: raw?.resolutionTimestamp || raw?.resolution_timestamp || new Date().toISOString(),
-    status: raw?.status || 'Open',
-    settlementPrice: settlement !== undefined && !isNaN(settlement) ? settlement : undefined,
+    status,
+    settlementPrice: cleanSettlement,
     winningOutcome: raw?.winningOutcome || raw?.winning_outcome,
     bestBidYes: Number(raw?.bestBidYes ?? raw?.best_bid_yes ?? 0),
     bestAskYes: Number(raw?.bestAskYes ?? raw?.best_ask_yes ?? 0),
