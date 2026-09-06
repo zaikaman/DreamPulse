@@ -355,6 +355,62 @@ describe('Phase 6 Settlement Sweeper Tests', () => {
       expect(history[0].claimableAmount).toBe(11.0);
     });
 
+    it('falls back to direct operator payout when clone auto-redeem reverts', async () => {
+      const settlementService = new SettlementService();
+      const cloneUser = '0x46cC04De981E603958e4612f877D72427c5b6544' as Address;
+      const cloneAddress = '0xaA0e920cA7385b5dD3368ACe451e1CB292FfA1a7' as Address;
+      const targetMarketId = '0x000000000000000000000000000000000000000000000000000000000001512c' as Hex;
+
+      const { sessionService } = await import('../src/services/session-service.js');
+      vi.spyOn(sessionService, 'getUserActiveSession').mockResolvedValue({
+        accountAddress: cloneAddress,
+      } as any);
+
+      vi.spyOn(somniaExchange.client, 'getMarketOnchain').mockResolvedValue({
+        pool: '0x8a2910c854ee42a3ff704eb8ee23b32692230b03' as Address,
+        status: 4,
+        finalized: true,
+        isResolved: true,
+        isVoided: false,
+        outcomeToken: '0xB52c5934113Af5c0Bb20eb3C72290C8215f755b9' as Address,
+        winningOutcome: 1,
+        yesId: 100n,
+        noId: 101n,
+      } as any);
+
+      vi.spyOn(somniaExchange.client, 'getOutcomeBalance').mockImplementation(async (p: { account: Address }) => {
+        if (p.account.toLowerCase() === cloneAddress.toLowerCase()) return 6_000_000n;
+        return 0n;
+      });
+
+      const { walletClient } = await import('../src/config/somnia.js');
+      vi.spyOn(walletClient, 'writeContract').mockRejectedValue(new Error('execution reverted'));
+
+      vi.spyOn(settlementService, 'scanUnclaimedSettlements').mockResolvedValue([
+        {
+          marketId: targetMarketId,
+          symbol: 'BTC/USD',
+          marketIdHex: targetMarketId,
+          winningOutcome: 'NO',
+          outcomeIdx: 1,
+          rawAmount: 6_000_000n,
+          claimableAmount: 6.0,
+          outcomeToken: '0xB52c5934113Af5c0Bb20eb3C72290C8215f755b9' as Address,
+          poolAddress: '0x8a2910c854ee42a3ff704eb8ee23b32692230b03' as Address,
+          isVoided: false,
+          status: 'Finalized',
+        },
+      ]);
+
+      const result = await settlementService.triggerBatchSweep(cloneUser);
+      expect(result.success).toBe(true);
+      expect(result.claimedMarketsCount).toBe(1);
+      expect(result.totalClaimedAmount).toBe('6.00 tUSDC');
+      expect(result.sweeps.length).toBe(1);
+      expect(result.sweeps[0].claimableAmount).toBe(6.0);
+      expect(result.sweeps[0].status).toBe('CONFIRMED');
+    });
+
     it('scans and sweeps winning manual trades placed through Trade Terminal on on-chain CLOB markets', async () => {
       const settlementService = new SettlementService();
       const terminalUserAddress = '0x1111222233334444555566667777888899990000';

@@ -10,7 +10,6 @@ import {
   WalletIcon,
   EyeIcon,
   CpuChipIcon,
-  UserIcon,
   MagnifyingGlassIcon,
   XMarkIcon,
   ExclamationCircleIcon,
@@ -494,7 +493,7 @@ export const SweeperControls: React.FC<SweeperControlsProps> = ({
                   </a>
                 </div>
                 <p className="text-[11px] text-muted-foreground mt-1">
-                  Resolved market winnings automatically convert back to tUSDC in your clone. Only your connected wallet can withdraw funds (1.00 tUSDC protocol fee per withdrawal; min 1.00 tUSDC).
+                  Dedicated non-custodial smart contract for autonomous swarm executions. Winnings redeemed to your clone can be withdrawn back to your connected wallet at any time.
                 </p>
               </div>
             </div>
@@ -542,26 +541,26 @@ export const SweeperControls: React.FC<SweeperControlsProps> = ({
             <div className="min-w-0">
               <div className="flex items-center gap-2 flex-wrap">
                 <h2 className="text-sm font-bold tracking-tight text-foreground leading-none">
-                  {isViewingSelf ? 'My Settlement Sweeper & Direct Wallet Payouts' : 'Autonomous Protocol Sweeper'}
+                  {isViewingSelf ? 'Settlement Sweeper & Direct Wallet Payouts' : 'Autonomous Protocol Sweeper'}
                 </h2>
                 <Badge variant="outline" className="font-mono text-[10px] px-1.5 py-0 bg-secondary/30 border-border/40 text-muted-foreground hidden sm:inline-flex">
-                  100% DIRECT PAYOUT
+                  {isViewingSelf ? 'AUTOMATED SETTLEMENT' : 'PROTOCOL SWEEPER'}
                 </Badge>
               </div>
               <p className="text-[11px] text-muted-foreground mt-1 hidden sm:block">
-                {isViewingSelf ? 'Your orders are owned by your wallet and winnings are claimed straight to it — no custodian in between.' : 'Automated on-chain engine sweeping resolved Somnia event contracts & executing direct payout settlements.'}
+                {isViewingSelf ? 'Automated on-chain engine sweeping resolved prediction markets and routing winning settlements directly to your connected wallet.' : 'Automated on-chain engine sweeping resolved Somnia event contracts & executing direct payout settlements.'}
               </p>
             </div>
           </div>
           <div className="flex items-center gap-2 flex-wrap flex-shrink-0">
             <div className="hidden md:flex items-center gap-1.5 text-[11px] font-mono text-muted-foreground">
-              {isViewingSelf ? <UserIcon className="w-3.5 h-3.5 text-muted-foreground" /> : <CpuChipIcon className="w-3.5 h-3.5 text-muted-foreground" />}
-              <span>{isViewingSelf ? 'Personal Account:' : 'Protocol Account:'}</span>
+              {isViewingSelf ? <WalletIcon className="w-3.5 h-3.5 text-muted-foreground" /> : <CpuChipIcon className="w-3.5 h-3.5 text-muted-foreground" />}
+              <span>{isViewingSelf ? 'Connected Wallet:' : 'Protocol Account:'}</span>
               <code className="text-[11px] text-foreground">({activeAddress ? `${activeAddress.slice(0, 6)}...${activeAddress.slice(-4)}` : '0x...'})</code>
             </div>
             <Badge variant="outline" className="gap-1 font-mono text-[10px] bg-secondary/30 border-border/50 text-muted-foreground hidden lg:inline-flex">
               <ShieldCheckIcon className="w-3 h-3" />
-              <span>100% Direct Wallet Payout</span>
+              <span>Direct Wallet Payout</span>
             </Badge>
             {userAddress ? (
               <button type="button" onClick={handleManualSweep} disabled={isSweeping || unclaimedAmount <= 0} className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg border text-xs font-bold transition-colors disabled:opacity-50 disabled:cursor-not-allowed bg-primary text-primary-foreground border-border hover:bg-primary/90">
@@ -595,7 +594,7 @@ export const SweeperControls: React.FC<SweeperControlsProps> = ({
             {/* Pending */}
             <div className="terminal-panel p-3.5 flex flex-col justify-between">
               <div className="flex items-center justify-between">
-                <span className="text-[10px] font-mono font-semibold tracking-wider text-muted-foreground uppercase">{isViewingSelf ? 'Pending Personal Unclaimed' : 'Pending Protocol Unclaimed'}</span>
+                <span className="text-[10px] font-mono font-semibold tracking-wider text-muted-foreground uppercase">{isViewingSelf ? 'Pending Unclaimed Winnings' : 'Pending Protocol Unclaimed'}</span>
                 {unclaimedAmount > 0 ? (
                   <Badge variant="outline" className="text-[10px] font-mono px-1.5 py-0 bg-[#ffb700]/10 text-[#ffb700] border-[#ffb700]/20">{claimableMarketsCount} MARKETS READY</Badge>
                 ) : (
@@ -628,7 +627,7 @@ export const SweeperControls: React.FC<SweeperControlsProps> = ({
               <div className="text-xl font-mono font-bold mt-2 text-foreground">
                 {confirmedCount} <span className="text-sm font-semibold">Sweeps</span>
               </div>
-              <div className="text-[10px] font-mono text-muted-foreground mt-1">Automated batch claims • 100% direct payout</div>
+              <div className="text-[10px] font-mono text-muted-foreground mt-1">Automated batch claims • Direct wallet settlement</div>
             </div>
           </div>
         )}
@@ -642,7 +641,7 @@ export const SweeperControls: React.FC<SweeperControlsProps> = ({
               <Square3Stack3DIcon className="w-3.5 h-3.5" />
             </div>
             <h3 className="text-xs font-bold tracking-tight text-foreground whitespace-nowrap">
-              {isViewingSelf ? 'My Settlement Redemption History' : 'Protocol Settlement Redemption History'}
+              {isViewingSelf ? 'Settlement Redemption History' : 'Protocol Settlement Redemption History'}
             </h3>
             <Badge variant="outline" className="font-mono text-[10px] px-1.5 py-0 bg-secondary/30 border-border/40 text-muted-foreground">
               ({filteredHistory.length}{isFiltered ? ` of ${confirmedCount}` : ''} confirmed)

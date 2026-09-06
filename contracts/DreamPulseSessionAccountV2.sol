@@ -15,7 +15,7 @@ interface IERC6909Minimal {
 }
 
 interface IBinaryModuleMinimal {
-    function redeem(uint256 operatorId, bytes32 venueId, bytes32 marketId, uint8 outcomeIdx, uint256 amount) external;
+    function redeem(uint32 operatorId, bytes32 venueId, bytes32 marketId, uint8 outcomeIdx, uint256 amount) external;
 }
 
 /**
