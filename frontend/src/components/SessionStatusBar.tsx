@@ -295,55 +295,57 @@ export const SessionStatusBar: React.FC<SessionStatusBarProps> = ({
 
     return (
       <div className="session-status-banner active">
-        {/* Left Cluster: Status + Trading Capital + Execution Mode */}
-        <div className="session-banner-left">
-          {/* Integrated Status Badge with Copy */}
-          <button
-            type="button"
-            onClick={handleCopy}
-            className="group inline-flex items-center gap-2 px-2.5 py-1 rounded-lg bg-emerald-500/10 border border-emerald-500/25 hover:bg-emerald-500/20 hover:border-emerald-500/40 transition-all cursor-pointer text-left select-none"
-            title={sessionTooltip}
-          >
-            <div className="relative flex items-center justify-center w-2 h-2">
-              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
-              <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
-            </div>
-            <div className="flex flex-col">
-              <span className="text-[10px] font-bold text-emerald-400 uppercase tracking-wider leading-none">
-                Session Active
-              </span>
-              <span className="text-[9px] font-mono text-emerald-400/70 group-hover:text-emerald-300 transition-colors flex items-center gap-1 mt-0.5">
-                {copied ? (
-                  <>
-                    <CheckIcon className="w-2.5 h-2.5 text-emerald-300" />
-                    <span>Copied!</span>
-                  </>
-                ) : (
-                  <>
-                    <span>{sessionKeyAddr.slice(0, 6)}...{sessionKeyAddr.slice(-4)}</span>
-                    <DocumentDuplicateIcon className="w-2.5 h-2.5 opacity-60 group-hover:opacity-100" />
-                  </>
-                )}
-              </span>
-            </div>
-          </button>
+        <div className="session-bar-container">
+          {/* Cluster 1: Session Identity & Trading Wallet */}
+          <div className="session-bar-identity">
+            {/* Integrated Status Badge with Copy */}
+            <button
+              type="button"
+              onClick={handleCopy}
+              className="session-badge-button group"
+              title={sessionTooltip}
+            >
+              <div className="session-live-beacon">
+                <span className="session-live-ping" />
+                <span className="session-live-dot" />
+              </div>
+              <div className="session-badge-details">
+                <span className="session-badge-title">Session Active</span>
+                <span className="session-badge-key">
+                  {copied ? (
+                    <span className="session-copied-pill">
+                      <CheckIcon className="w-2.5 h-2.5 text-emerald-300" />
+                      <span>Copied!</span>
+                    </span>
+                  ) : (
+                    <span className="session-address-pill">
+                      <span>{sessionKeyAddr.slice(0, 6)}...{sessionKeyAddr.slice(-4)}</span>
+                      <DocumentDuplicateIcon className="w-2.5 h-2.5 opacity-60 group-hover:opacity-100" />
+                    </span>
+                  )}
+                </span>
+              </div>
+            </button>
 
-          <div className="session-metric-divider hidden sm:block"></div>
-
-          {/* Primary Trading Wallet Balance & Capital Actions */}
-          {(cloneAddress || activeSession.accountAddress) && (
-            <>
-              <div className="session-metric-item">
-                <span className="metric-label">TRADING WALLET</span>
-                <div className="flex items-center gap-2">
-                  <span className="text-xs sm:text-sm font-mono font-bold text-emerald-400 tabular-nums leading-tight">
-                    ${cloneBalance || '0.00'} <span className="text-[10px] font-semibold text-emerald-400/70">tUSDC</span>
-                  </span>
+            {/* Primary Trading Wallet Balance & Capital Actions */}
+            {(cloneAddress || activeSession.accountAddress) && (
+              <div className="session-wallet-card">
+                <div className="session-wallet-meta">
+                  <div className="flex items-center gap-1">
+                    <WalletIcon className="w-2.5 h-2.5 text-muted-foreground" />
+                    <span className="session-field-label">TRADING WALLET</span>
+                  </div>
+                  <div className="session-wallet-balance">
+                    <span className="session-balance-value">${cloneBalance || '0.00'}</span>
+                    <span className="session-balance-symbol">tUSDC</span>
+                  </div>
+                </div>
+                <div className="session-wallet-actions">
                   {onOpenTradingWallet && (
                     <button
                       type="button"
                       onClick={() => onOpenTradingWallet('deposit')}
-                      className="inline-flex items-center gap-1 px-2 py-0.5 text-[11px] font-semibold bg-emerald-500/20 text-emerald-300 border border-emerald-500/35 rounded-md hover:bg-emerald-500/30 hover:border-emerald-500/50 transition-all cursor-pointer shadow-sm active:scale-95"
+                      className="session-wallet-btn deposit"
                       title="Deposit funds into your isolated Trading Wallet"
                     >
                       <ArrowDownTrayIcon className="w-3 h-3" />
@@ -354,7 +356,7 @@ export const SessionStatusBar: React.FC<SessionStatusBarProps> = ({
                     <button
                       type="button"
                       onClick={() => (onOpenTradingWallet ? onOpenTradingWallet('withdraw') : onWithdrawClone?.())}
-                      className="inline-flex items-center gap-1 px-2 py-0.5 text-[11px] font-semibold bg-secondary/80 text-foreground border border-border/60 rounded-md hover:bg-secondary transition-all cursor-pointer active:scale-95"
+                      className="session-wallet-btn withdraw"
                       title="Withdraw funds from Trading Wallet to connected wallet"
                     >
                       <ArrowUpTrayIcon className="w-3 h-3" />
@@ -363,117 +365,119 @@ export const SessionStatusBar: React.FC<SessionStatusBarProps> = ({
                   )}
                 </div>
               </div>
-
-              <div className="session-metric-divider hidden sm:block"></div>
-            </>
-          )}
-
-          {/* Single Cap */}
-          <div className="session-metric-divider hidden sm:block"></div>
-          <div className="session-metric-item">
-            <span className="metric-label">SINGLE CAP</span>
-            <span className="metric-value tabular-num font-mono">{formatCapAmount(activeSession.maxTradeSize)}</span>
+            )}
           </div>
 
-          {/* 24H Budget Meter */}
-          <div className="session-metric-divider hidden md:block"></div>
-          <div className="session-metric-item budget-meter-item">
-            <div className="budget-label-row">
-              <span className="metric-label">24H BUDGET</span>
-              <span className="budget-numbers tabular-num font-mono">
-                {isUnlimitedDaily
-                  ? `${spent.toFixed(1)} / Unlimited`
-                  : `${spent.toFixed(1)} / ${(cap ?? 0).toLocaleString()} tUSDC (${spentPercent.toFixed(0)}%)`}
-              </span>
+          {/* Cluster 2: Risk Telemetry & Execution Mode */}
+          <div className="session-bar-telemetry">
+            {/* Single Cap */}
+            <div className="session-telemetry-item">
+              <span className="session-field-label">SINGLE CAP</span>
+              <span className="session-telemetry-value">{formatCapAmount(activeSession.maxTradeSize)}</span>
             </div>
-            <div className="budget-progress-track">
-              <div
-                className="budget-progress-fill"
-                style={{
-                  width: isUnlimitedDaily ? '100%' : `${spentPercent}%`,
-                  backgroundColor: isUnlimitedDaily
-                    ? 'rgba(0, 255, 204, 0.6)'
-                    : spentPercent > 85
-                    ? 'hsl(var(--destructive))'
-                    : spentPercent > 60
-                    ? '#f59e0b'
-                    : 'hsl(var(--primary))',
+
+            <div className="session-telemetry-divider" />
+
+            {/* 24H Budget Meter */}
+            <div className="session-telemetry-item budget-meter">
+              <div className="session-budget-header">
+                <span className="session-field-label">24H BUDGET</span>
+                <span className="session-budget-numbers">
+                  {isUnlimitedDaily
+                    ? `${spent.toFixed(1)} / Unlimited`
+                    : `${spent.toFixed(1)} / ${(cap ?? 0).toLocaleString()} tUSDC (${spentPercent.toFixed(0)}%)`}
+                </span>
+              </div>
+              <div className="session-budget-track">
+                <div
+                  className="session-budget-fill"
+                  style={{
+                    width: isUnlimitedDaily ? '100%' : `${spentPercent}%`,
+                    background: isUnlimitedDaily
+                      ? 'linear-gradient(90deg, #10b981, #00ffcc)'
+                      : spentPercent > 85
+                      ? 'linear-gradient(90deg, #f43f5e, #e11d48)'
+                      : spentPercent > 60
+                      ? 'linear-gradient(90deg, #f59e0b, #fbbf24)'
+                      : 'linear-gradient(90deg, #10b981, #059669)',
+                  }}
+                />
+              </div>
+            </div>
+
+            <div className="session-telemetry-divider" />
+
+            {/* Execution Mode */}
+            <div className="session-telemetry-item">
+              <span className="session-field-label">EXECUTION MODE</span>
+              <div className="flex items-center">
+                {renderExecutionMode()}
+              </div>
+            </div>
+
+            <div className="session-telemetry-divider" />
+
+            {/* Session Expiry */}
+            <div className="session-telemetry-item">
+              <span className="session-field-label">EXPIRES</span>
+              <div className="session-expiry-badge">
+                <ClockIcon className="w-3 h-3 text-muted-foreground" />
+                <span>{timeRemaining || 'Perpetual'}</span>
+              </div>
+            </div>
+          </div>
+
+          {/* Cluster 3: Session Actions */}
+          <div className="session-bar-actions">
+            {isCollateralZero && onClaimFaucet && (
+              <Button
+                variant="outline"
+                size="xs"
+                onClick={async () => {
+                  try {
+                    await onClaimFaucet(1000);
+                  } catch {}
                 }}
-              ></div>
-            </div>
-          </div>
+                disabled={isFauceting}
+                className="h-7 text-xs px-2.5 gap-1.5 border-amber-500/30 bg-amber-500/10 text-amber-400 hover:bg-amber-500/20 cursor-pointer"
+              >
+                {isFauceting ? <Spinner size="xs" variant="amber" /> : <CurrencyDollarIcon className="w-3.5 h-3.5" />}
+                <span>Faucet</span>
+              </Button>
+            )}
 
-          {/* Execution Mode */}
-          <div className="session-metric-divider hidden lg:block"></div>
-          <div className="session-metric-item">
-            <span className="metric-label">EXECUTION MODE</span>
-            {renderExecutionMode()}
-          </div>
+            {onOpenFleetRisk && (
+              <button
+                type="button"
+                onClick={onOpenFleetRisk}
+                title="Configure Swarm Fleet Risk & Position Sizing"
+                className="session-action-btn neutral"
+              >
+                <AdjustmentsHorizontalIcon className="w-3.5 h-3.5 text-muted-foreground" />
+                <span>Fleet Risk</span>
+              </button>
+            )}
 
-          {/* Session Expiry */}
-          <div className="session-metric-divider hidden xl:block"></div>
-          <div className="session-metric-item">
-            <span className="metric-label">EXPIRES</span>
-            <div className="expiry-chip">
-              <ClockIcon className="w-3 h-3 text-muted-foreground" />
-              <span className="tabular-num">{timeRemaining || 'Perpetual'}</span>
-            </div>
-          </div>
-        </div>
-
-        {/* Right Cluster: Secondary Actions */}
-        <div className="session-banner-actions">
-          {isCollateralZero && onClaimFaucet && (
-            <Button
-              variant="outline"
-              size="xs"
-              onClick={async () => {
-                try {
-                  await onClaimFaucet(1000);
-                } catch {}
-              }}
-              disabled={isFauceting}
-              className="h-7 text-xs px-2.5 gap-1.5 border-amber-500/30 bg-amber-500/10 text-amber-400 hover:bg-amber-500/20 cursor-pointer"
+            <button
+              type="button"
+              onClick={onOpenRiskModal || (() => onOpenModal())}
+              title={riskTooltip}
+              className="session-action-btn neutral"
             >
-              {isFauceting ? <Spinner size="xs" variant="amber" /> : <CurrencyDollarIcon className="w-3.5 h-3.5" />}
-              <span>Faucet</span>
-            </Button>
-          )}
+              <KeyIcon className="w-3.5 h-3.5 text-muted-foreground" />
+              <span>Risk Limits</span>
+            </button>
 
-          {onOpenFleetRisk && (
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={onOpenFleetRisk}
-              title="Configure Swarm Fleet Risk & Position Sizing"
-              className="h-7 text-xs px-2.5 gap-1.5 border-border/60 bg-secondary/50 hover:bg-secondary text-muted-foreground hover:text-foreground cursor-pointer"
+            <button
+              type="button"
+              onClick={() => onOpenModal({ revoke: true })}
+              title="Revoke Session Authorization & On-Chain Permissions"
+              className="session-action-btn revoke"
             >
-              <AdjustmentsHorizontalIcon className="w-3.5 h-3.5" />
-              <span>Fleet Risk</span>
-            </Button>
-          )}
-
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={onOpenRiskModal || (() => onOpenModal())}
-            title={riskTooltip}
-            className="h-7 text-xs px-2.5 gap-1.5 border-border/60 bg-secondary/50 hover:bg-secondary text-muted-foreground hover:text-foreground cursor-pointer"
-          >
-            <KeyIcon className="w-3.5 h-3.5" />
-            <span>Risk Limits</span>
-          </Button>
-
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => onOpenModal({ revoke: true })}
-            title="Revoke Session Authorization & On-Chain Permissions"
-            className="h-7 text-xs px-2.5 gap-1.5 border-rose-500/30 bg-rose-500/10 text-rose-400 hover:bg-rose-500/20 hover:text-rose-300 cursor-pointer"
-          >
-            <XCircleIcon className="w-3.5 h-3.5" />
-            <span>Revoke</span>
-          </Button>
+              <XCircleIcon className="w-3.5 h-3.5 text-rose-400" />
+              <span>Revoke</span>
+            </button>
+          </div>
         </div>
       </div>
     );
@@ -495,7 +499,7 @@ export const SessionStatusBar: React.FC<SessionStatusBarProps> = ({
           </span>
         </div>
       </div>
-      <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+      <div className="session-banner-actions">
         {isCollateralZero && onClaimFaucet && (
           <Button
             variant="outline"
