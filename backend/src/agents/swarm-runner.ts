@@ -996,22 +996,30 @@ export class MultiAgentSwarmRunner {
       },
       titan: {
         status: this.telemetry.Titan.status,
+        evalLatencyMs: this.telemetry.Titan.evalLatencyMs,
+        tradesToday: this.telemetry.Titan.tradesToday,
         activeQuotes: 6,
         spreadCaptured: `${titanPrefix}${titanPnl.toFixed(2)} tUSDC`,
+        pnl: `${titanPrefix}${titanPnl.toFixed(2)} tUSDC`,
       },
       sweeper: {
         status: this.telemetry.Sweeper.status,
+        evalLatencyMs: this.telemetry.Sweeper.evalLatencyMs,
+        tradesToday: this.telemetry.Sweeper.tradesToday,
         lastSweep: new Date(this.telemetry.Sweeper.lastActionTimestamp).toISOString(),
         totalClaimed: `+${this.telemetry.Sweeper.pnlAmount.toFixed(2)} tUSDC`,
+        pnl: `+${this.telemetry.Sweeper.pnlAmount.toFixed(2)} tUSDC`,
       },
     };
   }
 
   public async getSwarmStatusAsync(): Promise<SwarmStatusSummary> {
+    await orderService.initPromise.catch(() => {});
     return this.getSwarmStatus();
   }
 
   public async getDetailedSwarmStateAsync(): Promise<Record<string, any>> {
+    await orderService.initPromise.catch(() => {});
     await this.getSwarmStatusAsync();
     return {
       agents: {

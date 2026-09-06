@@ -188,8 +188,8 @@ export interface BacktestResult {
 export interface SwarmStatusSummary {
   volt: { status: string; evalLatencyMs: number; tradesToday: number; pnl: string };
   oracle: { status: string; evalLatencyMs: number; tradesToday: number; pnl: string };
-  titan: { status: string; activeQuotes: number; spreadCaptured: string };
-  sweeper: { status: string; lastSweep: string; totalClaimed: string };
+  titan: { status: string; evalLatencyMs?: number; tradesToday?: number; activeQuotes: number; spreadCaptured: string; pnl?: string };
+  sweeper: { status: string; evalLatencyMs?: number; tradesToday?: number; lastSweep: string; totalClaimed: string; pnl?: string };
 }
 
 export interface PortfolioSummary {

@@ -530,8 +530,18 @@ export class OrderService {
   private orders: OrderExecution[] = [];
   private orderMap = new Map<string, OrderExecution>();
   private restingMakerQuotes = new Map<string, RestingMakerQuote>();
-  // --- Bounded-cache config (issue #13) ---
-  private static readonly MAX_CACHE_SIZE = 5000;
+  // --- Bounded-cache config (increased to 50k to retain all historical DB rows) ---
+  private static readonly MAX_CACHE_SIZE = 50000;
+  // Preserved tallies for any rows evicted from in-memory cache to prevent PnL or trade count drops
+  private evictedSwarmAggregates = {
+    voltPnl: 0,
+    oraclePnl: 0,
+    titanPnl: 0,
+    voltTrades: 0,
+    oracleTrades: 0,
+    titanTrades: 0,
+  };
+  private evictedUserPnl = new Map<string, number>();
   // --- Cumulative PnL fast-path cache ---
   private lastPnlSyncAt = 0;
   private pnlSyncInFlight: Promise<void> | null = null;
@@ -604,7 +614,7 @@ export class OrderService {
 
   /**
    * Inserts into bounded cache, evicting oldest when cap is hit.
-   * Caller must have already persisted to Supabase (or is about to) — evicted rows remain in DB for history queries.
+   * Preserves evicted trade metrics in baseline accumulators so all-time stats never drop.
    */
   public insertIntoCache(order: OrderExecution): void {
     const existingIdx = this.orders.findIndex((o) => o.id === order.id);
@@ -620,6 +630,33 @@ export class OrderService {
       if (evicted) {
         this.orderMap.delete(evicted.id);
         this.restingMakerQuotes.delete(evicted.id);
+
+        const opAddr = (operatorAccount?.address || SOMNIA_ADDRESSES.operatorAccount).toLowerCase();
+        if (evicted.userAddress && evicted.userAddress.toLowerCase() === opAddr) {
+          const ag = evicted.agentType?.toLowerCase();
+          const pnl = evicted.isSettled ? (evicted.pnl || 0) : 0;
+          const isCountableTrade = evicted.status === 'FILLED' || evicted.status === 'PARTIALLY_FILLED' || evicted.status === 'PENDING';
+
+          if (ag === 'volt') {
+            this.evictedSwarmAggregates.voltPnl += pnl;
+            if (isCountableTrade) this.evictedSwarmAggregates.voltTrades++;
+          } else if (ag === 'oracle') {
+            this.evictedSwarmAggregates.oraclePnl += pnl;
+            if (isCountableTrade) this.evictedSwarmAggregates.oracleTrades++;
+          } else if (ag === 'titan') {
+            this.evictedSwarmAggregates.titanPnl += pnl;
+            if (isCountableTrade) this.evictedSwarmAggregates.titanTrades++;
+          }
+        }
+
+        if (evicted.isSettled && evicted.pnl) {
+          const key = `${evicted.agentType ?? 'ALL'}|${evicted.userAddress?.toLowerCase() ?? 'ALL'}`;
+          this.evictedUserPnl.set(key, (this.evictedUserPnl.get(key) || 0) + evicted.pnl);
+          const allKey = `ALL|${evicted.userAddress?.toLowerCase() ?? 'ALL'}`;
+          if (key !== allKey) {
+            this.evictedUserPnl.set(allKey, (this.evictedUserPnl.get(allKey) || 0) + evicted.pnl);
+          }
+        }
       }
     }
   }
@@ -631,6 +668,15 @@ export class OrderService {
     this.orders = [];
     this.orderMap.clear();
     this.restingMakerQuotes.clear();
+    this.evictedSwarmAggregates = {
+      voltPnl: 0,
+      oraclePnl: 0,
+      titanPnl: 0,
+      voltTrades: 0,
+      oracleTrades: 0,
+      titanTrades: 0,
+    };
+    this.evictedUserPnl.clear();
   }
 
   /**
@@ -3318,12 +3364,12 @@ export class OrderService {
     titanTrades: number;
   } {
     const opAddr = (operatorAddress || operatorAccount?.address || SOMNIA_ADDRESSES.operatorAccount).toLowerCase();
-    let voltPnl = 0;
-    let oraclePnl = 0;
-    let titanPnl = 0;
-    let voltTrades = 0;
-    let oracleTrades = 0;
-    let titanTrades = 0;
+    let voltPnl = this.evictedSwarmAggregates.voltPnl;
+    let oraclePnl = this.evictedSwarmAggregates.oraclePnl;
+    let titanPnl = this.evictedSwarmAggregates.titanPnl;
+    let voltTrades = this.evictedSwarmAggregates.voltTrades;
+    let oracleTrades = this.evictedSwarmAggregates.oracleTrades;
+    let titanTrades = this.evictedSwarmAggregates.titanTrades;
 
     const ordersList = this.orders;
     const len = ordersList.length;
@@ -3370,7 +3416,7 @@ export class OrderService {
     const targetAddr = userAddress?.toLowerCase();
     const targetAgent = agentType?.toLowerCase();
 
-    let sum = 0;
+    let sum = this.evictedUserPnl.get(key) || 0;
     const ordersList = this.orders;
     const len = ordersList.length;
     for (let i = 0; i < len; i++) {

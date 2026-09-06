@@ -1068,7 +1068,7 @@ apiRouter.get('/portfolio/summary', optionalWalletAuth, async (req: Request, res
     const effectiveAddress = targetAddress || operatorAccount.address;
     const isOperator = targetAddress ? targetAddress.toLowerCase() === opAddress : true;
     const sweeperSummary = await settlementService.getSweeperSummary(effectiveAddress).catch(() => null);
-    const userOrders = orderService.getOrders({ userAddress: targetAddress });
+    const userOrders = orderService.getOrders({ userAddress: effectiveAddress });
     const session = targetAddress ? await sessionService.getUserActiveSession(targetAddress).catch(() => null) : null;
     if (session) {
       const sessionOrders = userOrders.filter((o) => o.sessionId === session.id);
