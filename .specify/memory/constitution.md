@@ -26,7 +26,7 @@ Follow-up TODOs:
 ## Core Principles
 
 ### I. Rigorous Code Quality & Type Safety
-- **Strict TypeScript & Zero `any`**: All codebase modules (agents, quantitative models, smart contract integrations, and frontend interfaces) MUST be strictly typed with zero unhandled `any` types.
+- **Strict TypeScript**: All codebase modules (agents, quantitative models, smart contract integrations, and frontend interfaces) MUST be strictly typed with zero compiler errors under strict mode.
 - **Deterministic Math & Precision Invariants**: All event contract probability, Black-Scholes/CDF calculations $\Phi(z)$, volatility pricing, and lot/tick quantization MUST use explicit precision rounding and guard against floating-point drift or `NaN`/`Infinity` propagation.
 - **Modular Decoupling**: Separation of concerns is mandatory across four distinct layers: Quantitative Models, On-chain Execution/Session Management, Market Data Feeds, and Presentation/UI. No trading strategy may directly manipulate UI state, and no UI component may construct raw on-chain transaction payloads without passing through the service layer.
 - **Explicit Error Handling & Resilience**: All external RPC, WebSocket, and Oracle calls MUST have defensive timeout, retry, backoff, and circuit-breaker mechanisms. Unexpected states MUST fail closed safely without executing unvalidated trades.

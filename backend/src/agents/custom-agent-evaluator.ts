@@ -812,21 +812,28 @@ export class CustomAgentEvaluator {
     const targetOutcome: OutcomeType = direction === 'PUT' ? 'NO' : 'YES';
 
     // Pricing calculation & Order Engine Rules
+    const bestAskYes = depth.yesAsks?.[0]?.price || market.bestAskYes || 0;
+    const bestBidYes = depth.yesBids?.[0]?.price || market.bestBidYes || 0;
+    const bestAskNo = depth.noAsks?.[0]?.price || market.bestAskNo || (bestBidYes > 0 ? Number((1.0 - bestBidYes).toFixed(2)) : 0);
+    const bestBidNo = depth.noBids?.[0]?.price || market.bestBidNo || (bestAskYes > 0 ? Number((1.0 - bestAskYes).toFixed(2)) : 0);
+
     let rawPrice = targetOutcome === 'YES'
-      ? (depth.yesAsks?.[0]?.price || market.bestAskYes || 0.51)
-      : (depth.noAsks?.[0]?.price || market.bestAskNo || (1.0 - (depth.yesBids?.[0]?.price || market.bestBidYes || 0.49)));
+      ? (bestAskYes > 0 ? bestAskYes : market.fairValueYes || 0.50)
+      : (bestAskNo > 0 ? bestAskNo : (1.0 - (market.fairValueYes || 0.50)));
 
     // Advanced Limit Order pricing offset support
     if (rules.action?.orderType === 'LIMIT') {
-      const bestBid = depth.yesBids?.[0]?.price || market.bestBidYes || 0.49;
-      const bestAsk = depth.yesAsks?.[0]?.price || market.bestAskYes || 0.51;
-      const midpoint = (bestBid + bestAsk) / 2;
+      const activeBid = targetOutcome === 'YES' ? bestBidYes : bestBidNo;
+      const activeAsk = targetOutcome === 'YES' ? bestAskYes : bestAskNo;
+      const midpoint = (activeBid > 0 && activeAsk > 0)
+        ? (activeBid + activeAsk) / 2
+        : (activeAsk > 0 ? activeAsk : (activeBid > 0 ? activeBid : rawPrice));
 
       if (rules.action.limitPricing === 'MIDPOINT') {
         rawPrice = midpoint;
       } else if (rules.action.limitPricing === 'DISCOUNT_OFFSET') {
         const offset = (rules.action.limitOffsetBps || 10) * 0.0001;
-        rawPrice = targetOutcome === 'YES' ? Math.max(0.05, bestAsk - offset) : Math.max(0.05, rawPrice - offset);
+        rawPrice = Math.max(0.05, (activeAsk > 0 ? activeAsk : rawPrice) - offset);
       }
     }
 

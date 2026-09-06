@@ -259,8 +259,18 @@ export class MultiAgentSwarmRunner {
           };
 
           const rawDepth = marketService.getMarketDepth(market.id) || {
-            yesBids: [{ price: market.bestBidYes || 0.49, quantity: 200, total: 98 }],
-            yesAsks: [{ price: market.bestAskYes || 0.51, quantity: 200, total: 102 }],
+            marketId: market.id,
+            symbol: market.symbol,
+            bestBidYes: market.bestBidYes || 0,
+            bestAskYes: market.bestAskYes || 0,
+            bestBidNo: market.bestBidNo || 0,
+            bestAskNo: market.bestAskNo || 0,
+            yesBids: [],
+            yesAsks: [],
+            noBids: [],
+            noAsks: [],
+            updatedAt: Date.now(),
+            isSeedDepth: false,
           };
 
           // Sanitize order book depth for taker agents (Volt, Oracle) to prevent self-crossing against Titan's resting maker orders
@@ -627,7 +637,20 @@ export class MultiAgentSwarmRunner {
           if (!agentInstance) continue;
 
           const spot = spotTickers[market.symbol] || { symbol: market.symbol, price: market.strikePrice, change1m: 0, change5m: 0, timestamp: Date.now() };
-          const rawDepth = marketService.getMarketDepth(market.id) || { yesBids: [{ price: market.bestBidYes || 0.49, quantity: 200, total: 98 }], yesAsks: [{ price: market.bestAskYes || 0.51, quantity: 200, total: 102 }] };
+          const rawDepth = marketService.getMarketDepth(market.id) || {
+            marketId: market.id,
+            symbol: market.symbol,
+            bestBidYes: market.bestBidYes || 0,
+            bestAskYes: market.bestAskYes || 0,
+            bestBidNo: market.bestBidNo || 0,
+            bestAskNo: market.bestAskNo || 0,
+            yesBids: [],
+            yesAsks: [],
+            noBids: [],
+            noAsks: [],
+            updatedAt: Date.now(),
+            isSeedDepth: false,
+          };
           const depth = type === 'Volt' || type === 'Oracle' ? orderService.sanitizeDepthForSelfTrade(rawDepth, market.id, userAddr) : rawDepth;
 
           const context: IAgentContext = { spotTicker: spot, market, depth, activeSessions: [] };
@@ -774,8 +797,18 @@ export class MultiAgentSwarmRunner {
         };
 
         const rawDepth = marketService.getMarketDepth(market.id) || {
-          yesBids: [{ price: market.bestBidYes || 0.49, quantity: 200, total: 98 }],
-          yesAsks: [{ price: market.bestAskYes || 0.51, quantity: 200, total: 102 }],
+          marketId: market.id,
+          symbol: market.symbol,
+          bestBidYes: market.bestBidYes || 0,
+          bestAskYes: market.bestAskYes || 0,
+          bestBidNo: market.bestBidNo || 0,
+          bestAskNo: market.bestAskNo || 0,
+          yesBids: [],
+          yesAsks: [],
+          noBids: [],
+          noAsks: [],
+          updatedAt: Date.now(),
+          isSeedDepth: false,
         };
 
         const depth = orderService.sanitizeDepthForSelfTrade(rawDepth, market.id, userAddr);

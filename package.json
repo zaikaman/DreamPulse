@@ -2,6 +2,7 @@
   "name": "dreampulse-workspace",
   "version": "1.0.0",
   "private": true,
+  "license": "MIT",
   "description": "DreamPulse - Autonomous Multi-Agent Trading Swarm on Somnia DreamDEX",
   "workspaces": [
     "backend",

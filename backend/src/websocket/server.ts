@@ -328,12 +328,8 @@ export class TelemetryWebSocketServer {
       }
     }, 60_000);
     // Avoid keeping process alive in tests due to this timer
-    if (this.cleanupInterval && typeof (this.cleanupInterval as any).unref === 'function') {
-      (this.cleanupInterval as any).unref();
-    }
-    if (this.pingInterval && typeof (this.pingInterval as any).unref === 'function') {
-      (this.pingInterval as any).unref();
-    }
+    this.cleanupInterval?.unref();
+    this.pingInterval?.unref();
 
     return this.wss;
   }

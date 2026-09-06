@@ -60,7 +60,7 @@ export class AnomalyService extends EventEmitter {
       return null;
     }
 
-    // Suppress actionable anomaly alerts on synthetic rolling markets or unseeded dummy books (0.49/0.51 fallback)
+    // Suppress actionable anomaly alerts on synthetic rolling markets or unseeded books
     if (market.isSynthetic || market.isSeedDepth) {
       this.activeAnomalies.delete(market.id);
       return null;

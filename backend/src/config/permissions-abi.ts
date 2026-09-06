@@ -582,8 +582,9 @@ export async function probeOnChainOperatorAuthorization(
     }
 
     return probed ? false : null;
-  } catch (err: any) {
-    console.warn(`[checkOnChainOperatorAuthorization] Check notice:`, err.message);
+  } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : String(err);
+    console.warn(`[checkOnChainOperatorAuthorization] Check notice:`, message);
     return probed ? false : null;
   }
 }
@@ -616,8 +617,9 @@ export async function checkVaultWithdrawableBalance(
       args: [owner, token],
     });
     return balance;
-  } catch (err: any) {
-    console.warn(`[checkVaultWithdrawableBalance] Check notice:`, err.message);
+  } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : String(err);
+    console.warn(`[checkVaultWithdrawableBalance] Check notice:`, message);
     return 0n;
   }
 }

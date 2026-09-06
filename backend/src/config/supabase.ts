@@ -24,7 +24,7 @@ export function getServiceSupabase(): SupabaseClient {
         autoRefreshToken: false,
       },
       realtime: {
-        transport: WebSocket as any,
+        transport: WebSocket as unknown as NonNullable<NonNullable<Parameters<typeof createClient>[2]>['realtime']>['transport'],
       },
     });
   }

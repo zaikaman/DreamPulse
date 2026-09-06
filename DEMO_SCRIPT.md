@@ -1,6 +1,6 @@
 # DreamPulse — Official Hackathon Demo Video Script
-**Target Duration**: ~2 Minutes 20 Seconds (Comfortably under the 3:00 minute hard ceiling)  
-**Total Word Count**: ~285 Words (~130–140 words/min = ~2m 10s of natural speech + 15s visual breathing room)  
+**Target Duration**: ~2 Minutes 55 Seconds (Targeting the 3:00 hackathon ceiling with 5s safety buffer)  
+**Total Word Count**: ~285 Words (~115–125 words/min broadcast pace + deliberate UI action pauses = ~2m 55s)  
 **Target Venue**: Somnia × DreamDEX Event Contracts Hackathon  
 **Submission Requirement**: 2–3 Minute Demo Video (Judging: Innovation 20%, Technical 25%, UX 20%, Ecosystem Impact 20%, Presentation 15%)  
 **Live Application**: [https://dreampulse-ai.vercel.app](https://dreampulse-ai.vercel.app) *(or `http://localhost:5174`)*  
@@ -8,20 +8,20 @@
 
 ---
 
-## Timed Video Storyboard (Total: ~02:25)
+## Timed Video Storyboard (Total: ~02:55)
 
 ```
-[0:00 ── 0:18] Scene 1: The Problem & Platform Solution (~18s | 31 words)
-[0:18 ── 0:42] Scene 2: Non-Custodial Onboarding & BatchApprove (~24s | 39 words)
-[0:42 ── 1:18] Scene 3: Pro Trade Terminal & AI Copilot (~36s | 63 words)
-[1:18 ── 1:48] Scene 4: No-Code Strategy Studio & Backtester (~30s | 56 words)
-[1:48 ── 2:15] Scene 5: Autonomous Multi-Agent Swarms & Sweeper (~27s | 56 words)
-[2:15 ── 2:30] Scene 6: Swarm Arena & Grand Finale (~15s | 35 words)
+[0:00 ── 0:20] Scene 1: The Problem & Platform Solution (~20s | 31 words)
+[0:20 ── 0:47] Scene 2: Non-Custodial Onboarding & BatchApprove (~27s | 39 words)
+[0:47 ── 1:31] Scene 3: Pro Trade Terminal & AI Copilot (~44s | 63 words)
+[1:31 ── 2:07] Scene 4: No-Code Strategy Studio & Backtester (~36s | 56 words)
+[2:07 ── 2:40] Scene 5: Autonomous Multi-Agent Swarms & Sweeper (~33s | 56 words)
+[2:40 ── 2:55] Scene 6: Swarm Arena & Grand Finale (~15s | 35 words)
 ```
 
 ---
 
-### Scene 1: The Problem & Platform Solution (0:00 – 0:18 | ~18s)
+### Scene 1: The Problem & Platform Solution (0:00 – 0:20 | ~20s)
 
 * **Judging Focus**: Innovation & Originality (20%) | Presentation (15%)
 * **Visual Action**:
@@ -33,7 +33,7 @@
 
 ---
 
-### Scene 2: Non-Custodial Onboarding & BatchApprove (0:18 – 0:42 | ~24s)
+### Scene 2: Non-Custodial Onboarding & BatchApprove (0:20 – 0:47 | ~27s)
 
 * **Judging Focus**: Technical Implementation (25%) | UX & Design (20%)
 * **Visual Action**:
@@ -46,7 +46,7 @@
 
 ---
 
-### Scene 3: Pro Trade Terminal & AI Alpha Copilot (0:42 – 1:18 | ~36s)
+### Scene 3: Pro Trade Terminal & AI Alpha Copilot (0:47 – 1:31 | ~44s)
 
 * **Judging Focus**: Technical Implementation (25%) | UX & Design (20%) | Consumer Application Track
 * **Visual Action**:
@@ -63,7 +63,7 @@
 
 ---
 
-### Scene 4: No-Code Strategy Studio & Quant Backtester (1:18 – 1:48 | ~30s)
+### Scene 4: No-Code Strategy Studio & Quant Backtester (1:31 – 2:07 | ~36s)
 
 * **Judging Focus**: Innovation & Originality (20%) | AI-Powered Agents Track
 * **Visual Action**:
@@ -79,7 +79,7 @@
 
 ---
 
-### Scene 5: Autonomous Multi-Agent Swarms & Settlement Sweeper (1:48 – 2:15 | ~27s)
+### Scene 5: Autonomous Multi-Agent Swarms & Settlement Sweeper (2:07 – 2:40 | ~33s)
 
 * **Judging Focus**: Technical Implementation (25%) | Analytics & Infrastructure Track
 * **Visual Action**:
@@ -96,7 +96,7 @@
 
 ---
 
-### Scene 6: Swarm Arena, Proof-of-Alpha & Grand Finale (2:15 – 2:30 | ~15s)
+### Scene 6: Swarm Arena, Proof-of-Alpha & Grand Finale (2:40 – 2:55 | ~15s)
 
 * **Judging Focus**: Business & Ecosystem Impact (20%) | Social Prediction Track | Presentation (15%)
 * **Visual Action**:
@@ -131,7 +131,7 @@
 
 | Metric | Target | Actual | Status |
 | :--- | :---: | :---: | :---: |
-| **Total Words** | ~250–300 words | **285 words** | Perfect |
-| **Speaking Time (@ 135 wpm)** | ~2m 00s – 2m 15s | **2 minutes 07 seconds** | Optimal |
-| **Visual Pauses & Transitions** | ~15–20 seconds | **~18 seconds** | Natural |
-| **Total Video Runtime** | Under 3:00 (Hard limit) | **~2 minutes 25 seconds** | Safe 35s Buffer |
+| **Total Words** | ~280–300 words | **285 words** | Perfect |
+| **Speaking Time (@ ~115–125 wpm)** | ~2m 15s – 2m 25s | **~2 minutes 20 seconds** | Broadcast Pacing |
+| **Visual Pauses & UI Action Beats** | ~30–35 seconds | **~35 seconds** | Crisp Demonstration |
+| **Total Video Runtime** | Target: ~2:55 (Max 3:00 limit) | **2 minutes 55 seconds (02:55)** | Exact Target |

@@ -23,7 +23,7 @@
     "totalTests": 307,
     "testSuites": 22,
     "passingRate": "100%",
-    "zeroAnyTypes": true,
+    "strictTypeScript": true,
     "runner": "Vitest v3.2.7"
   },
   "proofTrails": {
