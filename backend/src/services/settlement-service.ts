@@ -590,6 +590,9 @@ export class SettlementService {
             if (chunkResults.some((r) => r === null)) return null;
             const flat: any[] = (chunkResults as any[]).flat();
             if (flat.length !== contracts.length) return null;
+            // If any multicall call failed (e.g. Multicall3 not deployed or aggregate3 reverted),
+            // do NOT treat balance as 0n! Return null to fall back to direct SDK calls.
+            if (flat.some((r) => r?.status !== 'success')) return null;
             const mapped = new Map<string, { yesBal: bigint; noBal: bigint }>();
             for (let i = 0; i < pendingBalanceChecks.length; i++) {
               const yesRes = flat[i * 2];
@@ -827,11 +830,6 @@ export class SettlementService {
 
         for (const order of userOrders) {
           if (order.status !== 'FILLED' && order.status !== 'PARTIALLY_FILLED') continue;
-          // Skip historical orders that have already been settled for more than 15 minutes
-          if (order.isSettled && order.settledAt) {
-            const settledAgeMs = Date.now() - new Date(order.settledAt).getTime();
-            if (settledAgeMs > 15 * 60 * 1000) continue;
-          }
 
           const market = marketService.getMarketById(order.marketId);
           const winningOutcome = market?.winningOutcome || order.marketSnapshot?.winningOutcome;

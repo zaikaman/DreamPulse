@@ -119,12 +119,12 @@ Withdrawal, drain, and unrestricted transfer capabilities are not granted. Colla
 
 ## Live Evidence and Hackathon Fit
 
-The live cockpit and [`evidence.json`](./evidence.json) provide an audit trail containing execution records, transaction hashes, settlement data, and schemas. The current benchmark is more than **100 tUSDC in net realized profit** across more than **1,000 verified fills**.
+The live cockpit and [`evidence.json`](./evidence.json) provide an audit trail containing execution records, transaction hashes, settlement data, and schemas verified on Somnia Shannon Testnet.
 
 | Judging area | DreamPulse evidence |
 | --- | --- |
 | Innovation | One product unifies CLOB trading, AI, no-code agents, backtesting, autonomous liquidity, social prediction, and settlement. |
-| Technical implementation | Direct DreamDEX SDK integration, deployed contracts, serialized nonce handling, risk guardrails, WebSocket telemetry, and 306 passing tests. |
+| Technical implementation | Direct DreamDEX SDK integration, deployed contracts, serialized nonce handling, risk guardrails, WebSocket telemetry, and 307 passing tests. |
 | User experience | Institutional terminal, visual binary charts, one-click session authorization, command palette, onboarding wizard, and strategy builder. |
 | Ecosystem impact | Provides liquidity, reduces stale pricing, recycles settled capital, and makes automated prediction-market strategies accessible. |
 | Presentation | A focused 2:55 demo covers onboarding, terminal trading, Strategy Studio, swarms, telemetry, and settlement. |
@@ -192,7 +192,7 @@ npm run test:coverage --workspace=dreampulse-backend
 npm run verify
 ```
 
-The documented verification result is **306 tests passing across 22 suites**, with type checking and production builds included in `npm run verify`.
+The documented verification result is **307 tests passing across 22 suites**, with type checking and production builds included in `npm run verify`.
 
 ## Roadmap
 

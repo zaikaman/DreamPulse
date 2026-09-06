@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { SweeperAgent } from '../src/agents/sweeper.js';
 import { SettlementService } from '../src/services/settlement-service.js';
-import { somniaExchange } from '../src/config/somnia.js';
+import { somniaExchange, publicClient } from '../src/config/somnia.js';
 import { orderService } from '../src/services/order-service.js';
 import type { IAgentContext } from '../src/agents/base-agent.js';
 import type { Market, SessionGrant } from '../src/types/index.js';
@@ -523,6 +523,57 @@ describe('Phase 6 Settlement Sweeper Tests', () => {
 
       const totalSwept = settlementService.getUserTotalSweptForMarket(testUser, testMarketId);
       expect(totalSwept).toBe(0); // Must not add to total swept payout
+    });
+
+    it('falls back to getOutcomeBalance when multicall returns failure statuses', async () => {
+      const settlementService = new SettlementService();
+      const userAddress = '0x70997970C51812dc3A010C7d01b50e0d17dc79C8';
+      const tradedMarketId = '0x0000000000000000000000000000000000000000000000000000000000099999' as Hex;
+
+      vi.spyOn(orderService, 'getOrders').mockReturnValue([
+        {
+          id: 'test-order-multicall-fail',
+          marketId: tradedMarketId,
+          userAddress,
+          status: 'FILLED',
+          direction: 'BUY',
+          outcome: 'YES',
+          price: 0.5,
+          lotSize: 8,
+          isSettled: false,
+        },
+      ] as any);
+
+      vi.spyOn(somniaExchange.client, 'getClaimable').mockResolvedValue([]);
+      vi.spyOn(somniaExchange.client, 'getMarketOnchain').mockResolvedValue({
+        pool: '0x1111111111111111111111111111111111111111' as Address,
+        status: 4,
+        finalized: true,
+        isResolved: true,
+        isVoided: false,
+        outcomeToken: '0x2222222222222222222222222222222222222222' as Address,
+        winningOutcome: 0,
+        yesId: 1n,
+        noId: 2n,
+      } as any);
+
+      // Mock multicall returning failure status (mimicking missing Multicall3 contract)
+      vi.spyOn(publicClient, 'multicall').mockResolvedValue([
+        { status: 'failure', error: new Error('reverted 0x') },
+        { status: 'failure', error: new Error('reverted 0x') },
+      ] as any);
+
+      // Mock SDK fallback returning real balance
+      const sdkSpy = vi.spyOn(somniaExchange.client, 'getOutcomeBalance').mockImplementation(async (p: { id: bigint }) => {
+        return p.id === 1n ? 8_000_000n : 0n;
+      });
+
+      const found = await settlementService.scanUnclaimedSettlements(userAddress, true);
+      expect(sdkSpy).toHaveBeenCalled();
+      const pos = found.find((p) => p.marketId.toLowerCase() === tradedMarketId.toLowerCase());
+      expect(pos).toBeDefined();
+      expect(pos?.claimableAmount).toBe(8);
+      expect(pos?.winningOutcome).toBe('YES');
     });
   });
 });
