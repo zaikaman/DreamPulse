@@ -526,7 +526,7 @@ export const PersonalSwarmCockpit: React.FC<PersonalSwarmCockpitProps> = ({
             <div className="min-w-0">
               <div className="text-xs font-semibold text-amber-300">Session delegation required for autonomous background execution</div>
               <p className="text-[11px] text-muted-foreground mt-0.5">
-                Your fleet parameters are saved, but autonomous order placement requires an active on-chain session grant. Delegate once to let your agents trade directly from your wallet with zero fund lockups.
+                Your fleet parameters are saved, but autonomous order placement requires an active on-chain session grant. Delegate once to authorize your personal trading account vault.
               </p>
               {onOpenSessionModal && (
                 <button

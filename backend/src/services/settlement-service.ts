@@ -1195,6 +1195,12 @@ export class SettlementService {
               operatorBalance = 0n;
             }
 
+            const session = await sessionService.getUserActiveSession(normalizedUser).catch(() => null);
+            const cloneAddress = session?.accountAddress || (await getSessionAccount(normalizedUser).catch(() => null));
+            const isCloneValid = Boolean(cloneAddress && isAddress(cloneAddress) && cloneAddress.toLowerCase() !== CLONE_ZERO_ADDRESS.toLowerCase());
+            const targetPayoutRecipient = (isCloneValid && cloneAddress) ? (getAddress(cloneAddress) as Address) : normalizedUser;
+            const payoutTokenLabel = (isCloneValid && cloneAddress) ? 'tUSDC (in clone)' : 'tUSDC';
+
             const canPayoutBatch = hasGas && operatorBalance >= accumulatedRaw;
             let batchTxHash: Hex | undefined;
 
@@ -1204,14 +1210,14 @@ export class SettlementService {
                   address: SOMNIA_ADDRESSES.testUsdc,
                   abi: ERC20_ABI,
                   functionName: 'transfer',
-                  args: [normalizedUser, accumulatedRaw],
+                  args: [targetPayoutRecipient, accumulatedRaw],
                 });
                 if (transferHash) {
                   await publicClient.waitForTransactionReceipt({ hash: transferHash, timeout: 15_000 }).catch(() => {});
                   batchTxHash = transferHash;
                 }
               } catch (tErr: any) {
-                console.warn(`[SettlementService] Batched payout transfer of ${accumulatedRaw.toString()} to ${normalizedUser} failed:`, tErr.message);
+                console.warn(`[SettlementService] Batched payout transfer of ${accumulatedRaw.toString()} to ${targetPayoutRecipient} failed:`, tErr.message);
               }
             }
 
@@ -1225,7 +1231,7 @@ export class SettlementService {
                   marketId: pos.marketId,
                   winningOutcome: pos.winningOutcome,
                   claimableAmount: pos.claimableAmount,
-                  payoutToken: 'tUSDC',
+                  payoutToken: payoutTokenLabel,
                   isCompounded: false,
                   txHash: batchTxHash,
                   status: 'CONFIRMED',
@@ -1250,7 +1256,7 @@ export class SettlementService {
                       address: SOMNIA_ADDRESSES.testUsdc,
                       abi: ERC20_ABI,
                       functionName: 'transfer',
-                      args: [normalizedUser, pos.rawAmount],
+                      args: [targetPayoutRecipient, pos.rawAmount],
                     });
                     if (singleHash) {
                       await publicClient.waitForTransactionReceipt({ hash: singleHash, timeout: 15_000 }).catch(() => {});
@@ -1264,7 +1270,7 @@ export class SettlementService {
                         marketId: pos.marketId,
                         winningOutcome: pos.winningOutcome,
                         claimableAmount: pos.claimableAmount,
-                        payoutToken: 'tUSDC',
+                        payoutToken: payoutTokenLabel,
                         isCompounded: false,
                         txHash: singleHash,
                         status: 'CONFIRMED',
@@ -1280,7 +1286,7 @@ export class SettlementService {
                       continue;
                     }
                   } catch (sErr: any) {
-                    console.warn(`[SettlementService] Individual payout transfer of ${pos.rawAmount.toString()} for market ${pos.marketId} failed:`, sErr.message);
+                    console.warn(`[SettlementService] Individual payout transfer for market ${pos.marketId} failed:`, sErr.message);
                   }
                 }
                 // IMPORTANT: If transfer was skipped or failed, DO NOT settle orders or record CONFIRMED sweep.
@@ -1659,13 +1665,19 @@ export class SettlementService {
           .getErc20Balance(SOMNIA_ADDRESSES.testUsdc, operatorAccount.address)
           .catch(() => 0n);
         const hasGas = await hasOperatorGas().catch(() => false);
+        const session = await sessionService.getUserActiveSession(normalizedUser).catch(() => null);
+        const cloneAddress = session?.accountAddress || (await getSessionAccount(normalizedUser).catch(() => null));
+        const isCloneValid = Boolean(cloneAddress && isAddress(cloneAddress) && cloneAddress.toLowerCase() !== CLONE_ZERO_ADDRESS.toLowerCase());
+        const targetPayoutRecipient = (isCloneValid && cloneAddress) ? (getAddress(cloneAddress) as Address) : normalizedUser;
+        const payoutTokenLabel = (isCloneValid && cloneAddress) ? 'tUSDC (in clone)' : 'tUSDC';
+
         if (rawAmount > 0n && operatorBalance >= rawAmount && hasGas) {
           try {
             const transferHash = await executeOperatorWriteContract({
               address: SOMNIA_ADDRESSES.testUsdc,
               abi: ERC20_ABI,
               functionName: 'transfer',
-              args: [normalizedUser, rawAmount],
+              args: [targetPayoutRecipient, rawAmount],
             });
             if (transferHash) {
               if (process.env.NODE_ENV !== 'test') {
@@ -1673,6 +1685,7 @@ export class SettlementService {
               }
               txHash = transferHash;
               sweep.txHash = transferHash;
+              sweep.payoutToken = payoutTokenLabel;
             }
           } catch (tErr: any) {
             console.warn(`[SettlementService] Single claim transfer failed:`, tErr.message);

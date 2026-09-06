@@ -91,9 +91,9 @@ export const SOMNIA_ADDRESSES = {
   operatorAccount: '0x93e300607c363E7D7a47e50f5c9fDf1723e859Cf' as Address,
   sessionAccount: '0xff16EF28861F90201aB0B00e46f6c7683AFacee5' as Address,
   /** V2 implementation with 1 tUSDC withdrawal fee and 1 tUSDC min threshold */
-  sessionAccountImpl: '0x92673153f231d87e2adb8b61321260dacf138858' as Address,
+  sessionAccountImpl: '0x47ea804522bee0b6e98e5189e70de14843fdf886' as Address,
   /** V2 factory deploying one trading account clone per user (current model). */
-  sessionAccountFactory: '0x94dd9c8b9a5684ab026480737fac911824ac995d' as Address,
+  sessionAccountFactory: '0xf45589660652962a381c8420125bc4be90362081' as Address,
   // Faucet & Live Market Creators
   collateral: '0x70a86D8842FB63C4Ad2b7cdddF530eBf1BB25d8E' as Address,
   testUsdc: '0x70a86D8842FB63C4Ad2b7cdddF530eBf1BB25d8E' as Address,

@@ -398,7 +398,7 @@ export const AgentSwarmCockpit: React.FC<AgentSwarmCockpitProps> = ({
               </div>
               <div className="p-2.5 rounded-lg border bg-secondary/30 border-border/50 flex flex-col gap-0.5">
                 <span className="text-[10px] font-mono uppercase tracking-wider text-muted-foreground">Payout Mode</span>
-                <span className="text-xs font-mono font-bold text-muted-foreground">100% WALLET</span>
+                <span className="text-xs font-mono font-bold text-emerald-400">TRADING WALLET</span>
               </div>
             </div>
 
@@ -407,7 +407,7 @@ export const AgentSwarmCockpit: React.FC<AgentSwarmCockpitProps> = ({
                 <ShieldCheckIcon className="w-3.5 h-3.5" />
               </div>
               <p className="text-[11px] leading-relaxed text-muted-foreground m-0">
-                Background daemon continuously scans Somnia contracts for finalized markets with positive payouts, automatically claiming and transferring <span className="font-semibold text-foreground">100% of proceeds directly</span> to user wallets.
+                Background daemon continuously scans Somnia contracts for finalized markets with positive payouts, automatically claiming and compounding <span className="font-semibold text-foreground">100% of proceeds directly</span> into Smart Trading Wallets.
               </p>
             </div>
 

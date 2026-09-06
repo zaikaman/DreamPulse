@@ -533,42 +533,49 @@ export const SweeperControls: React.FC<SweeperControlsProps> = ({
       {/* ---------- 1. Sweeper Controls Header + Stats ---------- */}
       <div className="terminal-panel p-0 overflow-hidden">
         {/* Header Bar */}
-        <div className="flex items-center justify-between gap-4 px-4 py-3 border-b border-border/40 flex-wrap">
-          <div className="flex items-center gap-3 min-w-0">
-            <div className="w-8 h-8 rounded-lg grid place-items-center border bg-secondary/30 border-border/50 text-muted-foreground flex-shrink-0">
-              <SparklesIcon className="w-4 h-4" />
+        <div className="flex items-center justify-between gap-3 px-4 py-3 border-b border-border/40">
+          {/* Left: Icon + Title + Status Badge */}
+          <div className="flex items-center gap-2.5 min-w-0">
+            <div className="w-7 h-7 rounded-lg grid place-items-center border bg-secondary/30 border-border/50 text-muted-foreground flex-shrink-0">
+              <SparklesIcon className="w-3.5 h-3.5" />
             </div>
-            <div className="min-w-0">
-              <div className="flex items-center gap-2 flex-wrap">
-                <h2 className="text-sm font-bold tracking-tight text-foreground leading-none">
-                  {isViewingSelf ? 'Settlement Sweeper & Direct Wallet Payouts' : 'Autonomous Protocol Sweeper'}
-                </h2>
-                <Badge variant="outline" className="font-mono text-[10px] px-1.5 py-0 bg-secondary/30 border-border/40 text-muted-foreground hidden sm:inline-flex">
-                  {isViewingSelf ? 'AUTOMATED SETTLEMENT' : 'PROTOCOL SWEEPER'}
-                </Badge>
-              </div>
-              <p className="text-[11px] text-muted-foreground mt-1 hidden sm:block">
-                {isViewingSelf ? 'Automated on-chain engine sweeping resolved prediction markets and routing winning settlements directly to your connected wallet.' : 'Automated on-chain engine sweeping resolved Somnia event contracts & executing direct payout settlements.'}
-              </p>
+            <div className="flex items-center gap-2 min-w-0">
+              <h2 className="text-xs sm:text-sm font-bold tracking-tight text-foreground whitespace-nowrap">
+                {isViewingSelf ? 'Settlement Sweeper & Payouts' : 'Autonomous Protocol Sweeper'}
+              </h2>
+              <Badge variant="outline" className="font-mono text-[9px] px-1.5 py-0 bg-emerald-500/10 border-emerald-500/25 text-emerald-400 whitespace-nowrap hidden sm:inline-flex">
+                {isViewingSelf ? (effectiveCloneAddress ? 'COMPOUNDING TO TRADING WALLET' : 'AUTOMATED') : 'PROTOCOL'}
+              </Badge>
             </div>
           </div>
-          <div className="flex items-center gap-2 flex-wrap flex-shrink-0">
+
+          {/* Right: Account + Badge + Action Button */}
+          <div className="flex items-center gap-2.5 flex-shrink-0">
             <div className="hidden md:flex items-center gap-1.5 text-[11px] font-mono text-muted-foreground">
               {isViewingSelf ? <WalletIcon className="w-3.5 h-3.5 text-muted-foreground" /> : <CpuChipIcon className="w-3.5 h-3.5 text-muted-foreground" />}
-              <span>{isViewingSelf ? 'Connected Wallet:' : 'Protocol Account:'}</span>
+              <span className="hidden xl:inline">{isViewingSelf ? 'Wallet:' : 'Account:'}</span>
               <code className="text-[11px] text-foreground">({activeAddress ? `${activeAddress.slice(0, 6)}...${activeAddress.slice(-4)}` : '0x...'})</code>
             </div>
             <Badge variant="outline" className="gap-1 font-mono text-[10px] bg-secondary/30 border-border/50 text-muted-foreground hidden lg:inline-flex">
-              <ShieldCheckIcon className="w-3 h-3" />
-              <span>Direct Wallet Payout</span>
+              <ShieldCheckIcon className="w-3 h-3 text-emerald-400" />
+              <span>{effectiveCloneAddress ? 'Trading Wallet Payout' : 'Direct Wallet Payout'}</span>
             </Badge>
             {userAddress ? (
-              <button type="button" onClick={handleManualSweep} disabled={isSweeping || unclaimedAmount <= 0} className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg border text-xs font-bold transition-colors disabled:opacity-50 disabled:cursor-not-allowed bg-primary text-primary-foreground border-border hover:bg-primary/90">
+              <button
+                type="button"
+                onClick={handleManualSweep}
+                disabled={isSweeping || unclaimedAmount <= 0}
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border text-xs font-bold transition-all disabled:opacity-50 disabled:cursor-not-allowed bg-primary text-primary-foreground border-border hover:bg-primary/90 active:scale-95 shadow-sm cursor-pointer whitespace-nowrap"
+              >
                 {isSweeping ? <Spinner size="xs" variant="cyan" /> : <ArrowPathIcon className="w-3.5 h-3.5" />}
                 <span>{isSweeping ? 'Sweeping…' : unclaimedAmount > 0 ? `Sweep ${unclaimedAmount.toFixed(2)} tUSDC` : 'Sweep Now'}</span>
               </button>
             ) : (
-              <button type="button" onClick={onConnectWallet} className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border bg-secondary/30 border-border/50 text-xs font-medium text-muted-foreground hover:text-foreground hover:bg-secondary/50 transition-colors">
+              <button
+                type="button"
+                onClick={onConnectWallet}
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border bg-secondary/30 border-border/50 text-xs font-medium text-muted-foreground hover:text-foreground hover:bg-secondary/50 transition-colors cursor-pointer whitespace-nowrap"
+              >
                 <WalletIcon className="w-3.5 h-3.5" />
                 <span>Connect to Sweep</span>
               </button>
@@ -580,12 +587,13 @@ export const SweeperControls: React.FC<SweeperControlsProps> = ({
         {isLoading && history.length === 0 ? (
           <div className="p-3.5 grid grid-cols-1 md:grid-cols-3 gap-3">
             {[1, 2, 3].map((i) => (
-              <div key={`sw-skel-${i}`} className="terminal-panel p-3.5 flex flex-col gap-2 bg-secondary/10">
-                <div className="flex justify-between items-center">
-                  <span className="w-[110px] h-3 bg-secondary/40 rounded skeleton-shimmer" />
-                  <span className="w-14 h-4 bg-secondary/40 rounded skeleton-shimmer" />
+              <div key={`stat-skel-${i}`} className="terminal-panel p-3.5 flex flex-col justify-between h-[86px]">
+                <div className="flex items-center justify-between">
+                  <span className="w-20 h-3 bg-secondary/40 rounded skeleton-shimmer inline-block" />
+                  <span className="w-12 h-4 bg-secondary/40 rounded skeleton-shimmer inline-block" />
                 </div>
-                <span className="w-28 h-6 bg-secondary/40 rounded skeleton-shimmer mt-1" />
+                <span className="w-24 h-6 bg-secondary/40 rounded skeleton-shimmer inline-block mt-2" />
+                <span className="w-32 h-3 bg-secondary/40 rounded skeleton-shimmer inline-block mt-1" />
               </div>
             ))}
           </div>
@@ -610,8 +618,8 @@ export const SweeperControls: React.FC<SweeperControlsProps> = ({
             <div className="terminal-panel p-3.5 flex flex-col justify-between relative overflow-hidden">
               <div className="absolute top-0 left-0 right-0 h-[2.5px] bg-[#00e676]/60" />
               <div className="flex items-center justify-between">
-                <span className="text-[10px] font-mono font-semibold tracking-wider text-muted-foreground uppercase">Total Paid Out to Wallet</span>
-                <Badge variant="outline" className="text-[10px] font-mono px-1.5 py-0 bg-secondary/30 border-border/40 text-muted-foreground">WALLET</Badge>
+                <span className="text-[10px] font-mono font-semibold tracking-wider text-muted-foreground uppercase">{effectiveCloneAddress ? 'Total Settled to Trading Wallet' : 'Total Paid Out to Wallet'}</span>
+                <Badge variant="outline" className="text-[10px] font-mono px-1.5 py-0 bg-emerald-500/10 border-emerald-500/20 text-emerald-400">{effectiveCloneAddress ? 'TRADING WALLET' : 'WALLET'}</Badge>
               </div>
               <div className="text-xl font-mono font-bold mt-2" style={{ color: totalClaimedAllTime > 0 ? '#00e676' : 'var(--muted-foreground)' }}>
                 +{totalClaimedAllTime.toFixed(2)} <span className="text-xs font-semibold">tUSDC</span>
@@ -627,7 +635,9 @@ export const SweeperControls: React.FC<SweeperControlsProps> = ({
               <div className="text-xl font-mono font-bold mt-2 text-foreground">
                 {confirmedCount} <span className="text-sm font-semibold">Sweeps</span>
               </div>
-              <div className="text-[10px] font-mono text-muted-foreground mt-1">Automated batch claims • Direct wallet settlement</div>
+              <div className="text-[10px] font-mono text-muted-foreground mt-1">
+                {effectiveCloneAddress ? 'Automated batch claims • Compounding in Smart Trading Wallet' : 'Automated batch claims • Direct wallet settlement'}
+              </div>
             </div>
           </div>
         )}
@@ -682,7 +692,7 @@ export const SweeperControls: React.FC<SweeperControlsProps> = ({
                 <th className="px-3 py-2.5 text-left font-semibold">Market Contract</th>
                 <th className="px-3 py-2.5 text-left font-semibold">Winning Leg</th>
                 <th className="px-3 py-2.5 text-right font-semibold">Claimed Payout</th>
-                <th className="px-3 py-2.5 text-center font-semibold">Payout Type</th>
+                <th className="px-3 py-2.5 text-center font-semibold">Payout Destination</th>
                 <th className="px-3 py-2.5 text-right font-semibold">Somnia Shannon Tx</th>
               </tr>
             </thead>
@@ -751,6 +761,11 @@ export const SweeperControls: React.FC<SweeperControlsProps> = ({
                           <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-semibold border bg-amber-500/10 border-amber-500/30 text-amber-400">
                             <ClockIcon className="w-3 h-3 text-amber-400" />
                             <span>Pending Payout</span>
+                          </span>
+                        ) : sweep.payoutToken?.includes('clone') || effectiveCloneAddress ? (
+                          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-semibold border bg-emerald-500/10 border-emerald-500/30 text-emerald-400">
+                            <BanknotesIcon className="w-3 h-3 text-emerald-400" />
+                            <span>Trading Wallet</span>
                           </span>
                         ) : (
                           <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-semibold border bg-secondary/30 border-border/50 text-muted-foreground">

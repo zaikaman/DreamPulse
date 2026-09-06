@@ -1,12 +1,12 @@
 {
   "contractName": "DreamPulseSessionAccountFactory",
-  "implementation": "0x92673153f231d87e2adb8b61321260dacf138858",
-  "address": "0x94dd9c8b9a5684ab026480737fac911824ac995d",
+  "implementation": "0x47ea804522bee0b6e98e5189e70de14843fdf886",
+  "address": "0xf45589660652962a381c8420125bc4be90362081",
   "chainId": 50312,
-  "blockNumber": "481229288",
-  "transactionHash": "0xc79abdf493267b7b13982f0194927555381f99b7bc18d0dc465ff6e338fb211d",
-  "implementationTransactionHash": "0x03cf17d0312d32d4dc51a52e4c128c44a35877e8f6646475629dcd73ddd25b57",
-  "deployedAt": "2026-09-06T12:01:20.709Z",
+  "blockNumber": "481301389",
+  "transactionHash": "0xad87c9f3409252c4654b335fd20814f34156c583a2adbb082a9cc30d413f8436",
+  "implementationTransactionHash": "0x18660dd1364fc2853201f9a20ce028a7c18f97fa52c52bda8157d1237dbbbcac",
+  "deployedAt": "2026-09-06T14:01:31.352Z",
   "implementationAbi": [
     {
       "inputs": [],

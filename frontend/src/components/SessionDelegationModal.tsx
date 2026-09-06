@@ -151,13 +151,11 @@ export const SessionDelegationModal: React.FC<SessionDelegationModalProps> = ({
   const getStepStatusText = () => {
     switch (stepState) {
       case 'deploying_clone':
-        return 'Step 1/3: Sponsoring & Deploying Smart Account Clone...';
-      case 'approving_clone':
-        return 'Step 2/3: Confirming 1-Time TestUSDC Approval to Clone in Wallet...';
+        return 'Step 1/2: Sponsoring & Deploying Smart Account Clone...';
       case 'authorizing_onchain':
-        return 'Step 3/3: Authorizing Session Key on Smart Account Clone...';
+        return 'Step 2/2: Authorizing Session Key on Smart Account Clone...';
       case 'depositing_vault':
-        return 'Approving Collateral Deposit...';
+        return 'Depositing to Trading Account Vault...';
       case 'signing_eip712':
         return 'Signing EIP-712 Risk Ceilings in Wallet...';
       case 'registering_backend':
@@ -537,38 +535,64 @@ export const SessionDelegationModal: React.FC<SessionDelegationModalProps> = ({
                 <ExclamationTriangleIcon className="w-4 h-4 text-red-500 shrink-0 mt-0.5" />
                 <div style={{ flex: 1 }}>
                   <div style={{ fontWeight: 700, fontSize: '12px', color: 'hsl(var(--destructive))', marginBottom: '4px' }}>
-                    Action Required: Pool Allowance Authorization
+                    {parseFloat(cloneBalance || '0') <= 0 ? 'Action Recommended: Fund Trading Account' : 'Action Required: Delegation Setup'}
                   </div>
                   <div style={{ fontSize: '11px', color: 'hsl(var(--muted-foreground))', lineHeight: 1.4, marginBottom: '8px' }}>
-                    {allowanceStatus.guidance || 'Your wallet needs to allow market pools to pull escrow per trade. Click Authorize Pools below to complete 1-time setup. Funds never leave your wallet except into your own orders.'}
+                    {allowanceStatus.guidance || 'Deposit tUSDC into your Trading Account Vault to enable autonomous execution. Swarm agents trade strictly with your deposited funds.'}
                   </div>
                   <div style={{ display: 'flex', gap: '8px' }}>
-                    <button
-                      type="button"
-                      onClick={async () => {
-                        onClearError();
-                        try {
-                          await onEnsureAllowances?.();
-                        } catch {}
-                      }}
-                      disabled={isFixingAllowance || isSigning}
-                      style={{
-                        background: 'hsl(var(--destructive))',
-                        color: '#fff',
-                        fontWeight: 700,
-                        fontSize: '11px',
-                        padding: '7px 14px',
-                        borderRadius: '6px',
-                        border: 'none',
-                        cursor: 'pointer',
-                        display: 'inline-flex',
-                        alignItems: 'center',
-                        gap: '6px',
-                      }}
-                    >
-                      {isFixingAllowance ? <Spinner size="xs" variant="white" /> : <CheckCircleIcon className="w-3 h-3" />}
-                      Authorize Pools
-                    </button>
+                    {parseFloat(cloneBalance || '0') <= 0 && onOpenTradingWallet ? (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          onClose();
+                          onOpenTradingWallet('deposit');
+                        }}
+                        style={{
+                          background: 'hsl(var(--primary))',
+                          color: '#fff',
+                          fontWeight: 700,
+                          fontSize: '11px',
+                          padding: '7px 14px',
+                          borderRadius: '6px',
+                          border: 'none',
+                          cursor: 'pointer',
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          gap: '6px',
+                        }}
+                      >
+                        <ArrowDownTrayIcon className="w-3 h-3" />
+                        Deposit Collateral
+                      </button>
+                    ) : (
+                      <button
+                        type="button"
+                        onClick={async () => {
+                          onClearError();
+                          try {
+                            await onEnsureAllowances?.();
+                          } catch {}
+                        }}
+                        disabled={isFixingAllowance || isSigning}
+                        style={{
+                          background: 'hsl(var(--destructive))',
+                          color: '#fff',
+                          fontWeight: 700,
+                          fontSize: '11px',
+                          padding: '7px 14px',
+                          borderRadius: '6px',
+                          border: 'none',
+                          cursor: 'pointer',
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          gap: '6px',
+                        }}
+                      >
+                        {isFixingAllowance ? <Spinner size="xs" variant="white" /> : <CheckCircleIcon className="w-3 h-3" />}
+                        Check Account Status
+                      </button>
+                    )}
                     <button
                       type="button"
                       onClick={() => onRefreshAllowance?.()}

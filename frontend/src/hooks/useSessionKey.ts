@@ -349,12 +349,6 @@ export function useSessionKey(): UseSessionKeyReturn {
           }
         }
       }
-      if (currentClone) {
-        await web3Service.ensureCloneAllowance({
-          userAddress: wallet.address,
-          cloneAddress: currentClone,
-        });
-      }
       await refreshAllowanceStatus(true);
       await refreshBalances(wallet.address);
     } catch (err: any) {
@@ -566,25 +560,7 @@ export function useSessionKey(): UseSessionKeyReturn {
           if (currentClone) setCloneAddress(currentClone);
         }
 
-        // Step 2: One-time approval from wallet to the clone.
-        // In V2, this ONE single approval covers all 66+ pools forever.
-        setStepState('approving_clone');
-        if (currentClone) {
-          try {
-            const approveHash = await web3Service.ensureCloneAllowance({
-              userAddress: wallet.address,
-              cloneAddress: currentClone,
-            });
-            if (approveHash && !onChainTxHash) onChainTxHash = approveHash;
-          } catch (allowErr: any) {
-            if (String(allowErr?.message || '').includes('User rejected') || String(allowErr?.message || '').includes('rejected')) {
-              throw allowErr;
-            }
-            console.warn('[useSessionKey] Clone allowance note:', allowErr.message);
-          }
-        }
-
-        // Step 3: Authorize ephemeral session key on the clone with on-chain risk caps
+        // Step 2: Authorize ephemeral session key on the clone with on-chain risk caps
         setStepState('authorizing_onchain');
         const ephemeralKey = web3Service.generateEphemeralSessionKey();
 

@@ -654,18 +654,20 @@ apiRouter.get('/sessions/:userAddress/allowance-status', optionalWalletAuth, asy
     const cloneAllowanceHuman = Number(cloneAllowance) / 1_000_000;
     const cloneBalanceHuman = Number(cloneBalance) / 1_000_000;
 
-    const hasSufficientAllowance = cloneAllowanceHuman >= 100;
     const hasSessionKey = Boolean(session?.isActive && session?.onChainAuthorized);
-    const allReady = hasClone && hasSufficientAllowance && (balanceHuman > 0 || cloneBalanceHuman > 0);
+    const hasVaultFunds = cloneBalanceHuman > 0;
+    // In pure isolated vault mode, main-wallet approval is not required;
+    // readiness requires the clone, the active session key, and funded vault.
+    const allReady = hasClone && hasSessionKey && hasVaultFunds;
 
     const payload = {
       success: true,
       userAddress: normalized,
       hasActiveSession: !!session?.isActive,
       hasDelegated: !!session?.onChainAuthorized || hasClone,
-      isGloballyApproved: hasClone && hasSufficientAllowance,
-      hasOperatorAllowance: hasSufficientAllowance,
-      allowanceOperatorHuman: cloneAllowanceHuman,
+      isGloballyApproved: hasClone,
+      hasOperatorAllowance: hasClone,
+      allowanceOperatorHuman: cloneBalanceHuman,
       balanceHuman,
       accountAddress: hasClone ? accountAddress : undefined,
       hasClone,
@@ -675,20 +677,20 @@ apiRouter.get('/sessions/:userAddress/allowance-status', optionalWalletAuth, asy
       checks: [
         {
           pool: accountAddress ? `Smart Account Clone (${accountAddress.slice(0, 6)}...${accountAddress.slice(-4)})` : 'Smart Account Clone',
-          allowanceHuman: cloneAllowanceHuman,
+          allowanceHuman: cloneBalanceHuman,
           balanceHuman,
           vaultHuman: cloneBalanceHuman,
-          ready: hasClone && hasSufficientAllowance,
+          ready: hasClone && hasSessionKey && hasVaultFunds,
         },
       ],
       allReady,
       guidance: !hasClone
         ? 'Smart Account Clone required. Click Authorize to deploy your isolated clone (sponsored by backend).'
-        : !hasSufficientAllowance
-          ? 'One-time TestUSDC approval to your clone required. This 1 approval covers all 66+ pools forever.'
-          : balanceHuman <= 0 && cloneBalanceHuman <= 0
-            ? 'Wallet and Clone TestUSDC balance is 0. Claim TestUSDC from the faucet to begin copy-trading.'
-            : 'Ready — Smart Account Clone active and funded. 1-time approval covers all future pools.',
+        : !hasSessionKey
+          ? 'Session delegation required. Authorize your session key on your Smart Account Clone to begin.'
+          : !hasVaultFunds
+            ? 'Deposit tUSDC into your Trading Account Vault to enable autonomous execution. Swarm agents trade strictly from your deposited funds.'
+            : 'Ready — Smart Account Clone is active and funded in your isolated Trading Account Vault.',
     };
     allowanceStatusCache.set(cacheKey, { data: payload, expiresAt: Date.now() + ALLOWANCE_CACHE_TTL_MS });
     return res.json(payload);

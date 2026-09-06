@@ -988,11 +988,26 @@ export class OrderService {
     }
 
     // Validate risk guardrails against session & re-hydrate full session credentials
-    const registeredSession = (session?.id ? sessionService.getSessionById(session.id) : null)
+    const registeredSessionById = session?.id ? sessionService.getSessionById(session.id) : null;
+    const registeredSession = registeredSessionById
       || (session?.userAddress ? sessionService.listUserSessions(session.userAddress).find((s) => s.isActive) : null);
+    // A grant that references a real session id (e.g. copy-trade) is authoritative
+    // and always enforced, expired or not. A registered session found only by
+    // user-address fallback (e.g. the operator wallet's own self-session while the
+    // swarm submits master orders under a synthetic grant id like "session-volt")
+    // is adopted only while it is currently valid — otherwise the swarm would fail
+    // every master order with "Session not found" / "Session has expired" and
+    // silently stop trading whenever the self-session lapses.
+    const registeredSessionIsValid = Boolean(
+      registeredSession?.isActive && new Date(registeredSession.expiresAt).getTime() > Date.now(),
+    );
+    const adoptRegisteredSession = registeredSessionById !== null || registeredSessionIsValid;
     const effectiveSession: SessionGrant = {
       ...session,
-      ...(registeredSession ? {
+      ...((adoptRegisteredSession && registeredSession) ? {
+        // Adopt the registered session's real ID so validateTradeAllowance,
+        // recordTradeSpend and order persistence (session_id) hit the real row.
+        id: registeredSession.id,
         accountAddress: registeredSession.accountAddress || session.accountAddress,
         sessionKeyAddress: registeredSession.sessionKeyAddress || session.sessionKeyAddress,
         sessionKeyPrivateKey: registeredSession.sessionKeyPrivateKey || session.sessionKeyPrivateKey,
@@ -1001,7 +1016,7 @@ export class OrderService {
       } : {}),
     };
 
-    if (registeredSession) {
+    if (adoptRegisteredSession) {
       const riskAllowance = sessionService.validateTradeAllowance(effectiveSession.id, totalCost);
       if (!riskAllowance.allowed) {
         this.lastExecutionFailureReason = `Session risk limit reached: ${riskAllowance.reason}`;
@@ -1459,7 +1474,7 @@ export class OrderService {
     };
 
     // Record spend against session now that order has executed (use actual filled cost)
-    if (registeredSession) {
+    if (adoptRegisteredSession && registeredSession) {
       await sessionService.recordTradeSpend(effectiveSession.id, actualTotalCost);
     } else {
       effectiveSession.spentToday = Number((effectiveSession.spentToday + actualTotalCost).toFixed(4));
