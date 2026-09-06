@@ -12,6 +12,7 @@ import {
   calculateRoiEdge,
   calculateVolatilityNormalizedDriftThreshold,
   calculateEdgeProportionalLots,
+  calculatePriceActionMetrics,
 } from '../quantitative/pricing.js';
 import { quantizePrice, quantizeLotSize } from '../quantitative/quantizer.js';
 import { orderService } from '../services/order-service.js';
@@ -39,13 +40,15 @@ export class OracleArbAgent extends BaseAgent {
    * Evaluates mathematical pricing discrepancies between CLOB order book prices and
    * dynamic EWMA realized-volatility Black-Scholes Φ(d2) fair values.
    *
-   * Features:
+   * Features & Protections:
    * 1. EWMA Realized Volatility: Uses smoothed rolling tick history rather than noisy raw variance.
-   * 2. Depth VWAP Execution: Evaluates full order book ladder up to target lots.
-   * 3. Time-Decay Theta Calibration: Scales required edge dynamically in short horizons (<300s).
-   * 4. Adverse Selection Protection: Filters out trades fighting short-term spot momentum dumps/surges.
-   * 5. Optimal Risk/Reward Envelope [0.25, 0.68] & ROI-on-Risk Hurdle (≥8.0% expected return on capital).
-   * 6. Expiry Envelope: Avoids gamma pin-risk (<45s) and low-velocity horizon (>7200s).
+   * 2. Layer 1 Horizon Filter: Restricts volatility arbitrage to rapid convergence horizons (<= 15m / 900s).
+   *    Excludes 1-hour/macro contracts where Black-Scholes diffusion is flat and macro drift dominates.
+   * 3. Layer 2 Trend-Aware Directional Gating: Hard-blocks taking positions directly against multi-timeframe breakouts.
+   * 4. Layer 3 Dynamic Asymmetry Collar: Doubles required edge (>=7.0%) and ROI hurdle (>=16%) for mild counter-trend setups.
+   * 5. Depth VWAP Execution: Evaluates full order book ladder up to target lots.
+   * 6. Time-Decay Theta Calibration: Scales required edge dynamically in short horizons (<300s).
+   * 7. Optimal Risk/Reward Envelope [0.25, 0.68] & ROI-on-Risk Hurdle (≥8.0% expected return on capital).
    */
   public async evaluate(context: IAgentContext): Promise<IAgentDecision> {
     if (!this.isEnabled) {
@@ -63,7 +66,7 @@ export class OracleArbAgent extends BaseAgent {
     const now = Date.now();
     const timeLeftSeconds = Math.max(1, Math.floor((closeTime - now) / 1000));
 
-    // 1. Expiry Horizon Filter: Avoid extreme pin-risk (<45s) and slow convergence (>2h)
+    // 1. Expiry Horizon & Window Filter: Restrict volatility arbitrage to rapid convergence horizons (<= 15m / 900s)
     if (timeLeftSeconds < 45) {
       return {
         agentType: 'Oracle',
@@ -73,13 +76,14 @@ export class OracleArbAgent extends BaseAgent {
         rationale: `Market is near expiration (${timeLeftSeconds}s < 45s). Holding to avoid gamma pin-risk.`,
       };
     }
-    if (timeLeftSeconds > 7200) {
+    const isLongDurationWindow = market.windowDuration === '1h' || market.windowDuration === '4h' || market.windowDuration === '24h' || market.windowDuration === '1d';
+    if (isLongDurationWindow || timeLeftSeconds > 900) {
       return {
         agentType: 'Oracle',
         action: 'HOLD',
         targetMarketId: market.id,
         confidence: 0.5,
-        rationale: `Market window is too far (${Math.round(timeLeftSeconds / 60)}m > 120m) for quantitative mispricing convergence. Holding.`,
+        rationale: `Market horizon (${market.windowDuration || 'unknown'}, ${Math.round(timeLeftSeconds / 60)}m > 15m) exceeds quantitative volatility convergence window. Holding to prevent macro drift risk.`,
       };
     }
 
@@ -102,7 +106,10 @@ export class OracleArbAgent extends BaseAgent {
     const dynamicMinEdge = Number((this.oracleConfig.minEdge * timeDecayFactor).toFixed(4));
     const minRoiHurdle = 0.08; // Minimum 8.0% expected return on capital at risk
 
-    // 2. Dynamic Fair Value calculation utilizing real-time EWMA realized volatility
+    // 2. High-frequency price action indicators & multi-timeframe directional trend evaluation
+    const priceAction = calculatePriceActionMetrics(spotTicker.priceHistory, spotTicker.price);
+
+    // 3. Dynamic Fair Value calculation utilizing real-time EWMA realized volatility
     const fair = calculateFairValue(
       spotTicker.price,
       market.strikePrice,
@@ -124,7 +131,7 @@ export class OracleArbAgent extends BaseAgent {
     // Dynamic volatility-normalized adverse selection drift threshold (1.5 sigma of 1m move)
     const adverseDriftThreshold = calculateVolatilityNormalizedDriftThreshold(fair.volatilityUsed, 1.5, 60, 0.0008, 0.0050);
 
-    // 3. Evaluate YES Executable Edge with Depth VWAP
+    // 4. Evaluate YES Executable Edge with Depth VWAP
     const rawAsksYes = depth.yesAsks && depth.yesAsks.length > 0
       ? depth.yesAsks
       : (market.bestAskYes > 0 ? [{ price: market.bestAskYes, quantity: 200, total: 100 }] : []);
@@ -151,6 +158,17 @@ export class OracleArbAgent extends BaseAgent {
       }
 
       if (vwapResult.slippageVsTop <= this.oracleConfig.maxSlippage) {
+        // Layer 2: Directional Trend Gating: Do NOT buy YES if spot is actively in a bearish breakdown or plunging
+        if (priceAction.trend === 'BEARISH_BREAKDOWN' || priceAction.trendScore < -0.35 || priceAction.isPlunging) {
+          return {
+            agentType: 'Oracle',
+            action: 'HOLD',
+            targetMarketId: market.id,
+            confidence: 0.5,
+            rationale: `Theoretical YES edge detected, but market is in active downward trend (${priceAction.trend}, score ${(priceAction.trendScore).toFixed(2)}). Holding to avoid adverse selection.`,
+          };
+        }
+
         // Adverse selection check: do NOT buy YES if spot is actively dumping hard
         if (spotTicker.change1m < -adverseDriftThreshold) {
           return {
@@ -162,21 +180,28 @@ export class OracleArbAgent extends BaseAgent {
           };
         }
 
+        // Layer 3: Dynamic Asymmetry Collar: If taking mild counter-trend risk, require doubled margin of safety
+        const isCounterTrendYes = priceAction.trendScore < -0.10 || priceAction.trend === 'BEARISH';
+        const dynamicMinEdgeYes = isCounterTrendYes
+          ? Math.max(0.070, Number((dynamicMinEdge * 2.0).toFixed(4)))
+          : dynamicMinEdge;
+        const minRoiHurdleYes = isCounterTrendYes ? 0.16 : minRoiHurdle;
+
         const netEdgeYes = calculateNetExecutableEdge(fair.fairValueYes, snappedPrice);
         const roiEdgeYes = calculateRoiEdge(netEdgeYes, snappedPrice);
 
         // Require both absolute probability edge and ROI-on-risk percentage hurdle
-        if (netEdgeYes >= dynamicMinEdge && roiEdgeYes >= minRoiHurdle) {
+        if (netEdgeYes >= dynamicMinEdgeYes && roiEdgeYes >= minRoiHurdleYes) {
           const lotSize = calculateEdgeProportionalLots(
             this.oracleConfig.lotSize,
             netEdgeYes,
-            dynamicMinEdge,
+            dynamicMinEdgeYes,
             targetRiskUsd,
             snappedPrice,
           );
           const confidence = Math.min(0.99, Number((0.80 + netEdgeYes * 2.8).toFixed(2)));
 
-          const rationale = `[VOL ARB] Mathematical mispricing (EWMA σ=${volPct}%): Theoretical Φ(d2)=${(fair.fairValueYes * 100).toFixed(1)}% vs Depth VWAP ${(snappedPrice * 100).toFixed(1)}% (Net Edge: +${(netEdgeYes * 100).toFixed(1)}%, ROI/Risk: +${(roiEdgeYes * 100).toFixed(1)}%, Req: ${(dynamicMinEdge * 100).toFixed(1)}%). Buying YES (${lotSize} lots).`;
+          const rationale = `[VOL ARB] Mathematical mispricing (EWMA σ=${volPct}%${isCounterTrendYes ? ', ASYMMETRIC COLLAR' : ''}): Theoretical Φ(d2)=${(fair.fairValueYes * 100).toFixed(1)}% vs Depth VWAP ${(snappedPrice * 100).toFixed(1)}% (Net Edge: +${(netEdgeYes * 100).toFixed(1)}%, ROI/Risk: +${(roiEdgeYes * 100).toFixed(1)}%, Req: ${(dynamicMinEdgeYes * 100).toFixed(1)}%). Buying YES (${lotSize} lots).`;
 
           const decision: IAgentDecision = {
             agentType: 'Oracle',
@@ -206,8 +231,11 @@ export class OracleArbAgent extends BaseAgent {
               vwapPrice: snappedPrice,
               netEdge: netEdgeYes,
               roiEdge: roiEdgeYes,
-              requiredEdge: dynamicMinEdge,
+              requiredEdge: dynamicMinEdgeYes,
               spotChange1m: spotTicker.change1m,
+              trend: priceAction.trend,
+              trendScore: priceAction.trendScore,
+              isCounterTrend: isCounterTrendYes,
               slippage: vwapResult.slippageVsTop,
             },
             createdAt: new Date().toISOString(),
@@ -218,7 +246,7 @@ export class OracleArbAgent extends BaseAgent {
       }
     }
 
-    // 4. Evaluate NO Executable Edge with Depth VWAP
+    // 5. Evaluate NO Executable Edge with Depth VWAP
     const rawAsksNo = depth.noAsks && depth.noAsks.length > 0
       ? depth.noAsks
       : (market.bestAskNo > 0
@@ -247,6 +275,17 @@ export class OracleArbAgent extends BaseAgent {
       }
 
       if (vwapResult.slippageVsTop <= this.oracleConfig.maxSlippage) {
+        // Layer 2: Directional Trend Gating: Do NOT buy NO if spot is actively in a bullish expansion or surging
+        if (priceAction.trend === 'BULLISH_EXPANSION' || priceAction.trendScore > 0.35 || priceAction.isSurging) {
+          return {
+            agentType: 'Oracle',
+            action: 'HOLD',
+            targetMarketId: market.id,
+            confidence: 0.5,
+            rationale: `Theoretical NO edge detected, but market is in active upward trend (${priceAction.trend}, score ${(priceAction.trendScore).toFixed(2)}). Holding to avoid adverse selection.`,
+          };
+        }
+
         // Adverse selection check: do NOT buy NO if spot is actively surging hard
         if (spotTicker.change1m > adverseDriftThreshold) {
           return {
@@ -258,21 +297,28 @@ export class OracleArbAgent extends BaseAgent {
           };
         }
 
+        // Layer 3: Dynamic Asymmetry Collar: If taking mild counter-trend risk, require doubled margin of safety
+        const isCounterTrendNo = priceAction.trendScore > 0.10 || priceAction.trend === 'BULLISH';
+        const dynamicMinEdgeNo = isCounterTrendNo
+          ? Math.max(0.070, Number((dynamicMinEdge * 2.0).toFixed(4)))
+          : dynamicMinEdge;
+        const minRoiHurdleNo = isCounterTrendNo ? 0.16 : minRoiHurdle;
+
         const netEdgeNo = calculateNetExecutableEdge(fair.fairValueNo, snappedPrice);
         const roiEdgeNo = calculateRoiEdge(netEdgeNo, snappedPrice);
 
         // Require both absolute probability edge and ROI-on-risk percentage hurdle
-        if (netEdgeNo >= dynamicMinEdge && roiEdgeNo >= minRoiHurdle) {
+        if (netEdgeNo >= dynamicMinEdgeNo && roiEdgeNo >= minRoiHurdleNo) {
           const lotSize = calculateEdgeProportionalLots(
             this.oracleConfig.lotSize,
             netEdgeNo,
-            dynamicMinEdge,
+            dynamicMinEdgeNo,
             targetRiskUsd,
             snappedPrice,
           );
           const confidence = Math.min(0.99, Number((0.80 + netEdgeNo * 2.8).toFixed(2)));
 
-          const rationale = `[VOL ARB] Mathematical mispricing (EWMA σ=${volPct}%): Theoretical NO Φ(d2)=${(fair.fairValueNo * 100).toFixed(1)}% vs Depth VWAP ${(snappedPrice * 100).toFixed(1)}% (Net Edge: +${(netEdgeNo * 100).toFixed(1)}%, ROI/Risk: +${(roiEdgeNo * 100).toFixed(1)}%, Req: ${(dynamicMinEdge * 100).toFixed(1)}%). Buying NO (${lotSize} lots).`;
+          const rationale = `[VOL ARB] Mathematical mispricing (EWMA σ=${volPct}%${isCounterTrendNo ? ', ASYMMETRIC COLLAR' : ''}): Theoretical NO Φ(d2)=${(fair.fairValueNo * 100).toFixed(1)}% vs Depth VWAP ${(snappedPrice * 100).toFixed(1)}% (Net Edge: +${(netEdgeNo * 100).toFixed(1)}%, ROI/Risk: +${(roiEdgeNo * 100).toFixed(1)}%, Req: ${(dynamicMinEdgeNo * 100).toFixed(1)}%). Buying NO (${lotSize} lots).`;
 
           const decision: IAgentDecision = {
             agentType: 'Oracle',
@@ -302,8 +348,11 @@ export class OracleArbAgent extends BaseAgent {
               vwapPrice: snappedPrice,
               netEdge: netEdgeNo,
               roiEdge: roiEdgeNo,
-              requiredEdge: dynamicMinEdge,
+              requiredEdge: dynamicMinEdgeNo,
               spotChange1m: spotTicker.change1m,
+              trend: priceAction.trend,
+              trendScore: priceAction.trendScore,
+              isCounterTrend: isCounterTrendNo,
               slippage: vwapResult.slippageVsTop,
             },
             createdAt: new Date().toISOString(),

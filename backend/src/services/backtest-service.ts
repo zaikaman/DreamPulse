@@ -9,6 +9,7 @@ import {
   calculateEdgeProportionalLots,
   calculateNetExecutableEdge,
   calculateDepthVWAP,
+  calculatePriceActionMetrics,
   DEFAULT_TAKER_FEE_RATE,
   DEFAULT_GAS_HURDLE,
 } from '../quantitative/pricing.js';
@@ -582,18 +583,25 @@ export class BacktestService {
             }
           }
         } else if (agentType === 'Oracle') {
-          // Oracle Volatility / Statistical Arbitrage: fires on pricing discrepancy vs dynamic realized volatility Black-Scholes Φ(d2)
-          // Dynamic time-decay edge scaling (demands higher margin of safety as expiry nears)
-          const timeDecayFactor = timeRemainingSec < 300 ? 1.0 + ((300 - timeRemainingSec) / 300) * 0.40 : 1.0;
-          const dynamicMinEdge = Number((minEdge * timeDecayFactor).toFixed(4));
-          const minRoiHurdle = 0.08;
+          // Oracle Volatility / Statistical Arbitrage with 3-Layer Quantitative Defense Architecture:
+          // Layer 1: Expiry Horizon Filter - restrict to rapid convergence horizons (<= 15m / 900s).
+          // Long-duration contracts (1h/4h/24h) are hard-blocked because flat diffusion curves leave unhedged positions vulnerable to macro spot drift.
+          const isLongDurationWindow = timeframe === '1h' || timeRemainingSec > 900;
 
-          // Dynamic volatility-normalized adverse selection drift threshold
-          const adverseDriftThreshold = calculateVolatilityNormalizedDriftThreshold(dynamicVol, 1.5, 60, 0.0008, 0.0050);
+          // Avoid gamma pin risk when time remaining is under 45 seconds or outside 15m window
+          if (!isLongDurationWindow && windowExecutedTrades === 0 && timeRemainingSec >= 45) {
+            // Dynamic time-decay edge scaling (demands higher margin of safety as expiry nears)
+            const timeDecayFactor = timeRemainingSec < 300 ? 1.0 + ((300 - timeRemainingSec) / 300) * 0.40 : 1.0;
+            const dynamicMinEdge = Number((minEdge * timeDecayFactor).toFixed(4));
+            const minRoiHurdle = 0.08;
 
-          // Avoid gamma pin risk when time remaining is under 45 seconds
-          if (windowExecutedTrades === 0 && timeRemainingSec >= 45) {
+            // Layer 2: Multi-Timeframe Price Action & Directional Trend Gating
+            const priceAction = calculatePriceActionMetrics(recentTicks, currentSpot);
+
+            // Dynamic volatility-normalized adverse selection drift threshold
+            const adverseDriftThreshold = calculateVolatilityNormalizedDriftThreshold(dynamicVol, 1.5, 60, 0.0008, 0.0050);
             const barDrift = (currentSpot - prevSpot) / (prevSpot || 1);
+
             // Retail order flow imbalance and noise create divergence between CLOB pricing and Φ(z)
             const cycleNoise = Math.sin(currentIdx * 0.45 + w * 0.3) * 0.08;
             const meanReversionDiscrepancy = ((startCandle.open - currentSpot) / (startCandle.open || 1)) * 1.2;
@@ -608,19 +616,36 @@ export class BacktestService {
             const roiEdgeYes = marketAskYes > 0 ? netEdgeYes / marketAskYes : 0;
             const roiEdgeNo = marketAskNo > 0 ? netEdgeNo / marketAskNo : 0;
 
-            // Safe probability envelope [0.25, 0.68] + 8% ROI hurdle + Dynamic adverse selection momentum filter
-            if (netEdgeYes >= dynamicMinEdge && roiEdgeYes >= minRoiHurdle && marketAskYes <= 0.68 && marketAskYes >= 0.25 && barDrift >= -adverseDriftThreshold) {
+            // Layer 3: Dynamic Asymmetry Collar - Double required edge (>=7.0%) & ROI (>=16%) for mild counter-trend positions
+            const isCounterTrendYes = priceAction.trendScore < -0.10 || priceAction.trend === 'BEARISH';
+            const dynamicMinEdgeYes = isCounterTrendYes
+              ? Math.max(0.070, Number((dynamicMinEdge * 2.0).toFixed(4)))
+              : dynamicMinEdge;
+            const minRoiHurdleYes = isCounterTrendYes ? 0.16 : minRoiHurdle;
+
+            const isCounterTrendNo = priceAction.trendScore > 0.10 || priceAction.trend === 'BULLISH';
+            const dynamicMinEdgeNo = isCounterTrendNo
+              ? Math.max(0.070, Number((dynamicMinEdge * 2.0).toFixed(4)))
+              : dynamicMinEdge;
+            const minRoiHurdleNo = isCounterTrendNo ? 0.16 : minRoiHurdle;
+
+            // Layer 2 Trend Filter validations:
+            const isBlockedYes = priceAction.trend === 'BEARISH_BREAKDOWN' || priceAction.trendScore < -0.35 || priceAction.isPlunging || barDrift < -adverseDriftThreshold;
+            const isBlockedNo = priceAction.trend === 'BULLISH_EXPANSION' || priceAction.trendScore > 0.35 || priceAction.isSurging || barDrift > adverseDriftThreshold;
+
+            // Safe probability envelope [0.25, 0.68] + 3-Layer Quantitative Invariants
+            if (!isBlockedYes && netEdgeYes >= dynamicMinEdgeYes && roiEdgeYes >= minRoiHurdleYes && marketAskYes <= 0.68 && marketAskYes >= 0.25) {
               tradeExecuted = true;
               tradeAction = 'VOL_ARB';
               tradeOutcome = 'YES';
               tradePrice = marketAskYes;
-              tradeLots = calculateEdgeProportionalLots(lotSize, netEdgeYes, dynamicMinEdge, maxTradeSize, marketAskYes);
-            } else if (netEdgeNo >= dynamicMinEdge && roiEdgeNo >= minRoiHurdle && marketAskNo <= 0.68 && marketAskNo >= 0.25 && barDrift <= adverseDriftThreshold) {
+              tradeLots = calculateEdgeProportionalLots(lotSize, netEdgeYes, dynamicMinEdgeYes, maxTradeSize, marketAskYes);
+            } else if (!isBlockedNo && netEdgeNo >= dynamicMinEdgeNo && roiEdgeNo >= minRoiHurdleNo && marketAskNo <= 0.68 && marketAskNo >= 0.25) {
               tradeExecuted = true;
               tradeAction = 'VOL_ARB';
               tradeOutcome = 'NO';
               tradePrice = marketAskNo;
-              tradeLots = calculateEdgeProportionalLots(lotSize, netEdgeNo, dynamicMinEdge, maxTradeSize, marketAskNo);
+              tradeLots = calculateEdgeProportionalLots(lotSize, netEdgeNo, dynamicMinEdgeNo, maxTradeSize, marketAskNo);
             }
           }
         } else if (agentType === 'Titan') {

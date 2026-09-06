@@ -255,6 +255,102 @@ describe('Phase 5 Swarm Strategy & Agent Unit Tests', () => {
       expect(decision.price).toBe(0.46);
       expect(decision.confidence).toBeGreaterThan(0.75);
     });
+
+    it('rejects 1-hour markets due to long horizon macro drift (Layer 1 Horizon Filter)', async () => {
+      const context: IAgentContext = {
+        spotTicker: {
+          symbol: 'BTC/USD',
+          price: 96800.0,
+          change1m: 0.001,
+          change5m: 0.002,
+          timestamp: Date.now(),
+        },
+        market: {
+          ...baseMarket,
+          windowDuration: '1h',
+          closeTimestamp: new Date(Date.now() + 3300000).toISOString(), // 55 mins left
+          bestBidYes: 0.46,
+          bestAskYes: 0.48,
+          impliedProbYes: 0.47,
+        },
+        depth: { yesBids: [], yesAsks: [] },
+        activeSessions: [validSession],
+      };
+
+      const decision = await oracle.evaluate(context);
+      expect(decision.action).toBe('HOLD');
+      expect(decision.rationale).toContain('exceeds quantitative volatility convergence window');
+    });
+
+    it('rejects BUY NO when market is in active BULLISH_EXPANSION (Layer 2 Trend Gating)', async () => {
+      const now = Date.now();
+      const bullishHistory = [
+        { timestamp: now - 180000, price: 95500.0 },
+        { timestamp: now - 120000, price: 95800.0 },
+        { timestamp: now - 60000, price: 96200.0 },
+        { timestamp: now, price: 96600.0 },
+      ];
+
+      const context: IAgentContext = {
+        spotTicker: {
+          symbol: 'BTC/USD',
+          price: 96600.0,
+          change1m: 0.004,
+          change5m: 0.011,
+          priceHistory: bullishHistory,
+          timestamp: now,
+        },
+        market: {
+          ...baseMarket,
+          strikePrice: 96700.0, // spot is slightly below strike, so theoretical NO is attractive
+          bestBidYes: 0.55,
+          bestAskYes: 0.58,
+          bestAskNo: 0.44, // 14% theoretical edge on NO
+        },
+        depth: { yesBids: [], yesAsks: [] },
+        activeSessions: [validSession],
+      };
+
+      const decision = await oracle.evaluate(context);
+      expect(decision.action).toBe('HOLD');
+      expect(decision.rationale).toContain('active upward trend');
+    });
+
+    it('enforces 7.0%+ edge hurdle when taking counter-trend risk (Layer 3 Asymmetric Collar)', async () => {
+      const now = Date.now();
+      // Mild upward drift (trendScore ~0.15)
+      const mildBullishHistory = [
+        { timestamp: now - 240000, price: 96400.0 },
+        { timestamp: now - 120000, price: 96450.0 },
+        { timestamp: now - 60000, price: 96490.0 },
+        { timestamp: now, price: 96510.0 },
+      ];
+
+      // Edge is only 4.5% (passes standard 3.5% minEdge, but fails 7.0% counter-trend asymmetric collar)
+      const context: IAgentContext = {
+        spotTicker: {
+          symbol: 'BTC/USD',
+          price: 96510.0,
+          change1m: 0.0002,
+          change5m: 0.0011,
+          priceHistory: mildBullishHistory,
+          timestamp: now,
+        },
+        market: {
+          ...baseMarket,
+          strikePrice: 96550.0,
+          bestBidYes: 0.51,
+          bestAskYes: 0.53,
+          bestAskNo: 0.48, // small edge on NO
+        },
+        depth: { yesBids: [], yesAsks: [] },
+        activeSessions: [validSession],
+      };
+
+      const decision = await oracle.evaluate(context);
+      // Fails to clear the 7.0% asymmetric collar, so holds
+      expect(decision.action).toBe('HOLD');
+    });
   });
 
   // ----------------------------------------------------------------------------

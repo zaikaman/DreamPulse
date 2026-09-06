@@ -73,6 +73,47 @@ describe('Phase 7 Strategy Studio & Historical Backtest Tests', () => {
     expect(history.length).toBeGreaterThan(0);
   });
 
+  it('enforces 3-Layer Quantitative Defense in Oracle backtest: hard-locks on 1h contracts and blocks adverse trend drift', async () => {
+    const backtestService = new BacktestService();
+    const userAddress = '0x70997970C51812dc3A010C7d01b50e0d17dc79C8';
+
+    // 1. Layer 1 Horizon Filter: Oracle on 1h timeframe must execute 0 trades (hard lockout on long-duration windows)
+    const result1h = await backtestService.runSimulation({
+      userAddress,
+      agentType: 'Oracle',
+      symbol: 'BTC/USD',
+      timeframe: '1h',
+      initialCapital: 1000.0,
+      strategyConfig: {
+        minEdge: 0.03,
+        lotSize: 5.0,
+      },
+    });
+
+    expect(result1h.agentType).toBe('Oracle');
+    expect(result1h.timeframe).toBe('1h');
+    expect(result1h.totalTrades).toBe(0);
+    expect(result1h.equityCurve[result1h.equityCurve.length - 1]?.equity).toBe(1000.0);
+
+    // 2. Rapid convergence window (5m timeframe, 15m window duration): Oracle trades safely with Layer 2 & 3
+    const result5m = await backtestService.runSimulation({
+      userAddress,
+      agentType: 'Oracle',
+      symbol: 'BTC/USD',
+      timeframe: '5m',
+      initialCapital: 1000.0,
+      strategyConfig: {
+        minEdge: 0.035,
+        lotSize: 5.0,
+      },
+    });
+
+    expect(result5m.agentType).toBe('Oracle');
+    expect(result5m.timeframe).toBe('5m');
+    expect(result5m.totalTrades).toBeGreaterThan(0);
+    expect(result5m.winRate).toBeGreaterThanOrEqual(40);
+  });
+
   it('runs backtest simulation for Titan Market Maker with spread configuration', async () => {
     const backtestService = new BacktestService();
     const result = await backtestService.runSimulation({
