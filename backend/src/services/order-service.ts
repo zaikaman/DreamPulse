@@ -1239,7 +1239,7 @@ export class OrderService {
                     address: effectiveSession.sessionKeyAddress as Address,
                   });
                   const SESSION_KEY_GAS_DRIP_WEI = 100_000_000_000_000_000n; // 0.1 STT
-                  const SESSION_KEY_MIN_BALANCE_WEI = 25_000_000_000_000_000n; // 0.025 STT (sufficient for ~4M gas at 6 gwei)
+                  const SESSION_KEY_MIN_BALANCE_WEI = 50_000_000_000_000_000n; // 0.05 STT (safely covers ~4M gas up to 12 gwei)
                   if (keyBalance < SESSION_KEY_MIN_BALANCE_WEI) {
                     const dripHash = await executeOperatorTx(() =>
                       walletClient.sendTransaction({
@@ -1271,7 +1271,7 @@ export class OrderService {
                 if (cloneBal < tradeCost) {
                   const availHuman = (Number(cloneBal) / 1e6).toFixed(2);
                   const costHuman = (Number(tradeCost) / 1e6).toFixed(2);
-                  console.info(`[OrderService] [${source}] Trade skipped for ${targetTrader} on ${onchain.pool}: Trading Account balance ($${availHuman}) is less than trade cost ($${costHuman}). Please deposit funds into your Trading Account Vault.`);
+                  console.info(`[OrderService] [${source}] Trade skipped for trader ${targetTrader} (via clone ${resolvedClone}) on ${onchain.pool}: Trading Account balance ($${availHuman}) is less than trade cost ($${costHuman}). Please deposit funds into your Trading Account Vault.`);
                   this.lastExecutionFailureReason = `Insufficient Trading Account Vault balance ($${availHuman} available, $${costHuman} needed). Please deposit into your Trading Account.`;
                   return null;
                 }
@@ -1348,7 +1348,11 @@ export class OrderService {
       } catch (err: any) {
         const msg: string = err?.message || String(err);
         this.lastExecutionFailureReason = `On-chain order placement failed: ${msg}`;
-        const isGasFundsError = msg.includes('insufficient funds for gas') || msg.includes('insufficient native balance') || msg.includes('exceeds balance') || msg.includes('Insufficient native STT gas balance');
+        const isGasFundsError = msg.includes('insufficient funds for gas') ||
+          msg.includes('insufficient native balance') ||
+          msg.includes('exceeds balance') ||
+          msg.includes('Insufficient native STT gas balance') ||
+          (msg.includes('insufficient balance') && !msg.includes('ERC20') && !msg.includes('collateral') && !msg.includes('TestUSDC'));
         const isAllowanceError = !isGasFundsError && (msg.includes('Insufficient TestUSDC allowance') || msg.includes('allowance') || msg.includes('ERC20InsufficientAllowance'));
         const isCollateralError = !isGasFundsError && (msg.includes('Insufficient collateral') || msg.includes('ERC20InsufficientBalance') || (msg.includes('insufficient balance') && !msg.includes('gas')));
         const isTimeoutError = msg.includes('Timed out while waiting') || msg.includes('timeout') || msg.includes('waitForTransactionReceipt');
@@ -1356,6 +1360,7 @@ export class OrderService {
 
         const resolvedClone = effectiveSession?.accountAddress || (await resolveSessionAccount(targetTrader).catch(() => null));
         const hasClone = Boolean(resolvedClone);
+        const traderLabel = hasClone ? `trader ${targetTrader} (via clone ${resolvedClone})` : `trader ${targetTrader}`;
 
         if (isAllowanceError || isCollateralError) {
           this.lastExecutionFailureReason = isAllowanceError
@@ -1365,16 +1370,16 @@ export class OrderService {
             : (hasClone
                 ? 'Insufficient TestUSDC in your Trading Account Vault. Please deposit funds into your Trading Account.'
                 : 'Insufficient TestUSDC balance in wallet to cover order cost.');
-          console.warn(`[OrderService] [${source}] Order placement skipped for ${targetTrader} on ${onchain?.pool}: ${msg.slice(0, 900)} — user must ensure TestUSDC balance and pool allowance via frontend.`);
+          console.warn(`[OrderService] [${source}] Order placement skipped for ${traderLabel} on ${onchain?.pool}: ${msg.slice(0, 900)} — user must ensure TestUSDC balance and pool allowance via frontend.`);
           return null;
         }
         if (isGasFundsError) {
           this.lastExecutionFailureReason = 'Insufficient native STT gas balance to execute transaction. Please fund wallet with STT.';
-          console.warn(`[OrderService] [${source}] Gas shortage for ${targetTrader}: ${msg.slice(0, 500)}`);
+          console.warn(`[OrderService] [${source}] Gas shortage for ${traderLabel}: ${msg.slice(0, 500)}`);
           return null;
         }
         if (isTimeoutError) {
-          console.warn(`[OrderService] [${source}] Receipt timeout for ${targetTrader} on ${onchain?.pool}: ${msg.slice(0, 500)} — not marking pool as failed.`);
+          console.warn(`[OrderService] [${source}] Receipt timeout for ${traderLabel} on ${onchain?.pool}: ${msg.slice(0, 500)} — not marking pool as failed.`);
           return null;
         }
 
@@ -1390,14 +1395,14 @@ export class OrderService {
           if (shouldLog) console.info(`[OrderService] Order skipped on ${onchain?.pool}: market round has expired`);
         } else if (msg.includes('0x27406db9') || msg.includes('SelectorNotAllowed')) {
           this.lastExecutionFailureReason = 'Smart Account Clone trading selector not allowed on-chain. Please re-authorize session on the latest deployment.';
-          if (shouldLog) console.warn(`[OrderService] Clone selector rejected for ${targetTrader}`);
+          if (shouldLog) console.warn(`[OrderService] Clone selector rejected for ${traderLabel}`);
         } else if (msg.includes('Missing or invalid parameters')) {
           this.lastExecutionFailureReason = 'Execution rejected on-chain. The market round may have closed or counterparty liquidity moved. Please refresh and try the active market.';
-          if (shouldLog) console.warn(`[OrderService] On-chain placeOrder rejected for ${targetTrader}:`, msg.slice(0, 800));
+          if (shouldLog) console.warn(`[OrderService] On-chain placeOrder rejected for ${traderLabel}:`, msg.slice(0, 800));
         } else if (isOutOfGasError) {
           if (shouldLog) console.warn(`[OrderService] Transaction ran out of gas on ${onchain?.pool}: ${msg.slice(0, 500)}`);
         } else {
-          if (shouldLog) console.warn(`[OrderService] On-chain placeOrder note for ${targetTrader} on ${onchain?.pool} market ${decision.targetMarketId.slice(0, 10)}...:`, msg.slice(0, 800));
+          if (shouldLog) console.warn(`[OrderService] On-chain placeOrder note for ${traderLabel} on ${onchain?.pool} market ${decision.targetMarketId.slice(0, 10)}...:`, msg.slice(0, 800));
         }
       }
     }
