@@ -355,7 +355,7 @@ describe('Phase 6 Settlement Sweeper Tests', () => {
       expect(history[0].claimableAmount).toBe(11.0);
     });
 
-    it('falls back to direct operator payout when clone auto-redeem reverts', async () => {
+    it('routes to userClaimable and prevents operator fund drain when clone auto-redeem reverts', async () => {
       const settlementService = new SettlementService();
       const cloneUser = '0x46cC04De981E603958e4612f877D72427c5b6544' as Address;
       const cloneAddress = '0xaA0e920cA7385b5dD3368ACe451e1CB292FfA1a7' as Address;
@@ -404,11 +404,12 @@ describe('Phase 6 Settlement Sweeper Tests', () => {
 
       const result = await settlementService.triggerBatchSweep(cloneUser);
       expect(result.success).toBe(true);
-      expect(result.claimedMarketsCount).toBe(1);
-      expect(result.totalClaimedAmount).toBe('6.00 tUSDC');
-      expect(result.sweeps.length).toBe(1);
-      expect(result.sweeps[0].claimableAmount).toBe(6.0);
-      expect(result.sweeps[0].status).toBe('CONFIRMED');
+      expect(result.claimedMarketsCount).toBe(0);
+      expect(result.totalClaimedAmount).toBe('0.00 tUSDC');
+      expect(result.sweeps.length).toBe(0);
+      expect(result.userClaimable.length).toBe(1);
+      expect(result.userClaimable[0].marketId).toBe(targetMarketId);
+      expect(result.userClaimable[0].status).toBe('USER_CLAIMABLE');
     });
 
     it('scans and sweeps winning manual trades placed through Trade Terminal on on-chain CLOB markets', async () => {
