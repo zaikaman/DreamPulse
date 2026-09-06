@@ -16,7 +16,7 @@ import {
   executeOperatorTx,
   executeOperatorWriteContract,
 } from '../config/somnia.js';
-import { ERC20_ABI } from '../config/permissions-abi.js';
+import { ERC20_ABI, SESSION_CLONE_ABI, getSessionAccount, CLONE_ZERO_ADDRESS } from '../config/permissions-abi.js';
 import { env } from '../config/env.js';
 import type { SettlementSweep, OutcomeType } from '../types/index.js';
 
@@ -79,6 +79,8 @@ export interface ClaimResult {
   totalClaimedAmount: string;
   txHash: Hex;
   sweeps: SettlementSweep[];
+  /** User-owned winnings the backend cannot redeem — claimable from the user's own wallet. */
+  userClaimable: SerializableUnclaimedPosition[];
 }
 
 function settleUnclaimedPosition(pos: {
@@ -923,6 +925,7 @@ export class SettlementService {
     const unclaimed = await this.scanUnclaimedSettlements(normalizedUser);
 
     const claimedSweeps: SettlementSweep[] = [];
+    const userClaimable: SerializableUnclaimedPosition[] = [];
     let totalClaimed = 0;
     let resolvedTxHash: Hex = ('0x0000000000000000000000000000000000000000000000000000000000000000' as Hex);
     const now = new Date().toISOString();
@@ -961,11 +964,107 @@ export class SettlementService {
                   : (pos.outcomeIdx === 0 ? 0 : 1);
                 const winId = actualWinIdx === 0 ? onchain.yesId : onchain.noId;
                 if (winId !== undefined) {
-                  const opBal = await somniaExchange.client.getOutcomeBalance({
-                    outcomeToken,
-                    account: operatorAccount.address,
-                    id: BigInt(winId),
-                  }).catch(() => 0n);
+                  const session = await sessionService.getUserActiveSession(normalizedUser).catch(() => null);
+                  const cloneAddress = session?.accountAddress || (await getSessionAccount(normalizedUser).catch(() => null));
+                  const isCloneValid = Boolean(cloneAddress && cloneAddress.toLowerCase() !== CLONE_ZERO_ADDRESS.toLowerCase());
+
+                  const [opBal, userBal, cloneBal] = await Promise.all([
+                    somniaExchange.client.getOutcomeBalance({
+                      outcomeToken,
+                      account: operatorAccount.address,
+                      id: BigInt(winId),
+                    }).catch(() => 0n),
+                    somniaExchange.client.getOutcomeBalance({
+                      outcomeToken,
+                      account: normalizedUser,
+                      id: BigInt(winId),
+                    }).catch(() => 0n),
+                    isCloneValid
+                      ? somniaExchange.client.getOutcomeBalance({
+                          outcomeToken,
+                          account: cloneAddress!,
+                          id: BigInt(winId),
+                        }).catch(() => 0n)
+                      : Promise.resolve(0n),
+                  ]);
+
+                  // V2 CLONE AUTO-REDEEM: The clone holds winning outcome tokens.
+                  // The sweeper calls clone.redeemWinnings permissionlessly:
+                  // the payout lands directly in the clone as tUSDC, which the user
+                  // can withdraw anytime to their wallet.
+                  if (cloneBal > 0n && isCloneValid) {
+                    const redeemAmount = cloneBal < pos.rawAmount ? cloneBal : pos.rawAmount;
+                    try {
+                      const redeemHash = await executeOperatorTx(() =>
+                        walletClient.writeContract({
+                          address: cloneAddress!,
+                          abi: SESSION_CLONE_ABI,
+                          functionName: 'redeemWinnings',
+                          args: [
+                            SOMNIA_ADDRESSES.binaryModule,
+                            outcomeToken,
+                            pos.marketIdHex!,
+                            actualWinIdx,
+                            redeemAmount,
+                          ],
+                          account: operatorAccount,
+                          chain: somniaShannonTestnet,
+                        }),
+                      );
+                      await publicClient.waitForTransactionReceipt({ hash: redeemHash, timeout: 60_000 });
+                      settleUnclaimedPosition(pos);
+                      const claimedHuman = Number(redeemAmount) / 1e6;
+                      totalClaimed += claimedHuman;
+                      resolvedTxHash = redeemHash;
+                      claimedSweeps.push({
+                        id: crypto.randomUUID(),
+                        userAddress: normalizedUser,
+                        marketId: pos.marketId,
+                        winningOutcome: pos.winningOutcome,
+                        claimableAmount: claimedHuman,
+                        payoutToken: 'tUSDC (in clone)',
+                        isCompounded: false,
+                        txHash: redeemHash,
+                        status: 'CONFIRMED',
+                        claimedAt: now,
+                      });
+                      console.info(
+                        `[SettlementService] Sweeper redeemed ${claimedHuman} tUSDC into clone ${cloneAddress} for ${normalizedUser} on market ${pos.marketId} (tx: ${redeemHash})`,
+                      );
+                      continue;
+                    } catch (cloneErr: any) {
+                      console.warn(
+                        `[SettlementService] Clone auto-redeem notice on ${cloneAddress} for market ${pos.marketId}:`,
+                        cloneErr?.message || cloneErr,
+                      );
+                    }
+                  }
+
+                  // NON-CUSTODIAL MODEL: user-owned winnings live in the user's
+                  // wallet and only the owner can redeem them on-chain. Settle
+                  // the local order records, then leave the position claimable
+                  // for the user's own wallet claim — never mark swept, never
+                  // pay from the operator, never suppress the scanner.
+                  if (opBal === 0n && userBal > 0n) {
+                    settleUnclaimedPosition(pos);
+                    userClaimable.push({
+                      marketId: pos.marketId,
+                      symbol: pos.symbol,
+                      marketIdHex: pos.marketIdHex,
+                      poolAddress: pos.poolAddress,
+                      outcomeToken: pos.outcomeToken,
+                      winningOutcome: pos.winningOutcome,
+                      outcomeIdx: pos.outcomeIdx,
+                      rawAmount: pos.rawAmount.toString(),
+                      claimableAmount: pos.claimableAmount,
+                      isVoided: pos.isVoided,
+                      status: 'USER_CLAIMABLE',
+                    });
+                    console.info(
+                      `[SettlementService] User-owned winnings for ${normalizedUser} on ${pos.marketId} (${pos.claimableAmount} tUSDC) — claimable from the user's own wallet; backend cannot redeem.`,
+                    );
+                    continue;
+                  }
 
                   // STRICT INVARIANT: ONLY execute on-chain redeem if operator actually holds > 0n outcome tokens
                   if (opBal > 0n) {
@@ -1318,6 +1417,7 @@ export class SettlementService {
       totalClaimedAmount: `${totalClaimed.toFixed(2)} tUSDC`,
       txHash: resolvedTxHash,
       sweeps: claimedSweeps,
+      userClaimable,
     };
   }
 
@@ -1355,11 +1455,41 @@ export class SettlementService {
           const isCopyTrader = normalizedUser.toLowerCase() !== operatorAccount.address.toLowerCase();
           const targetHolder = isCopyTrader ? operatorAccount.address : normalizedUser;
 
-          const bal = await somniaExchange.client.getOutcomeBalance({
-            outcomeToken: onchain.outcomeToken,
-            account: targetHolder,
-            id: winId,
-          });
+          const [bal, userBal] = await Promise.all([
+            somniaExchange.client.getOutcomeBalance({
+              outcomeToken: onchain.outcomeToken,
+              account: targetHolder,
+              id: winId,
+            }),
+            isCopyTrader
+              ? somniaExchange.client.getOutcomeBalance({
+                  outcomeToken: onchain.outcomeToken,
+                  account: normalizedUser,
+                  id: winId,
+                }).catch(() => 0n)
+              : Promise.resolve(0n),
+          ]);
+
+          // NON-CUSTODIAL MODEL: user-owned winnings can only be redeemed by
+          // the owner's own wallet. Settle local records and report the
+          // position as user-claimable — never fabricate a CONFIRMED sweep.
+          if (isCopyTrader && bal === 0n && userBal > 0n) {
+            settleUnclaimedPosition({ marketId, marketIdHex: targetHex, winningOutcome, isVoided });
+            const decimals = SOMNIA_ADDRESSES.decimals;
+            const one = 10n ** BigInt(decimals);
+            return {
+              id: crypto.randomUUID(),
+              userAddress: normalizedUser,
+              marketId,
+              winningOutcome,
+              claimableAmount: Number(userBal) / Number(one),
+              payoutToken: 'tUSDC',
+              isCompounded: false,
+              txHash: undefined,
+              status: 'PENDING',
+              claimedAt: new Date().toISOString(),
+            };
+          }
 
           if (bal > 0n) {
             const decimals = SOMNIA_ADDRESSES.decimals;

@@ -11,6 +11,7 @@ import {
   ShieldCheckIcon,
   ShieldExclamationIcon,
   ArrowPathIcon,
+  InformationCircleIcon,
 } from '@heroicons/react/24/outline';
 import type { Market, AgentThoughtLog, OrderExecution, SessionGrant } from '../../types/index.js';
 import type { MarketTickData } from '../../hooks/useTelemetry.js';
@@ -95,7 +96,8 @@ export const TraderCockpitTicket: React.FC<TraderCockpitTicketProps> = ({
   // Order Configuration State
   const [outcome, setOutcome] = useState<'YES' | 'NO'>('YES');
   const [price, setPrice] = useState<number | null>(null);
-  const [collateralAmount, setCollateralAmount] = useState<number>(10);
+  const [sizingMode, setSizingMode] = useState<'COLLATERAL' | 'SHARES'>('COLLATERAL');
+  const [amountInput, setAmountInput] = useState<string>('10');
   const [isManualPrice, setIsManualPrice] = useState<boolean>(false);
 
   // Execution State
@@ -147,14 +149,18 @@ export const TraderCockpitTicket: React.FC<TraderCockpitTicketProps> = ({
       setPrice(Number(prefillData.price.toFixed(2)));
       setIsManualPrice(true);
       if (prefillData.lotSize && prefillData.lotSize > 0) {
-        const estCost = Math.max(1, Number((prefillData.price * prefillData.lotSize).toFixed(2)));
-        setCollateralAmount(Math.min(estCost, 100));
+        if (sizingMode === 'SHARES') {
+          setAmountInput(prefillData.lotSize.toString());
+        } else {
+          const estCost = Math.max(0.01, Number((prefillData.price * prefillData.lotSize).toFixed(2)));
+          setAmountInput(estCost.toString());
+        }
       }
       setPulseEffect(true);
       const timer = setTimeout(() => setPulseEffect(false), 900);
       return () => clearTimeout(timer);
     }
-  }, [prefillData]);
+  }, [prefillData, sizingMode]);
 
   // Adjust price automatically when switching outcomes in IOC mode
   useEffect(() => {
@@ -170,20 +176,30 @@ export const TraderCockpitTicket: React.FC<TraderCockpitTicketProps> = ({
     return isNaN(parsed) ? 0 : parsed;
   }, [wallet.balanceCollateral]);
 
-  // Derived current percentage of account balance
-  const currentPct = useMemo(() => {
-    if (userBalance <= 0) return Math.min(100, Math.max(0, collateralAmount));
-    return Math.min(100, Math.max(0, Math.round((collateralAmount / userBalance) * 100)));
-  }, [collateralAmount, userBalance]);
+  // Numeric amount parsed from user string input
+  const numericAmount = useMemo(() => {
+    const parsed = parseFloat(amountInput);
+    return isNaN(parsed) || parsed < 0 ? 0 : parsed;
+  }, [amountInput]);
 
   // Calculated Order Quantities & Payouts ($1.00/lot upon winning)
-  const calculateTicketMetrics = (targetPrice: number | null, collateral: number) => {
-    if (targetPrice === null || isNaN(targetPrice) || targetPrice <= 0 || targetPrice >= 1 || collateral <= 0) {
+  const calculateTicketMetrics = (
+    targetPrice: number | null,
+    amount: number,
+    mode: 'COLLATERAL' | 'SHARES'
+  ) => {
+    if (targetPrice === null || isNaN(targetPrice) || targetPrice <= 0 || targetPrice >= 1 || amount <= 0) {
       return null;
     }
     const validPrice = Math.max(0.01, Math.min(0.99, targetPrice));
-    const lotSize = Math.max(1, Math.floor(collateral / validPrice));
+    const lotSize = mode === 'SHARES'
+      ? Math.max(1, Math.floor(amount))
+      : Math.max(1, Math.floor(amount / validPrice));
     const totalCost = Number((lotSize * validPrice).toFixed(2));
+    const unusedCollateral = mode === 'COLLATERAL' && amount > totalCost
+      ? Number((amount - totalCost).toFixed(2))
+      : 0;
+    const nextLotCost = Number(((lotSize + 1) * validPrice).toFixed(2));
     const grossPayout = Number((lotSize * 1.0).toFixed(2));
     const netProfit = Number((grossPayout - totalCost).toFixed(2));
     const rocPercent = totalCost > 0 ? Number(((netProfit / totalCost) * 100).toFixed(1)) : 0;
@@ -192,6 +208,9 @@ export const TraderCockpitTicket: React.FC<TraderCockpitTicketProps> = ({
     return {
       lotSize,
       totalCost,
+      unusedCollateral,
+      nextLotCost,
+      validPrice,
       grossPayout,
       netProfit,
       rocPercent,
@@ -201,15 +220,22 @@ export const TraderCockpitTicket: React.FC<TraderCockpitTicketProps> = ({
 
   const upCalculations = useMemo(() => {
     const targetPrice = outcome === 'YES' && isManualPrice ? price : defaultUpPrice;
-    return calculateTicketMetrics(targetPrice, collateralAmount);
-  }, [outcome, isManualPrice, price, defaultUpPrice, collateralAmount]);
+    return calculateTicketMetrics(targetPrice, numericAmount, sizingMode);
+  }, [outcome, isManualPrice, price, defaultUpPrice, numericAmount, sizingMode]);
 
   const downCalculations = useMemo(() => {
     const targetPrice = outcome === 'NO' && isManualPrice ? price : defaultDownPrice;
-    return calculateTicketMetrics(targetPrice, collateralAmount);
-  }, [outcome, isManualPrice, price, defaultDownPrice, collateralAmount]);
+    return calculateTicketMetrics(targetPrice, numericAmount, sizingMode);
+  }, [outcome, isManualPrice, price, defaultDownPrice, numericAmount, sizingMode]);
 
   const calculations = outcome === 'YES' ? upCalculations : downCalculations;
+
+  // Derived current percentage of account balance
+  const currentPct = useMemo(() => {
+    if (userBalance <= 0) return 0;
+    const cost = calculations?.totalCost ?? (sizingMode === 'COLLATERAL' ? numericAmount : 0);
+    return Math.min(100, Math.max(0, Math.round((cost / userBalance) * 100)));
+  }, [calculations?.totalCost, sizingMode, numericAmount, userBalance]);
 
   // Multi-Factor Confluence & High-Conviction Copilot Intelligence
   const confluence = useMemo(() => {
@@ -226,7 +252,13 @@ export const TraderCockpitTicket: React.FC<TraderCockpitTicketProps> = ({
     setIsManualPrice(false);
     // Kelly Criterion optimal sizing: 15% of balance or preset $25
     const optimalSize = userBalance > 50 ? Math.min(50, Math.floor(userBalance * 0.15)) : 25;
-    setCollateralAmount(optimalSize);
+    if (sizingMode === 'COLLATERAL') {
+      setAmountInput(optimalSize.toString());
+    } else {
+      const priceGuess = confluence.recommendedOutcome === 'YES' ? (defaultUpPrice || 0.5) : (defaultDownPrice || 0.5);
+      const optShares = Math.max(1, Math.floor(optimalSize / priceGuess));
+      setAmountInput(optShares.toString());
+    }
     setPulseEffect(true);
     soundEngine.playTradeFill();
     setTimeout(() => setPulseEffect(false), 800);
@@ -440,15 +472,69 @@ export const TraderCockpitTicket: React.FC<TraderCockpitTicketProps> = ({
         </p>
       </div>
 
-      {/* 2. Amount Input & Quick Percentages */}
+      {/* 2. Amount Input & Quick Percentages with Dual Mode (tUSDC vs Shares) */}
       <div className="mb-3.5 flex-shrink-0">
         <div className="flex items-center justify-between text-xs text-muted-foreground mb-1.5">
-          <span className="font-bold text-foreground">Amount</span>
+          <div className="flex items-center gap-1.5">
+            <span className="font-bold text-foreground">Order Size</span>
+            <div className="inline-flex p-0.5 rounded-lg bg-secondary/50 border border-border/40 text-[10px]">
+              <button
+                type="button"
+                onClick={() => {
+                  if (sizingMode !== 'COLLATERAL') {
+                    setSizingMode('COLLATERAL');
+                    if (calculations) {
+                      setAmountInput(calculations.totalCost.toFixed(2));
+                    }
+                  }
+                }}
+                className={cn(
+                  "px-2 py-0.5 rounded-md font-bold transition-all cursor-pointer",
+                  sizingMode === 'COLLATERAL'
+                    ? "bg-brand-cyan/20 text-brand-cyan border border-brand-cyan/30 shadow-xs"
+                    : "text-muted-foreground hover:text-foreground border border-transparent"
+                )}
+              >
+                tUSDC ($)
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  if (sizingMode !== 'SHARES') {
+                    setSizingMode('SHARES');
+                    if (calculations) {
+                      setAmountInput(calculations.lotSize.toString());
+                    }
+                  }
+                }}
+                className={cn(
+                  "px-2 py-0.5 rounded-md font-bold transition-all cursor-pointer",
+                  sizingMode === 'SHARES'
+                    ? "bg-brand-cyan/20 text-brand-cyan border border-brand-cyan/30 shadow-xs"
+                    : "text-muted-foreground hover:text-foreground border border-transparent"
+                )}
+              >
+                Shares
+              </button>
+            </div>
+          </div>
+
           <div className="flex items-center gap-1">
-            <span className="text-[10px]">Max: ${userBalance.toFixed(2)} tUSDC</span>
+            <span className="text-[10px]">
+              {sizingMode === 'COLLATERAL'
+                ? `Max: $${userBalance.toFixed(2)}`
+                : `Max: ${Math.floor(userBalance / (calculations?.validPrice || 0.5))} sh`}
+            </span>
             <button
               type="button"
-              onClick={() => setCollateralAmount(Math.max(1, Math.floor(userBalance)))}
+              onClick={() => {
+                if (sizingMode === 'COLLATERAL') {
+                  setAmountInput(userBalance > 0 ? userBalance.toFixed(2) : '10');
+                } else {
+                  const maxSh = Math.max(1, Math.floor(userBalance / (calculations?.validPrice || 0.5)));
+                  setAmountInput(maxSh.toString());
+                }
+              }}
               className="text-brand-cyan hover:underline text-[10px] font-bold cursor-pointer"
             >
               MAX
@@ -456,24 +542,64 @@ export const TraderCockpitTicket: React.FC<TraderCockpitTicketProps> = ({
           </div>
         </div>
 
-        <div className="relative mb-2">
+        <div className="relative mb-1.5">
           <input
             type="number"
-            min="1"
+            min={sizingMode === 'COLLATERAL' ? "0.01" : "1"}
             max="50000"
-            step="1"
-            value={collateralAmount}
-            onChange={(e) => {
-              const val = parseFloat(e.target.value);
-              if (!isNaN(val)) setCollateralAmount(Math.max(1, val));
-            }}
+            step={sizingMode === 'COLLATERAL' ? "any" : "1"}
+            value={amountInput}
+            onChange={(e) => setAmountInput(e.target.value)}
             className="w-full px-3 py-2 bg-secondary/30 border border-border/60 rounded-xl text-sm font-mono text-foreground focus:outline-none focus:border-brand-cyan transition-all [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
-            placeholder="0.00"
+            placeholder={sizingMode === 'COLLATERAL' ? "0.00" : "0"}
           />
-          <span className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground font-mono text-xs font-bold">
-            tUSDC
+          <span className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground font-mono text-xs font-bold pointer-events-none">
+            {sizingMode === 'COLLATERAL' ? 'tUSDC' : 'SHARES'}
           </span>
         </div>
+
+        {/* Live conversion subtitle */}
+        {calculations && numericAmount > 0 && (
+          <div className="flex items-center justify-between text-[11px] font-mono mb-1.5 px-0.5 text-muted-foreground">
+            <span>
+              Receives: <strong className="text-foreground">{calculations.lotSize.toLocaleString()} {calculations.lotSize === 1 ? 'Share' : 'Shares'}</strong>
+              <span className="text-[10px] text-muted-foreground/80"> (~${calculations.validPrice.toFixed(2)}/sh)</span>
+            </span>
+            <span>
+              Actual Cost: <strong className="text-brand-cyan">${calculations.totalCost.toFixed(2)} tUSDC</strong>
+            </span>
+          </div>
+        )}
+
+        {/* Smart helper banner for unspent budget / discrete lot sizing */}
+        {calculations && sizingMode === 'COLLATERAL' && calculations.unusedCollateral > 0 && (
+          <div className="mb-2 p-2 rounded-lg bg-secondary/40 border border-brand-cyan/20 text-[10px] flex items-center justify-between gap-1.5">
+            <div className="flex items-center gap-1.5 text-muted-foreground min-w-0">
+              <InformationCircleIcon className="w-3.5 h-3.5 text-brand-cyan flex-shrink-0" />
+              <span className="truncate">
+                <strong className="text-foreground">${calculations.unusedCollateral.toFixed(2)} unspent</strong> (contracts trade in whole lots)
+              </span>
+            </div>
+            <div className="flex items-center gap-1 flex-shrink-0">
+              <button
+                type="button"
+                onClick={() => setAmountInput(calculations.totalCost.toFixed(2))}
+                className="px-1.5 py-0.5 rounded bg-brand-cyan/15 hover:bg-brand-cyan/25 text-brand-cyan border border-brand-cyan/30 text-[9px] font-bold cursor-pointer transition-colors"
+                title={`Snap to exact cost of ${calculations.lotSize} shares`}
+              >
+                Snap ${calculations.totalCost.toFixed(2)}
+              </button>
+              <button
+                type="button"
+                onClick={() => setAmountInput(calculations.nextLotCost.toFixed(2))}
+                className="px-1.5 py-0.5 rounded bg-secondary hover:bg-secondary/80 text-muted-foreground hover:text-foreground border border-border/50 text-[9px] font-bold cursor-pointer transition-colors"
+                title={`Round up to ${calculations.lotSize + 1} shares`}
+              >
+                +1 Sh (${calculations.nextLotCost.toFixed(2)})
+              </button>
+            </div>
+          </div>
+        )}
 
         {/* Account Percentage Slider (0% - 100% of Balance) */}
         <input
@@ -485,10 +611,14 @@ export const TraderCockpitTicket: React.FC<TraderCockpitTicketProps> = ({
           onChange={(e) => {
             const pct = parseInt(e.target.value, 10);
             if (userBalance > 0) {
-              const calculated = Math.max(1, Number(((userBalance * pct) / 100).toFixed(2)));
-              setCollateralAmount(calculated);
-            } else {
-              setCollateralAmount(pct);
+              if (sizingMode === 'COLLATERAL') {
+                const calculated = Math.max(0.01, Number(((userBalance * pct) / 100).toFixed(2)));
+                setAmountInput(calculated.toString());
+              } else {
+                const maxSh = Math.floor(userBalance / (calculations?.validPrice || 0.5));
+                const targetSh = Math.max(1, Math.floor((maxSh * pct) / 100));
+                setAmountInput(targetSh.toString());
+              }
             }
           }}
           className="w-full h-1 bg-secondary/60 rounded-lg appearance-none cursor-pointer accent-brand-cyan mb-2"
@@ -504,10 +634,14 @@ export const TraderCockpitTicket: React.FC<TraderCockpitTicketProps> = ({
                 type="button"
                 onClick={() => {
                   if (userBalance > 0) {
-                    const target = Math.max(1, Number(((userBalance * pct) / 100).toFixed(2)));
-                    setCollateralAmount(target);
-                  } else {
-                    setCollateralAmount(pct);
+                    if (sizingMode === 'COLLATERAL') {
+                      const target = Math.max(0.01, Number(((userBalance * pct) / 100).toFixed(2)));
+                      setAmountInput(target.toString());
+                    } else {
+                      const maxSh = Math.floor(userBalance / (calculations?.validPrice || 0.5));
+                      const targetSh = Math.max(1, Math.floor((maxSh * pct) / 100));
+                      setAmountInput(targetSh.toString());
+                    }
                   }
                 }}
                 className={cn(
@@ -551,7 +685,7 @@ export const TraderCockpitTicket: React.FC<TraderCockpitTicketProps> = ({
           </div>
 
           <div className="text-[10px] text-muted-foreground min-h-[16px]">
-            {collateralAmount > 0 ? (
+            {numericAmount > 0 ? (
               upCalculations ? (
                 <span className="text-[#00e676]/90 font-mono">
                   Payout: {upCalculations.payoutMultiplier}x (${upCalculations.grossPayout})
@@ -588,7 +722,7 @@ export const TraderCockpitTicket: React.FC<TraderCockpitTicketProps> = ({
           </div>
 
           <div className="text-[10px] text-muted-foreground min-h-[16px]">
-            {collateralAmount > 0 ? (
+            {numericAmount > 0 ? (
               downCalculations ? (
                 <span className="text-[#ff3366]/90 font-mono">
                   Payout: {downCalculations.payoutMultiplier}x (${downCalculations.grossPayout})
@@ -759,15 +893,29 @@ export const TraderCockpitTicket: React.FC<TraderCockpitTicketProps> = ({
       <div className="p-2.5 rounded-xl bg-secondary/20 border border-border/30 text-xs space-y-1.5 mb-3 flex-shrink-0">
         <div className="flex items-center justify-between text-muted-foreground">
           <span>Cost (max loss)</span>
-          <span className="font-bold text-foreground">
-            {calculations ? `$${calculations.totalCost.toFixed(2)} tUSDC` : '—'}
-          </span>
+          <div className="text-right">
+            <span className="font-bold text-foreground">
+              {calculations ? `$${calculations.totalCost.toFixed(2)} tUSDC` : '—'}
+            </span>
+            {calculations && calculations.unusedCollateral > 0 && sizingMode === 'COLLATERAL' && (
+              <span className="block text-[9px] text-brand-cyan/90">
+                (${calculations.unusedCollateral.toFixed(2)} unspent remains in wallet)
+              </span>
+            )}
+          </div>
         </div>
         <div className="flex items-center justify-between text-muted-foreground">
           <span>Shares</span>
-          <span className="font-bold text-foreground">
-            {calculations ? calculations.lotSize.toLocaleString() : '—'}
-          </span>
+          <div className="text-right">
+            <span className="font-bold text-foreground">
+              {calculations ? `${calculations.lotSize.toLocaleString()} ${calculations.lotSize === 1 ? 'Share' : 'Shares'}` : '—'}
+            </span>
+            {calculations && (
+              <span className="block text-[9px] text-muted-foreground/80">
+                @ ${calculations.validPrice.toFixed(2)} / share
+              </span>
+            )}
+          </div>
         </div>
         <div className="flex items-center justify-between text-muted-foreground">
           <span>Strike</span>
@@ -907,7 +1055,7 @@ export const TraderCockpitTicket: React.FC<TraderCockpitTicketProps> = ({
               <>
                 {activeSession?.isActive && <BoltIcon className="w-4 h-4 text-[#060709]" />}
                 <span className="text-[#060709] font-bold">
-                  {outcome === 'YES' ? 'Buy UP' : 'Buy DOWN'} • ${calculations.totalCost.toFixed(2)} tUSDC
+                  {outcome === 'YES' ? 'Buy UP' : 'Buy DOWN'} • ${calculations.totalCost.toFixed(2)} tUSDC ({calculations.lotSize.toLocaleString()} {calculations.lotSize === 1 ? 'Share' : 'Shares'})
                 </span>
               </>
             )}

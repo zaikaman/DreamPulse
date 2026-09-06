@@ -17,8 +17,24 @@ import { leaderboardService, type ArenaTimeframe, type ArenaSortBy } from '../se
 import { requireWalletAuth, optionalWalletAuth } from '../middleware/wallet-auth.js';
 import { telemetryWsGateway } from '../websocket/server.js';
 import { supabase, isPersistenceEnabled } from '../config/supabase.js';
+import { getSessionAccount, getCloneAllowance, getCloneBalance, CLONE_ZERO_ADDRESS } from '../config/permissions-abi.js';
 
 export const apiRouter = Router();
+
+// SECURITY: session_key_private_key is a live signing key held by the backend
+// relay only. It must never leave the server on unauthenticated (optional-auth)
+// read paths — GET /sessions/:userAddress is public by design. Strip it from
+// every session object returned by GET endpoints. The POST /sessions/register
+// response intentionally still returns the full record once to the
+// just-authenticated owner (the frontend already holds the key in memory and
+// needs the echoed record to hydrate state without a second round-trip).
+function stripSessionSecrets<T>(session: T): T {
+  if (!session || typeof session !== 'object') return session;
+  const copy = { ...(session as Record<string, unknown>) };
+  delete copy.sessionKeyPrivateKey;
+  delete copy.session_key_private_key;
+  return copy as T;
+}
 
 // ------------------------------------------------------------------------------
 // 1. Markets & Edge Radar Endpoints
@@ -348,6 +364,9 @@ apiRouter.post('/sessions/register', requireWalletAuth, async (req: Request, res
       targetPoolAddress,
       onChainAuthorized,
       copyTradeEnabled,
+      sessionKeyAddress,
+      sessionKeyPrivateKey,
+      delegationContractAddress,
     } = req.body;
 
     if (!userAddress) {
@@ -368,6 +387,9 @@ apiRouter.post('/sessions/register', requireWalletAuth, async (req: Request, res
       targetPoolAddress,
       onChainAuthorized,
       copyTradeEnabled: typeof copyTradeEnabled === 'boolean' ? copyTradeEnabled : undefined,
+      sessionKeyAddress,
+      sessionKeyPrivateKey,
+      delegationContractAddress,
     });
 
     allowanceStatusCache.delete(userAddress.toLowerCase());
@@ -436,7 +458,7 @@ apiRouter.get('/sessions/:userAddress', optionalWalletAuth, async (req: Request,
     if (activeOnly) {
       return res.json({
         success: true,
-        session: activeSession,
+        session: activeSession ? stripSessionSecrets(activeSession) : activeSession,
       });
     }
 
@@ -448,8 +470,8 @@ apiRouter.get('/sessions/:userAddress', optionalWalletAuth, async (req: Request,
     return res.json({
       success: true,
       count: sessions.length,
-      activeSession,
-      sessions,
+      activeSession: activeSession ? stripSessionSecrets(activeSession) : activeSession,
+      sessions: sessions.map(stripSessionSecrets),
       nextNonce,
     });
   } catch (err: any) {
@@ -471,10 +493,34 @@ apiRouter.post('/sessions/:userAddress/reset-spend', requireWalletAuth, async (r
     return res.json({
       success: true,
       message: 'Session spend reset to 0 tUSDC',
-      session: { ...session, spentToday: 0 },
+      session: stripSessionSecrets({ ...session, spentToday: 0 }),
     });
   } catch (err: any) {
     return res.status(500).json({ success: false, error: err.message || 'Failed to reset session spend' });
+  }
+});
+
+apiRouter.post('/sessions/:userAddress/risk', requireWalletAuth, async (req: Request, res: Response) => {
+  try {
+    const { userAddress } = req.params;
+    const { maxTradeSize, dailyVolumeCap } = req.body;
+    if (!userAddress || !isAddress(userAddress)) {
+      return res.status(400).json({ success: false, error: 'Invalid user address parameter' });
+    }
+    const session = await sessionService.updateSessionRisk(
+      userAddress,
+      Number(maxTradeSize || 1000000000),
+      Number(dailyVolumeCap || 1000000000)
+    );
+    if (!session) {
+      return res.status(404).json({ success: false, error: 'No active session found for user' });
+    }
+    return res.json({
+      success: true,
+      session: stripSessionSecrets(session),
+    });
+  } catch (err: any) {
+    return res.status(500).json({ success: false, error: err.message || 'Failed to update session risk' });
   }
 });
 
@@ -512,6 +558,55 @@ apiRouter.post('/sessions/:id/revoke', requireWalletAuth, async (req: Request, r
   }
 });
 
+apiRouter.get('/sessions/:userAddress/clone', optionalWalletAuth, async (req: Request, res: Response) => {
+  try {
+    const { userAddress } = req.params;
+    if (!userAddress || !isAddress(userAddress)) {
+      return res.status(400).json({ success: false, error: 'Invalid userAddress' });
+    }
+    const normalized = getAddress(userAddress) as Address;
+    const session = await sessionService.getUserActiveSession(normalized).catch(() => null);
+    let cloneAddress = session?.accountAddress;
+    if (!cloneAddress) {
+      cloneAddress = (await getSessionAccount(normalized).catch(() => null)) ?? undefined;
+    }
+    const isDeployed = Boolean(cloneAddress && cloneAddress.toLowerCase() !== CLONE_ZERO_ADDRESS.toLowerCase());
+    const predicted = !isDeployed ? await sessionService.predictClone(normalized).catch(() => null) : null;
+    let cloneBalance = 0;
+    if (isDeployed && cloneAddress) {
+      const balRaw = await getCloneBalance(cloneAddress).catch(() => 0n);
+      cloneBalance = Number(balRaw ?? 0n) / 1e6;
+    }
+    return res.json({
+      success: true,
+      userAddress: normalized,
+      accountAddress: isDeployed ? cloneAddress : (predicted ?? cloneAddress ?? null),
+      isDeployed,
+      cloneBalance,
+    });
+  } catch (err: any) {
+    return res.status(500).json({ success: false, error: err?.message || 'Failed to query clone' });
+  }
+});
+
+apiRouter.post('/sessions/:userAddress/deploy-clone', requireWalletAuth, async (req: Request, res: Response) => {
+  try {
+    const { userAddress } = req.params;
+    if (!userAddress || !isAddress(userAddress)) {
+      return res.status(400).json({ success: false, error: 'Invalid userAddress' });
+    }
+    const normalized = getAddress(userAddress) as Address;
+    const accountAddress = await sessionService.getOrCreateClone(normalized);
+    return res.json({
+      success: true,
+      userAddress: normalized,
+      accountAddress,
+    });
+  } catch (err: any) {
+    return res.status(500).json({ success: false, error: err?.message || 'Failed to deploy clone' });
+  }
+});
+
 apiRouter.get('/sessions/:userAddress/allowance-status', optionalWalletAuth, async (req: Request, res: Response) => {
   try {
     const { userAddress } = req.params;
@@ -528,58 +623,107 @@ apiRouter.get('/sessions/:userAddress/allowance-status', optionalWalletAuth, asy
     }
     const session = await sessionService.getUserActiveSession(normalized).catch(() => null);
     const erc20Abi = parseAbi(['function allowance(address owner, address spender) view returns (uint256)', 'function balanceOf(address account) view returns (uint256)']);
-    const registryAbi = parseAbi(['function isGloballyApproved(address owner, address operator, bytes4 selector) view returns (bool)']);
-    const operatorAddr = (SOMNIA_ADDRESSES.operatorAccount || '0x93e300607c363E7D7a47e50f5c9fDf1723e859Cf') as Address;
-    const selector = '0x80054449' as `0x${string}`;
 
-    let allowanceOperator: bigint = 0n;
+    let accountAddress = session?.accountAddress;
+    if (!accountAddress) {
+      accountAddress = (await getSessionAccount(normalized).catch(() => null)) ?? undefined;
+    }
+    const hasClone = Boolean(accountAddress && accountAddress.toLowerCase() !== CLONE_ZERO_ADDRESS.toLowerCase());
+
     let balance: bigint = 0n;
-    let isGlobal: boolean = false;
+    let cloneAllowance: bigint = 0n;
+    let cloneBalance: bigint = 0n;
     try {
-      [allowanceOperator, balance, isGlobal] = await Promise.all([
-        publicClient.readContract({ address: SOMNIA_ADDRESSES.testUsdc, abi: erc20Abi, functionName: 'allowance', args: [normalized, operatorAddr] }).catch(() => 0n) as Promise<bigint>,
+      const [walletBal, cloneAllow, cloneBal] = await Promise.all([
         publicClient.readContract({ address: SOMNIA_ADDRESSES.testUsdc, abi: erc20Abi, functionName: 'balanceOf', args: [normalized] }).catch(() => 0n) as Promise<bigint>,
-        publicClient.readContract({ address: SOMNIA_ADDRESSES.operatorPermissionsRegistry, abi: registryAbi, functionName: 'isGloballyApproved', args: [normalized, operatorAddr, selector] }).catch(() => false) as Promise<boolean>,
-      ]) as [bigint, bigint, boolean];
+        hasClone && accountAddress
+          ? (getCloneAllowance(normalized, accountAddress).catch(() => 0n) as Promise<bigint>)
+          : Promise.resolve(0n),
+        hasClone && accountAddress
+          ? (getCloneBalance(accountAddress).catch(() => 0n) as Promise<bigint>)
+          : Promise.resolve(0n),
+      ]);
+      balance = walletBal ?? 0n;
+      cloneAllowance = cloneAllow ?? 0n;
+      cloneBalance = cloneBal ?? 0n;
     } catch {
       // safe fallback if RPC throws
     }
 
-    const allowanceOperatorHuman = Number(allowanceOperator) / 1_000_000;
     const balanceHuman = Number(balance) / 1_000_000;
-    const hasOperatorAllowance = allowanceOperatorHuman >= 100;
-    const allReady = hasOperatorAllowance && balanceHuman > 0;
+    const cloneAllowanceHuman = Number(cloneAllowance) / 1_000_000;
+    const cloneBalanceHuman = Number(cloneBalance) / 1_000_000;
+
+    const hasSufficientAllowance = cloneAllowanceHuman >= 100;
+    const hasSessionKey = Boolean(session?.isActive && session?.onChainAuthorized);
+    const allReady = hasClone && hasSufficientAllowance && (balanceHuman > 0 || cloneBalanceHuman > 0);
 
     const payload = {
       success: true,
       userAddress: normalized,
       hasActiveSession: !!session?.isActive,
-      hasDelegated: !!session?.onChainAuthorized || Boolean(isGlobal),
-      isGloballyApproved: Boolean(isGlobal),
-      hasOperatorAllowance,
-      allowanceOperatorHuman,
+      hasDelegated: !!session?.onChainAuthorized || hasClone,
+      isGloballyApproved: hasClone && hasSufficientAllowance,
+      hasOperatorAllowance: hasSufficientAllowance,
+      allowanceOperatorHuman: cloneAllowanceHuman,
       balanceHuman,
+      accountAddress: hasClone ? accountAddress : undefined,
+      hasClone,
+      cloneAllowanceHuman,
+      cloneBalanceHuman,
       poolsChecked: 1,
       checks: [
         {
-          pool: 'Global Operator & TestUSDC',
-          allowanceHuman: allowanceOperatorHuman,
+          pool: accountAddress ? `Smart Account Clone (${accountAddress.slice(0, 6)}...${accountAddress.slice(-4)})` : 'Smart Account Clone',
+          allowanceHuman: cloneAllowanceHuman,
           balanceHuman,
-          vaultHuman: 0,
-          ready: allReady,
+          vaultHuman: cloneBalanceHuman,
+          ready: hasClone && hasSufficientAllowance,
         },
       ],
       allReady,
-      guidance: !hasOperatorAllowance
-        ? 'TestUSDC allowance to operator required. Click Approve to grant 1-time session trading allowance.'
-        : balanceHuman <= 0
-          ? 'Wallet TestUSDC balance is 0. Claim TestUSDC from the faucet to begin copy-trading.'
-          : 'Ready — Operator authorization and TestUSDC allowance active across all binary prediction markets.',
+      guidance: !hasClone
+        ? 'Smart Account Clone required. Click Authorize to deploy your isolated clone (sponsored by backend).'
+        : !hasSufficientAllowance
+          ? 'One-time TestUSDC approval to your clone required. This 1 approval covers all 66+ pools forever.'
+          : balanceHuman <= 0 && cloneBalanceHuman <= 0
+            ? 'Wallet and Clone TestUSDC balance is 0. Claim TestUSDC from the faucet to begin copy-trading.'
+            : 'Ready — Smart Account Clone active and funded. 1-time approval covers all future pools.',
     };
     allowanceStatusCache.set(cacheKey, { data: payload, expiresAt: Date.now() + ALLOWANCE_CACHE_TTL_MS });
     return res.json(payload);
   } catch (err: any) {
     return res.status(500).json({ success: false, error: err.message || 'Failed to check allowance status' });
+  }
+});
+
+// Allowance targets for the non-custodial session flow: active trading pools
+// (with outcome-token singletons for sell-side grants) the frontend should
+// request per-pool TestUSDC allowances for at session creation.
+apiRouter.get('/sessions/allowance-targets/list', optionalWalletAuth, async (_req: Request, res: Response) => {
+  try {
+    const markets = marketService.getActiveMarkets();
+    const seen = new Set<string>();
+    const targets: Array<{ pool: string; outcomeToken: string | null; collateral: string }> = [];
+    for (const m of markets) {
+      const pool = m.poolAddress;
+      if (!pool || !pool.startsWith('0x') || pool.length !== 42) continue;
+      const key = pool.toLowerCase();
+      if (seen.has(key)) continue;
+      seen.add(key);
+      let outcomeToken: string | null = null;
+      try {
+        if (m.marketIdHex && m.marketIdHex.startsWith('0x')) {
+          const oc = await somniaExchange.client.getMarketOnchain(m.marketIdHex as Hex).catch(() => null);
+          if (oc?.outcomeToken) outcomeToken = oc.outcomeToken as string;
+        }
+      } catch {}
+      targets.push({ pool: getAddress(pool), outcomeToken, collateral: SOMNIA_ADDRESSES.testUsdc });
+      if (targets.length >= 12) break;
+    }
+    return res.json({ success: true, count: targets.length, targets });
+  } catch (err: any) {
+    return res.status(500).json({ success: false, error: err.message || 'Failed to list allowance targets' });
   }
 });
 
@@ -1154,6 +1298,9 @@ apiRouter.get('/sweeper/unclaimed', optionalWalletAuth, async (req: Request, res
         symbol: p.symbol,
         marketIdHex: p.marketIdHex,
         winningOutcome: p.winningOutcome,
+        outcomeIdx: p.outcomeIdx,
+        outcomeToken: p.outcomeToken,
+        poolAddress: p.poolAddress,
         claimableAmount: p.claimableAmount,
         rawAmount: p.rawAmount.toString(),
         isVoided: p.isVoided,
@@ -1171,12 +1318,16 @@ apiRouter.post('/sweeper/trigger', requireWalletAuth, async (req: Request, res: 
     const targetAddress = req.walletAddress || userAddress || operatorAccount.address;
     const result = await settlementService.triggerBatchSweep(targetAddress);
 
+    const userClaimable = Array.isArray(result.userClaimable) ? result.userClaimable : [];
     res.json({
       success: true,
       claimedMarketsCount: result.claimedMarketsCount,
       totalClaimedAmount: result.totalClaimedAmount,
       txHash: result.txHash,
       sweeps: result.sweeps,
+      userClaimable,
+      userClaimableCount: userClaimable.length,
+      userClaimableAmount: `${userClaimable.reduce((sum, p) => sum + (p.claimableAmount || 0), 0).toFixed(2)} tUSDC`,
     });
   } catch (err: any) {
     res.status(500).json({ success: false, error: err.message || 'Failed to trigger settlement sweep' });

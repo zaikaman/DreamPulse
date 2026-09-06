@@ -230,6 +230,11 @@ export class SocialCopyService {
           continue;
         }
 
+        if (session.onChainAuthorized !== true) {
+          console.warn(`[SocialCopyService] Skipping mirror for ${copierRel.copierAddress}: Session key not authorized on-chain`);
+          continue;
+        }
+
         const price = leaderOrder.price;
         if (price <= 0 || price >= 1.0) continue;
 

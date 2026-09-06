@@ -5,6 +5,7 @@ import {
   EyeSlashIcon,
   SparklesIcon,
   ArrowPathIcon,
+  CheckIcon,
 } from '@heroicons/react/24/outline';
 import type { Market, SessionGrant, AgentThoughtLog } from '../../types/index.js';
 import type { MarketTickData, DepthUpdateData } from '../../hooks/useTelemetry.js';
@@ -36,6 +37,14 @@ interface TradeTerminalViewProps {
   onConnectWallet?: () => void;
 }
 
+const getAssetDotColor = (symbol: string) => {
+  const s = symbol.toUpperCase();
+  if (s.includes('BTC')) return 'bg-[#f7931a]';
+  if (s.includes('ETH')) return 'bg-[#627eea]';
+  if (s.includes('SOL')) return 'bg-[#14f195]';
+  return 'bg-[#ffb700]';
+};
+
 export const TradeTerminalView: React.FC<TradeTerminalViewProps> = ({
   markets,
   selectedMarket,
@@ -56,6 +65,29 @@ export const TradeTerminalView: React.FC<TradeTerminalViewProps> = ({
   const [prefillData, setPrefillData] = useState<LadderPrefillData | null>(null);
   const [isDropdownOpen, setIsDropdownOpen] = useState<boolean>(false);
   const [isBookVisible, setIsBookVisible] = useState<boolean>(false);
+  const dropdownRef = React.useRef<HTMLDivElement>(null);
+
+  React.useEffect(() => {
+    if (!isDropdownOpen) return;
+    const handleClickOutside = (event: MouseEvent | TouchEvent) => {
+      if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
+        setIsDropdownOpen(false);
+      }
+    };
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        setIsDropdownOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    document.addEventListener('touchstart', handleClickOutside);
+    document.addEventListener('keydown', handleKeyDown);
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+      document.removeEventListener('touchstart', handleClickOutside);
+      document.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [isDropdownOpen]);
 
   // Active contract telemetry — strict selection (no silent fallback to wrong contract)
   const market = selectedMarket ?? null;
@@ -114,51 +146,94 @@ export const TradeTerminalView: React.FC<TradeTerminalViewProps> = ({
     <div className="flex flex-col w-full min-h-0 flex-1 overflow-y-auto xl:overflow-hidden terminal-panel-adaptive gap-2 select-none pb-4 lg:pb-0">
       {/* Top Pro DEX Navigation Bar */}
       {market && (
-        <div className="terminal-panel p-2 px-3 flex items-center justify-between flex-wrap gap-2 flex-shrink-0 bg-background/70 border border-border/40 backdrop-blur-md rounded-xl">
+        <div className="terminal-panel !overflow-visible relative z-30 p-2 px-3 flex items-center justify-between flex-wrap gap-2 flex-shrink-0 bg-background/70 border border-border/40 backdrop-blur-md rounded-xl">
           {/* Left Side: Asset Selector + Price + 24h Delta */}
           <div className="flex items-center gap-3">
             {/* Quick Market Switcher Dropdown */}
-            <div className="relative">
+            <div className="relative z-50" ref={dropdownRef}>
               <button
                 type="button"
                 onClick={() => setIsDropdownOpen(!isDropdownOpen)}
-                className="flex items-center gap-2 px-2.5 py-1.5 rounded-lg bg-secondary/50 hover:bg-secondary/80 border border-border/50 text-xs font-mono font-bold cursor-pointer transition-colors"
+                aria-expanded={isDropdownOpen}
+                className={cn(
+                  "flex items-center gap-2 px-2.5 py-1.5 rounded-lg border text-xs font-mono font-bold cursor-pointer transition-all",
+                  isDropdownOpen
+                    ? "bg-secondary text-foreground border-border shadow-xs"
+                    : "bg-secondary/50 hover:bg-secondary/80 border-border/50 text-foreground"
+                )}
               >
-                <span className="w-2 h-2 rounded-full bg-[#ffb700]" />
+                <span className={cn("w-2 h-2 rounded-full flex-shrink-0", getAssetDotColor(market.symbol))} />
                 <span className="text-foreground">{market.symbol.split('/')[0]}</span>
-                <ChevronDownIcon className="w-3 h-3 text-muted-foreground" />
+                <span className="text-[10px] text-muted-foreground font-normal">({market.windowDuration || '1m'})</span>
+                <ChevronDownIcon className={cn("w-3 h-3 text-muted-foreground transition-transform duration-200", isDropdownOpen && "rotate-180")} />
               </button>
 
               {isDropdownOpen && (
-                <div className="absolute left-0 top-full mt-1 w-64 max-h-72 overflow-y-auto rounded-xl bg-background/95 border border-border shadow-2xl z-50 p-1 font-mono text-xs divide-y divide-border/20 backdrop-blur-xl">
-                  {markets.map((m) => {
-                    const isCur = m.id === market.id;
-                    return (
-                      <button
-                        key={m.id}
-                        type="button"
-                        onClick={() => {
-                          onSelectMarket(m.id);
-                          setIsDropdownOpen(false);
-                        }}
-                        className={cn(
-                          "w-full px-2.5 py-2 text-left flex items-center justify-between hover:bg-secondary/40 transition-colors cursor-pointer rounded-md",
-                          isCur && "bg-secondary/60 font-bold"
-                        )}
-                      >
-                        <div className="flex items-center gap-1.5">
-                          <span>{m.symbol}</span>
-                          <span className="text-[10px] text-muted-foreground">({m.windowDuration})</span>
-                          {m.status === 'Resolving' && (
-                            <span className="text-[9px] px-1 py-0.2 rounded bg-[#ffb700]/20 text-[#ffb700] border border-[#ffb700]/30 font-bold">
-                              Resolving
-                            </span>
+                <div className="absolute left-0 top-full mt-2 w-80 max-h-80 overflow-hidden flex flex-col rounded-xl bg-card/95 border border-border/80 shadow-2xl shadow-black/60 z-50 font-mono text-xs backdrop-blur-2xl animate-in fade-in-50 zoom-in-95 duration-150">
+                  {/* Dropdown Header */}
+                  <div className="px-3 py-2 border-b border-border/40 flex items-center justify-between bg-muted/20 text-[10px] uppercase tracking-wider text-muted-foreground font-semibold flex-shrink-0">
+                    <span>Select Contract</span>
+                    <span className="px-1.5 py-0.5 rounded bg-secondary/80 text-[9px] text-foreground font-medium">
+                      {markets.length} available
+                    </span>
+                  </div>
+
+                  {/* Markets List */}
+                  <div className="overflow-y-auto max-h-64 p-1.5 space-y-1 scrollbar-thin">
+                    {markets.map((m) => {
+                      const isCur = m.id === market.id;
+                      const livePrice = (m.symbol && currentSpotPrices[m.symbol]) || liveTicks.get(m.id)?.spotPrice || m.strikePrice || 0;
+                      return (
+                        <button
+                          key={m.id}
+                          type="button"
+                          onClick={() => {
+                            onSelectMarket(m.id);
+                            setIsDropdownOpen(false);
+                          }}
+                          className={cn(
+                            "w-full px-2.5 py-2 text-left flex items-center justify-between transition-colors cursor-pointer rounded-lg group",
+                            isCur
+                              ? "bg-secondary/90 border border-primary/40 font-semibold shadow-xs"
+                              : "hover:bg-secondary/50 text-muted-foreground hover:text-foreground border border-transparent"
                           )}
-                        </div>
-                        <span className="text-[11px] text-muted-foreground">${(m.strikePrice ?? 0).toLocaleString()}</span>
-                      </button>
-                    );
-                  })}
+                        >
+                          <div className="flex items-center gap-2">
+                            <span className={cn("w-2 h-2 rounded-full flex-shrink-0", getAssetDotColor(m.symbol))} />
+                            <div className="flex flex-col">
+                              <div className="flex items-center gap-1.5">
+                                <span className="text-foreground font-bold">{m.symbol}</span>
+                                <span className="text-[10px] px-1 py-0.2 rounded bg-secondary text-muted-foreground border border-border/40">
+                                  {m.windowDuration}
+                                </span>
+                                {m.status === 'Resolving' && (
+                                  <span className="text-[9px] px-1.5 py-0.2 rounded bg-[#ffb700]/20 text-[#ffb700] border border-[#ffb700]/30 font-bold animate-pulse">
+                                    Resolving
+                                  </span>
+                                )}
+                              </div>
+                              <span className="text-[10px] text-muted-foreground">
+                                Strike: ${(m.strikePrice ?? 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                              </span>
+                            </div>
+                          </div>
+
+                          <div className="flex items-center gap-2 pl-2 flex-shrink-0">
+                            {livePrice > 0 && (
+                              <div className="text-right">
+                                <div className="text-foreground text-[11px] font-semibold">
+                                  ${livePrice.toLocaleString(undefined, { minimumFractionDigits: 1, maximumFractionDigits: 2 })}
+                                </div>
+                              </div>
+                            )}
+                            {isCur && (
+                              <CheckIcon className="w-3.5 h-3.5 text-primary flex-shrink-0" />
+                            )}
+                          </div>
+                        </button>
+                      );
+                    })}
+                  </div>
                 </div>
               )}
             </div>

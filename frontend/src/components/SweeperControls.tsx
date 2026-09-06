@@ -15,10 +15,14 @@ import {
   XMarkIcon,
   ExclamationCircleIcon,
   ClockIcon,
+  BanknotesIcon,
+  ArrowDownTrayIcon,
+  CheckIcon,
+  DocumentDuplicateIcon,
 } from '@heroicons/react/24/outline';
 import { apiClient } from '../services/api.js';
-import { SOMNIA_ADDRESSES } from '../services/web3.js';
-import type { SettlementSweep } from '../types/index.js';
+import { SOMNIA_ADDRESSES, web3Service } from '../services/web3.js';
+import type { SettlementSweep, UserClaimablePosition } from '../types/index.js';
 import { telemetryClient, type SweepCompleteData, type PnlUpdateData } from '../services/telemetry-client.js';
 import { shouldPoll, STALE_TIMES } from '../lib/polling.js';
 import { ClaimCelebration } from './ClaimCelebration.js';
@@ -31,6 +35,9 @@ interface SweeperControlsProps {
   userAddress?: string;
   onRefreshPortfolio?: () => void;
   onConnectWallet?: () => Promise<void>;
+  cloneAddress?: string | null;
+  cloneBalance?: string;
+  onWithdrawClone?: (amount?: number) => Promise<void>;
 }
 
 const SWEEPER_SUMMARY_CACHE_KEY = 'dreampulse_sweeper_summary_';
@@ -47,9 +54,44 @@ export const SweeperControls: React.FC<SweeperControlsProps> = ({
   userAddress,
   onRefreshPortfolio,
   onConnectWallet,
+  cloneAddress,
+  cloneBalance,
+  onWithdrawClone,
 }) => {
   const activeAddress = (userAddress ?? SOMNIA_ADDRESSES.operatorAccount).toLowerCase();
   const isViewingSelf = !!userAddress;
+
+  const [internalCloneAddress, setInternalCloneAddress] = useState<string | null>(null);
+  const [internalCloneBalance, setInternalCloneBalance] = useState<string>('0.00');
+  const [isWithdrawingClone, setIsWithdrawingClone] = useState<boolean>(false);
+  const [cloneCopied, setCloneCopied] = useState<boolean>(false);
+
+  const effectiveCloneAddress = cloneAddress ?? internalCloneAddress;
+  const effectiveCloneBalance = cloneBalance ?? internalCloneBalance;
+
+  const fetchCloneDetails = useCallback(async () => {
+    if (!userAddress || !userAddress.startsWith('0x')) {
+      setInternalCloneAddress(null);
+      setInternalCloneBalance('0.00');
+      return;
+    }
+    try {
+      const clone = await web3Service.getCloneAddress(userAddress as `0x${string}`);
+      setInternalCloneAddress(clone);
+      if (clone) {
+        const bal = await web3Service.getCloneBalance({ cloneAddress: clone });
+        setInternalCloneBalance((Number(bal) / 1e6).toFixed(2));
+      } else {
+        setInternalCloneBalance('0.00');
+      }
+    } catch (err) {
+      console.warn('[SweeperControls] Failed to fetch clone data:', err);
+    }
+  }, [userAddress]);
+
+  useEffect(() => {
+    fetchCloneDetails();
+  }, [fetchCloneDetails]);
 
   const initialCache = (() => {
     try {
@@ -71,6 +113,8 @@ export const SweeperControls: React.FC<SweeperControlsProps> = ({
 
   const [isSweeping, setIsSweeping] = useState<boolean>(false);
   const [sweepError, setSweepError] = useState<string | null>(null);
+  const [isClaiming, setIsClaiming] = useState<boolean>(false);
+  const [claimables, setClaimables] = useState<UserClaimablePosition[]>([]);
   const [isLoading, setIsLoading] = useState<boolean>(!initialCache);
   const [history, setHistory] = useState<SettlementSweep[]>(initialHistory);
   const [unclaimedAmount, setUnclaimedAmount] = useState<number>(initialCache?.unclaimedAmount || 0);
@@ -233,6 +277,9 @@ export const SweeperControls: React.FC<SweeperControlsProps> = ({
         if (claimedNum > 0) {
           setCelebrationState({ isOpen: true, amount: res.totalClaimedAmount, txHash: res.txHash });
         }
+        // Non-custodial model: user-owned winnings cannot be swept by the
+        // backend — surface them for one-click wallet claims instead.
+        setClaimables(Array.isArray(res.userClaimable) ? res.userClaimable : []);
         setTotalClaimedAllTime((prev) => Number((prev + claimedNum).toFixed(2)));
         setUnclaimedAmount(0);
         await fetchSweeperData();
@@ -245,6 +292,89 @@ export const SweeperControls: React.FC<SweeperControlsProps> = ({
       setSweepError(err.message || 'Settlement sweep failed. Please check wallet connection or session delegation.');
     } finally {
       setIsSweeping(false);
+    }
+  };
+
+  const claimableTotal = claimables.reduce((sum, p) => sum + (p.claimableAmount || 0), 0);
+
+  const handleClaimToWallet = async () => {
+    if (!activeAddress || !activeAddress.startsWith('0x') || claimables.length === 0) return;
+    setIsClaiming(true);
+    setSweepError(null);
+    try {
+      let claimed = 0;
+      let lastHash: string | undefined;
+      for (const pos of claimables) {
+        if (!pos.marketIdHex || !pos.marketIdHex.startsWith('0x') || pos.winningOutcome === 'VOID') continue;
+        if (!pos.rawAmount || BigInt(pos.rawAmount) <= 0n) continue;
+        try {
+          const { hash } = await web3Service.claimMarketWinnings({
+            userAddress: activeAddress as `0x${string}`,
+            marketIdHex: pos.marketIdHex as `0x${string}`,
+            outcomeIdx: pos.winningOutcome === 'NO' ? 1 : 0,
+            amountRaw: BigInt(pos.rawAmount),
+            outcomeToken: pos.outcomeToken as `0x${string}` | undefined,
+          });
+          lastHash = hash;
+          claimed += pos.claimableAmount || 0;
+        } catch (claimErr: any) {
+          console.warn(`[SweeperControls] Claim failed for ${pos.marketId}:`, claimErr?.message || claimErr);
+          if (String(claimErr?.message || '').toLowerCase().includes('reject')) break;
+        }
+      }
+      if (claimed > 0) {
+        setCelebrationState({ isOpen: true, amount: `${claimed.toFixed(2)} tUSDC`, txHash: lastHash || '' });
+        setClaimables([]);
+        setTotalClaimedAllTime((prev) => Number((prev + claimed).toFixed(2)));
+        await fetchSweeperData();
+        if (onRefreshPortfolio) onRefreshPortfolio();
+      } else {
+        setSweepError('No winnings could be claimed from your wallet. They may already be claimed.');
+      }
+    } catch (err: any) {
+      console.warn('[SweeperControls] Wallet claim error:', err);
+      setSweepError(err.message || 'Wallet claim failed.');
+    } finally {
+      setIsClaiming(false);
+    }
+  };
+
+  const handleCopyClone = (addr: string) => {
+    navigator.clipboard.writeText(addr);
+    setCloneCopied(true);
+    setTimeout(() => setCloneCopied(false), 2000);
+  };
+
+  const handleWithdrawClone = async () => {
+    if (!userAddress || !effectiveCloneAddress) return;
+    const bal = parseFloat(effectiveCloneBalance || '0');
+    if (bal < 1.0) {
+      setSweepError('Minimum withdrawal is 1.00 tUSDC. Your clone balance is insufficient.');
+      return;
+    }
+    setIsWithdrawingClone(true);
+    setSweepError(null);
+    try {
+      if (onWithdrawClone) {
+        await onWithdrawClone();
+      } else {
+        const res = await web3Service.withdrawFromClone({
+          userAddress: userAddress as `0x${string}`,
+          cloneAddress: effectiveCloneAddress as `0x${string}`,
+        });
+        setCelebrationState({
+          isOpen: true,
+          amount: `${effectiveCloneBalance} tUSDC`,
+          txHash: res.hash,
+        });
+      }
+      await Promise.all([fetchCloneDetails(), fetchSweeperData()]);
+      if (onRefreshPortfolio) onRefreshPortfolio();
+    } catch (err: any) {
+      console.warn('[SweeperControls] Clone withdrawal error:', err);
+      setSweepError(err.message || 'Failed to withdraw from smart account clone.');
+    } finally {
+      setIsWithdrawingClone(false);
     }
   };
 
@@ -306,6 +436,101 @@ export const SweeperControls: React.FC<SweeperControlsProps> = ({
         </div>
       )}
 
+      {/* ---------- User-Claimable Winnings Banner (non-custodial) ---------- */}
+      {claimables.length > 0 && (
+        <div className="flex items-center justify-between gap-3 px-4 py-3 rounded-xl border border-emerald-500/30 bg-emerald-500/10 text-xs backdrop-blur-sm">
+          <div className="flex items-center gap-2.5 min-w-0">
+            <WalletIcon className="w-4 h-4 text-emerald-400 flex-shrink-0" />
+            <div className="min-w-0">
+              <span className="font-semibold text-emerald-200">
+                {claimableTotal.toFixed(2)} tUSDC ready to claim to your wallet
+              </span>
+              <span className="text-emerald-300/80"> — {claimables.length} market{claimables.length === 1 ? '' : 's'}. Positions are owned by you; only your wallet can redeem them.</span>
+            </div>
+          </div>
+          <button
+            type="button"
+            onClick={handleClaimToWallet}
+            disabled={isClaiming}
+            className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg border text-xs font-bold transition-colors disabled:opacity-50 disabled:cursor-not-allowed bg-emerald-500 text-white border-emerald-600 hover:bg-emerald-400 flex-shrink-0"
+          >
+            {isClaiming ? <Spinner size="xs" variant="white" /> : <WalletIcon className="w-3.5 h-3.5" />}
+            <span>{isClaiming ? 'Claiming…' : `Claim ${claimableTotal.toFixed(2)} tUSDC`}</span>
+          </button>
+        </div>
+      )}
+
+      {/* ---------- Smart Account Clone Winnings & Vault Balance ---------- */}
+      {effectiveCloneAddress && (
+        <div className="terminal-panel p-4 bg-secondary/20 border-border/60 relative overflow-hidden">
+          <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+            <div className="flex items-start gap-3 min-w-0">
+              <div className="w-9 h-9 rounded-xl bg-emerald-500/15 border border-emerald-500/30 grid place-items-center text-emerald-400 flex-shrink-0 mt-0.5 sm:mt-0">
+                <BanknotesIcon className="w-5 h-5" />
+              </div>
+              <div className="min-w-0">
+                <div className="flex items-center gap-2 flex-wrap">
+                  <span className="text-xs font-bold text-foreground tracking-tight">Smart Account Clone</span>
+                  <Badge variant="outline" className="font-mono text-[10px] px-1.5 py-0 bg-emerald-500/10 text-emerald-400 border-emerald-500/30">
+                    V2 NON-CUSTODIAL
+                  </Badge>
+                  <button
+                    type="button"
+                    onClick={() => handleCopyClone(effectiveCloneAddress)}
+                    className="inline-flex items-center gap-1 text-[11px] font-mono text-muted-foreground hover:text-foreground transition-colors cursor-pointer"
+                    title="Click to copy clone address"
+                  >
+                    <span>{effectiveCloneAddress.slice(0, 6)}...{effectiveCloneAddress.slice(-4)}</span>
+                    {cloneCopied ? <CheckIcon className="w-3 h-3 text-emerald-400" /> : <DocumentDuplicateIcon className="w-3 h-3" />}
+                  </button>
+                  <a
+                    href={`https://shannon-explorer.somnia.network/address/${effectiveCloneAddress}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-muted-foreground hover:text-foreground transition-colors"
+                    title="View clone on Shannon Explorer"
+                  >
+                    <ArrowTopRightOnSquareIcon className="w-3 h-3" />
+                  </a>
+                </div>
+                <p className="text-[11px] text-muted-foreground mt-1">
+                  Resolved market winnings automatically convert back to tUSDC in your clone. Only your connected wallet can withdraw funds (1.00 tUSDC protocol fee per withdrawal; min 1.00 tUSDC).
+                </p>
+              </div>
+            </div>
+
+            <div className="flex items-center gap-3 w-full sm:w-auto justify-between sm:justify-end flex-shrink-0 border-t sm:border-t-0 pt-3 sm:pt-0 border-border/40">
+              <div className="text-left sm:text-right">
+                <div className="text-[10px] font-mono uppercase text-muted-foreground">Clone Vault Balance</div>
+                <div className="text-base sm:text-lg font-mono font-bold text-emerald-400">
+                  {effectiveCloneBalance} <span className="text-xs font-semibold">tUSDC</span>
+                </div>
+              </div>
+
+              <button
+                type="button"
+                onClick={handleWithdrawClone}
+                disabled={isWithdrawingClone || parseFloat(effectiveCloneBalance || '0') < 1.0}
+                className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-lg border text-xs font-bold transition-all disabled:opacity-40 disabled:cursor-not-allowed bg-emerald-500 text-white border-emerald-600 hover:bg-emerald-400 active:scale-95 shadow-sm shadow-emerald-500/20 cursor-pointer"
+                title={parseFloat(effectiveCloneBalance || '0') >= 1.0 ? "Withdraw full clone balance to your wallet (1.00 tUSDC fee applies)" : "Minimum 1.00 tUSDC required to withdraw"}
+              >
+                {isWithdrawingClone ? (
+                  <>
+                    <Spinner size="xs" variant="white" />
+                    <span>Withdrawing…</span>
+                  </>
+                ) : (
+                  <>
+                    <ArrowDownTrayIcon className="w-3.5 h-3.5" />
+                    <span>Withdraw to Wallet</span>
+                  </>
+                )}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* ---------- 1. Sweeper Controls Header + Stats ---------- */}
       <div className="terminal-panel p-0 overflow-hidden">
         {/* Header Bar */}
@@ -324,7 +549,7 @@ export const SweeperControls: React.FC<SweeperControlsProps> = ({
                 </Badge>
               </div>
               <p className="text-[11px] text-muted-foreground mt-1 hidden sm:block">
-                {isViewingSelf ? 'Automatically claims binary contract payouts & transfers 100% of winnings directly to your wallet.' : 'Automated on-chain engine sweeping resolved Somnia event contracts & executing direct payout settlements.'}
+                {isViewingSelf ? 'Your orders are owned by your wallet and winnings are claimed straight to it — no custodian in between.' : 'Automated on-chain engine sweeping resolved Somnia event contracts & executing direct payout settlements.'}
               </p>
             </div>
           </div>

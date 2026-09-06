@@ -15,14 +15,18 @@ import {
   MIN_OPERATOR_GAS_WEI,
   executeOperatorTx,
   executeOperatorWriteContract,
+  createSessionWalletClient,
 } from '../config/somnia.js';
 import { ORDER_TYPE, type BinarySide, type MarketOnchain, orderBookEventsAbi } from '@somnia-chain/markets-sdk';
 import {
   BINARY_POOL_WRITE_ABI,
+  BINARY_POOL_SELF_WRITE_ABI,
   OPERATOR_PERMISSIONS_REGISTRY_ABI,
   OPERATOR_SELECTORS,
   ERC20_ABI,
   SPOT_POOL_ABI,
+  SESSION_CLONE_ABI,
+  getSessionAccount,
   checkOnChainOperatorAuthorization,
 } from '../config/permissions-abi.js';
 import type { IAgentDecision, OrderBookDepth, OrderBookLevel } from '../agents/base-agent.js';
@@ -259,6 +263,34 @@ const BINARY_ORDER_KIND: Record<BinarySide, number> = {
 };
 
 const ZERO_ADDRESS = '0x0000000000000000000000000000000000000000' as Address;
+const ZERO_ADDRESS_CLONE = '0x0000000000000000000000000000000000000000' as Address;
+const cloneAddressCache = new Map<string, { address: Address | null; at: number }>();
+const CLONE_CACHE_MS = 5 * 60 * 1000;
+
+/**
+ * Resolves a user's V2 trading account clone: prefers the active session's
+ * bound clone, falls back to the factory registry (short-TTL cached).
+ */
+export async function resolveSessionAccount(user: Address): Promise<Address | null> {
+  try {
+    const session = await sessionService.getUserActiveSession(user).catch(() => null);
+    if (session?.accountAddress && isAddress(session.accountAddress)) {
+      return getAddress(session.accountAddress);
+    }
+  } catch {}
+  const key = user.toLowerCase();
+  const cached = cloneAddressCache.get(key);
+  if (cached && Date.now() - cached.at < CLONE_CACHE_MS) return cached.address;
+  let resolved: Address | null = null;
+  try {
+    const account = await getSessionAccount(user);
+    if (account && account.toLowerCase() !== ZERO_ADDRESS_CLONE.toLowerCase()) {
+      resolved = getAddress(account);
+    }
+  } catch {}
+  cloneAddressCache.set(key, { address: resolved, at: Date.now() });
+  return resolved;
+}
 
 /**
  * Snap a human value to whole step units to avoid 18-decimal / 6-decimal floating-point drifts.
@@ -390,31 +422,26 @@ export async function assertFunded(
         if (err.message?.includes('circuit breaker')) throw err;
       }
     } else if (process.env.NODE_ENV !== 'test') {
-      // Copy trader: collateral is drawn via transferFrom(traderAddress, operatorAddress, need)
-      // Verify trader's TestUSDC balance and 1-click allowance to operator
+      // Non-custodial clone model: the clone holds funds and executes trades as itself.
       try {
-        const [wallet, allowanceOperator] = await Promise.all([
-          somniaExchange.client.getErc20Balance(onchain.collateral || SOMNIA_ADDRESSES.testUsdc, traderAddress).catch(() => 0n),
-          publicClient.readContract({
-            address: onchain.collateral || SOMNIA_ADDRESSES.testUsdc,
-            abi: ERC20_ABI,
-            functionName: 'allowance',
-            args: [traderAddress, operatorAddress],
-          }).catch(() => 0n),
-        ]);
-
-        if (wallet < need) {
+        const token = (onchain.collateral || SOMNIA_ADDRESSES.testUsdc) as Address;
+        const account = await resolveSessionAccount(traderAddress);
+        if (!account) {
           throw new Error(
-            `Insufficient TestUSDC balance for copy-trader ${traderAddress}: balance ${wallet} raw, need ${need} raw for ${outcome} buy.`,
+            `No trading account deployed for trader ${traderAddress}. Authorize a session in the Session Modal to deploy it.`,
           );
         }
-        if (allowanceOperator < need) {
+        const cloneBal = await somniaExchange.client.getErc20Balance(token, account).catch(() => 0n);
+
+        if (cloneBal < need) {
+          const cloneHuman = (Number(cloneBal) / 1e6).toFixed(2);
+          const needHuman = (Number(need) / 1e6).toFixed(2);
           throw new Error(
-            `Insufficient TestUSDC allowance to operator (${operatorAddress}) for copy-trader ${traderAddress}: allowance ${allowanceOperator} raw, need ${need} raw. User must approve TestUSDC to operator via frontend.`,
+            `Insufficient Trading Wallet balance ($${cloneHuman} available in trading account, $${needHuman} needed). Please deposit TestUSDC into your Trading Wallet.`,
           );
         }
       } catch (err: any) {
-        if (err.message?.includes('Insufficient')) throw err;
+        if (err.message?.includes('Insufficient') || err.message?.includes('No trading account') || err.message?.includes('allowance')) throw err;
         if (err.message?.includes('circuit breaker')) throw err;
       }
     }
@@ -960,32 +987,44 @@ export class OrderService {
       return null;
     }
 
-    // Validate risk guardrails against session
-    const registeredSession = sessionService.getSessionById(session.id);
+    // Validate risk guardrails against session & re-hydrate full session credentials
+    const registeredSession = (session?.id ? sessionService.getSessionById(session.id) : null)
+      || (session?.userAddress ? sessionService.listUserSessions(session.userAddress).find((s) => s.isActive) : null);
+    const effectiveSession: SessionGrant = {
+      ...session,
+      ...(registeredSession ? {
+        accountAddress: registeredSession.accountAddress || session.accountAddress,
+        sessionKeyAddress: registeredSession.sessionKeyAddress || session.sessionKeyAddress,
+        sessionKeyPrivateKey: registeredSession.sessionKeyPrivateKey || session.sessionKeyPrivateKey,
+        delegationContractAddress: registeredSession.delegationContractAddress || session.delegationContractAddress,
+        copyTradeEnabled: registeredSession.copyTradeEnabled ?? session.copyTradeEnabled,
+      } : {}),
+    };
+
     if (registeredSession) {
-      const riskAllowance = sessionService.validateTradeAllowance(session.id, totalCost);
+      const riskAllowance = sessionService.validateTradeAllowance(effectiveSession.id, totalCost);
       if (!riskAllowance.allowed) {
         this.lastExecutionFailureReason = `Session risk limit reached: ${riskAllowance.reason}`;
         console.warn(`[OrderService] Trade rejected: ${riskAllowance.reason}`);
         return null;
       }
     } else {
-      if (!session.isActive) {
+      if (!effectiveSession.isActive) {
         this.lastExecutionFailureReason = 'Session is inactive. Please re-authorize your session.';
         console.warn('[OrderService] Trade rejected: Session is inactive');
         return null;
       }
-      if (new Date(session.expiresAt).getTime() <= Date.now()) {
+      if (new Date(effectiveSession.expiresAt).getTime() <= Date.now()) {
         this.lastExecutionFailureReason = 'Session has expired. Please re-authorize your session.';
         console.warn('[OrderService] Trade rejected: Session has expired');
         return null;
       }
-      if (totalCost > session.maxTradeSize) {
-        this.lastExecutionFailureReason = `Trade cost ($${totalCost}) exceeds maxTradeSize ($${session.maxTradeSize})`;
-        console.warn(`[OrderService] Trade rejected: Trade cost (${totalCost}) exceeds maxTradeSize (${session.maxTradeSize})`);
+      if (totalCost > effectiveSession.maxTradeSize) {
+        this.lastExecutionFailureReason = `Trade cost ($${totalCost}) exceeds maxTradeSize ($${effectiveSession.maxTradeSize})`;
+        console.warn(`[OrderService] Trade rejected: Trade cost (${totalCost}) exceeds maxTradeSize (${effectiveSession.maxTradeSize})`);
         return null;
       }
-      if (session.spentToday + totalCost > session.dailyVolumeCap) {
+      if (effectiveSession.spentToday + totalCost > effectiveSession.dailyVolumeCap) {
         this.lastExecutionFailureReason = 'Trade cost exceeds dailyVolumeCap';
         console.warn(`[OrderService] Trade rejected: Trade cost exceeds dailyVolumeCap`);
         return null;
@@ -1023,7 +1062,7 @@ export class OrderService {
     }
 
     const operatorAddress = operatorAccount.address;
-    const targetTrader = (session.userAddress as Address) || operatorAddress;
+    const targetTrader = (effectiveSession.userAddress as Address) || operatorAddress;
     const isOperatorMaster = targetTrader.toLowerCase() === operatorAddress.toLowerCase();
 
     // Assert pre-flight funding
@@ -1069,7 +1108,32 @@ export class OrderService {
         const one = 10n ** BigInt(SOMNIA_ADDRESSES.decimals);
         const priceYes = outcome === 'YES' ? rawPriceOwn : one - rawPriceOwn;
         const nowSec = Math.floor(Date.now() / 1000);
+        const nowNs = BigInt(Date.now()) * 1_000_000n;
         const onchainExpiry = Number(onchain.expiry || 0);
+
+        // Pre-flight check pool's real on-chain market expiry to prevent OrderAlreadyExpired (0x3154078e)
+        const poolExpiryNs = process.env.NODE_ENV !== 'test'
+          ? await publicClient.readContract({
+              address: onchain.pool,
+              abi: [
+                {
+                  type: 'function',
+                  name: 'marketExpiryNs',
+                  stateMutability: 'view',
+                  inputs: [],
+                  outputs: [{ type: 'uint64' }],
+                },
+              ] as const,
+              functionName: 'marketExpiryNs',
+            }).catch(() => 0n)
+          : 0n;
+
+        if (poolExpiryNs > 0n && poolExpiryNs <= nowNs + 10_000_000_000n) {
+          const secsLeft = Number(poolExpiryNs - nowNs) / 1e9;
+          this.lastExecutionFailureReason = `Market round has closed or is resolving on-chain (${secsLeft <= 0 ? 'expired' : secsLeft.toFixed(0) + 's remaining'}). Please select the next active market round.`;
+          console.info(`[OrderService] Pool ${onchain.pool} marketExpiryNs is expired or resolving (${secsLeft.toFixed(1)}s remaining), skipping on-chain placement`);
+          return null;
+        }
 
         const expiresAtSec = onchainExpiry > 0
           ? Math.min(nowSec + 300, onchainExpiry)
@@ -1077,10 +1141,13 @@ export class OrderService {
 
         if (expiresAtSec <= nowSec + 15 || (onchainExpiry > 0 && onchainExpiry <= nowSec + 15)) {
           console.info(`[OrderService] Market ${market?.id || onchain.pool} expires in <= 15s (expiry: ${expiresAtSec}, now: ${nowSec}), skipping on-chain placement`);
+          this.lastExecutionFailureReason = 'Market round has closed or is resolving. Please select the next active market round.';
           return null;
         }
 
-        const expireTimestampNs = BigInt(expiresAtSec) * 1_000_000_000n;
+        const expireTimestampNs = poolExpiryNs > 0n
+          ? poolExpiryNs
+          : BigInt(expiresAtSec) * 1_000_000_000n;
 
         if (isOperatorMaster) {
             const placeRes = await executeOperatorTx(() =>
@@ -1134,75 +1201,102 @@ export class OrderService {
               fillsQuantity = 0;
             }
           } else {
-            // Copy-trade execution:
-            // Collateral is pulled from user via transferFrom(targetTrader, operatorAddress, need)
+            // Copy-trade / Swarm / Delegated User Execution — NON-CUSTODIAL clone model:
+            // The clone holds its own funds, executes orders as itself, and
+            // owns positions/escrow directly. No operator transferFrom or custody.
             const tradeCost = (rawPriceOwn * rawQuantity) / one;
-            let collateralPulled = false;
-
-            const refundCollateralIfPulled = async () => {
-              if (collateralPulled && tradeCost > 0n && process.env.NODE_ENV !== 'test') {
-                try {
-                  const refHash = await executeOperatorWriteContract({
-                    address: SOMNIA_ADDRESSES.testUsdc,
-                    abi: ERC20_ABI,
-                    functionName: 'transfer',
-                    args: [targetTrader, tradeCost],
-                  });
-                  await publicClient.waitForTransactionReceipt({ hash: refHash, timeout: 60_000 });
-                  console.info(`[OrderService] Collateral of ${tradeCost} tUSDC auto-refunded to ${targetTrader} (tx: ${refHash})`);
-                } catch (refErr: any) {
-                  console.error(`[OrderService] CRITICAL: Collateral auto-refund to ${targetTrader} failed:`, refErr.message);
-                }
-              }
-            };
-
-            if (direction === 'BUY' && process.env.NODE_ENV !== 'test') {
-              try {
-                const tfHash = await executeOperatorWriteContract({
-                  address: SOMNIA_ADDRESSES.testUsdc,
-                  abi: ERC20_ABI,
-                  functionName: 'transferFrom',
-                  args: [targetTrader, operatorAddress, tradeCost],
-                });
-                if (tfHash) {
-                  collateralPulled = true;
-                }
-              } catch (tfErr: any) {
-                console.warn(`[OrderService] transferFrom failed for copy-trader ${targetTrader}:`, tfErr.message);
-                return null;
-              }
-            }
-
-            // Execute order placement via SDK
             let placeRes: any = null;
+
             try {
-              placeRes = await executeOperatorTx(() =>
-                somniaExchange.trader.placeOrder({
-                  pool: onchain.pool,
-                  side: binarySide,
-                  price: priceYes,
-                  quantity: rawQuantity,
-                  outcomeToken: onchain.outcomeToken,
-                  yesId: onchain.yesId,
-                  noId: onchain.noId,
-                  collateral: onchain.collateral || SOMNIA_ADDRESSES.collateral,
-                  orderType: orderTypeEnum,
-                  expireTimestampNs,
-                  gas: 10_000_000n,
-                }),
-              );
+              if ((!effectiveSession?.sessionKeyPrivateKey || !effectiveSession?.sessionKeyAddress) && process.env.NODE_ENV !== 'test') {
+                throw new Error(
+                  `No session key registered for trader ${targetTrader}. Re-authorize the session in the Session Modal to enable automated trading.`,
+                );
+              }
+
+              if (effectiveSession?.sessionKeyPrivateKey && effectiveSession?.sessionKeyAddress && process.env.NODE_ENV !== 'test') {
+                const sessionClient = createSessionWalletClient(effectiveSession.sessionKeyPrivateKey as Hex);
+                // Ephemeral session keys hold no STT on creation, so drip a
+                // Ephemeral session keys hold no STT on creation, so drip gas
+                // from the operator (~0.1 STT) when low to comfortably cover order placement.
+                try {
+                  const keyBalance = await publicClient.getBalance({
+                    address: effectiveSession.sessionKeyAddress as Address,
+                  });
+                  const SESSION_KEY_GAS_DRIP_WEI = 100_000_000_000_000_000n; // 0.1 STT
+                  const SESSION_KEY_MIN_BALANCE_WEI = 25_000_000_000_000_000n; // 0.025 STT (sufficient for ~4M gas at 6 gwei)
+                  if (keyBalance < SESSION_KEY_MIN_BALANCE_WEI) {
+                    const dripHash = await executeOperatorTx(() =>
+                      walletClient.sendTransaction({
+                        account: operatorAccount,
+                        chain: somniaShannonTestnet,
+                        to: effectiveSession.sessionKeyAddress as Address,
+                        value: SESSION_KEY_GAS_DRIP_WEI,
+                      }),
+                    );
+                    await publicClient.waitForTransactionReceipt({ hash: dripHash, timeout: 60_000 });
+                    console.info(`[OrderService] Funded ephemeral session key ${effectiveSession.sessionKeyAddress} with gas drip (tx: ${dripHash})`);
+                  }
+                } catch (dripErr: any) {
+                  console.warn(`[OrderService] Session-key gas drip notice for ${effectiveSession.sessionKeyAddress}:`, dripErr?.message || dripErr);
+                }
+
+                const resolvedClone = (effectiveSession.accountAddress && isAddress(effectiveSession.accountAddress))
+                  ? getAddress(effectiveSession.accountAddress)
+                  : await resolveSessionAccount(targetTrader).catch(() => null);
+
+                if (!resolvedClone) {
+                  throw new Error(
+                    `No trading account clone found for trader ${targetTrader}. Please authorize a session to deploy your trading account.`,
+                  );
+                }
+
+                // Check isolated clone vault balance
+                const cloneBal = await somniaExchange.client.getErc20Balance(SOMNIA_ADDRESSES.testUsdc, resolvedClone).catch(() => 0n);
+                if (cloneBal < tradeCost) {
+                  const availHuman = (Number(cloneBal) / 1e6).toFixed(2);
+                  const costHuman = (Number(tradeCost) / 1e6).toFixed(2);
+                  console.info(`[OrderService] [${source}] Trade skipped for ${targetTrader} on ${onchain.pool}: Trading Account balance ($${availHuman}) is less than trade cost ($${costHuman}). Please deposit funds into your Trading Account Vault.`);
+                  this.lastExecutionFailureReason = `Insufficient Trading Account Vault balance ($${availHuman} available, $${costHuman} needed). Please deposit into your Trading Account.`;
+                  return null;
+                }
+
+                const callData = encodeFunctionData({
+                  abi: BINARY_POOL_SELF_WRITE_ABI,
+                  functionName: 'placeBinaryOrder',
+                  args: [
+                    BINARY_ORDER_KIND[binarySide] ?? 0,
+                    priceYes,
+                    rawQuantity,
+                    expireTimestampNs,
+                    orderTypeEnum,
+                    0,
+                    '0x0000000000000000000000000000000000000000',
+                    0n,
+                    0n,
+                  ],
+                });
+
+                const sessionTxHash = await (sessionClient as any).writeContract({
+                  address: resolvedClone,
+                  abi: SESSION_CLONE_ABI,
+                  functionName: 'executeOrder',
+                  args: [onchain.pool, callData, tradeCost],
+                  gas: 4_000_000n,
+                });
+
+                const receipt = await publicClient.waitForTransactionReceipt({ hash: sessionTxHash, timeout: 60_000 });
+                placeRes = { hash: sessionTxHash, receipt, fills: [{ quantityFilled: rawQuantity }] };
+              }
 
               if (placeRes?.receipt?.status === 'reverted') {
-                await refundCollateralIfPulled();
-                throw new Error(`Copy-trade placement reverted on-chain (tx: ${placeRes.hash})`);
+                throw new Error(`Order placement reverted on-chain (tx: ${placeRes.hash})`);
               }
               if (placeRes && (placeRes as any).success === false) {
-                console.info(`[OrderService] Copy-trade order silently rejected (success=false) for ${onchain.pool} — refunding collateral`);
-                await refundCollateralIfPulled();
+                console.info(`[OrderService] Order silently rejected (success=false) for ${onchain.pool} — pool auto-pull left clone funds untouched`);
                 return null;
               }
             } catch (pErr: any) {
-              await refundCollateralIfPulled();
               throw pErr;
             }
 
@@ -1232,83 +1326,59 @@ export class OrderService {
               fillsQuantity = 0;
             }
 
-            // For taker IOC BUY copy-trades where partial fill occurred, refund unfilled collateral
-            if (!isMaker && direction === 'BUY' && collateralPulled && copyFilledRaw < rawQuantity && process.env.NODE_ENV !== 'test') {
-              const actualCost = (rawPriceOwn * copyFilledRaw) / one;
-              const refundAmount = tradeCost > actualCost ? tradeCost - actualCost : 0n;
-              if (refundAmount > 0n) {
-                try {
-                  const refHash = await executeOperatorWriteContract({
-                    address: SOMNIA_ADDRESSES.testUsdc,
-                    abi: ERC20_ABI,
-                    functionName: 'transfer',
-                    args: [targetTrader, refundAmount],
-                  });
-                  await publicClient.waitForTransactionReceipt({ hash: refHash, timeout: 60_000 });
-                  console.info(`[OrderService] Unfilled IOC collateral of ${refundAmount} tUSDC refunded to ${targetTrader} (tx: ${refHash})`);
-                } catch (refErr: any) {
-                  console.error(`[OrderService] Collateral refund for unfilled IOC to ${targetTrader} failed:`, refErr.message);
-                }
-              }
-            }
-
-            // For SELL copy-trades, return proceeds to user
-            if (direction === 'SELL' && copyFilledRaw > 0n) {
-              const proceeds = (rawPriceOwn * copyFilledRaw) / one;
-              if (proceeds > 0n) {
-                try {
-                  await executeOperatorWriteContract({
-                    address: SOMNIA_ADDRESSES.testUsdc,
-                    abi: ERC20_ABI,
-                    functionName: 'transfer',
-                    args: [targetTrader, proceeds],
-                  });
-                } catch (trErr: any) {
-                  console.warn(`[OrderService] Transfer proceeds failed to copy-trader ${targetTrader}:`, trErr?.message || trErr);
-                }
-              }
-            }
+            // Non-custodial: the pool auto-pulls exactly the filled escrow from
+            // the clone and auto-delivers fills/proceeds to it. There is nothing
+            // to pull, refund, or forward — the operator never holds user funds.
           }
       } catch (err: any) {
         const msg: string = err?.message || String(err);
         this.lastExecutionFailureReason = `On-chain order placement failed: ${msg}`;
-        const isAllowanceError = msg.includes('Insufficient TestUSDC allowance') || msg.includes('allowance') || msg.includes('ERC20InsufficientAllowance');
-        const isCollateralError = msg.includes('Insufficient collateral') || msg.includes('ERC20InsufficientBalance') || msg.includes('insufficient balance');
-        const isTimeoutError = msg.includes('Timed out while waiting') || msg.includes('timeout') || msg.includes('waitForTransactionReceipt');
         const isGasFundsError = msg.includes('insufficient funds for gas') || msg.includes('insufficient native balance') || msg.includes('exceeds balance') || msg.includes('Insufficient native STT gas balance');
+        const isAllowanceError = !isGasFundsError && (msg.includes('Insufficient TestUSDC allowance') || msg.includes('allowance') || msg.includes('ERC20InsufficientAllowance'));
+        const isCollateralError = !isGasFundsError && (msg.includes('Insufficient collateral') || msg.includes('ERC20InsufficientBalance') || (msg.includes('insufficient balance') && !msg.includes('gas')));
+        const isTimeoutError = msg.includes('Timed out while waiting') || msg.includes('timeout') || msg.includes('waitForTransactionReceipt');
         const isOutOfGasError = msg.includes('out of gas') || msg.includes('OUT_OF_GAS') || msg.includes('gas limit reached');
+
+        const resolvedClone = effectiveSession?.accountAddress || (await resolveSessionAccount(targetTrader).catch(() => null));
+        const hasClone = Boolean(resolvedClone);
 
         if (isAllowanceError || isCollateralError) {
           this.lastExecutionFailureReason = isAllowanceError
-            ? 'TestUSDC allowance to operator is required. Please re-authorize your session in the Session Modal.'
-            : 'Insufficient TestUSDC balance in wallet to cover order cost.';
-          console.warn(`[OrderService] Copy-trade skipped for ${targetTrader} on ${onchain?.pool}: ${msg.slice(0, 900)} — user must ensure TestUSDC balance and operator allowance via frontend.`);
+            ? (hasClone
+                ? 'TestUSDC allowance to your Smart Account Clone is required. Please approve the clone in the Session Modal.'
+                : 'TestUSDC allowance to the market pool is required. Please approve the pool in the Session Modal.')
+            : (hasClone
+                ? 'Insufficient TestUSDC in your Trading Account Vault. Please deposit funds into your Trading Account.'
+                : 'Insufficient TestUSDC balance in wallet to cover order cost.');
+          console.warn(`[OrderService] [${source}] Order placement skipped for ${targetTrader} on ${onchain?.pool}: ${msg.slice(0, 900)} — user must ensure TestUSDC balance and pool allowance via frontend.`);
+          return null;
+        }
+        if (isGasFundsError) {
+          this.lastExecutionFailureReason = 'Insufficient native STT gas balance to execute transaction. Please fund wallet with STT.';
+          console.warn(`[OrderService] [${source}] Gas shortage for ${targetTrader}: ${msg.slice(0, 500)}`);
           return null;
         }
         if (isTimeoutError) {
-          console.warn(`[OrderService] Copy-trade receipt timeout for ${targetTrader} on ${onchain?.pool}: ${msg.slice(0, 500)} — not marking pool as failed.`);
+          console.warn(`[OrderService] [${source}] Receipt timeout for ${targetTrader} on ${onchain?.pool}: ${msg.slice(0, 500)} — not marking pool as failed.`);
           return null;
         }
 
         const shouldLog = recordOnChainRevert();
-        // Per-pool cooldown only for genuine on-chain reverts where gas was burned and retry would waste more
         if (onchain?.pool) {
           poolFailureUntil.set(onchain.pool.toLowerCase(), Date.now() + POOL_FAILURE_COOLDOWN_MS);
         }
         if (msg.includes('ImmediateOrCancelNoFill')) {
           this.lastExecutionFailureReason = 'No matching counterparty liquidity found on the order book at this price (Immediate-Or-Cancel unfilled). Please place a Limit order or adjust price.';
           if (shouldLog) console.info(`[OrderService] IOC trade skipped: no crossing liquidity on CLOB book at tick ${quantizedPrice}`);
-        } else if (isCollateralError) {
-          if (shouldLog) console.warn(`[OrderService] Insufficient ERC20 collateral balance for ${targetTrader}: ${msg}`);
-          if (isOperatorMaster) ensureOperatorCollateral().catch(() => {});
-        } else if (isGasFundsError) {
-          const now = Date.now();
-          if (now - lastGasWarningTime > GAS_WARN_THROTTLE_MS) {
-            lastGasWarningTime = now;
-            console.warn(
-              `[OrderService] Operator wallet (${operatorAddress}) has low or zero STT for gas. Fund the operator address on Somnia Shannon Testnet to enable live on-chain trades.`,
-            );
-          }
+        } else if (msg.includes('0x3154078e') || msg.includes('OrderAlreadyExpired') || msg.includes('OrderExpiryBeyondMarket')) {
+          this.lastExecutionFailureReason = 'Market round has closed or expired on-chain. Please select the next active market round.';
+          if (shouldLog) console.info(`[OrderService] Order skipped on ${onchain?.pool}: market round has expired`);
+        } else if (msg.includes('0x27406db9') || msg.includes('SelectorNotAllowed')) {
+          this.lastExecutionFailureReason = 'Smart Account Clone trading selector not allowed on-chain. Please re-authorize session on the latest deployment.';
+          if (shouldLog) console.warn(`[OrderService] Clone selector rejected for ${targetTrader}`);
+        } else if (msg.includes('Missing or invalid parameters')) {
+          this.lastExecutionFailureReason = 'Execution rejected on-chain. The market round may have closed or counterparty liquidity moved. Please refresh and try the active market.';
+          if (shouldLog) console.warn(`[OrderService] On-chain placeOrder rejected for ${targetTrader}:`, msg.slice(0, 800));
         } else if (isOutOfGasError) {
           if (shouldLog) console.warn(`[OrderService] Transaction ran out of gas on ${onchain?.pool}: ${msg.slice(0, 500)}`);
         } else {
@@ -1356,8 +1426,8 @@ export class OrderService {
     const orderExecution: OrderExecution = {
       id: orderId,
       onchainOrderId,
-      userAddress: session.userAddress,
-      sessionId: session.id,
+      userAddress: effectiveSession.userAddress,
+      sessionId: effectiveSession.id,
       customAgentId: decision.customAgentId,
       customAgentName: resolvedCustomName,
       marketId: decision.targetMarketId,
@@ -1390,9 +1460,9 @@ export class OrderService {
 
     // Record spend against session now that order has executed (use actual filled cost)
     if (registeredSession) {
-      await sessionService.recordTradeSpend(session.id, actualTotalCost);
+      await sessionService.recordTradeSpend(effectiveSession.id, actualTotalCost);
     } else {
-      session.spentToday = Number((session.spentToday + actualTotalCost).toFixed(4));
+      effectiveSession.spentToday = Number((effectiveSession.spentToday + actualTotalCost).toFixed(4));
     }
 
     // Store in-memory with bounded capacity (evict oldest; history remains in Supabase for analytics/pagination)
@@ -1403,7 +1473,7 @@ export class OrderService {
       this.registerRestingMakerQuote({
         orderId,
         marketId: decision.targetMarketId,
-        userAddress: session.userAddress.toLowerCase(),
+        userAddress: effectiveSession.userAddress.toLowerCase(),
         agentType: effectiveAgentType,
         outcome,
         direction,
@@ -1416,7 +1486,7 @@ export class OrderService {
     // Broadcast order fill event over WebSocket telemetry stream
     if (orderStatus === 'FILLED' || orderStatus === 'PARTIALLY_FILLED') {
       telemetryWsGateway.broadcastOrderFilled({
-        userAddress: session.userAddress,
+        userAddress: effectiveSession.userAddress,
         orderId,
         marketId: decision.targetMarketId,
         agentType: effectiveAgentType,
@@ -1434,16 +1504,16 @@ export class OrderService {
     // Persist to Supabase asynchronously
     if (
       this.isPersistenceEnabled() &&
-      isAddress(session.userAddress) &&
+      isAddress(effectiveSession.userAddress) &&
       txHash !== '0x1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef'
     ) {
       try {
         await marketService.ensureMarketPersisted(decision.targetMarketId, market?.symbol);
-        const isUuid = session.id && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(session.id);
+        const isUuid = effectiveSession.id && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(effectiveSession.id);
         const insertPayload: any = {
           id: orderId,
-          user_address: session.userAddress,
-          session_id: isUuid ? session.id : null,
+          user_address: effectiveSession.userAddress,
+          session_id: isUuid ? effectiveSession.id : null,
           market_id: decision.targetMarketId,
           agent_type: effectiveAgentType,
           source,
@@ -1668,35 +1738,49 @@ export class OrderService {
       }
     }
 
-    // Check user's on-chain TestUSDC balance and operator allowance
+    // Check trading account clone TestUSDC balance (non-custodial model)
     const userAddress = getAddress(params.userAddress);
-    const operatorAddress = operatorAccount.address;
     const one = 10n ** BigInt(SOMNIA_ADDRESSES.decimals);
     const needRaw = (rawPriceOwn * rawQuantity) / one;
 
     if (process.env.NODE_ENV !== 'test') {
       try {
-        const [userBalanceRaw, userAllowanceRaw] = await Promise.all([
-          somniaExchange.client.getErc20Balance(SOMNIA_ADDRESSES.testUsdc, userAddress).catch(() => null),
-          publicClient.readContract({
-            address: SOMNIA_ADDRESSES.testUsdc,
-            abi: ERC20_ABI,
-            functionName: 'allowance',
-            args: [userAddress, operatorAddress],
-          }).catch(() => null),
-        ]);
+        const cloneAccount = (session?.accountAddress && isAddress(session.accountAddress))
+          ? getAddress(session.accountAddress)
+          : await resolveSessionAccount(userAddress).catch(() => null);
 
-        if (userBalanceRaw !== null && userBalanceRaw < needRaw) {
-          const balHuman = (Number(userBalanceRaw) / 1e6).toFixed(2);
-          const needHuman = (Number(needRaw) / 1e6).toFixed(2);
-          throw new Error(`Insufficient TestUSDC balance in wallet ($${balHuman} available, $${needHuman} needed). Please claim 1,000 TestUSDC from the faucet in the header.`);
-        }
+        if (cloneAccount) {
+          const cloneBalRaw = await somniaExchange.client.getErc20Balance(SOMNIA_ADDRESSES.testUsdc, cloneAccount).catch(() => null);
+          if (cloneBalRaw !== null && cloneBalRaw < needRaw) {
+            const availHuman = (Number(cloneBalRaw) / 1e6).toFixed(2);
+            const needHuman = (Number(needRaw) / 1e6).toFixed(2);
+            throw new Error(`Insufficient Trading Wallet balance ($${availHuman} available, $${needHuman} needed). Please deposit TestUSDC into your Trading Wallet.`);
+          }
+        } else {
+          // If no clone deployed yet, check wallet balance and operator allowance fallback
+          const operatorAddress = operatorAccount.address;
+          const [userBalanceRaw, userAllowanceRaw] = await Promise.all([
+            somniaExchange.client.getErc20Balance(SOMNIA_ADDRESSES.testUsdc, userAddress).catch(() => null),
+            publicClient.readContract({
+              address: SOMNIA_ADDRESSES.testUsdc,
+              abi: ERC20_ABI,
+              functionName: 'allowance',
+              args: [userAddress, operatorAddress],
+            }).catch(() => null),
+          ]);
 
-        if (userAllowanceRaw !== null && userAllowanceRaw < needRaw) {
-          throw new Error(`TestUSDC allowance to operator is required for zero-gas trading. Please click 'Approve Collateral' or re-authorize your session in the Session Modal.`);
+          if (userBalanceRaw !== null && userBalanceRaw < needRaw) {
+            const balHuman = (Number(userBalanceRaw) / 1e6).toFixed(2);
+            const needHuman = (Number(needRaw) / 1e6).toFixed(2);
+            throw new Error(`Insufficient TestUSDC balance in wallet ($${balHuman} available, $${needHuman} needed). Please claim 1,000 TestUSDC from the faucet in the header or deposit into your Trading Wallet.`);
+          }
+
+          if (userAllowanceRaw !== null && userAllowanceRaw < needRaw) {
+            throw new Error(`Trading account or TestUSDC allowance required for zero-gas trading. Please deposit into your Trading Wallet or authorize in the Session Modal.`);
+          }
         }
       } catch (fundErr: any) {
-        if (fundErr.message?.includes('Insufficient') || fundErr.message?.includes('allowance')) {
+        if (fundErr.message?.includes('Insufficient') || fundErr.message?.includes('Trading Wallet') || fundErr.message?.includes('allowance')) {
           throw fundErr;
         }
       }

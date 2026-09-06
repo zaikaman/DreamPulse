@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
-import type { Address } from 'viem';
+import { isAddress, getAddress, parseUnits, type Address } from 'viem';
 import { useAccount, useDisconnect, useSwitchChain } from 'wagmi';
 import { useConnectModal } from '@rainbow-me/rainbowkit';
 import type { SessionGrant } from '../types/index.js';
@@ -47,10 +47,12 @@ export interface AllowanceStatus {
 export interface UseSessionKeyReturn {
   wallet: WalletState;
   activeSession: SessionGrant | null;
+  cloneAddress: Address | null;
+  cloneBalance: string;
   isLoading: boolean;
   isSigning: boolean;
   isFauceting: boolean;
-  stepState: 'idle' | 'authorizing_onchain' | 'depositing_vault' | 'signing_eip712' | 'registering_backend';
+  stepState: 'idle' | 'deploying_clone' | 'approving_clone' | 'authorizing_onchain' | 'depositing_vault' | 'signing_eip712' | 'registering_backend';
   error: string | null;
   allowanceStatus: AllowanceStatus | null;
   isFixingAllowance: boolean;
@@ -68,6 +70,8 @@ export interface UseSessionKeyReturn {
   }) => Promise<SessionGrant>;
   revokeSession: (options?: { onChain?: boolean }) => Promise<void>;
   refreshSession: () => Promise<void>;
+  withdrawFromClone: (amount?: number) => Promise<void>;
+  depositToClone: (amount: number) => Promise<void>;
   setSessionCopyTrade: (enabled: boolean) => void;
   ensureAllowances: () => Promise<void>;
   refreshAllowanceStatus: (forceFresh?: boolean) => Promise<void>;
@@ -138,13 +142,15 @@ export function useSessionKey(): UseSessionKeyReturn {
   // SECURITY: memory-only. No localStorage hydration — prevents XSS from forging a session
   // by writing to localStorage before React mounts. Purge legacy key eagerly.
   const [activeSession, setActiveSession] = useState<SessionGrant | null>(null);
+  const [cloneAddress, setCloneAddress] = useState<Address | null>(null);
+  const [cloneBalance, setCloneBalance] = useState<string>('0.00');
 
   const [isLoading, setIsLoading] = useState<boolean>(false);
   const [isSigning, setIsSigning] = useState<boolean>(false);
   const [isFauceting, setIsFauceting] = useState<boolean>(false);
   const [isFixingAllowance, setIsFixingAllowance] = useState<boolean>(false);
   const [stepState, setStepState] = useState<
-    'idle' | 'authorizing_onchain' | 'depositing_vault' | 'signing_eip712' | 'registering_backend'
+    'idle' | 'deploying_clone' | 'approving_clone' | 'authorizing_onchain' | 'depositing_vault' | 'signing_eip712' | 'registering_backend'
   >('idle');
   const [error, setError] = useState<string | null>(null);
   const [allowanceStatus, setAllowanceStatus] = useState<AllowanceStatus | null>(null);
@@ -169,15 +175,22 @@ export function useSessionKey(): UseSessionKeyReturn {
       setActiveSession(null);
       return;
     }
-    // Re-check at expiry + every 60s as safety net against clock skew
-    const timeout = window.setTimeout(() => setActiveSession(null), msUntilExpiry + 500);
+    // Re-check at expiry + every 60s as safety net against clock skew.
+    // CAUTION: setTimeout delay is stored as a 32-bit signed int in JavaScript (max 2,147,483,647 ms ~24.8 days).
+    // Durations >= 24.8 days (such as default 30-day sessions: 2,592,000,000 ms) overflow and fire after 1ms,
+    // which was wiping activeSession immediately upon registration!
+    const MAX_TIMEOUT_MS = 2_147_483_647;
+    let timeout: number | null = null;
+    if (msUntilExpiry > 0 && msUntilExpiry < MAX_TIMEOUT_MS - 1000) {
+      timeout = window.setTimeout(() => setActiveSession(null), msUntilExpiry + 500);
+    }
     const interval = window.setInterval(() => {
       if (activeSession && new Date(activeSession.expiresAt).getTime() <= Date.now()) {
         setActiveSession(null);
       }
     }, 60_000);
     return () => {
-      window.clearTimeout(timeout);
+      if (timeout != null) window.clearTimeout(timeout);
       window.clearInterval(interval);
     };
   }, [activeSession?.expiresAt, activeSession?.id]);
@@ -250,9 +263,10 @@ export function useSessionKey(): UseSessionKeyReturn {
    */
   const refreshBalances = useCallback(async (address: Address) => {
     try {
-      const [stt, collateral] = await Promise.all([
+      const [stt, collateral, clone] = await Promise.all([
         web3Service.getSTTBalance(address),
         web3Service.getCollateralBalance(address),
+        web3Service.getCloneAddress(address).catch(() => null),
       ]);
 
       setWallet((prev) => ({
@@ -260,6 +274,14 @@ export function useSessionKey(): UseSessionKeyReturn {
         balanceSTT: parseFloat(stt).toFixed(4),
         balanceCollateral: parseFloat(collateral).toFixed(2),
       }));
+
+      setCloneAddress(clone);
+      if (clone) {
+        const bal = await web3Service.getCloneBalance({ cloneAddress: clone }).catch(() => 0n);
+        setCloneBalance((Number(bal) / 1e6).toFixed(2));
+      } else {
+        setCloneBalance('0.00');
+      }
     } catch (err) {
       console.warn('[useSessionKey] Balance fetch error:', err);
     }
@@ -273,14 +295,21 @@ export function useSessionKey(): UseSessionKeyReturn {
     try {
       const res = await apiClient.getAllowanceStatus(wallet.address, Boolean(forceFresh));
       if (res.success) {
+        if (res.accountAddress && isAddress(res.accountAddress)) {
+          setCloneAddress(getAddress(res.accountAddress) as Address);
+        }
+        if (typeof res.cloneBalanceHuman === 'number') {
+          setCloneBalance(res.cloneBalanceHuman.toFixed(2));
+        }
+
         const checks: AllowanceStatusCheck[] = Array.isArray(res.checks)
           ? res.checks
           : [
               {
-                pool: 'Global Operator & TestUSDC',
+                pool: 'Smart Account Clone',
                 allowanceHuman: res.allowanceOperatorHuman ?? 0,
                 balanceHuman: res.balanceHuman ?? 0,
-                vaultHuman: 0,
+                vaultHuman: res.cloneBalanceHuman ?? 0,
                 ready: Boolean(res.allReady),
               },
             ];
@@ -309,7 +338,23 @@ export function useSessionKey(): UseSessionKeyReturn {
     setIsFixingAllowance(true);
     setError(null);
     try {
-      await web3Service.ensureAllowancesForPools({ userAddress: wallet.address });
+      let currentClone = cloneAddress;
+      if (!currentClone) {
+        currentClone = await web3Service.getCloneAddress(wallet.address);
+        if (!currentClone) {
+          const deployRes = await apiClient.deployCloneAccount(wallet.address).catch(() => null);
+          if (deployRes?.accountAddress && isAddress(deployRes.accountAddress)) {
+            currentClone = getAddress(deployRes.accountAddress) as Address;
+            setCloneAddress(currentClone);
+          }
+        }
+      }
+      if (currentClone) {
+        await web3Service.ensureCloneAllowance({
+          userAddress: wallet.address,
+          cloneAddress: currentClone,
+        });
+      }
       await refreshAllowanceStatus(true);
       await refreshBalances(wallet.address);
     } catch (err: any) {
@@ -319,7 +364,7 @@ export function useSessionKey(): UseSessionKeyReturn {
     } finally {
       setIsFixingAllowance(false);
     }
-  }, [wallet.address, refreshAllowanceStatus, refreshBalances]);
+  }, [wallet.address, cloneAddress, refreshAllowanceStatus, refreshBalances]);
 
   /**
    * Fetches active session from backend API (service_role / RLS-hardened).
@@ -337,8 +382,8 @@ export function useSessionKey(): UseSessionKeyReturn {
     purgeLegacySessionStorage();
     try {
       const data = await apiClient.getActiveSession(address);
-      if (data?.success && data?.session) {
-        const s = data.session;
+      const s = data?.session || (data as any)?.activeSession;
+      if (data?.success && s) {
         const grant: SessionGrant = {
           id: s.id,
           userAddress: (s.userAddress || address) as `0x${string}`,
@@ -354,11 +399,18 @@ export function useSessionKey(): UseSessionKeyReturn {
           targetPoolAddress: s.targetPoolAddress,
           onChainAuthorized: s.onChainAuthorized === true,
           copyTradeEnabled: Boolean(s.copyTradeEnabled),
+          sessionKeyAddress: s.sessionKeyAddress,
+          sessionKeyPrivateKey: s.sessionKeyPrivateKey,
+          delegationContractAddress: s.delegationContractAddress,
+          accountAddress: s.accountAddress,
         };
 
         if (isSessionValid(grant, address)) {
           lastValidatedWalletRef.current = address;
           setActiveSession(grant);
+          if (s.accountAddress && isAddress(s.accountAddress)) {
+            setCloneAddress(getAddress(s.accountAddress) as Address);
+          }
           return;
         }
       }
@@ -492,19 +544,105 @@ export function useSessionKey(): UseSessionKeyReturn {
       let onChainTxHash: `0x${string}` | undefined;
 
       try {
-        // Step 1: On-Chain Operator & TestUSDC Authorization
-        setStepState('authorizing_onchain');
-        try {
-          const batchHash = await web3Service.batchSingleApproveAndGlobal({ userAddress: wallet.address });
-          if (batchHash) onChainTxHash = batchHash;
-        } catch (e: any) {
-          if (String(e?.message || '').includes('User rejected') || String(e?.message || '').includes('rejected')) {
-            throw e;
+        // Step 1: Ensure user has an isolated Smart Account Clone (backend sponsors deployment gas)
+        setStepState('deploying_clone');
+        let currentClone = cloneAddress;
+        if (!currentClone) {
+          currentClone = await web3Service.getCloneAddress(wallet.address);
+        }
+        if (!currentClone) {
+          try {
+            const deployRes = await apiClient.deployCloneAccount(wallet.address);
+            if (deployRes?.accountAddress && isAddress(deployRes.accountAddress)) {
+              currentClone = getAddress(deployRes.accountAddress) as Address;
+              setCloneAddress(currentClone);
+            }
+          } catch (deployErr: any) {
+            console.warn('[useSessionKey] Backend deploy-clone note:', deployErr?.message || deployErr);
           }
-          console.warn('[useSessionKey] batchSingleApproveAndGlobal notice:', e.message);
+        }
+        if (!currentClone) {
+          currentClone = await web3Service.getCloneAddress(wallet.address);
+          if (currentClone) setCloneAddress(currentClone);
         }
 
-        // Optional: Collateral vault deposit — only for SpotPools, BinaryPools use allowance only
+        // Step 2: One-time approval from wallet to the clone.
+        // In V2, this ONE single approval covers all 66+ pools forever.
+        setStepState('approving_clone');
+        if (currentClone) {
+          try {
+            const approveHash = await web3Service.ensureCloneAllowance({
+              userAddress: wallet.address,
+              cloneAddress: currentClone,
+            });
+            if (approveHash && !onChainTxHash) onChainTxHash = approveHash;
+          } catch (allowErr: any) {
+            if (String(allowErr?.message || '').includes('User rejected') || String(allowErr?.message || '').includes('rejected')) {
+              throw allowErr;
+            }
+            console.warn('[useSessionKey] Clone allowance note:', allowErr.message);
+          }
+        }
+
+        // Step 3: Authorize ephemeral session key on the clone with on-chain risk caps
+        setStepState('authorizing_onchain');
+        const ephemeralKey = web3Service.generateEphemeralSessionKey();
+
+        const clampedMaxTrade = Math.min(Math.max(1, params.maxTradeSize), 50);
+        const clampedDailyCap = Math.min(
+          Math.max(params.dailyVolumeCap, clampedMaxTrade),
+          500,
+        );
+        const clampedDurationHours = Math.min(Math.max(1, params.durationHours), 720);
+        if (
+          clampedMaxTrade !== params.maxTradeSize ||
+          clampedDailyCap !== params.dailyVolumeCap ||
+          clampedDurationHours !== params.durationHours
+        ) {
+          params = {
+            ...params,
+            maxTradeSize: clampedMaxTrade,
+            dailyVolumeCap: clampedDailyCap,
+            durationHours: clampedDurationHours,
+          };
+        }
+
+        if (currentClone) {
+          try {
+            const authRes = await web3Service.authorizeSessionOnClone({
+              userAddress: wallet.address,
+              cloneAddress: currentClone,
+              sessionKey: ephemeralKey.address,
+              maxTradeSize: params.maxTradeSize,
+              dailyVolumeCap: params.dailyVolumeCap,
+              durationHours: params.durationHours,
+            });
+            if (authRes?.hash) onChainTxHash = authRes.hash;
+          } catch (authErr: any) {
+            if (String(authErr?.message || '').includes('User rejected') || String(authErr?.message || '').includes('rejected')) {
+              throw authErr;
+            }
+            console.warn('[useSessionKey] authorizeSessionOnClone notice:', authErr.message);
+          }
+        } else {
+          try {
+            const authRes = await web3Service.authorizeSessionOnChain({
+              userAddress: wallet.address,
+              sessionKey: ephemeralKey.address,
+              maxTradeSize: params.maxTradeSize,
+              dailyVolumeCap: params.dailyVolumeCap,
+              durationHours: params.durationHours,
+            });
+            if (authRes?.hash) onChainTxHash = authRes.hash;
+          } catch (authErr: any) {
+            if (String(authErr?.message || '').includes('User rejected') || String(authErr?.message || '').includes('rejected')) {
+              throw authErr;
+            }
+            console.warn('[useSessionKey] authorizeSessionOnChain notice:', authErr.message);
+          }
+        }
+
+        // Optional vault deposit for SpotPools
         if (params.depositAmount && params.depositAmount > 0 && params.targetPool) {
           setStepState('depositing_vault');
           await web3Service.setupPoolVault({
@@ -515,7 +653,7 @@ export function useSessionKey(): UseSessionKeyReturn {
           });
         }
 
-        // Step 2: Fetch next session nonce & sign EIP-712 structured data in user's wallet for risk ceilings
+        // Step 4: EIP-712 structured data signing
         setStepState('signing_eip712');
         let nonce = 0;
         try {
@@ -523,9 +661,7 @@ export function useSessionKey(): UseSessionKeyReturn {
           if (typeof nonceRes?.nextNonce === 'number') {
             nonce = nonceRes.nextNonce;
           }
-        } catch (nonceErr) {
-          console.warn('[useSessionKey] Could not fetch next session nonce from backend, using fallback 0:', nonceErr);
-        }
+        } catch {}
 
         const now = Date.now();
         const expiresAt = new Date(now + params.durationHours * 3600 * 1000).toISOString();
@@ -556,6 +692,10 @@ export function useSessionKey(): UseSessionKeyReturn {
           targetPoolAddress: params.targetPool,
           onChainAuthorized: true,
           copyTradeEnabled: params.copyTradeEnabled,
+          sessionKeyAddress: ephemeralKey.address,
+          sessionKeyPrivateKey: ephemeralKey.privateKey,
+          delegationContractAddress: currentClone || SOMNIA_ADDRESSES.sessionAccount,
+          accountAddress: currentClone || undefined,
         });
 
         const createdSession: SessionGrant = {
@@ -574,14 +714,23 @@ export function useSessionKey(): UseSessionKeyReturn {
           targetPoolAddress: params.targetPool,
           onChainAuthorized: true,
           copyTradeEnabled: params.copyTradeEnabled ?? false,
+          sessionKeyAddress: ephemeralKey.address,
+          sessionKeyPrivateKey: ephemeralKey.privateKey,
+          delegationContractAddress: currentClone || SOMNIA_ADDRESSES.sessionAccount,
+          accountAddress: currentClone || undefined,
         };
 
         if (!isSessionValid(createdSession, wallet.address)) {
           throw new Error('Created session failed validation (expired or wallet mismatch)');
         }
+        if (currentClone) {
+          setCloneAddress(currentClone);
+        }
+        lastValidatedWalletRef.current = wallet.address;
         setActiveSession(createdSession);
         await refreshBalances(wallet.address);
         await refreshAllowanceStatus(true).catch(() => {});
+        await fetchActiveSession(wallet.address).catch(() => {});
 
         return createdSession;
       } catch (err: any) {
@@ -597,7 +746,7 @@ export function useSessionKey(): UseSessionKeyReturn {
   );
 
   /**
-   * Revokes the active session grant both on-chain and in backend.
+   * Revokes the active session grant both on-chain and in backend in exactly 1 transaction.
    */
   const revokeSession = useCallback(
     async (options?: { onChain?: boolean }) => {
@@ -608,11 +757,21 @@ export function useSessionKey(): UseSessionKeyReturn {
       try {
         const shouldRevokeOnChain = options && typeof options.onChain === 'boolean' ? options.onChain : true;
         if (shouldRevokeOnChain && wallet.address) {
-          await web3Service.revokeOperatorOnChain({
-            userAddress: wallet.address,
-            operator: SOMNIA_ADDRESSES.operatorAccount,
-            pool: activeSession.targetPoolAddress,
-          });
+          const targetClone = (activeSession.accountAddress || cloneAddress) as Address | undefined;
+          if (targetClone && activeSession.sessionKeyAddress) {
+            await web3Service.revokeSessionOnClone({
+              userAddress: wallet.address,
+              cloneAddress: targetClone,
+              sessionKey: activeSession.sessionKeyAddress,
+            });
+          } else if (activeSession.sessionKeyAddress) {
+            await web3Service.revokeSessionOnChain({
+              userAddress: wallet.address,
+              sessionKey: activeSession.sessionKeyAddress,
+            });
+          } else {
+            await web3Service.revokeSessionAccountGlobal({ userAddress: wallet.address });
+          }
         }
         await apiClient.revokeSession(activeSession.id);
         setActiveSession(null);
@@ -625,7 +784,7 @@ export function useSessionKey(): UseSessionKeyReturn {
         setIsLoading(false);
       }
     },
-    [activeSession, wallet.address]
+    [activeSession, cloneAddress, wallet.address]
   );
 
   const refreshSession = useCallback(async () => {
@@ -635,6 +794,77 @@ export function useSessionKey(): UseSessionKeyReturn {
       await refreshAllowanceStatus().catch(() => {});
     }
   }, [wallet.address, refreshBalances, fetchActiveSession, refreshAllowanceStatus]);
+
+  /**
+   * Withdraws funds from the Smart Account Clone to the user's connected wallet (owner-only).
+   */
+  const withdrawFromClone = useCallback(async (amount?: number) => {
+    if (!wallet.isConnected || !wallet.address) {
+      throw new Error('Please connect your Web3 wallet first.');
+    }
+    const currentClone = cloneAddress || (activeSession?.accountAddress as Address | undefined);
+    if (!currentClone) {
+      throw new Error('No smart account clone found for wallet.');
+    }
+    if (amount !== undefined && amount < 1.0) {
+      throw new Error('Minimum withdrawal amount is 1.00 tUSDC.');
+    }
+    setIsLoading(true);
+    setError(null);
+    try {
+      const amountRaw = amount && amount > 0 ? parseUnits(amount.toString(), 6) : undefined;
+      await web3Service.withdrawFromClone({
+        userAddress: wallet.address,
+        cloneAddress: currentClone,
+        amount: amountRaw,
+      });
+      await Promise.all([
+        refreshBalances(wallet.address),
+        refreshAllowanceStatus(true),
+      ]);
+    } catch (err: any) {
+      const parsed = parseWeb3Error(err);
+      setError(parsed.message);
+      throw err;
+    } finally {
+      setIsLoading(false);
+    }
+  }, [wallet.isConnected, wallet.address, cloneAddress, activeSession, refreshBalances, refreshAllowanceStatus]);
+
+  /**
+   * Deposits funds from the user's connected wallet into their Smart Account Clone.
+   */
+  const depositToClone = useCallback(async (amount: number) => {
+    if (!wallet.isConnected || !wallet.address) {
+      throw new Error('Please connect your Web3 wallet first.');
+    }
+    const currentClone = cloneAddress || (activeSession?.accountAddress as Address | undefined);
+    if (!currentClone) {
+      throw new Error('No smart account clone found for wallet. Please activate trading account first.');
+    }
+    if (!amount || amount <= 0) {
+      throw new Error('Deposit amount must be greater than 0.');
+    }
+    setIsLoading(true);
+    setError(null);
+    try {
+      await web3Service.depositToClone({
+        userAddress: wallet.address,
+        cloneAddress: currentClone,
+        amount,
+      });
+      await Promise.all([
+        refreshBalances(wallet.address),
+        refreshAllowanceStatus(true),
+      ]);
+    } catch (err: any) {
+      const parsed = parseWeb3Error(err);
+      setError(parsed.message);
+      throw err;
+    } finally {
+      setIsLoading(false);
+    }
+  }, [wallet.isConnected, wallet.address, cloneAddress, activeSession, refreshBalances, refreshAllowanceStatus]);
 
   // Synchronize state when Wagmi account or chain changes (mobile WalletConnect, extension, etc.)
   useEffect(() => {
@@ -801,9 +1031,16 @@ export function useSessionKey(): UseSessionKeyReturn {
               targetPoolAddress: newRow.target_pool_address,
               onChainAuthorized: newRow.on_chain_authorized === true,
               copyTradeEnabled: newRow.copy_trade_enabled === true,
+              sessionKeyAddress: newRow.session_key_address,
+              sessionKeyPrivateKey: newRow.session_key_private_key,
+              delegationContractAddress: newRow.delegation_contract_address,
+              accountAddress: newRow.account_address,
             };
             if (isSessionValid(updated, lower)) {
               setActiveSession(updated);
+              if (newRow.account_address && isAddress(newRow.account_address)) {
+                setCloneAddress(getAddress(newRow.account_address) as Address);
+              }
             }
           }
         },
@@ -826,19 +1063,27 @@ export function useSessionKey(): UseSessionKeyReturn {
               targetPoolAddress: updatedRow.target_pool_address,
               onChainAuthorized: updatedRow.on_chain_authorized === true,
               copyTradeEnabled: updatedRow.copy_trade_enabled === true,
+              sessionKeyAddress: updatedRow.session_key_address,
+              sessionKeyPrivateKey: updatedRow.session_key_private_key,
+              delegationContractAddress: updatedRow.delegation_contract_address,
+              accountAddress: updatedRow.account_address,
             };
             if (isSessionValid(updated, lower)) {
               setActiveSession(updated);
+              if (updatedRow.account_address && isAddress(updatedRow.account_address)) {
+                setCloneAddress(getAddress(updatedRow.account_address) as Address);
+              }
             } else {
-              setActiveSession(null);
+              setActiveSession((curr) => (curr?.id === updatedRow.id ? null : curr));
             }
           } else if (!updatedRow.is_active) {
-            setActiveSession(null);
+            // Only clear active session if the updated row was our current active session!
+            setActiveSession((curr) => (curr?.id === updatedRow.id ? null : curr));
           }
         },
         // onDelete
-        () => {
-          setActiveSession(null);
+        (oldRow: any) => {
+          setActiveSession((curr) => (curr?.id === oldRow?.id ? null : curr));
         },
       );
       if (cancelled && channel) {
@@ -969,6 +1214,8 @@ export function useSessionKey(): UseSessionKeyReturn {
   return {
     wallet,
     activeSession,
+    cloneAddress,
+    cloneBalance,
     isLoading,
     isSigning,
     isFauceting,
@@ -983,6 +1230,8 @@ export function useSessionKey(): UseSessionKeyReturn {
     createSession,
     revokeSession,
     refreshSession,
+    withdrawFromClone,
+    depositToClone,
     setSessionCopyTrade,
     ensureAllowances,
     refreshAllowanceStatus,

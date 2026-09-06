@@ -35,6 +35,8 @@ const SweeperControls = React.lazy(() => import('./components/SweeperControls.js
 const AnalyticsView = React.lazy(() => import('./components/dashboard/AnalyticsView.js').then((m) => ({ default: m.AnalyticsView })));
 const SessionDelegationModal = React.lazy(() => import('./components/SessionDelegationModal.js').then((m) => ({ default: m.SessionDelegationModal })));
 const OnboardingWizardModal = React.lazy(() => import('./components/onboarding/OnboardingWizardModal.js').then((m) => ({ default: m.OnboardingWizardModal })));
+const TradingWalletModal = React.lazy(() => import('./components/TradingWalletModal.js').then((m) => ({ default: m.TradingWalletModal })));
+const RiskManagementModal = React.lazy(() => import('./components/RiskManagementModal.js').then((m) => ({ default: m.RiskManagementModal })));
 
 export const App: React.FC = () => {
   const [activeNav, setActiveNav] = useState<DashboardViewType>('Landing');
@@ -66,6 +68,10 @@ export const App: React.FC = () => {
     stepState: sessionStepState,
     error: sessionError,
     allowanceStatus,
+    cloneAddress,
+    cloneBalance,
+    withdrawFromClone,
+    depositToClone,
     connectWallet,
     disconnectWallet,
     switchNetwork,
@@ -86,6 +92,19 @@ export const App: React.FC = () => {
 
   const [isSessionModalOpen, setIsSessionModalOpen] = useState<boolean>(false);
   const [sessionModalInitialRevoke, setSessionModalInitialRevoke] = useState<boolean>(false);
+  const [isTradingWalletModalOpen, setIsTradingWalletModalOpen] = useState<boolean>(false);
+  const [tradingWalletTab, setTradingWalletTab] = useState<'deposit' | 'withdraw'>('deposit');
+  const [isRiskModalOpen, setIsRiskModalOpen] = useState<boolean>(false);
+
+  const handleOpenTradingWallet = useCallback((tab: 'deposit' | 'withdraw' = 'deposit') => {
+    setTradingWalletTab(tab);
+    setIsTradingWalletModalOpen(true);
+  }, []);
+
+  const handleOpenRiskModal = useCallback(() => {
+    setIsRiskModalOpen(true);
+  }, []);
+
   const [forkedStrategyConfig, setForkedStrategyConfig] = useState<{
     agentType: AgentType;
     config?: Record<string, any>;
@@ -280,6 +299,11 @@ export const App: React.FC = () => {
             onOpenTradeTerminal={handleOpenTradeTerminal}
             wallet={wallet}
             activeSession={activeSession}
+            cloneAddress={cloneAddress}
+            cloneBalance={cloneBalance}
+            onWithdrawClone={withdrawFromClone}
+            onOpenTradingWallet={handleOpenTradingWallet}
+            onOpenRiskModal={handleOpenRiskModal}
             isFauceting={isSessionFauceting}
             onClaimFaucet={claimCollateralFaucet}
             onOpenSessionModal={handleOpenSessionModal}
@@ -438,6 +462,9 @@ export const App: React.FC = () => {
             <SweeperControls
               userAddress={wallet.address || undefined}
               onConnectWallet={connectWallet}
+              cloneAddress={cloneAddress}
+              cloneBalance={cloneBalance}
+              onWithdrawClone={withdrawFromClone}
             />
           </React.Suspense>
         ) : (
@@ -494,6 +521,10 @@ export const App: React.FC = () => {
           }}
           wallet={wallet}
           activeSession={activeSession}
+          cloneAddress={cloneAddress}
+          cloneBalance={cloneBalance}
+          onOpenTradingWallet={handleOpenTradingWallet}
+          onOpenRiskModal={handleOpenRiskModal}
           isSigning={isSessionSigning}
           isLoading={isSessionLoading}
           isFauceting={isSessionFauceting}
@@ -510,6 +541,37 @@ export const App: React.FC = () => {
           onEnsureAllowances={ensureAllowances}
           onRefreshAllowance={refreshAllowanceStatus}
           onClearError={clearSessionError}
+        />
+      </React.Suspense>
+
+      {/* Isolated Trading Account (Smart Clone) Deposit & Withdraw Modal */}
+      <React.Suspense fallback={null}>
+        <TradingWalletModal
+          isOpen={isTradingWalletModalOpen}
+          initialTab={tradingWalletTab}
+          onClose={() => setIsTradingWalletModalOpen(false)}
+          wallet={wallet}
+          cloneAddress={cloneAddress}
+          cloneBalance={cloneBalance}
+          onDeposit={depositToClone}
+          onWithdraw={withdrawFromClone}
+          onClaimFaucet={claimCollateralFaucet}
+          isFauceting={isSessionFauceting}
+        />
+      </React.Suspense>
+
+      {/* Decoupled Risk Management & Ceilings Modal */}
+      <React.Suspense fallback={null}>
+        <RiskManagementModal
+          isOpen={isRiskModalOpen}
+          onClose={() => setIsRiskModalOpen(false)}
+          activeSession={activeSession}
+          onUpdateRisk={async ({ maxTradeSize, dailyVolumeCap }) => {
+            if (wallet.address) {
+              await apiClient.updateSessionRisk(wallet.address, { maxTradeSize, dailyVolumeCap });
+              await refreshAllowanceStatus(true);
+            }
+          }}
         />
       </React.Suspense>
 

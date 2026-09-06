@@ -69,6 +69,10 @@ export interface SessionGrant {
   targetPoolAddress?: `0x${string}`;
   onChainAuthorized?: boolean;
   copyTradeEnabled?: boolean;
+  sessionKeyAddress?: `0x${string}`;
+  sessionKeyPrivateKey?: `0x${string}`;
+  delegationContractAddress?: `0x${string}`;
+  accountAddress?: `0x${string}`;
 }
 
 export interface AgentStrategy {
@@ -134,8 +138,21 @@ export interface SettlementSweep {
   claimedAt: string;
 }
 
-export interface SweeperSummary {
-  unclaimedAmount: number;
+export interface UserClaimablePosition {
+  marketId: string;
+  symbol?: string;
+  marketIdHex?: `0x${string}`;
+  winningOutcome: OutcomeType;
+  outcomeIdx?: 0 | 1;
+  outcomeToken?: `0x${string}`;
+  poolAddress?: `0x${string}`;
+  claimableAmount: number;
+  rawAmount?: string;
+  isVoided?: boolean;
+  status?: string;
+}
+
+export interface SweeperSummary {  unclaimedAmount: number;
   totalClaimedAllTime: number;
   claimableMarketsCount: number;
   confirmedSweepsCount: number;

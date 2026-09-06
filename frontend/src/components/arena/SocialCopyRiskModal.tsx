@@ -38,8 +38,8 @@ export interface SocialCopyRiskModalProps {
   onOpenSessionModal?: () => void;
 }
 
-const MAX_TRADE_PRESETS = [10, 25, 50, 100, 250, 500];
-const DAILY_CAP_PRESETS = [100, 250, 500, 1000, 2500, 5000];
+const MAX_TRADE_PRESETS = [5, 10, 25, 50];
+const DAILY_CAP_PRESETS = [50, 100, 250, 500];
 
 export const SocialCopyRiskModal: React.FC<SocialCopyRiskModalProps> = ({
   isOpen,
@@ -53,8 +53,8 @@ export const SocialCopyRiskModal: React.FC<SocialCopyRiskModalProps> = ({
   hasActiveSession = false,
   onOpenSessionModal,
 }) => {
-  const [maxTradeSize, setMaxTradeSize] = useState<number>(50);
-  const [dailyVolumeCap, setDailyVolumeCap] = useState<number>(500);
+  const [maxTradeSize, setMaxTradeSize] = useState<number>(25);
+  const [dailyVolumeCap, setDailyVolumeCap] = useState<number>(250);
   const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
@@ -63,11 +63,11 @@ export const SocialCopyRiskModal: React.FC<SocialCopyRiskModalProps> = ({
     if (isOpen && trader) {
       setErrorMsg(null);
       if (existingConfig) {
-        setMaxTradeSize(existingConfig.maxTradeSize ?? 50);
-        setDailyVolumeCap(existingConfig.dailyVolumeCap ?? 500);
+        setMaxTradeSize(Math.min(50, existingConfig.maxTradeSize ?? 25));
+        setDailyVolumeCap(Math.min(500, existingConfig.dailyVolumeCap ?? 250));
       } else {
-        setMaxTradeSize(50);
-        setDailyVolumeCap(500);
+        setMaxTradeSize(25);
+        setDailyVolumeCap(250);
       }
     }
   }, [isOpen, trader, existingConfig]);
@@ -82,12 +82,12 @@ export const SocialCopyRiskModal: React.FC<SocialCopyRiskModalProps> = ({
 
   // Handle Submit
   const handleSubmit = async () => {
-    if (maxTradeSize <= 0) {
-      setErrorMsg('Max trade size must be greater than 0 tUSDC');
+    if (maxTradeSize <= 0 || maxTradeSize > 50) {
+      setErrorMsg('Max trade size must be between 1 and 50 tUSDC');
       return;
     }
-    if (dailyVolumeCap <= 0) {
-      setErrorMsg('Daily volume cap must be greater than 0 tUSDC');
+    if (dailyVolumeCap <= 0 || dailyVolumeCap > 500) {
+      setErrorMsg('Daily volume cap must be between 1 and 500 tUSDC');
       return;
     }
     if (maxTradeSize > dailyVolumeCap) {
@@ -221,9 +221,9 @@ export const SocialCopyRiskModal: React.FC<SocialCopyRiskModalProps> = ({
             {/* Slider */}
             <input
               type="range"
-              min={5}
-              max={500}
-              step={5}
+              min={1}
+              max={50}
+              step={1}
               value={maxTradeSize}
               onChange={(e) => setMaxTradeSize(Number(e.target.value))}
               className="w-full h-1 bg-secondary/80 rounded appearance-none cursor-pointer accent-primary"
@@ -276,9 +276,9 @@ export const SocialCopyRiskModal: React.FC<SocialCopyRiskModalProps> = ({
             {/* Slider */}
             <input
               type="range"
-              min={50}
-              max={5000}
-              step={50}
+              min={10}
+              max={500}
+              step={10}
               value={dailyVolumeCap}
               onChange={(e) => setDailyVolumeCap(Number(e.target.value))}
               className="w-full h-1 bg-secondary/80 rounded appearance-none cursor-pointer accent-primary"

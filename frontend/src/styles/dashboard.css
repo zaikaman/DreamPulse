@@ -1934,10 +1934,15 @@ select.terminal-select option {
   box-shadow: 0 0 8px rgba(0, 255, 204, 0.15);
 }
 
-.duration-grid,
-.duration-grid-expanded {
+.duration-grid {
   display: grid;
   grid-template-columns: repeat(4, 1fr);
+  gap: 6px;
+}
+
+.duration-grid-expanded {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
   gap: 6px;
 }
 
@@ -2195,9 +2200,8 @@ select.terminal-select option {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  flex-wrap: wrap;
   gap: 12px;
-  padding: 8px 16px;
+  padding: 8px 14px;
   border-radius: var(--radius-lg);
   margin-bottom: 12px;
   background-color: hsl(var(--card) / 0.65);
@@ -2212,6 +2216,7 @@ select.terminal-select option {
   background-color: hsl(var(--card) / 0.65);
   border-color: hsl(var(--border) / 0.7);
   box-shadow: 0 4px 20px 0 rgba(0, 0, 0, 0.2);
+  padding: 6px 14px;
 }
 
 .session-status-banner.inactive {
@@ -2232,13 +2237,27 @@ select.terminal-select option {
 .session-banner-left {
   display: flex;
   align-items: center;
-  gap: 14px;
+  gap: 12px;
+  min-width: 0;
+}
+
+.session-banner-telemetry {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+
+.session-banner-controls {
+  display: flex;
+  align-items: center;
+  gap: 10px;
   min-width: 0;
 }
 
 .status-badge-dot {
-  width: 28px;
-  height: 28px;
+  width: 26px;
+  height: 26px;
   border-radius: 50%;
   display: flex;
   align-items: center;
@@ -2303,7 +2322,7 @@ select.terminal-select option {
 .session-banner-metrics {
   display: flex;
   align-items: center;
-  gap: 12px;
+  gap: 10px;
   flex-wrap: wrap;
 }
 
@@ -2312,12 +2331,14 @@ select.terminal-select option {
   flex-direction: column;
   gap: 2px;
   min-width: 0;
+  flex-shrink: 0;
 }
 
 .session-metric-divider {
   width: 1px;
-  height: 24px;
-  background: hsl(var(--border));
+  height: 20px;
+  background: hsl(var(--border) / 0.6);
+  flex-shrink: 0;
   display: none;
 }
 
@@ -2332,6 +2353,8 @@ select.terminal-select option {
   font-weight: 700;
   color: var(--muted-foreground);
   letter-spacing: 0.05em;
+  text-transform: uppercase;
+  white-space: nowrap;
 }
 
 .metric-value {
@@ -2339,6 +2362,7 @@ select.terminal-select option {
   font-weight: 700;
   color: #ffffff;
   font-family: var(--font-mono);
+  white-space: nowrap;
 }
 
 .operator-chip {
@@ -2347,12 +2371,13 @@ select.terminal-select option {
   gap: 4px;
   background: hsl(var(--secondary) / 0.6);
   border: 1px solid hsl(var(--border) / 0.6);
-  padding: 2px 7px;
+  padding: 2px 6px;
   border-radius: 4px;
   font-size: 10px;
   font-family: var(--font-mono);
   color: hsl(var(--foreground));
   cursor: pointer;
+  white-space: nowrap;
   transition: border-color 0.15s, background-color 0.15s;
 }
 
@@ -2366,20 +2391,23 @@ select.terminal-select option {
 }
 
 .budget-meter-item {
-  min-width: 170px;
+  min-width: 130px;
+  max-width: 175px;
+  flex: 1 1 auto;
 }
 
 .budget-label-row {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 8px;
+  gap: 6px;
 }
 
 .budget-numbers {
   font-size: 10px;
   color: var(--foreground);
   font-family: var(--font-mono);
+  white-space: nowrap;
 }
 
 .budget-progress-track {
@@ -2404,12 +2432,14 @@ select.terminal-select option {
   font-size: 10px;
   color: var(--muted-foreground);
   font-family: var(--font-mono);
+  white-space: nowrap;
 }
 
 .session-banner-actions {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 6px;
+  flex-shrink: 0;
 }
 
 .btn-banner-action {
@@ -2496,21 +2526,90 @@ select.terminal-select option {
   color: #ff3366;
 }
 
+/* Breakpoint rules for Session Status Bar Active State */
+@media (min-width: 1024px) {
+  .session-status-banner.active {
+    flex-direction: row;
+    align-items: center;
+    justify-content: space-between;
+    flex-wrap: nowrap;
+    gap: 16px;
+    padding: 8px 16px;
+  }
+  .session-status-banner.active .session-banner-left {
+    flex-shrink: 0;
+    flex-wrap: nowrap;
+    gap: 14px;
+  }
+  .session-status-banner.active .session-banner-actions {
+    flex-shrink: 0;
+    margin-left: auto;
+  }
+}
+
+@media (max-width: 1023px) and (min-width: 641px) {
+  .session-status-banner.active {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 10px;
+    padding: 10px 14px;
+  }
+  .session-status-banner.active .session-banner-left {
+    width: 100%;
+    justify-content: flex-start;
+    flex-wrap: wrap;
+    gap: 12px;
+  }
+  .session-status-banner.active .session-banner-actions {
+    width: 100%;
+    justify-content: flex-end;
+    align-items: center;
+    gap: 8px;
+    margin-left: 0;
+    padding-top: 8px;
+    border-top: 1px solid hsl(var(--border) / 0.35);
+  }
+}
+
+@media (max-width: 640px) {
+  .session-status-banner.active {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 10px;
+    padding: 10px 12px;
+  }
+  .session-status-banner.active .session-banner-left {
+    width: 100%;
+    flex-wrap: wrap;
+    gap: 10px;
+  }
+  .session-status-banner.active .session-banner-actions {
+    width: 100%;
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 6px;
+    padding-top: 8px;
+    border-top: 1px solid hsl(var(--border) / 0.35);
+  }
+  .session-status-banner.active .session-banner-actions button {
+    justify-content: center;
+    width: 100%;
+    padding-left: 4px;
+    padding-right: 4px;
+  }
+}
+
 @media (max-width: 768px) {
-  .session-status-banner {
+  .session-status-banner:not(.active) {
     flex-direction: column;
     align-items: flex-start;
     gap: 10px;
     padding: 10px 14px;
   }
-  .session-banner-left {
+  .session-status-banner:not(.active) .session-banner-left {
     width: 100%;
   }
-  .session-banner-metrics {
-    width: 100%;
-    gap: 10px;
-  }
-  .session-banner-actions {
+  .session-status-banner:not(.active) .session-banner-actions {
     width: 100%;
     justify-content: flex-end;
     flex-wrap: wrap;

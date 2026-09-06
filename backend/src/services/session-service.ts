@@ -1,13 +1,17 @@
 import { isAddress, getAddress, type Address, type Hex } from 'viem';
+import { privateKeyToAccount } from 'viem/accounts';
 import { supabase, isPersistenceEnabled } from '../config/supabase.js';
 import { SOMNIA_ADDRESSES, operatorAccount, publicClient } from '../config/somnia.js';
 import { userSwarmService } from './user-swarm-service.js';
 import {
   verifySessionDelegationSignature,
   validateZeroCustodyInvariants,
-  checkOnChainOperatorAuthorization,
-  probeOnChainOperatorAuthorization,
-  OPERATOR_SELECTORS,
+  getSessionAccount,
+  deployCloneForUser,
+  predictCloneForUser,
+  checkCloneSessionPolicy,
+  checkOnChainSessionPolicy,
+  CLONE_ZERO_ADDRESS,
 } from '../config/permissions-abi.js';
 
 function isSessionPersistenceEnabled(): boolean {
@@ -62,6 +66,11 @@ export interface SessionRecord {
   targetPoolAddress?: Address;
   onChainAuthorized?: boolean;
   copyTradeEnabled?: boolean;
+  sessionKeyAddress?: Address;
+  sessionKeyPrivateKey?: Hex;
+  delegationContractAddress?: Address;
+  /** V2 per-user trading account clone (owns positions, pulls escrow). */
+  accountAddress?: Address;
   createdAt: string;
   updatedAt: string;
 }
@@ -80,6 +89,10 @@ export interface RegisterSessionParams {
   targetPoolAddress?: string;
   onChainAuthorized?: boolean;
   copyTradeEnabled?: boolean;
+  sessionKeyAddress?: string;
+  sessionKeyPrivateKey?: string;
+  delegationContractAddress?: string;
+  accountAddress?: string;
 }
 
 export class SessionService {
@@ -120,6 +133,16 @@ export class SessionService {
                 existing.isActive = isActive;
                 existing.spentToday = Number(row.spent_today || 0);
                 existing.onChainAuthorized = row.on_chain_authorized === true;
+                existing.sessionKeyAddress = row.session_key_address
+                  ? (getAddress(row.session_key_address) as Address)
+                  : undefined;
+                existing.sessionKeyPrivateKey = (row.session_key_private_key as Hex) || undefined;
+                existing.delegationContractAddress = row.delegation_contract_address
+                  ? (getAddress(row.delegation_contract_address) as Address)
+                  : undefined;
+                existing.accountAddress = row.account_address
+                  ? (getAddress(row.account_address) as Address)
+                  : undefined;
                 existing.copyTradeEnabled = userSwarmService.hasUserConfig(row.user_address)
                   ? userSwarmService.isCopyTradeEnabled(row.user_address)
                   : (row.copy_trade_enabled === true);
@@ -190,6 +213,10 @@ export class SessionService {
         vaultDepositAmount: row.vault_deposit_amount ? Number(row.vault_deposit_amount) : undefined,
         targetPoolAddress: row.target_pool_address ? (getAddress(row.target_pool_address) as Address) : undefined,
         onChainAuthorized: row.on_chain_authorized === true,
+        sessionKeyAddress: row.session_key_address ? (getAddress(row.session_key_address) as Address) : undefined,
+        sessionKeyPrivateKey: (row.session_key_private_key as Hex) || undefined,
+        delegationContractAddress: row.delegation_contract_address ? (getAddress(row.delegation_contract_address) as Address) : undefined,
+        accountAddress: (row as any).account_address ? (getAddress((row as any).account_address) as Address) : undefined,
         copyTradeEnabled: userSwarmService.hasUserConfig(row.user_address)
           ? userSwarmService.isCopyTradeEnabled(row.user_address)
           : (row.copy_trade_enabled === true),
@@ -340,43 +367,41 @@ export class SessionService {
       }
     }
 
-    // Verify on-chain operator authorization on Somnia Shannon Testnet if on-chain check available
+    // V2 clone model: the user's trading account clone owns positions and
+    // pulls escrow. Authorization = clone deployed for the user + live
+    // per-key policy on the clone. No registry grant, no pool approvals.
     let onChainAuthorized = params.onChainAuthorized ?? false;
     let targetPoolAddress: Address | undefined;
     if (params.targetPoolAddress && isAddress(params.targetPoolAddress)) {
       targetPoolAddress = getAddress(params.targetPoolAddress) as Address;
     }
 
-    try {
-      const isAuthed = await checkOnChainOperatorAuthorization(
-        normalizedUser,
-        normalizedOperator,
-        targetPoolAddress,
-        OPERATOR_SELECTORS.placeOrderFor,
-      );
-      if (isAuthed) {
-        onChainAuthorized = true;
-      } else if (params.onChainTxHash) {
-        const isTxVerified = await verifyTxHashOnChain(params.onChainTxHash, normalizedUser);
-        if (isTxVerified) {
-          const recheckAuthed = await checkOnChainOperatorAuthorization(
-            normalizedUser,
-            normalizedOperator,
-            targetPoolAddress,
-            OPERATOR_SELECTORS.placeOrderFor,
-          ).catch(() => false);
-          onChainAuthorized = recheckAuthed || (params.onChainAuthorized ?? false);
-        } else {
-          if (params.onChainAuthorized !== true) {
-            onChainAuthorized = false;
+    let accountAddress: Address | undefined = params.accountAddress && isAddress(params.accountAddress)
+      ? (getAddress(params.accountAddress) as Address)
+      : undefined;
+    const isSessionKeyGrant = Boolean(params.sessionKeyAddress && isAddress(params.sessionKeyAddress));
+    if (isSessionKeyGrant || params.accountAddress) {
+      try {
+        const factoryAccount = await this.getOrCreateClone(normalizedUser);
+        if (factoryAccount && factoryAccount.toLowerCase() !== CLONE_ZERO_ADDRESS.toLowerCase()) {
+          if (accountAddress && accountAddress.toLowerCase() !== factoryAccount.toLowerCase()) {
+            throw new Error(`accountAddress ${accountAddress} is not the registered trading account for ${normalizedUser}`);
           }
+          accountAddress = factoryAccount;
+        }
+      } catch (err: any) {
+        if (err?.message?.startsWith('accountAddress')) throw err;
+        if (process.env.NODE_ENV !== 'test') {
+          console.warn('[SessionService] Clone lookup/deployment warning:', err?.message || err);
         }
       }
-    } catch {
-      if (params.onChainTxHash && params.onChainAuthorized !== true) {
-        const isTxVerified = await verifyTxHashOnChain(params.onChainTxHash, normalizedUser);
-        onChainAuthorized = isTxVerified;
-      }
+    }
+
+    // A verified user-sent tx (clone authorize/approve/deploy) from the owner
+    // counts toward authorization when the clone is not yet readable.
+    if (!onChainAuthorized && params.onChainTxHash) {
+      const isTxVerified = await verifyTxHashOnChain(params.onChainTxHash, normalizedUser);
+      if (isTxVerified) onChainAuthorized = params.onChainAuthorized ?? true;
     }
 
     // Deactivate previous active sessions for this user
@@ -412,6 +437,60 @@ export class SessionService {
       await userSwarmService.upsertConfig(normalizedUser, { copyTradeEnabled: params.copyTradeEnabled }).catch(() => {});
     }
 
+    const sessionKeyAddress = params.sessionKeyAddress && isAddress(params.sessionKeyAddress)
+      ? (getAddress(params.sessionKeyAddress) as Address)
+      : undefined;
+    let sessionKeyPrivateKey = params.sessionKeyPrivateKey?.startsWith('0x')
+      ? (params.sessionKeyPrivateKey as Hex)
+      : undefined;
+    // SECURITY: the relay signs with this key — reject a mismatched pair instead
+    // of storing a key that can never authorize on-chain (fail-closed).
+    if (sessionKeyAddress && sessionKeyPrivateKey) {
+      try {
+        const derived = privateKeyToAccount(sessionKeyPrivateKey).address;
+        if (derived.toLowerCase() !== sessionKeyAddress.toLowerCase()) {
+          throw new Error(
+            `sessionKeyPrivateKey does not correspond to sessionKeyAddress ${sessionKeyAddress}`,
+          );
+        }
+      } catch (err: any) {
+        if (err?.message?.startsWith('sessionKeyPrivateKey does not correspond')) throw err;
+        throw new Error(`Invalid sessionKeyPrivateKey: ${err?.message || err}`);
+      }
+    } else if (!sessionKeyAddress) {
+      // No session key for this grant — drop any stray key material.
+      sessionKeyPrivateKey = undefined;
+    }
+    // In V2, the delegation contract for session keys is the user's clone (when deployed),
+    // or an explicitly supplied contract address (e.g. tests or legacy singleton).
+    const delegationContractAddress = (params.delegationContractAddress && isAddress(params.delegationContractAddress))
+      ? (getAddress(params.delegationContractAddress) as Address)
+      : (sessionKeyAddress ? accountAddress : undefined);
+
+    if (sessionKeyAddress && accountAddress) {
+      try {
+        const onChainPolicy = await checkCloneSessionPolicy(accountAddress, sessionKeyAddress);
+        if (onChainPolicy && onChainPolicy.isActive) {
+          onChainAuthorized = true;
+        }
+      } catch (policyErr: any) {
+        if (process.env.NODE_ENV !== 'test') {
+          console.warn('[SessionService] Clone session policy check warning:', policyErr?.message || policyErr);
+        }
+      }
+    } else if (sessionKeyAddress && !accountAddress) {
+      try {
+        const onChainPolicy = await checkOnChainSessionPolicy(normalizedUser, sessionKeyAddress);
+        if (onChainPolicy && onChainPolicy.isActive) {
+          onChainAuthorized = true;
+        }
+      } catch (policyErr: any) {
+        if (process.env.NODE_ENV !== 'test') {
+          console.warn('[SessionService] On-chain session policy check warning:', policyErr?.message || policyErr);
+        }
+      }
+    }
+
     const sessionId = crypto.randomUUID();
     const sessionRecord: SessionRecord = {
       id: sessionId,
@@ -431,6 +510,10 @@ export class SessionService {
       targetPoolAddress,
       onChainAuthorized,
       copyTradeEnabled: params.copyTradeEnabled ?? userSwarmService.isCopyTradeEnabled(normalizedUser),
+      sessionKeyAddress,
+      sessionKeyPrivateKey,
+      delegationContractAddress,
+      accountAddress,
       createdAt: new Date(now).toISOString(),
       updatedAt: new Date(now).toISOString(),
     };
@@ -460,6 +543,10 @@ export class SessionService {
           vault_deposit_amount: params.vaultDepositAmount ?? null,
           target_pool_address: targetPoolAddress || null,
           copy_trade_enabled: sessionRecord.copyTradeEnabled ?? false,
+          session_key_address: sessionKeyAddress || null,
+          session_key_private_key: sessionKeyPrivateKey || null,
+          delegation_contract_address: delegationContractAddress || null,
+          account_address: accountAddress || null,
         });
       } catch (err) {
         console.warn('[SessionService] Supabase insert fallback (session held in memory):', err);
@@ -481,6 +568,38 @@ export class SessionService {
         session.copyTradeEnabled = enabled;
       }
     }
+  }
+
+  /**
+   * Updates risk limits (maxTradeSize and dailyVolumeCap) for a user's active session.
+   */
+  public async updateSessionRisk(userAddress: string, maxTradeSize: number, dailyVolumeCap: number): Promise<SessionRecord | null> {
+    const key = userAddress.toLowerCase();
+    const sessionId = this.userToActiveSessionId.get(key);
+    if (!sessionId) return null;
+    const session = this.sessions.get(sessionId);
+    if (!session) return null;
+
+    session.maxTradeSize = maxTradeSize;
+    session.dailyVolumeCap = dailyVolumeCap;
+    session.updatedAt = new Date().toISOString();
+
+    if (isSessionPersistenceEnabled()) {
+      try {
+        await supabase
+          .from('sessions')
+          .update({
+            max_trade_size: maxTradeSize,
+            daily_volume_cap: dailyVolumeCap,
+            updated_at: session.updatedAt,
+          })
+          .eq('id', sessionId);
+      } catch (err) {
+        console.warn('[SessionService] Supabase updateSessionRisk fallback:', err);
+      }
+    }
+
+    return session;
   }
 
   /**
@@ -536,6 +655,10 @@ export class SessionService {
               vaultDepositAmount: row.vault_deposit_amount ? Number(row.vault_deposit_amount) : undefined,
               targetPoolAddress: row.target_pool_address ? (getAddress(row.target_pool_address) as Address) : undefined,
               onChainAuthorized: row.on_chain_authorized === true,
+              sessionKeyAddress: row.session_key_address ? (getAddress(row.session_key_address) as Address) : undefined,
+              sessionKeyPrivateKey: (row.session_key_private_key as Hex) || undefined,
+              delegationContractAddress: row.delegation_contract_address ? (getAddress(row.delegation_contract_address) as Address) : undefined,
+              accountAddress: (row as any).account_address ? (getAddress((row as any).account_address) as Address) : undefined,
               copyTradeEnabled: userSwarmService.hasUserConfig(row.user_address)
                 ? userSwarmService.isCopyTradeEnabled(row.user_address)
                 : (row.copy_trade_enabled === true),
@@ -629,6 +752,33 @@ export class SessionService {
   }
 
   /**
+   * Retrieves a user's deployed trading account clone from the V2 factory.
+   * If not yet deployed, the operator sponsors the deployment gas via deployFor.
+   */
+  public async getOrCreateClone(userAddress: Address): Promise<Address> {
+    const normalizedUser = getAddress(userAddress) as Address;
+    const existing = await getSessionAccount(normalizedUser).catch(() => null);
+    if (existing && existing.toLowerCase() !== CLONE_ZERO_ADDRESS.toLowerCase()) {
+      return existing;
+    }
+    if (process.env.NODE_ENV === 'test') {
+      return (`0x222222222222222222222222${normalizedUser.slice(26)}`) as Address;
+    }
+    return await deployCloneForUser(normalizedUser);
+  }
+
+  /**
+   * Predicts a user's clone address before deployment.
+   */
+  public async predictClone(userAddress: Address): Promise<Address | null> {
+    const normalizedUser = getAddress(userAddress) as Address;
+    if (process.env.NODE_ENV === 'test') {
+      return (`0x222222222222222222222222${normalizedUser.slice(26)}`) as Address;
+    }
+    return await predictCloneForUser(normalizedUser);
+  }
+
+  /**
    * Sessions the swarm may copy-trade: live operator match, on-chain grant, not a dummy/test wallet, and copyTradeEnabled === true.
    */
   public getDelegatedCopyTradeSessions(operatorAddress?: string): SessionRecord[] {
@@ -648,8 +798,9 @@ export class SessionService {
   }
 
   /**
-   * Re-checks OperatorPermissionsRegistry for active sessions. Throttled so the 100ms
-   * swarm loop does not hammer RPC. RPC failures leave the previous flag in place.
+   * Re-checks per-key clone policies for active sessions. Throttled so the
+   * 100ms swarm loop does not hammer RPC. RPC failures leave the previous
+   * flag in place.
    */
   public async refreshOnChainAuthorizations(operatorAddress?: string): Promise<void> {
     const now = Date.now();
@@ -674,12 +825,24 @@ export class SessionService {
       await Promise.all(
         candidates.map(async (session) => {
           try {
-            const probed = await probeOnChainOperatorAuthorization(
-              session.userAddress,
-              operator,
-              session.targetPoolAddress,
-              OPERATOR_SELECTORS.placeOrderFor,
-            );
+            // V2 clone model: authorized = live per-key policy on the user's
+            // own clone. No registry grant exists in this model.
+            let probed: boolean | null = null;
+            if (session.accountAddress && session.sessionKeyAddress) {
+              try {
+                const policy = await checkCloneSessionPolicy(session.accountAddress, session.sessionKeyAddress);
+                probed = policy ? policy.isActive : null;
+              } catch {
+                probed = null;
+              }
+            } else if (session.sessionKeyAddress && !session.accountAddress) {
+              try {
+                const policy = await checkOnChainSessionPolicy(session.userAddress, session.sessionKeyAddress);
+                probed = policy ? policy.isActive : null;
+              } catch {
+                probed = null;
+              }
+            }
             if (probed === null) return;
             if (session.onChainAuthorized === probed) return;
             session.onChainAuthorized = probed;

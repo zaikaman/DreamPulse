@@ -11,6 +11,7 @@ import {
   type Hex,
   type PublicClient,
 } from 'viem';
+import { generatePrivateKey, privateKeyToAccount } from 'viem/accounts';
 
 
 import {
@@ -44,9 +45,9 @@ export const somniaShannonTestnet = defineChain({
   id: 50312,
   name: 'Somnia Shannon Testnet',
   nativeCurrency: {
-    name: 'Somnia Test Token',
-    symbol: 'STT',
     decimals: 18,
+    name: 'Somnia Shannon Testnet Token',
+    symbol: 'STT',
   },
   rpcUrls: {
     default: {
@@ -70,11 +71,185 @@ export const SOMNIA_ADDRESSES = {
   decimals: 6, // TestUSDC decimals — canonical for caps (maxTradeSize / dailyVolumeCap)
   operatorPermissionsRegistry: '0x15C7e8CE38F021c5b45d098AaD788f63090bF20A' as Address,
   operatorAccount: '0x93e300607c363E7D7a47e50f5c9fDf1723e859Cf' as Address,
+  sessionAccount: '0xff16EF28861F90201aB0B00e46f6c7683AFacee5' as Address,
+  sessionAccountImpl: '0x92673153f231d87e2adb8b61321260dacf138858' as Address,
+  sessionAccountFactory: '0x94dd9c8b9a5684ab026480737fac911824ac995d' as Address,
   testUsdc: '0x70a86D8842FB63C4Ad2b7cdddF530eBf1BB25d8E' as Address,
   binaryModule: '0x3ecC694Cef705358864a646142ac17A90E29e388' as Address,
   marketsCore: '0x2802504314685D89bF6C992CA5a8e7cC78bc0294' as Address,
   collateralRouter: '0xbC0C9834B15ACE38bB50dDaa7d7f7C7CC4DC183C' as Address,
 };
+
+export const SESSION_FACTORY_ABI = [
+  {
+    type: 'function',
+    name: 'deployFor',
+    stateMutability: 'nonpayable',
+    inputs: [
+      { name: 'user', type: 'address' },
+      { name: 'collateral', type: 'address' },
+    ],
+    outputs: [{ name: 'account', type: 'address' }],
+  },
+  {
+    type: 'function',
+    name: 'accounts',
+    stateMutability: 'view',
+    inputs: [{ name: '', type: 'address' }],
+    outputs: [{ name: '', type: 'address' }],
+  },
+  {
+    type: 'function',
+    name: 'predictFor',
+    stateMutability: 'view',
+    inputs: [{ name: '', type: 'address' }],
+    outputs: [{ name: '', type: 'address' }],
+  },
+] as const;
+
+export const SESSION_CLONE_ABI = [
+  {
+    type: 'function',
+    name: 'authorizeSession',
+    stateMutability: 'nonpayable',
+    inputs: [
+      { name: 'sessionKey', type: 'address' },
+      { name: 'maxTradeSize', type: 'uint256' },
+      { name: 'dailyVolumeCap', type: 'uint256' },
+      { name: 'durationSec', type: 'uint256' },
+    ],
+    outputs: [],
+  },
+  {
+    type: 'function',
+    name: 'revokeSession',
+    stateMutability: 'nonpayable',
+    inputs: [{ name: 'sessionKey', type: 'address' }],
+    outputs: [],
+  },
+  {
+    type: 'function',
+    name: 'executeOrder',
+    stateMutability: 'payable',
+    inputs: [
+      { name: 'targetPool', type: 'address' },
+      { name: 'callData', type: 'bytes' },
+      { name: 'tradeCost', type: 'uint256' },
+    ],
+    outputs: [{ name: '', type: 'bytes' }],
+  },
+  {
+    type: 'function',
+    name: 'redeemWinnings',
+    stateMutability: 'nonpayable',
+    inputs: [
+      { name: 'module', type: 'address' },
+      { name: 'outcomeToken', type: 'address' },
+      { name: 'marketId', type: 'bytes32' },
+      { name: 'outcomeIdx', type: 'uint8' },
+      { name: 'amount', type: 'uint256' },
+    ],
+    outputs: [],
+  },
+  {
+    type: 'function',
+    name: 'withdraw',
+    stateMutability: 'nonpayable',
+    inputs: [
+      { name: 'token', type: 'address' },
+      { name: 'amount', type: 'uint256' },
+    ],
+    outputs: [],
+  },
+  {
+    type: 'function',
+    name: 'withdrawNative',
+    stateMutability: 'nonpayable',
+    inputs: [],
+    outputs: [],
+  },
+  {
+    type: 'function',
+    name: 'getSession',
+    stateMutability: 'view',
+    inputs: [{ name: 'sessionKey', type: 'address' }],
+    outputs: [
+      { name: 'maxTradeSize', type: 'uint256' },
+      { name: 'dailyVolumeCap', type: 'uint256' },
+      { name: 'spentToday', type: 'uint256' },
+      { name: 'remainingDailyAllowance', type: 'uint256' },
+      { name: 'expiresAt', type: 'uint256' },
+      { name: 'isActive', type: 'bool' },
+    ],
+  },
+  {
+    type: 'function',
+    name: 'owner',
+    stateMutability: 'view',
+    inputs: [],
+    outputs: [{ name: '', type: 'address' }],
+  },
+  {
+    type: 'function',
+    name: 'feeRecipient',
+    stateMutability: 'view',
+    inputs: [],
+    outputs: [{ name: '', type: 'address' }],
+  },
+  {
+    type: 'function',
+    name: 'WITHDRAWAL_FEE',
+    stateMutability: 'view',
+    inputs: [],
+    outputs: [{ name: '', type: 'uint256' }],
+  },
+  {
+    type: 'function',
+    name: 'MIN_WITHDRAWAL_AMOUNT',
+    stateMutability: 'view',
+    inputs: [],
+    outputs: [{ name: '', type: 'uint256' }],
+  },
+] as const;
+
+export const DREAM_PULSE_SESSION_ACCOUNT_ABI = [
+  {
+    type: 'function',
+    name: 'authorizeSession',
+    stateMutability: 'nonpayable',
+    inputs: [
+      { name: 'sessionKey', type: 'address' },
+      { name: 'maxTradeSize', type: 'uint256' },
+      { name: 'dailyVolumeCap', type: 'uint256' },
+      { name: 'durationSec', type: 'uint256' },
+    ],
+    outputs: [],
+  },
+  {
+    type: 'function',
+    name: 'revokeSession',
+    stateMutability: 'nonpayable',
+    inputs: [{ name: 'sessionKey', type: 'address' }],
+    outputs: [],
+  },
+  {
+    type: 'function',
+    name: 'getSession',
+    stateMutability: 'view',
+    inputs: [
+      { name: 'user', type: 'address' },
+      { name: 'sessionKey', type: 'address' },
+    ],
+    outputs: [
+      { name: 'maxTradeSize', type: 'uint256' },
+      { name: 'dailyVolumeCap', type: 'uint256' },
+      { name: 'spentToday', type: 'uint256' },
+      { name: 'remainingDailyAllowance', type: 'uint256' },
+      { name: 'expiresAt', type: 'uint256' },
+      { name: 'isActive', type: 'bool' },
+    ],
+  },
+] as const;
 
 /**
  * Canonical tUSDC collateral decimals (6). Single source of truth for cap encoding.
@@ -88,6 +263,63 @@ export const OPERATOR_SELECTORS = {
   cancelOrderFor: '0xe37b444b' as Hex,
   reduceOrderFor: '0x364c2587' as Hex,
 } as const;
+
+/**
+ * Non-custodial session model: the user grants these binary-market selectors
+ * to the DreamPulseSessionAccount CONTRACT (never an EOA). Pools auto-pull
+ * escrow from the owner's wallet; the session contract never receives funds.
+ */
+export const SESSION_ACCOUNT_SELECTORS = [
+  OPERATOR_SELECTORS.placeBinaryOrderFor,
+  OPERATOR_SELECTORS.cancelOrderFor,
+  OPERATOR_SELECTORS.reduceOrderFor,
+] as Hex[];
+
+export const ERC6909_OPERATOR_ABI = [
+  {
+    type: 'function',
+    name: 'isOperator',
+    stateMutability: 'view',
+    inputs: [
+      { name: 'owner', type: 'address' },
+      { name: 'spender', type: 'address' },
+    ],
+    outputs: [{ name: '', type: 'bool' }],
+  },
+  {
+    type: 'function',
+    name: 'setOperator',
+    stateMutability: 'nonpayable',
+    inputs: [
+      { name: 'spender', type: 'address' },
+      { name: 'approved', type: 'bool' },
+    ],
+    outputs: [{ name: '', type: 'bool' }],
+  },
+] as const;
+
+/**
+ * BinaryModule redeem surface for user-side claiming of user-owned winnings.
+ * Mirrors @somnia-chain/markets-sdk binaryModuleWriteAbi redeem:
+ * redeem(uint256 operatorId, bytes32 venueId, bytes32 marketId, uint8 outcomeIdx, uint256 amount).
+ */
+export const BINARY_MODULE_REDEEM_ABI = [
+  {
+    type: 'function',
+    name: 'redeem',
+    stateMutability: 'nonpayable',
+    inputs: [
+      { name: 'operatorId', type: 'uint256' },
+      { name: 'venueId', type: 'bytes32' },
+      { name: 'marketId', type: 'bytes32' },
+      { name: 'outcomeIdx', type: 'uint8' },
+      { name: 'amount', type: 'uint256' },
+    ],
+    outputs: [],
+  },
+] as const;
+
+export const ZERO_BYTES32 = '0x0000000000000000000000000000000000000000000000000000000000000000' as Hex;
 
 export const SESSION_EIP712_DOMAIN = {
   name: 'DreamPulse Operator Registry',
@@ -280,6 +512,27 @@ export const ERC20_ABI = [
     stateMutability: 'nonpayable',
     inputs: [
       { name: 'spender', type: 'address' },
+      { name: 'amount', type: 'uint256' },
+    ],
+    outputs: [{ name: '', type: 'bool' }],
+  },
+  {
+    type: 'function',
+    name: 'transfer',
+    stateMutability: 'nonpayable',
+    inputs: [
+      { name: 'to', type: 'address' },
+      { name: 'amount', type: 'uint256' },
+    ],
+    outputs: [{ name: '', type: 'bool' }],
+  },
+  {
+    type: 'function',
+    name: 'transferFrom',
+    stateMutability: 'nonpayable',
+    inputs: [
+      { name: 'from', type: 'address' },
+      { name: 'to', type: 'address' },
       { name: 'amount', type: 'uint256' },
     ],
     outputs: [{ name: '', type: 'bool' }],
@@ -929,6 +1182,571 @@ export class Web3Service {
       });
     }
 
+    await publicClient.waitForTransactionReceipt({ hash });
+    return { hash };
+  }
+
+  // ---------------------------------------------------------------------------
+  // Non-custodial session model (production path): the user authorizes the
+  // DreamPulseSessionAccount CONTRACT in the registry and approves each
+  // market pool to auto-pull escrow from their own wallet. No EOA — operator
+  // or otherwise — ever receives or holds user funds.
+  // ---------------------------------------------------------------------------
+
+  /**
+   * Grants the session contract global trading rights (binary selectors).
+   * One tx covers all current and future pools.
+   */
+  public async grantSessionAccountGlobal(params: {
+    userAddress: Address;
+  }): Promise<{ hash: Hex } | undefined> {
+    if (await this.isSessionAccountAuthorized({ owner: params.userAddress })) {
+      return undefined;
+    }
+    const wallet = await this.getWalletClient(params.userAddress);
+    const hash = await wallet.writeContract({
+      address: SOMNIA_ADDRESSES.operatorPermissionsRegistry,
+      abi: OPERATOR_REGISTRY_ABI,
+      functionName: 'setOperatorApprovalGlobal',
+      args: [SOMNIA_ADDRESSES.sessionAccount, SESSION_ACCOUNT_SELECTORS, true],
+    });
+    await publicClient.waitForTransactionReceipt({ hash });
+    return { hash };
+  }
+
+  /**
+   * Revokes the session contract's global trading rights (1 tx kill switch).
+   */
+  public async revokeSessionAccountGlobal(params: {
+    userAddress: Address;
+  }): Promise<{ hash: Hex } | undefined> {
+    const isAuthorized = await this.isSessionAccountAuthorized({ owner: params.userAddress });
+    if (!isAuthorized) {
+      return undefined;
+    }
+    const wallet = await this.getWalletClient(params.userAddress);
+    const hash = await wallet.writeContract({
+      address: SOMNIA_ADDRESSES.operatorPermissionsRegistry,
+      abi: OPERATOR_REGISTRY_ABI,
+      functionName: 'setOperatorApprovalGlobal',
+      args: [SOMNIA_ADDRESSES.sessionAccount, SESSION_ACCOUNT_SELECTORS, false],
+    });
+    await publicClient.waitForTransactionReceipt({ hash });
+    return { hash };
+  }
+
+  /**
+   * Reads whether the session contract holds a global trading grant.
+   */
+  public async isSessionAccountAuthorized(params: {
+    owner: Address;
+  }): Promise<boolean> {
+    try {
+      const granted = await publicClient.readContract({
+        address: SOMNIA_ADDRESSES.operatorPermissionsRegistry,
+        abi: OPERATOR_REGISTRY_ABI,
+        functionName: 'isGloballyApproved',
+        args: [params.owner, SOMNIA_ADDRESSES.sessionAccount, OPERATOR_SELECTORS.placeBinaryOrderFor],
+      });
+      return Boolean(granted);
+    } catch {
+      return false;
+    }
+  }
+
+  /**
+   * Reads the owner's TestUSDC allowance to a specific pool.
+   */
+  public async getPoolAllowance(params: {
+    owner: Address;
+    pool: Address;
+    token?: Address;
+  }): Promise<bigint> {
+    try {
+      return await publicClient.readContract({
+        address: params.token || SOMNIA_ADDRESSES.testUsdc,
+        abi: ERC20_ABI,
+        functionName: 'allowance',
+        args: [params.owner, params.pool],
+      });
+    } catch {
+      return 0n;
+    }
+  }
+
+  /**
+   * Approves a single pool to auto-pull TestUSDC escrow (max approval,
+   * one tx per pool). Skips when allowance already covers the threshold.
+   */
+  public async approvePoolForTestUsdc(params: {
+    userAddress: Address;
+    pool: Address;
+    token?: Address;
+    amount?: bigint;
+  }): Promise<Hex | undefined> {
+    const token = params.token || SOMNIA_ADDRESSES.testUsdc;
+    const amount = params.amount || parseUnits('1000000', 6);
+    const current = await this.getPoolAllowance({ owner: params.userAddress, pool: params.pool, token });
+    if (current >= parseUnits('1000', 6)) return undefined;
+    const wallet = await this.getWalletClient(params.userAddress);
+    const hash = await wallet.writeContract({
+      address: token,
+      abi: ERC20_ABI,
+      functionName: 'approve',
+      args: [params.pool, amount],
+    });
+    await publicClient.waitForTransactionReceipt({ hash });
+    return hash;
+  }
+
+  /**
+   * Ensures TestUSDC allowances for a list of pools. Returns tx hashes for
+   * newly granted approvals (empty when everything was already approved).
+   */
+  public async ensurePoolAllowances(params: {
+    userAddress: Address;
+    pools: Address[];
+    token?: Address;
+  }): Promise<Hex[]> {
+    const hashes: Hex[] = [];
+    const unique = Array.from(new Set(params.pools.map((p) => p.toLowerCase())));
+    for (const pool of unique.slice(0, 12)) {
+      try {
+        const hash = await this.approvePoolForTestUsdc({
+          userAddress: params.userAddress,
+          pool: pool as Address,
+          token: params.token,
+        });
+        if (hash) hashes.push(hash);
+      } catch (err: any) {
+        console.warn(`[Web3Service] Pool allowance notice for ${pool}:`, err?.message || err);
+      }
+    }
+    return hashes;
+  }
+
+  /**
+   * Ensures each pool is an operator on its outcome-token singleton (needed
+   * for SELL-side escrow of outcome tokens). One-time grant per pool.
+   */
+  public async ensureOutcomeTokenOperators(params: {
+    userAddress: Address;
+    targets: Array<{ pool: Address; outcomeToken: Address }>;
+  }): Promise<Hex[]> {
+    const hashes: Hex[] = [];
+    const wallet = await this.getWalletClient(params.userAddress).catch(() => null);
+    if (!wallet) return hashes;
+    const seen = new Set<string>();
+    for (const t of params.targets.slice(0, 12)) {
+      const key = `${t.outcomeToken.toLowerCase()}:${t.pool.toLowerCase()}`;
+      if (seen.has(key)) continue;
+      seen.add(key);
+      try {
+        const already = await publicClient.readContract({
+          address: t.outcomeToken,
+          abi: ERC6909_OPERATOR_ABI,
+          functionName: 'isOperator',
+          args: [params.userAddress, t.pool],
+        }).catch(() => false);
+        if (already) continue;
+        const hash = await wallet.writeContract({
+          address: t.outcomeToken,
+          abi: ERC6909_OPERATOR_ABI,
+          functionName: 'setOperator',
+          args: [t.pool, true],
+        });
+        await publicClient.waitForTransactionReceipt({ hash });
+        hashes.push(hash);
+      } catch (err: any) {
+        console.warn(`[Web3Service] Outcome-token operator notice for ${t.pool}:`, err?.message || err);
+      }
+    }
+    return hashes;
+  }
+
+  /**
+   * One-shot session authorization for the non-custodial model: registry
+   * grant to the session contract + pool escrow allowances + outcome-token
+   * operator grants. Returns the tx hashes that were submitted.
+   */
+  public async authorizeSessionForPools(params: {
+    userAddress: Address;
+    pools: Address[];
+    outcomeTargets?: Array<{ pool: Address; outcomeToken: Address }>;
+  }): Promise<Hex[]> {
+    const hashes: Hex[] = [];
+    const grant = await this.grantSessionAccountGlobal({ userAddress: params.userAddress });
+    if (grant?.hash) hashes.push(grant.hash);
+    const poolHashes = await this.ensurePoolAllowances({ userAddress: params.userAddress, pools: params.pools });
+    hashes.push(...poolHashes);
+    if (params.outcomeTargets && params.outcomeTargets.length > 0) {
+      const outcomeHashes = await this.ensureOutcomeTokenOperators({
+        userAddress: params.userAddress,
+        targets: params.outcomeTargets,
+      });
+      hashes.push(...outcomeHashes);
+      // One grant of the BinaryModule on each outcome-token singleton covers
+      // every market for user-side winnings claims (redeem pulls via module).
+      const seenTokens = new Set<string>();
+      for (const t of params.outcomeTargets) {
+        const key = t.outcomeToken.toLowerCase();
+        if (seenTokens.has(key)) continue;
+        seenTokens.add(key);
+        try {
+          const h = await this.ensureModuleOutcomeOperator({
+            userAddress: params.userAddress,
+            outcomeToken: t.outcomeToken,
+          });
+          if (h) hashes.push(h);
+        } catch (err: any) {
+          console.warn('[Web3Service] Module outcome-operator notice:', err?.message || err);
+        }
+      }
+    }
+    return hashes;
+  }
+
+  /**
+   * Grants the BinaryModule as ERC-6909 operator on an outcome-token
+   * singleton (one grant covers all markets for that token). Required once
+   * for user-side winnings claims via module redeem.
+   */
+  public async ensureModuleOutcomeOperator(params: {
+    userAddress: Address;
+    outcomeToken: Address;
+  }): Promise<Hex | undefined> {
+    try {
+      const already = await publicClient.readContract({
+        address: params.outcomeToken,
+        abi: ERC6909_OPERATOR_ABI,
+        functionName: 'isOperator',
+        args: [params.userAddress, SOMNIA_ADDRESSES.binaryModule],
+      }).catch(() => false);
+      if (already) return undefined;
+    } catch {}
+    const wallet = await this.getWalletClient(params.userAddress);
+    const hash = await wallet.writeContract({
+      address: params.outcomeToken,
+      abi: ERC6909_OPERATOR_ABI,
+      functionName: 'setOperator',
+      args: [SOMNIA_ADDRESSES.binaryModule, true],
+    });
+    await publicClient.waitForTransactionReceipt({ hash });
+    return hash;
+  }
+
+  /**
+   * Claims user-owned winnings from the user's own wallet via the
+   * BinaryModule (self-send redeem — burns the caller's outcome tokens,
+   * pays collateral to the caller). Only the position owner can call this.
+   */
+  public async claimMarketWinnings(params: {
+    userAddress: Address;
+    marketIdHex: Hex;
+    outcomeIdx: 0 | 1;
+    amountRaw: bigint;
+    outcomeToken?: Address;
+  }): Promise<{ hash: Hex }> {
+    if (params.outcomeToken) {
+      await this.ensureModuleOutcomeOperator({
+        userAddress: params.userAddress,
+        outcomeToken: params.outcomeToken,
+      }).catch((err: any) => {
+        console.warn('[Web3Service] Module grant notice before claim:', err?.message || err);
+      });
+    }
+    const wallet = await this.getWalletClient(params.userAddress);
+    const hash = await wallet.writeContract({
+      address: SOMNIA_ADDRESSES.binaryModule,
+      abi: BINARY_MODULE_REDEEM_ABI,
+      functionName: 'redeem',
+      args: [0n, ZERO_BYTES32, params.marketIdHex, params.outcomeIdx, params.amountRaw],
+    });
+    await publicClient.waitForTransactionReceipt({ hash });
+    return { hash };
+  }
+
+  /**
+   * Generates an isolated, ephemeral session key pair locally in the browser memory.
+   */
+  public generateEphemeralSessionKey(): { address: Address; privateKey: Hex } {
+    const privateKey = generatePrivateKey();
+    const account = privateKeyToAccount(privateKey);
+    return {
+      address: account.address,
+      privateKey,
+    };
+  }
+
+  /**
+   * Authorizes a per-user ephemeral session key on-chain via DreamPulseSessionAccount.
+   * Enforces maxTradeSize, dailyVolumeCap, and duration on-chain in 1 transaction.
+   */
+  public async authorizeSessionOnChain(params: {
+    userAddress: Address;
+    sessionKey: Address;
+    maxTradeSize: number;
+    dailyVolumeCap: number;
+    durationHours: number;
+  }): Promise<{ hash: Hex }> {
+    const wallet = await this.getWalletClient(params.userAddress);
+    const maxTradeRaw = parseUnits(params.maxTradeSize.toString(), 6);
+    const dailyCapRaw = parseUnits(params.dailyVolumeCap.toString(), 6);
+    const durationSec = BigInt(Math.floor(params.durationHours * 3600));
+
+    const hash = await wallet.writeContract({
+      address: SOMNIA_ADDRESSES.sessionAccount,
+      abi: DREAM_PULSE_SESSION_ACCOUNT_ABI,
+      functionName: 'authorizeSession',
+      args: [params.sessionKey, maxTradeRaw, dailyCapRaw, durationSec],
+    });
+
+    await publicClient.waitForTransactionReceipt({ hash });
+    return { hash };
+  }
+
+  /**
+   * Revokes an active per-user session key on-chain via DreamPulseSessionAccount in 1 transaction.
+   */
+  public async revokeSessionOnChain(params: {
+    userAddress: Address;
+    sessionKey: Address;
+  }): Promise<{ hash: Hex }> {
+    const wallet = await this.getWalletClient(params.userAddress);
+    const hash = await wallet.writeContract({
+      address: SOMNIA_ADDRESSES.sessionAccount,
+      abi: DREAM_PULSE_SESSION_ACCOUNT_ABI,
+      functionName: 'revokeSession',
+      args: [params.sessionKey],
+    });
+
+    await publicClient.waitForTransactionReceipt({ hash });
+    return { hash };
+  }
+
+  /**
+   * Reads live on-chain session key policy from DreamPulseSessionAccount.
+   */
+  public async getOnChainSessionPolicy(params: {
+    userAddress: Address;
+    sessionKey: Address;
+  }): Promise<{
+    maxTradeSize: number;
+    dailyVolumeCap: number;
+    spentToday: number;
+    remainingDailyAllowance: number;
+    expiresAt: number;
+    isActive: boolean;
+  } | null> {
+    try {
+      const res = await publicClient.readContract({
+        address: SOMNIA_ADDRESSES.sessionAccount,
+        abi: DREAM_PULSE_SESSION_ACCOUNT_ABI,
+        functionName: 'getSession',
+        args: [params.userAddress, params.sessionKey],
+      });
+      return {
+        maxTradeSize: Number(res[0]) / 1e6,
+        dailyVolumeCap: Number(res[1]) / 1e6,
+        spentToday: Number(res[2]) / 1e6,
+        remainingDailyAllowance: Number(res[3]) / 1e6,
+        expiresAt: Number(res[4]),
+        isActive: res[5],
+      };
+    } catch {
+      return null;
+    }
+  }
+
+  /**
+   * Reads a user's deployed trading account clone address from the factory.
+   */
+  public async getCloneAddress(userAddress: Address): Promise<Address | null> {
+    try {
+      const clone = await publicClient.readContract({
+        address: SOMNIA_ADDRESSES.sessionAccountFactory,
+        abi: SESSION_FACTORY_ABI,
+        functionName: 'accounts',
+        args: [userAddress],
+      });
+      if (!clone || clone === '0x0000000000000000000000000000000000000000') return null;
+      return clone as Address;
+    } catch {
+      return null;
+    }
+  }
+
+  /**
+   * Predicts a user's next undeployed clone address.
+   */
+  public async predictCloneAddress(userAddress: Address): Promise<Address | null> {
+    try {
+      const predicted = await publicClient.readContract({
+        address: SOMNIA_ADDRESSES.sessionAccountFactory,
+        abi: SESSION_FACTORY_ABI,
+        functionName: 'predictFor',
+        args: [userAddress],
+      });
+      return predicted as Address;
+    } catch {
+      return null;
+    }
+  }
+
+  /**
+   * Ensures the user has granted TestUSDC allowance to their clone.
+   * In V2, this ONE single approval covers all 66+ pools forever.
+   */
+  public async ensureCloneAllowance(params: {
+    userAddress: Address;
+    cloneAddress: Address;
+    amount?: bigint;
+  }): Promise<Hex | undefined> {
+    const minAllowance = params.amount ?? parseUnits('100', 6);
+    try {
+      const current = await publicClient.readContract({
+        address: SOMNIA_ADDRESSES.testUsdc,
+        abi: ERC20_ABI,
+        functionName: 'allowance',
+        args: [params.userAddress, params.cloneAddress],
+      });
+      if (current >= minAllowance) return undefined;
+    } catch {}
+
+    const wallet = await this.getWalletClient(params.userAddress);
+    const maxUint256 = 115792089237316195423570985008687907853269984665640564039457584007913129639935n;
+    const hash = await wallet.writeContract({
+      address: SOMNIA_ADDRESSES.testUsdc,
+      abi: ERC20_ABI,
+      functionName: 'approve',
+      args: [params.cloneAddress, maxUint256],
+    });
+    await publicClient.waitForTransactionReceipt({ hash });
+    return hash;
+  }
+
+  /**
+   * Authorizes an ephemeral session key on the user's clone with on-chain risk caps.
+   */
+  public async authorizeSessionOnClone(params: {
+    userAddress: Address;
+    cloneAddress: Address;
+    sessionKey: Address;
+    maxTradeSize: number;
+    dailyVolumeCap: number;
+    durationHours: number;
+  }): Promise<{ hash: Hex }> {
+    const wallet = await this.getWalletClient(params.userAddress);
+    const maxTradeRaw = parseUnits(params.maxTradeSize.toString(), 6);
+    const dailyCapRaw = parseUnits(params.dailyVolumeCap.toString(), 6);
+    const durationSec = BigInt(Math.floor(params.durationHours * 3600));
+
+    const hash = await wallet.writeContract({
+      address: params.cloneAddress,
+      abi: SESSION_CLONE_ABI,
+      functionName: 'authorizeSession',
+      args: [params.sessionKey, maxTradeRaw, dailyCapRaw, durationSec],
+    });
+    await publicClient.waitForTransactionReceipt({ hash });
+    return { hash };
+  }
+
+  /**
+   * Revokes an active session key on the user's clone.
+   */
+  public async revokeSessionOnClone(params: {
+    userAddress: Address;
+    cloneAddress: Address;
+    sessionKey: Address;
+  }): Promise<{ hash: Hex }> {
+    const wallet = await this.getWalletClient(params.userAddress);
+    const hash = await wallet.writeContract({
+      address: params.cloneAddress,
+      abi: SESSION_CLONE_ABI,
+      functionName: 'revokeSession',
+      args: [params.sessionKey],
+    });
+    await publicClient.waitForTransactionReceipt({ hash });
+    return { hash };
+  }
+
+  /**
+   * Reads the ERC20 balance of a user's clone.
+   */
+  public async getCloneBalance(params: {
+    cloneAddress: Address;
+    token?: Address;
+  }): Promise<bigint> {
+    try {
+      return await publicClient.readContract({
+        address: params.token || SOMNIA_ADDRESSES.testUsdc,
+        abi: ERC20_ABI,
+        functionName: 'balanceOf',
+        args: [params.cloneAddress],
+      });
+    } catch {
+      return 0n;
+    }
+  }
+
+  /**
+   * Deposits funds from the owner's wallet into the isolated Smart Account Clone.
+   * Single-transaction ERC-20 transfer directly to the clone address.
+   */
+  public async depositToClone(params: {
+    userAddress: Address;
+    cloneAddress: Address;
+    amount: number | bigint;
+    token?: Address;
+  }): Promise<{ hash: Hex }> {
+    const wallet = await this.getWalletClient(params.userAddress);
+    const token = params.token || SOMNIA_ADDRESSES.testUsdc;
+    const rawAmount = typeof params.amount === 'bigint'
+      ? params.amount
+      : parseUnits(params.amount.toString(), 6);
+
+    if (rawAmount <= 0n) {
+      throw new Error('Deposit amount must be greater than 0');
+    }
+
+    const hash = await wallet.writeContract({
+      address: token,
+      abi: ERC20_ABI,
+      functionName: 'transfer',
+      args: [params.cloneAddress, rawAmount],
+    });
+    await publicClient.waitForTransactionReceipt({ hash });
+    return { hash };
+  }
+
+  /**
+   * Withdraws funds from the clone to the owner's wallet (owner-only, non-custodial).
+   */
+  public async withdrawFromClone(params: {
+    userAddress: Address;
+    cloneAddress: Address;
+    token?: Address;
+    amount?: bigint;
+  }): Promise<{ hash: Hex }> {
+    const wallet = await this.getWalletClient(params.userAddress);
+    const token = params.token || SOMNIA_ADDRESSES.testUsdc;
+    let withdrawAmount = params.amount;
+    if (!withdrawAmount) {
+      withdrawAmount = await this.getCloneBalance({ cloneAddress: params.cloneAddress, token });
+    }
+    if (!withdrawAmount || withdrawAmount <= 0n) {
+      throw new Error('Clone balance is 0 or no amount specified');
+    }
+    const MIN_WITHDRAWAL_AMOUNT = 1_000_000n; // 1 tUSDC (6 decimals)
+    if (token.toLowerCase() === SOMNIA_ADDRESSES.testUsdc.toLowerCase() && withdrawAmount < MIN_WITHDRAWAL_AMOUNT) {
+      throw new Error('Minimum withdrawal amount is 1.00 tUSDC');
+    }
+    const hash = await wallet.writeContract({
+      address: params.cloneAddress,
+      abi: SESSION_CLONE_ABI,
+      functionName: 'withdraw',
+      args: [token, withdrawAmount],
+    });
     await publicClient.waitForTransactionReceipt({ hash });
     return { hash };
   }

@@ -12,15 +12,14 @@ import {
   CheckCircleIcon,
   ArrowTopRightOnSquareIcon,
   ArrowPathIcon,
-  DocumentDuplicateIcon,
   CheckIcon,
-  CurrencyDollarIcon,
   Square3Stack3DIcon,
   DocumentCheckIcon,
   ArrowLeftEndOnRectangleIcon,
   XCircleIcon,
-  SparklesIcon,
-  ArrowsPointingOutIcon,
+  WalletIcon,
+  ArrowDownTrayIcon,
+  ArrowUpTrayIcon,
 } from '@heroicons/react/24/outline';
 import type { SessionGrant } from '../types/index.js';
 import type { WalletState, AllowanceStatus } from '../hooks/useSessionKey.js';
@@ -30,8 +29,6 @@ import { parseWeb3Error } from '../lib/errorUtils.js';
 import {
   UNLIMITED_AMOUNT,
   UNLIMITED_HOURS,
-  isUnlimitedAmount,
-  isUnlimitedExpiry,
   formatCapAmount,
   formatSessionTimeRemaining,
 } from '../lib/sessionUtils.js';
@@ -42,11 +39,13 @@ interface SessionDelegationModalProps {
   onClose: () => void;
   wallet: WalletState;
   activeSession: SessionGrant | null;
+  cloneAddress?: `0x${string}` | null;
+  cloneBalance?: string;
   isSigning: boolean;
   isLoading: boolean;
   isFauceting?: boolean;
   isFixingAllowance?: boolean;
-  stepState?: 'idle' | 'authorizing_onchain' | 'depositing_vault' | 'signing_eip712' | 'registering_backend';
+  stepState?: 'idle' | 'deploying_clone' | 'approving_clone' | 'authorizing_onchain' | 'depositing_vault' | 'signing_eip712' | 'registering_backend';
   error: string | null;
   allowanceStatus?: AllowanceStatus | null;
   onConnectWallet: () => Promise<void>;
@@ -65,6 +64,8 @@ interface SessionDelegationModalProps {
   onEnsureAllowances?: () => Promise<void>;
   onRefreshAllowance?: () => Promise<void>;
   onClearError: () => void;
+  onOpenTradingWallet?: (tab: 'deposit' | 'withdraw') => void;
+  onOpenRiskModal?: () => void;
 }
 
 export const SessionDelegationModal: React.FC<SessionDelegationModalProps> = ({
@@ -73,9 +74,10 @@ export const SessionDelegationModal: React.FC<SessionDelegationModalProps> = ({
   onClose,
   wallet,
   activeSession,
+  cloneAddress,
+  cloneBalance,
   isSigning,
   isLoading,
-  isFauceting = false,
   isFixingAllowance = false,
   stepState = 'idle',
   error,
@@ -83,33 +85,16 @@ export const SessionDelegationModal: React.FC<SessionDelegationModalProps> = ({
   onConnectWallet,
   onDisconnectWallet,
   onSwitchNetwork,
-  onClaimFaucet,
   onCreateSession,
   onRevokeSession,
   onEnsureAllowances,
   onRefreshAllowance,
   onClearError,
+  onOpenTradingWallet,
+  onOpenRiskModal,
 }) => {
-  // Max Trade Size state
-  const [maxTradeSize, setMaxTradeSize] = useState<number>(10);
-  const [isUnlimitedMaxTrade, setIsUnlimitedMaxTrade] = useState<boolean>(false);
-  const [customMaxTradeStr, setCustomMaxTradeStr] = useState<string>('10');
-
-  // Daily Volume Cap state
-  const [dailyVolumeCap, setDailyVolumeCap] = useState<number>(100);
-  const [isUnlimitedDailyCap, setIsUnlimitedDailyCap] = useState<boolean>(false);
-  const [customDailyCapStr, setCustomDailyCapStr] = useState<string>('100');
-
-
-  // Duration state
-  const [durationHours, setDurationHours] = useState<number>(24);
-  const [isCustomDuration, setIsCustomDuration] = useState<boolean>(false);
-  const [customDurationValue, setCustomDurationValue] = useState<string>('30');
-  const [customDurationUnit, setCustomDurationUnit] = useState<'hours' | 'days' | 'months'>('days');
-
   // Miscellaneous modal state
   const [enableCopyTrading, setEnableCopyTrading] = useState<boolean>(false);
-  const [copiedOperator, setCopiedOperator] = useState<boolean>(false);
   const [confirmRevoke, setConfirmRevoke] = useState<boolean>(initialRevokeMode);
   const [revokeOnChainOption, setRevokeOnChainOption] = useState<boolean>(true);
 
@@ -122,79 +107,29 @@ export const SessionDelegationModal: React.FC<SessionDelegationModalProps> = ({
 
       if (activeSession) {
         setEnableCopyTrading(Boolean(activeSession.copyTradeEnabled));
-
-        // Max Trade Size pre-population
-        if (isUnlimitedAmount(activeSession.maxTradeSize)) {
-          setIsUnlimitedMaxTrade(true);
-          setMaxTradeSize(UNLIMITED_AMOUNT);
-          setCustomMaxTradeStr('100');
-        } else {
-          setIsUnlimitedMaxTrade(false);
-          setMaxTradeSize(activeSession.maxTradeSize);
-          setCustomMaxTradeStr(String(activeSession.maxTradeSize));
-        }
-
-        // Daily Volume Cap pre-population
-        if (isUnlimitedAmount(activeSession.dailyVolumeCap)) {
-          setIsUnlimitedDailyCap(true);
-          setDailyVolumeCap(UNLIMITED_AMOUNT);
-          setCustomDailyCapStr('500');
-        } else {
-          setIsUnlimitedDailyCap(false);
-          setDailyVolumeCap(activeSession.dailyVolumeCap);
-          setCustomDailyCapStr(String(activeSession.dailyVolumeCap));
-        }
-
-
-        // Duration pre-population
-        if (isUnlimitedExpiry(activeSession.expiresAt)) {
-          setDurationHours(UNLIMITED_HOURS);
-          setIsCustomDuration(false);
-        } else {
-          const expiryTime = new Date(activeSession.expiresAt).getTime();
-          const remainingHours = Math.max(1, Math.round((expiryTime - Date.now()) / (3600 * 1000)));
-          setDurationHours(remainingHours);
-          setIsCustomDuration(false);
-        }
       }
     }
   }, [isOpen, initialRevokeMode, activeSession]);
 
   if (!isOpen) return null;
 
-  const handleCopyOperator = () => {
-    navigator.clipboard.writeText(SOMNIA_ADDRESSES.operatorAccount);
-    setCopiedOperator(true);
-    setTimeout(() => setCopiedOperator(false), 2000);
-  };
-
-  const getEffectiveDurationHours = (): number => {
-    if (isCustomDuration) {
-      const num = parseFloat(customDurationValue) || 1;
-      if (customDurationUnit === 'days') return Math.round(num * 24);
-      if (customDurationUnit === 'months') return Math.round(num * 24 * 30);
-      return Math.round(num);
-    }
-    return durationHours;
-  };
+  const effectiveCloneAddress = cloneAddress || (activeSession?.accountAddress as `0x${string}` | undefined);
 
   const handleCreate = async () => {
     onClearError();
-    const effectiveMaxTrade = isUnlimitedMaxTrade ? UNLIMITED_AMOUNT : Math.max(1, maxTradeSize);
-    const effectiveDailyCap = isUnlimitedDailyCap
-      ? UNLIMITED_AMOUNT
-      : Math.max(isUnlimitedMaxTrade ? 1 : effectiveMaxTrade, dailyVolumeCap);
-    const effectiveDuration = getEffectiveDurationHours();
-
     try {
       await onCreateSession({
-        maxTradeSize: effectiveMaxTrade,
-        dailyVolumeCap: effectiveDailyCap,
-        durationHours: effectiveDuration,
+        maxTradeSize: UNLIMITED_AMOUNT,
+        dailyVolumeCap: UNLIMITED_AMOUNT,
+        durationHours: UNLIMITED_HOURS,
         depositAmount: undefined,
         copyTradeEnabled: enableCopyTrading,
       });
+      await onRefreshAllowance?.();
       onClose();
+      if (onOpenTradingWallet) {
+        setTimeout(() => onOpenTradingWallet('deposit'), 300);
+      }
     } catch {
       // error handled in hook
     }
@@ -211,61 +146,26 @@ export const SessionDelegationModal: React.FC<SessionDelegationModalProps> = ({
     }
   };
 
-  const durationOptions = [
-    { label: '1 Hour', hours: 1 },
-    { label: '6 Hours', hours: 6 },
-    { label: '24 Hours', hours: 24 },
-    { label: '7 Days', hours: 168 },
-    { label: '30 Days', hours: 720 },
-    { label: '90 Days', hours: 2160 },
-    { label: '1 Year', hours: 8760 },
-    { label: 'Unlimited (100 Yrs)', hours: UNLIMITED_HOURS },
-  ];
-
   const parsedError = error ? parseWeb3Error(error) : null;
 
   const getStepStatusText = () => {
     switch (stepState) {
+      case 'deploying_clone':
+        return 'Step 1/3: Sponsoring & Deploying Smart Account Clone...';
+      case 'approving_clone':
+        return 'Step 2/3: Confirming 1-Time TestUSDC Approval to Clone in Wallet...';
       case 'authorizing_onchain':
-        return 'Step 1/2: Confirming On-Chain Operator Approval in Wallet...';
+        return 'Step 3/3: Authorizing Session Key on Smart Account Clone...';
       case 'depositing_vault':
-        return 'Step 1/2: Approving Collateral Deposit...';
+        return 'Approving Collateral Deposit...';
       case 'signing_eip712':
-        return 'Step 2/2: Signing EIP-712 Risk Ceilings in Wallet...';
+        return 'Signing EIP-712 Risk Ceilings in Wallet...';
       case 'registering_backend':
         return 'Finalizing: Registering Session with DreamPulse Swarm...';
       default:
         return 'Sign EIP-712 & Submit On-Chain Delegation...';
     }
   };
-
-
-  // Max Trade Size input handler
-  const handleMaxTradeChange = (valStr: string) => {
-    setCustomMaxTradeStr(valStr);
-    const parsed = parseFloat(valStr);
-    if (!isNaN(parsed) && parsed > 0) {
-      setMaxTradeSize(parsed);
-      setIsUnlimitedMaxTrade(false);
-      if (!isUnlimitedDailyCap && dailyVolumeCap < parsed) {
-        setDailyVolumeCap(parsed * 2);
-        setCustomDailyCapStr(String(parsed * 2));
-      }
-    }
-  };
-
-  // Daily Volume Cap input handler
-  const handleDailyCapChange = (valStr: string) => {
-    setCustomDailyCapStr(valStr);
-    const parsed = parseFloat(valStr);
-    if (!isNaN(parsed) && parsed > 0) {
-      setDailyVolumeCap(parsed);
-      setIsUnlimitedDailyCap(false);
-    }
-  };
-
-  const parsedCollateral = parseFloat(wallet.balanceCollateral || '0');
-  const collateralBalance = isNaN(parsedCollateral) ? 0 : parsedCollateral;
 
   return (
     <div className="modal-backdrop" onClick={onClose}>
@@ -292,7 +192,7 @@ export const SessionDelegationModal: React.FC<SessionDelegationModalProps> = ({
               </h2>
               <span className="modal-subheading">
                 {confirmRevoke
-                  ? 'Confirm revocation of autonomous agent execution and operator permissions'
+                  ? 'Confirm revocation of autonomous execution, the session key, and the session contract grant'
                   : 'EIP-712 cryptographic authorization for autonomous swarm & custom bot execution'}
               </span>
             </div>
@@ -319,62 +219,122 @@ export const SessionDelegationModal: React.FC<SessionDelegationModalProps> = ({
                 <span className="modal-status-badge">NON-CUSTODIAL</span>
               </div>
 
-              {/* Collateral balance check inside active session */}
+              {/* Isolated Trading Account Balance & Actions */}
               <div
                 style={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'space-between',
-                  background: collateralBalance === 0 ? 'hsl(var(--secondary) / 0.5)' : 'hsl(var(--secondary) / 0.35)',
-                  border: `1px solid ${collateralBalance === 0 ? 'rgba(255, 183, 0, 0.28)' : 'hsl(var(--border) / 0.5)'}`,
-                  borderRadius: '6px',
-                  padding: '8px 12px',
-                  margin: '10px 0',
+                  background: 'hsl(var(--secondary) / 0.4)',
+                  border: '1px solid hsl(var(--border) / 0.7)',
+                  borderRadius: '12px',
+                  padding: '14px 16px',
+                  margin: '12px 0',
                 }}
               >
-                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                  {collateralBalance === 0 ? (
-                    <ExclamationTriangleIcon className="w-4 h-4" style={{ color: '#ffb700' }} />
-                  ) : (
-                    <CheckCircleIcon className="w-4 h-4" style={{ color: 'var(--trade-yes)' }} />
-                  )}
-                  <div>
-                    <div style={{ fontSize: '11px', fontWeight: 600, color: 'hsl(var(--foreground))' }}>
-                      Trading Collateral: <span className="tabular-num">{wallet.balanceCollateral || '0.00'} tUSDC</span>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '10px' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    <div style={{ padding: '6px', borderRadius: '8px', background: 'rgba(0, 255, 204, 0.1)', color: '#00ffcc' }}>
+                      <WalletIcon className="w-4 h-4" />
                     </div>
-                    <div style={{ fontSize: '10px', color: 'hsl(var(--muted-foreground))' }}>
-                      {collateralBalance === 0
-                        ? 'Zero collateral will cause autonomous transactions to revert. Claim faucet below.'
-                        : 'Collateral is ready for automated multi-agent order book execution.'}
+                    <div>
+                      <div style={{ fontSize: '11px', fontWeight: 600, color: 'hsl(var(--muted-foreground))', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                        Trading Account Balance (Clone)
+                      </div>
+                      <div style={{ fontSize: '18px', fontWeight: 700, color: '#00ffcc', fontFamily: 'var(--font-mono)' }}>
+                        {cloneBalance || '0.00'} <span style={{ fontSize: '12px', fontWeight: 500, color: 'hsl(var(--muted-foreground))' }}>tUSDC</span>
+                      </div>
                     </div>
                   </div>
+                  {effectiveCloneAddress && (
+                    <div style={{ textAlign: 'right' }}>
+                      <div style={{ fontSize: '10px', color: 'hsl(var(--muted-foreground))', fontFamily: 'var(--font-mono)' }}>
+                        SMART CLONE
+                      </div>
+                      <a
+                        href={`https://shannon-explorer.somnia.network/address/${effectiveCloneAddress}`}
+                        target="_blank"
+                        rel="noreferrer"
+                        style={{ fontSize: '11px', color: 'hsl(var(--foreground))', fontFamily: 'var(--font-mono)', display: 'inline-flex', alignItems: 'center', gap: '4px', textDecoration: 'none' }}
+                      >
+                        <span>{effectiveCloneAddress.slice(0, 6)}...{effectiveCloneAddress.slice(-4)}</span>
+                        <ArrowTopRightOnSquareIcon className="w-3 h-3 text-muted-foreground" />
+                      </a>
+                    </div>
+                  )}
                 </div>
-                {onClaimFaucet && (
+
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '8px', marginTop: '8px' }}>
                   <button
                     type="button"
-                    onClick={async () => {
-                      if (!onClaimFaucet) return;
-                      await onClaimFaucet(1000);
+                    onClick={() => {
+                      onClose();
+                      onOpenTradingWallet?.('deposit');
                     }}
-                    disabled={isFauceting}
                     style={{
-                      background: 'hsl(var(--secondary) / 0.8)',
-                      border: '1px solid hsl(var(--border) / 0.6)',
-                      color: 'hsl(var(--foreground))',
-                      borderRadius: '5px',
-                      padding: '4px 10px',
+                      background: 'hsl(var(--primary))',
+                      color: 'hsl(var(--primary-foreground))',
+                      border: 'none',
+                      borderRadius: '8px',
+                      padding: '8px',
                       fontSize: '11px',
-                      fontWeight: 600,
-                      cursor: isFauceting ? 'not-allowed' : 'pointer',
-                      display: 'inline-flex',
+                      fontWeight: 700,
+                      cursor: 'pointer',
+                      display: 'flex',
                       alignItems: 'center',
-                      gap: '4px',
+                      justifyContent: 'center',
+                      gap: '5px',
                     }}
                   >
-                    {isFauceting ? <ArrowPathIcon className="w-3 h-3 spin" /> : <CurrencyDollarIcon className="w-3 h-3" />}
-                    <span>+1,000 tUSDC Faucet</span>
+                    <ArrowDownTrayIcon className="w-3.5 h-3.5" />
+                    <span>Deposit</span>
                   </button>
-                )}
+                  <button
+                    type="button"
+                    onClick={() => {
+                      onClose();
+                      onOpenTradingWallet?.('withdraw');
+                    }}
+                    style={{
+                      background: 'hsl(var(--secondary))',
+                      color: 'hsl(var(--foreground))',
+                      border: '1px solid hsl(var(--border))',
+                      borderRadius: '8px',
+                      padding: '8px',
+                      fontSize: '11px',
+                      fontWeight: 600,
+                      cursor: 'pointer',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      gap: '5px',
+                    }}
+                  >
+                    <ArrowUpTrayIcon className="w-3.5 h-3.5" />
+                    <span>Withdraw</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      onClose();
+                      onOpenRiskModal?.();
+                    }}
+                    style={{
+                      background: 'hsl(var(--secondary))',
+                      color: 'hsl(var(--foreground))',
+                      border: '1px solid hsl(var(--border))',
+                      borderRadius: '8px',
+                      padding: '8px',
+                      fontSize: '11px',
+                      fontWeight: 600,
+                      cursor: 'pointer',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      gap: '5px',
+                    }}
+                  >
+                    <AdjustmentsHorizontalIcon className="w-3.5 h-3.5" />
+                    <span>Risk Limits</span>
+                  </button>
+                </div>
               </div>
 
               {/* Direct Payout Guarantee Highlight */}
@@ -483,10 +443,10 @@ export const SessionDelegationModal: React.FC<SessionDelegationModalProps> = ({
                     </div>
                     <div className="revoke-option-text">
                       <span className="revoke-option-label">
-                        Submit On-Chain Revocation to Operator Permissions Registry
+                        Submit 1-Tx On-Chain Revocation
                       </span>
                       <span className="revoke-option-hint">
-                        Broadcasts an EVM gas transaction to permanently disable on-chain operator permissions on Somnia Testnet.
+                        Broadcasts 1 on-chain transaction to instantly deactivate the session key on Somnia Testnet.
                       </span>
                     </div>
                   </div>
@@ -577,10 +537,10 @@ export const SessionDelegationModal: React.FC<SessionDelegationModalProps> = ({
                 <ExclamationTriangleIcon className="w-4 h-4 text-red-500 shrink-0 mt-0.5" />
                 <div style={{ flex: 1 }}>
                   <div style={{ fontWeight: 700, fontSize: '12px', color: 'hsl(var(--destructive))', marginBottom: '4px' }}>
-                    Action Required: Operator TestUSDC Authorization
+                    Action Required: Pool Allowance Authorization
                   </div>
                   <div style={{ fontSize: '11px', color: 'hsl(var(--muted-foreground))', lineHeight: 1.4, marginBottom: '8px' }}>
-                    {allowanceStatus.guidance || 'Your wallet needs to grant TestUSDC allowance to the operator for seamless copy-trading. Click Authorize Operator below to complete 1-time setup.'}
+                    {allowanceStatus.guidance || 'Your wallet needs to allow market pools to pull escrow per trade. Click Authorize Pools below to complete 1-time setup. Funds never leave your wallet except into your own orders.'}
                   </div>
                   <div style={{ display: 'flex', gap: '8px' }}>
                     <button
@@ -607,7 +567,7 @@ export const SessionDelegationModal: React.FC<SessionDelegationModalProps> = ({
                       }}
                     >
                       {isFixingAllowance ? <Spinner size="xs" variant="white" /> : <CheckCircleIcon className="w-3 h-3" />}
-                      Authorize Operator
+                      Authorize Pools
                     </button>
                     <button
                       type="button"
@@ -632,404 +592,163 @@ export const SessionDelegationModal: React.FC<SessionDelegationModalProps> = ({
             </div>
           )}
 
-          {/* 2-Step Onboarding Architecture Banner */}
-          <div className="safety-guarantees-card" style={{ padding: '12px 14px', marginBottom: '14px' }}>
-            <div className="safety-card-title" style={{ marginBottom: '10px' }}>
-              <Square3Stack3DIcon className="w-4 h-4 safety-icon-cyan" />
-              <span>2-Step Cryptographic Delegation Flow</span>
-            </div>
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '10px', fontSize: '11px' }}>
-              <div style={{ background: 'hsl(var(--card) / 0.5)', padding: '10px', borderRadius: '6px', border: '1px solid hsl(var(--border) / 0.5)' }}>
-                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '4px' }}>
-                  <strong style={{ display: 'flex', alignItems: 'center', gap: '5px', color: 'hsl(var(--foreground))', fontSize: '11.5px' }}>
-                    <ShieldCheckIcon className="w-3.5 h-3.5" style={{ color: 'var(--brand-cyan)' }} />
-                    <span>Step 1: On-Chain Auth</span>
-                  </strong>
-                  <span style={{ fontSize: '9px', fontFamily: 'var(--font-mono)', padding: '1px 5px', borderRadius: '3px', background: 'hsl(var(--secondary))', color: 'hsl(var(--muted-foreground))' }}>1 TX</span>
+          {!activeSession?.isActive && (
+            <>
+              {/* 2-Step Onboarding Architecture Banner */}
+              <div className="safety-guarantees-card" style={{ padding: '12px 14px', marginBottom: '14px' }}>
+                <div className="safety-card-title" style={{ marginBottom: '10px' }}>
+                  <Square3Stack3DIcon className="w-4 h-4 safety-icon-cyan" />
+                  <span>2-Step Cryptographic Delegation Flow</span>
                 </div>
-                <p style={{ margin: 0, color: 'hsl(var(--muted-foreground))', lineHeight: 1.35 }}>
-                  Authorizes operator key on <code>OperatorPermissionsRegistry</code> & enables token routing.
-                </p>
-              </div>
-              <div style={{ background: 'hsl(var(--card) / 0.5)', padding: '10px', borderRadius: '6px', border: '1px solid hsl(var(--border) / 0.5)' }}>
-                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '4px' }}>
-                  <strong style={{ display: 'flex', alignItems: 'center', gap: '5px', color: 'hsl(var(--foreground))', fontSize: '11.5px' }}>
-                    <DocumentCheckIcon className="w-3.5 h-3.5" style={{ color: 'var(--brand-cyan)' }} />
-                    <span>Step 2: EIP-712 Policy</span>
-                  </strong>
-                  <span style={{ fontSize: '9px', fontFamily: 'var(--font-mono)', padding: '1px 5px', borderRadius: '3px', background: 'rgba(0, 230, 118, 0.15)', color: 'var(--trade-yes)' }}>GASLESS</span>
-                </div>
-                <p style={{ margin: 0, color: 'hsl(var(--muted-foreground))', lineHeight: 1.35 }}>
-                  Cryptographically enforces maximum trade size & spend ceilings without custodial access.
-                </p>
-              </div>
-            </div>
-          </div>
-
-          {/* Operator Contract Information */}
-          <div className="operator-info-row">
-            <span className="operator-label">Delegated Operator:</span>
-            <div className="operator-address-chip" onClick={handleCopyOperator} title="Click to copy operator address">
-              <code>{SOMNIA_ADDRESSES.operatorAccount}</code>
-              {copiedOperator ? (
-                <CheckIcon className="w-3 h-3" style={{ color: 'var(--trade-yes)' }} />
-              ) : (
-                <DocumentDuplicateIcon className="w-3 h-3" />
-              )}
-            </div>
-            <a
-              href={`https://shannon-explorer.somnia.network/address/${SOMNIA_ADDRESSES.operatorAccount}`}
-              target="_blank"
-              rel="noreferrer"
-              className="operator-explorer-link"
-              title="View Delegated Operator on Somnia Explorer"
-            >
-              <ArrowTopRightOnSquareIcon className="w-3 h-3" />
-            </a>
-          </div>
-
-          {/* Risk Limits Configuration Form */}
-          <div className="risk-config-section">
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '12px' }}>
-              <h3 className="section-title" style={{ margin: 0 }}>Configure Risk Ceilings & Working Capital</h3>
-              <span style={{ fontSize: '10px', color: 'hsl(var(--muted-foreground))', fontFamily: 'var(--font-mono)' }}>
-                Zero Upper Cap Constraints
-              </span>
-            </div>
-
-            {/* 1. Non-Custodial Direct Allowance Notice */}
-            <div style={{ padding: '12px 14px', borderRadius: '8px', background: 'rgba(255, 255, 255, 0.03)', border: '1px solid var(--border)', marginBottom: '16px' }}>
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '8px', marginBottom: '6px' }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '6px', color: 'var(--foreground)', fontSize: '12px', fontWeight: 600 }}>
-                  <ShieldCheckIcon className="w-4 h-4 text-brand-cyan" />
-                  <span>Non-Custodial Direct ERC-20 Allowance</span>
-                </div>
-                <span style={{ fontSize: '11px', fontFamily: 'var(--font-mono)', color: 'var(--muted-foreground)' }}>
-                  Wallet Collateral: <strong style={{ color: 'var(--foreground)' }}>{collateralBalance.toLocaleString()} tUSDC</strong>
-                </span>
-              </div>
-              <p style={{ margin: 0, fontSize: '11px', color: 'var(--muted-foreground)', lineHeight: 1.5 }}>
-                Binary prediction markets settle directly from your wallet balance via standard ERC-20 approvals. No funds are transferred to a vault contract. Automated session trades are constrained strictly by the cryptographically signed Max Trade Size and Daily Volume Cap below.
-              </p>
-            </div>
-
-            {/* 2. Max Trade Size Limit */}
-            <div className="config-group">
-              <div className="config-header-row">
-                <label htmlFor="max-trade-input" className="config-label" style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
-                  <AdjustmentsHorizontalIcon className="w-3.5 h-3.5" style={{ color: 'hsl(var(--muted-foreground))' }} />
-                  <span>Max Trade Size Limit</span>
-                </label>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                  {isUnlimitedMaxTrade ? (
-                    <span className="unlimited-active-badge">
-                      <SparklesIcon className="w-3 h-3 text-[#00ffcc]" />
-                      <span>Unlimited (No Cap)</span>
-                    </span>
-                  ) : (
-                    <>
-                      <input
-                        id="max-trade-input"
-                        type="number"
-                        min={1}
-                        step="any"
-                        value={customMaxTradeStr}
-                        onChange={(e) => handleMaxTradeChange(e.target.value)}
-                        className="custom-numeric-input"
-                        placeholder="10"
-                        aria-label="Max Trade Size in tUSDC"
-                      />
-                      <span className="config-unit-label">tUSDC</span>
-                    </>
-                  )}
-                </div>
-              </div>
-              <input
-                id="max-trade-slider"
-                type="range"
-                min={1}
-                max={Math.max(5000, isUnlimitedMaxTrade ? 5000 : maxTradeSize)}
-                step={5}
-                disabled={isUnlimitedMaxTrade}
-                value={isUnlimitedMaxTrade ? 5000 : maxTradeSize}
-                onChange={(e) => {
-                  const val = Number(e.target.value);
-                  setMaxTradeSize(val);
-                  setIsUnlimitedMaxTrade(false);
-                  setCustomMaxTradeStr(String(val));
-                  if (!isUnlimitedDailyCap && dailyVolumeCap < val) {
-                    setDailyVolumeCap(val * 2);
-                    setCustomDailyCapStr(String(val * 2));
-                  }
-                }}
-                className="custom-range-slider"
-                style={{ opacity: isUnlimitedMaxTrade ? 0.35 : 1 }}
-              />
-              <div className="preset-pill-row">
-                {[10, 50, 100, 500, 1000, 5000].map((val) => (
-                  <button
-                    key={val}
-                    type="button"
-                    className={`preset-pill ${!isUnlimitedMaxTrade && maxTradeSize === val ? 'active' : ''}`}
-                    onClick={() => {
-                      setIsUnlimitedMaxTrade(false);
-                      setMaxTradeSize(val);
-                      setCustomMaxTradeStr(String(val));
-                      if (!isUnlimitedDailyCap && dailyVolumeCap < val) {
-                        setDailyVolumeCap(val * 2);
-                        setCustomDailyCapStr(String(val * 2));
-                      }
-                    }}
-                  >
-                    {val.toLocaleString()} tUSDC
-                  </button>
-                ))}
-                <button
-                  type="button"
-                  className={`preset-pill preset-pill-unlimited ${isUnlimitedMaxTrade ? 'active' : ''}`}
-                  onClick={() => {
-                    setIsUnlimitedMaxTrade(true);
-                    setMaxTradeSize(UNLIMITED_AMOUNT);
-                  }}
-                >
-                  <SparklesIcon className="w-3 h-3 text-[#00ffcc]" />
-                  <span>Unlimited</span>
-                </button>
-              </div>
-            </div>
-
-            {/* 3. 24-Hour Daily Volume Cap */}
-            <div className="config-group">
-              <div className="config-header-row">
-                <label htmlFor="daily-cap-input" className="config-label" style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
-                  <BoltIcon className="w-3.5 h-3.5" style={{ color: 'hsl(var(--muted-foreground))' }} />
-                  <span>24-Hour Daily Volume Cap</span>
-                </label>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                  {isUnlimitedDailyCap ? (
-                    <span className="unlimited-active-badge">
-                      <SparklesIcon className="w-3 h-3 text-[#00ffcc]" />
-                      <span>Unlimited (No Cap)</span>
-                    </span>
-                  ) : (
-                    <>
-                      <input
-                        id="daily-cap-input"
-                        type="number"
-                        min={1}
-                        step="any"
-                        value={customDailyCapStr}
-                        onChange={(e) => handleDailyCapChange(e.target.value)}
-                        className="custom-numeric-input"
-                        placeholder="100"
-                        aria-label="24-Hour Daily Volume Cap in tUSDC"
-                      />
-                      <span className="config-unit-label">tUSDC</span>
-                    </>
-                  )}
-                </div>
-              </div>
-              <input
-                id="daily-cap-slider"
-                type="range"
-                min={isUnlimitedMaxTrade ? 10 : maxTradeSize}
-                max={Math.max(25000, isUnlimitedDailyCap ? 25000 : dailyVolumeCap)}
-                step={25}
-                disabled={isUnlimitedDailyCap}
-                value={isUnlimitedDailyCap ? 25000 : dailyVolumeCap}
-                onChange={(e) => {
-                  const val = Number(e.target.value);
-                  setDailyVolumeCap(val);
-                  setIsUnlimitedDailyCap(false);
-                  setCustomDailyCapStr(String(val));
-                }}
-                className="custom-range-slider"
-                style={{ opacity: isUnlimitedDailyCap ? 0.35 : 1 }}
-              />
-              <div className="preset-pill-row">
-                {[100, 500, 1000, 5000, 25000, 100000].map((val) => (
-                  <button
-                    key={val}
-                    type="button"
-                    className={`preset-pill ${!isUnlimitedDailyCap && dailyVolumeCap === val ? 'active' : ''}`}
-                    onClick={() => {
-                      setIsUnlimitedDailyCap(false);
-                      const effectiveVal = Math.max(val, isUnlimitedMaxTrade ? 1 : maxTradeSize);
-                      setDailyVolumeCap(effectiveVal);
-                      setCustomDailyCapStr(String(effectiveVal));
-                    }}
-                  >
-                    {val.toLocaleString()} tUSDC
-                  </button>
-                ))}
-                <button
-                  type="button"
-                  className={`preset-pill preset-pill-unlimited ${isUnlimitedDailyCap ? 'active' : ''}`}
-                  onClick={() => {
-                    setIsUnlimitedDailyCap(true);
-                    setDailyVolumeCap(UNLIMITED_AMOUNT);
-                  }}
-                >
-                  <SparklesIcon className="w-3 h-3 text-[#00ffcc]" />
-                  <span>Unlimited</span>
-                </button>
-              </div>
-            </div>
-
-            {/* 4. Session Duration Selector */}
-            <div className="config-group">
-              <div className="config-header-row">
-                <label className="config-label" style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
-                  <ClockIcon className="w-3.5 h-3.5" style={{ color: 'hsl(var(--muted-foreground))' }} />
-                  <span>Session Duration & Expiration</span>
-                </label>
-                <span className="config-value-badge font-mono">
-                  {isCustomDuration
-                    ? `${customDurationValue} ${customDurationUnit}`
-                    : durationHours >= UNLIMITED_HOURS
-                    ? 'Unlimited (100 Years)'
-                    : durationHours >= 8760
-                    ? `${Math.round(durationHours / 8760)} Year(s)`
-                    : durationHours >= 24
-                    ? `${Math.round(durationHours / 24)} Day(s)`
-                    : `${durationHours} Hour(s)`}
-                </span>
-              </div>
-              <div className="duration-grid-expanded">
-                {durationOptions.map((opt) => (
-                  <button
-                    key={opt.hours}
-                    type="button"
-                    className={`duration-card ${!isCustomDuration && durationHours === opt.hours ? 'active' : ''}`}
-                    onClick={() => {
-                      setIsCustomDuration(false);
-                      setDurationHours(opt.hours);
-                    }}
-                  >
-                    {opt.hours >= UNLIMITED_HOURS ? (
-                      <SparklesIcon className="w-3.5 h-3.5 text-[#00ffcc]" />
-                    ) : (
-                      <ClockIcon className="w-3.5 h-3.5" />
-                    )}
-                    <span>{opt.label}</span>
-                  </button>
-                ))}
-                <button
-                  type="button"
-                  className={`duration-card ${isCustomDuration ? 'active' : ''}`}
-                  onClick={() => setIsCustomDuration(true)}
-                >
-                  <ArrowsPointingOutIcon className="w-3.5 h-3.5" />
-                  <span>Custom...</span>
-                </button>
-              </div>
-
-              {/* Custom Duration Input Box */}
-              {isCustomDuration && (
-                <div className="custom-duration-box animate-fadeIn">
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                    <span style={{ fontSize: '11px', color: 'hsl(var(--muted-foreground))' }}>Delegate for:</span>
-                    <input
-                      type="number"
-                      min={1}
-                      value={customDurationValue}
-                      onChange={(e) => setCustomDurationValue(e.target.value)}
-                      className="custom-numeric-input"
-                      style={{ width: '70px' }}
-                      aria-label="Custom duration quantity"
-                    />
-                    <select
-                      value={customDurationUnit}
-                      onChange={(e) => setCustomDurationUnit(e.target.value as any)}
-                      className="custom-select-box"
-                      aria-label="Custom duration unit"
-                    >
-                      <option value="hours">Hours</option>
-                      <option value="days">Days</option>
-                      <option value="months">Months (30d)</option>
-                    </select>
-                    <span style={{ fontSize: '10.5px', color: 'var(--brand-cyan)', fontFamily: 'var(--font-mono)' }}>
-                      (= {getEffectiveDurationHours().toLocaleString()} Total Hours)
-                    </span>
-                  </div>
-                </div>
-              )}
-            </div>
-
-            {/* Session Delegation Capability Clarification Card */}
-            <div className="rounded-lg p-3 border border-border/60 bg-secondary/20 flex flex-col gap-2">
-              <div className="text-[11px] font-bold text-foreground flex items-center gap-1.5 font-mono uppercase text-muted-foreground">
-                <ShieldCheckIcon className="w-3.5 h-3.5 text-[#00e676]" />
-                <span>Session Key Capabilities</span>
-              </div>
-              <div className="grid grid-cols-2 gap-2 text-[11px]">
-                <div className="p-2 rounded bg-background/50 border border-border/40 flex flex-col gap-0.5">
-                  <span className="font-bold text-foreground flex items-center gap-1">
-                    <BoltIcon className="w-3 h-3 text-[#ffb700]" /> 1-Click Terminal
-                  </span>
-                  <span className="text-[10px] text-muted-foreground">Instant gasless trades with AI Alpha Copilot</span>
-                </div>
-                <div className="p-2 rounded bg-background/50 border border-border/40 flex flex-col gap-0.5">
-                  <span className="font-bold text-foreground flex items-center gap-1">
-                    <SparklesIcon className="w-3 h-3 text-[#d8b4fe]" /> Custom Agents
-                  </span>
-                  <span className="text-[10px] text-muted-foreground">Powers your Strategy Studio automated bots</span>
-                </div>
-              </div>
-            </div>
-
-            {/* Autonomous Protocol Swarm Mirror Switch */}
-            <div className="config-group" style={{ background: 'hsl(var(--secondary) / 0.35)', padding: '12px 14px', borderRadius: '8px', border: `1px solid ${enableCopyTrading ? 'rgba(56, 189, 248, 0.4)' : 'hsl(var(--border) / 0.7)'}` }}>
-              <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: '12px' }}>
-                <div style={{ display: 'flex', gap: '10px' }}>
-                  <div style={{ width: '32px', height: '32px', borderRadius: '8px', background: enableCopyTrading ? 'rgba(56, 189, 248, 0.15)' : 'hsl(var(--secondary))', border: `1px solid ${enableCopyTrading ? 'rgba(56, 189, 248, 0.3)' : 'hsl(var(--border) / 0.6)'}`, display: 'grid', placeItems: 'center', color: enableCopyTrading ? '#00ffcc' : 'hsl(var(--muted-foreground))', flexShrink: 0, marginTop: '2px' }}>
-                    <BoltIcon className="w-4 h-4" />
-                  </div>
-                  <div>
-                    <div style={{ fontSize: '12px', fontWeight: 700, color: 'hsl(var(--foreground))', display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
-                      <span>Mirror Protocol Swarm (Volt, Oracle, Titan)</span>
-                      <span style={{ fontSize: '9px', padding: '1px 6px', borderRadius: '4px', background: enableCopyTrading ? 'rgba(56, 189, 248, 0.15)' : 'hsl(var(--secondary))', color: enableCopyTrading ? '#00ffcc' : 'hsl(var(--muted-foreground))', border: `1px solid ${enableCopyTrading ? 'rgba(56, 189, 248, 0.3)' : 'hsl(var(--border))'}`, fontWeight: 700, fontFamily: 'var(--font-mono)' }}>
-                        {enableCopyTrading ? 'PROTOCOL MIRROR ON' : 'PROTOCOL MIRROR OFF'}
-                      </span>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '10px', fontSize: '11px' }}>
+                  <div style={{ background: 'hsl(var(--card) / 0.5)', padding: '10px', borderRadius: '6px', border: '1px solid hsl(var(--border) / 0.5)' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '4px' }}>
+                      <strong style={{ display: 'flex', alignItems: 'center', gap: '5px', color: 'hsl(var(--foreground))', fontSize: '11.5px' }}>
+                        <ShieldCheckIcon className="w-3.5 h-3.5" style={{ color: 'var(--brand-cyan)' }} />
+                        <span>Step 1: Smart Account Clone</span>
+                      </strong>
+                      <span style={{ fontSize: '9px', fontFamily: 'var(--font-mono)', padding: '1px 5px', borderRadius: '3px', background: 'hsl(var(--secondary))', color: 'hsl(var(--muted-foreground))' }}>1 TX</span>
                     </div>
-                    <p style={{ margin: '4px 0 0', fontSize: '11px', color: 'hsl(var(--muted-foreground))', lineHeight: 1.4 }}>
-                      {enableCopyTrading
-                        ? 'Institutional Volt, Oracle, and Titan trades will be mirrored directly to your wallet within authorized caps.'
-                        : 'Keep OFF if you only want to trade manually or let your own Custom Strategy Studio bots trade without copying platform bots.'}
+                    <p style={{ margin: 0, color: 'hsl(var(--muted-foreground))', lineHeight: 1.35 }}>
+                      Authorizes your isolated V2 Smart Account Clone ({effectiveCloneAddress ? `${effectiveCloneAddress.slice(0, 6)}...${effectiveCloneAddress.slice(-4)}` : 'V2 Clone'}). Enforces risk bounds on-chain. Revocable in 1 tx.
+                    </p>
+                  </div>
+                  <div style={{ background: 'hsl(var(--card) / 0.5)', padding: '10px', borderRadius: '6px', border: '1px solid hsl(var(--border) / 0.5)' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '4px' }}>
+                      <strong style={{ display: 'flex', alignItems: 'center', gap: '5px', color: 'hsl(var(--foreground))', fontSize: '11.5px' }}>
+                        <DocumentCheckIcon className="w-3.5 h-3.5" style={{ color: 'var(--brand-cyan)' }} />
+                        <span>Step 2: Ephemeral Key</span>
+                      </strong>
+                      <span style={{ fontSize: '9px', fontFamily: 'var(--font-mono)', padding: '1px 5px', borderRadius: '3px', background: 'rgba(0, 230, 118, 0.15)', color: 'var(--trade-yes)' }}>PER-USER</span>
+                    </div>
+                    <p style={{ margin: 0, color: 'hsl(var(--muted-foreground))', lineHeight: 1.35 }}>
+                      Generates an isolated, weak session key for your EOA. Stealing it only grants bounded, expiring power.
                     </p>
                   </div>
                 </div>
-                <button
-                  type="button"
-                  onClick={() => setEnableCopyTrading(!enableCopyTrading)}
-                  className="cursor-pointer flex-shrink-0"
-                  style={{
-                    width: '42px',
-                    height: '24px',
-                    borderRadius: '12px',
-                    background: enableCopyTrading ? '#00ffcc' : 'hsl(var(--muted))',
-                    border: 'none',
-                    position: 'relative',
-                    transition: 'background 0.2s ease',
-                    padding: '2px',
-                  }}
-                  aria-label="Toggle autonomous protocol swarm mirroring"
-                >
-                  <span
-                    style={{
-                      display: 'block',
-                      width: '20px',
-                      height: '20px',
-                      borderRadius: '50%',
-                      background: '#09090b',
-                      transform: enableCopyTrading ? 'translateX(18px)' : 'translateX(0)',
-                      transition: 'transform 0.2s ease',
-                    }}
-                  />
-                </button>
               </div>
-            </div>
-          </div>
+
+              {/* Smart Account Clone Contract Information */}
+              <div className="operator-info-row">
+                <span className="operator-label">Smart Account Clone:</span>
+                <div className="operator-address-chip" title="Isolated Non-Custodial Smart Account Clone Contract">
+                  <code>{effectiveCloneAddress || SOMNIA_ADDRESSES.sessionAccount}</code>
+                </div>
+                <a
+                  href={`https://shannon-explorer.somnia.network/address/${effectiveCloneAddress || SOMNIA_ADDRESSES.sessionAccount}`}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="operator-explorer-link"
+                  title="View Smart Account Clone Contract on Somnia Explorer"
+                >
+                  <ArrowTopRightOnSquareIcon className="w-3 h-3" />
+                </a>
+              </div>
+
+              {/* Isolated Smart Trading Account Architecture Card */}
+              <div className="risk-config-section" style={{ padding: '16px', borderRadius: '12px', background: 'hsl(var(--secondary) / 0.25)', border: '1px solid hsl(var(--border) / 0.6)', marginBottom: '14px' }}>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '12px' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    <div style={{ padding: '6px', borderRadius: '8px', background: 'rgba(0, 255, 204, 0.1)', color: '#00ffcc' }}>
+                      <ShieldCheckIcon className="w-5 h-5" />
+                    </div>
+                    <div>
+                      <h3 className="section-title" style={{ margin: 0, fontSize: '13px' }}>
+                        Isolated Trading Account Model
+                      </h3>
+                      <p style={{ margin: '2px 0 0', fontSize: '11px', color: 'hsl(var(--muted-foreground))' }}>
+                        Deposit & withdraw model — identical to DreamDEX & Hyperliquid.
+                      </p>
+                    </div>
+                  </div>
+                  <span style={{ fontSize: '10px', color: '#00ffcc', fontFamily: 'var(--font-mono)', background: 'rgba(0, 255, 204, 0.1)', padding: '2px 8px', borderRadius: '4px', border: '1px solid rgba(0, 255, 204, 0.25)' }}>
+                    PERPETUAL
+                  </span>
+                </div>
+
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '10px', marginBottom: '14px' }}>
+                  <div style={{ padding: '10px 12px', borderRadius: '8px', background: 'hsl(var(--card) / 0.6)', border: '1px solid hsl(var(--border) / 0.4)' }}>
+                    <div style={{ fontSize: '10px', fontWeight: 600, color: 'hsl(var(--muted-foreground))', textTransform: 'uppercase', marginBottom: '4px' }}>
+                      1. Physical Isolation
+                    </div>
+                    <p style={{ margin: 0, fontSize: '11px', color: 'hsl(var(--foreground))', lineHeight: 1.35 }}>
+                      Only funds deposited into your Smart Clone are tradeable. Zero auto-pull from your EOA.
+                    </p>
+                  </div>
+
+                  <div style={{ padding: '10px 12px', borderRadius: '8px', background: 'hsl(var(--card) / 0.6)', border: '1px solid hsl(var(--border) / 0.4)' }}>
+                    <div style={{ fontSize: '10px', fontWeight: 600, color: 'hsl(var(--muted-foreground))', textTransform: 'uppercase', marginBottom: '4px' }}>
+                      2. Trade Forever
+                    </div>
+                    <p style={{ margin: 0, fontSize: '11px', color: 'hsl(var(--foreground))', lineHeight: 1.35 }}>
+                      No artificial trade caps or daily ceilings blocking you. Deposit what you want, trade freely.
+                    </p>
+                  </div>
+
+                  <div style={{ padding: '10px 12px', borderRadius: '8px', background: 'hsl(var(--card) / 0.6)', border: '1px solid hsl(var(--border) / 0.4)' }}>
+                    <div style={{ fontSize: '10px', fontWeight: 600, color: 'hsl(var(--muted-foreground))', textTransform: 'uppercase', marginBottom: '4px' }}>
+                      3. Decoupled Risk
+                    </div>
+                    <p style={{ margin: 0, fontSize: '11px', color: 'hsl(var(--foreground))', lineHeight: 1.35 }}>
+                      Want tighter single-trade or daily stop limits? Configure them anytime in the Risk Limits modal.
+                    </p>
+                  </div>
+                </div>
+
+                {/* Autonomous Protocol Swarm Mirror Switch */}
+                <div style={{ background: 'hsl(var(--secondary) / 0.4)', padding: '12px 14px', borderRadius: '8px', border: `1px solid ${enableCopyTrading ? 'rgba(56, 189, 248, 0.4)' : 'hsl(var(--border) / 0.7)'}` }}>
+                  <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: '12px' }}>
+                    <div style={{ display: 'flex', gap: '10px' }}>
+                      <div style={{ width: '32px', height: '32px', borderRadius: '8px', background: enableCopyTrading ? 'rgba(56, 189, 248, 0.15)' : 'hsl(var(--secondary))', border: `1px solid ${enableCopyTrading ? 'rgba(56, 189, 248, 0.3)' : 'hsl(var(--border) / 0.6)'}`, display: 'grid', placeItems: 'center', color: enableCopyTrading ? '#00ffcc' : 'hsl(var(--muted-foreground))', flexShrink: 0, marginTop: '2px' }}>
+                        <BoltIcon className="w-4 h-4" />
+                      </div>
+                      <div>
+                        <div style={{ fontSize: '12px', fontWeight: 700, color: 'hsl(var(--foreground))', display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
+                          <span>Mirror Protocol Swarm (Volt, Oracle, Titan)</span>
+                          <span style={{ fontSize: '9px', padding: '1px 6px', borderRadius: '4px', background: enableCopyTrading ? 'rgba(56, 189, 248, 0.15)' : 'hsl(var(--secondary))', color: enableCopyTrading ? '#00ffcc' : 'hsl(var(--muted-foreground))', border: `1px solid ${enableCopyTrading ? 'rgba(56, 189, 248, 0.3)' : 'hsl(var(--border))'}`, fontWeight: 700, fontFamily: 'var(--font-mono)' }}>
+                            {enableCopyTrading ? 'PROTOCOL MIRROR ON' : 'PROTOCOL MIRROR OFF'}
+                          </span>
+                        </div>
+                        <p style={{ margin: '4px 0 0', fontSize: '11px', color: 'hsl(var(--muted-foreground))', lineHeight: 1.4 }}>
+                          {enableCopyTrading
+                            ? 'Institutional Volt, Oracle, and Titan trades will be mirrored using your trading wallet balance.'
+                            : 'Keep OFF if you only want to trade manually or let your own Custom Strategy Studio bots trade without copying platform bots.'}
+                        </p>
+                      </div>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => setEnableCopyTrading(!enableCopyTrading)}
+                      className="cursor-pointer flex-shrink-0"
+                      style={{
+                        width: '42px',
+                        height: '24px',
+                        borderRadius: '12px',
+                        background: enableCopyTrading ? '#00ffcc' : 'hsl(var(--muted))',
+                        border: 'none',
+                        position: 'relative',
+                        transition: 'background 0.2s ease',
+                        padding: '2px',
+                      }}
+                      aria-label="Toggle autonomous protocol swarm mirroring"
+                    >
+                      <span
+                        style={{
+                          display: 'block',
+                          width: '20px',
+                          height: '20px',
+                          borderRadius: '50%',
+                          background: '#09090b',
+                          transform: enableCopyTrading ? 'translateX(18px)' : 'translateX(0)',
+                          transition: 'transform 0.2s ease',
+                        }}
+                      />
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </>
+          )}
 
           {/* Zero-Custody Safety Guarantees */}
           <div className="safety-guarantees-card">
@@ -1148,7 +867,14 @@ export const SessionDelegationModal: React.FC<SessionDelegationModalProps> = ({
             <button
               type="button"
               className="btn-primary-action"
-              onClick={handleCreate}
+              onClick={
+                activeSession?.isActive
+                  ? () => {
+                      onClose();
+                      onOpenTradingWallet?.('deposit');
+                    }
+                  : handleCreate
+              }
               disabled={isSigning || isLoading}
             >
               {isSigning ? (
@@ -1161,8 +887,8 @@ export const SessionDelegationModal: React.FC<SessionDelegationModalProps> = ({
                   <CheckCircleIcon className="w-4 h-4" />
                   <span>
                     {activeSession?.isActive
-                      ? 'Update Session & On-Chain Permissions'
-                      : 'Authorize On-Chain Session & Delegation'}
+                      ? 'Deposit Funds to Trading Account'
+                      : 'Activate Smart Trading Account (1-Click)'}
                   </span>
                 </>
               )}

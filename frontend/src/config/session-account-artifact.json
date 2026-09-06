@@ -1,0 +1,551 @@
+{
+  "contractName": "DreamPulseSessionAccount",
+  "address": "0xff16ef28861f90201ab0b00e46f6c7683afacee5",
+  "chainId": 50312,
+  "blockNumber": "481103348",
+  "transactionHash": "0x6b9fe60b53bf2bda0c6733a01854a9887c71444359dff7b33981a3c75068b457",
+  "deployedAt": "2026-09-06T08:31:23.262Z",
+  "abi": [
+    {
+      "inputs": [
+        {
+          "internalType": "uint256",
+          "name": "requestedTotal",
+          "type": "uint256"
+        },
+        {
+          "internalType": "uint256",
+          "name": "dailyCap",
+          "type": "uint256"
+        }
+      ],
+      "name": "ExceedsDailyVolumeCap",
+      "type": "error"
+    },
+    {
+      "inputs": [
+        {
+          "internalType": "uint256",
+          "name": "requested",
+          "type": "uint256"
+        },
+        {
+          "internalType": "uint256",
+          "name": "maxAllowed",
+          "type": "uint256"
+        }
+      ],
+      "name": "ExceedsMaxTradeSize",
+      "type": "error"
+    },
+    {
+      "inputs": [
+        {
+          "internalType": "bytes",
+          "name": "revertReason",
+          "type": "bytes"
+        }
+      ],
+      "name": "ExecutionFailed",
+      "type": "error"
+    },
+    {
+      "inputs": [],
+      "name": "InvalidCapLimits",
+      "type": "error"
+    },
+    {
+      "inputs": [],
+      "name": "InvalidDuration",
+      "type": "error"
+    },
+    {
+      "inputs": [],
+      "name": "InvalidSessionKey",
+      "type": "error"
+    },
+    {
+      "inputs": [
+        {
+          "internalType": "bytes4",
+          "name": "selector",
+          "type": "bytes4"
+        }
+      ],
+      "name": "SelectorNotAllowed",
+      "type": "error"
+    },
+    {
+      "inputs": [],
+      "name": "SessionExpired",
+      "type": "error"
+    },
+    {
+      "inputs": [],
+      "name": "SessionNotActive",
+      "type": "error"
+    },
+    {
+      "anonymous": false,
+      "inputs": [
+        {
+          "indexed": true,
+          "internalType": "address",
+          "name": "user",
+          "type": "address"
+        },
+        {
+          "indexed": true,
+          "internalType": "address",
+          "name": "sessionKey",
+          "type": "address"
+        },
+        {
+          "indexed": true,
+          "internalType": "address",
+          "name": "targetPool",
+          "type": "address"
+        },
+        {
+          "indexed": false,
+          "internalType": "uint256",
+          "name": "tradeCost",
+          "type": "uint256"
+        },
+        {
+          "indexed": false,
+          "internalType": "bytes4",
+          "name": "selector",
+          "type": "bytes4"
+        }
+      ],
+      "name": "OrderExecuted",
+      "type": "event"
+    },
+    {
+      "anonymous": false,
+      "inputs": [
+        {
+          "indexed": true,
+          "internalType": "address",
+          "name": "user",
+          "type": "address"
+        },
+        {
+          "indexed": true,
+          "internalType": "address",
+          "name": "sessionKey",
+          "type": "address"
+        },
+        {
+          "indexed": false,
+          "internalType": "uint256",
+          "name": "maxTradeSize",
+          "type": "uint256"
+        },
+        {
+          "indexed": false,
+          "internalType": "uint256",
+          "name": "dailyVolumeCap",
+          "type": "uint256"
+        },
+        {
+          "indexed": false,
+          "internalType": "uint256",
+          "name": "expiresAt",
+          "type": "uint256"
+        }
+      ],
+      "name": "SessionAuthorized",
+      "type": "event"
+    },
+    {
+      "anonymous": false,
+      "inputs": [
+        {
+          "indexed": true,
+          "internalType": "address",
+          "name": "user",
+          "type": "address"
+        },
+        {
+          "indexed": true,
+          "internalType": "address",
+          "name": "sessionKey",
+          "type": "address"
+        }
+      ],
+      "name": "SessionRevoked",
+      "type": "event"
+    },
+    {
+      "inputs": [],
+      "name": "MAX_ALLOWED_DAILY_CAP",
+      "outputs": [
+        {
+          "internalType": "uint256",
+          "name": "",
+          "type": "uint256"
+        }
+      ],
+      "stateMutability": "view",
+      "type": "function"
+    },
+    {
+      "inputs": [],
+      "name": "MAX_ALLOWED_TRADE_SIZE",
+      "outputs": [
+        {
+          "internalType": "uint256",
+          "name": "",
+          "type": "uint256"
+        }
+      ],
+      "stateMutability": "view",
+      "type": "function"
+    },
+    {
+      "inputs": [],
+      "name": "MAX_SESSION_DURATION",
+      "outputs": [
+        {
+          "internalType": "uint256",
+          "name": "",
+          "type": "uint256"
+        }
+      ],
+      "stateMutability": "view",
+      "type": "function"
+    },
+    {
+      "inputs": [],
+      "name": "SELECTOR_CANCEL_ORDER",
+      "outputs": [
+        {
+          "internalType": "bytes4",
+          "name": "",
+          "type": "bytes4"
+        }
+      ],
+      "stateMutability": "view",
+      "type": "function"
+    },
+    {
+      "inputs": [],
+      "name": "SELECTOR_CANCEL_ORDER_FOR",
+      "outputs": [
+        {
+          "internalType": "bytes4",
+          "name": "",
+          "type": "bytes4"
+        }
+      ],
+      "stateMutability": "view",
+      "type": "function"
+    },
+    {
+      "inputs": [],
+      "name": "SELECTOR_PLACE_BINARY_ORDER",
+      "outputs": [
+        {
+          "internalType": "bytes4",
+          "name": "",
+          "type": "bytes4"
+        }
+      ],
+      "stateMutability": "view",
+      "type": "function"
+    },
+    {
+      "inputs": [],
+      "name": "SELECTOR_PLACE_BINARY_ORDER_FOR",
+      "outputs": [
+        {
+          "internalType": "bytes4",
+          "name": "",
+          "type": "bytes4"
+        }
+      ],
+      "stateMutability": "view",
+      "type": "function"
+    },
+    {
+      "inputs": [],
+      "name": "SELECTOR_PLACE_ORDER",
+      "outputs": [
+        {
+          "internalType": "bytes4",
+          "name": "",
+          "type": "bytes4"
+        }
+      ],
+      "stateMutability": "view",
+      "type": "function"
+    },
+    {
+      "inputs": [],
+      "name": "SELECTOR_PLACE_ORDER_FOR",
+      "outputs": [
+        {
+          "internalType": "bytes4",
+          "name": "",
+          "type": "bytes4"
+        }
+      ],
+      "stateMutability": "view",
+      "type": "function"
+    },
+    {
+      "inputs": [],
+      "name": "SELECTOR_REDUCE_ORDER",
+      "outputs": [
+        {
+          "internalType": "bytes4",
+          "name": "",
+          "type": "bytes4"
+        }
+      ],
+      "stateMutability": "view",
+      "type": "function"
+    },
+    {
+      "inputs": [],
+      "name": "SELECTOR_REDUCE_ORDER_FOR",
+      "outputs": [
+        {
+          "internalType": "bytes4",
+          "name": "",
+          "type": "bytes4"
+        }
+      ],
+      "stateMutability": "view",
+      "type": "function"
+    },
+    {
+      "inputs": [
+        {
+          "internalType": "address",
+          "name": "sessionKey",
+          "type": "address"
+        },
+        {
+          "internalType": "uint256",
+          "name": "maxTradeSize",
+          "type": "uint256"
+        },
+        {
+          "internalType": "uint256",
+          "name": "dailyVolumeCap",
+          "type": "uint256"
+        },
+        {
+          "internalType": "uint256",
+          "name": "durationSec",
+          "type": "uint256"
+        }
+      ],
+      "name": "authorizeSession",
+      "outputs": [],
+      "stateMutability": "nonpayable",
+      "type": "function"
+    },
+    {
+      "inputs": [
+        {
+          "internalType": "address",
+          "name": "targetPool",
+          "type": "address"
+        },
+        {
+          "internalType": "bytes",
+          "name": "callData",
+          "type": "bytes"
+        },
+        {
+          "internalType": "uint256",
+          "name": "tradeCost",
+          "type": "uint256"
+        }
+      ],
+      "name": "executeFromSelf",
+      "outputs": [
+        {
+          "internalType": "bytes",
+          "name": "",
+          "type": "bytes"
+        }
+      ],
+      "stateMutability": "payable",
+      "type": "function"
+    },
+    {
+      "inputs": [
+        {
+          "internalType": "address",
+          "name": "user",
+          "type": "address"
+        },
+        {
+          "internalType": "address",
+          "name": "targetPool",
+          "type": "address"
+        },
+        {
+          "internalType": "bytes",
+          "name": "callData",
+          "type": "bytes"
+        },
+        {
+          "internalType": "uint256",
+          "name": "tradeCost",
+          "type": "uint256"
+        }
+      ],
+      "name": "executeOrder",
+      "outputs": [
+        {
+          "internalType": "bytes",
+          "name": "",
+          "type": "bytes"
+        }
+      ],
+      "stateMutability": "payable",
+      "type": "function"
+    },
+    {
+      "inputs": [
+        {
+          "internalType": "address",
+          "name": "user",
+          "type": "address"
+        },
+        {
+          "internalType": "address",
+          "name": "sessionKey",
+          "type": "address"
+        }
+      ],
+      "name": "getSession",
+      "outputs": [
+        {
+          "internalType": "uint256",
+          "name": "maxTradeSize",
+          "type": "uint256"
+        },
+        {
+          "internalType": "uint256",
+          "name": "dailyVolumeCap",
+          "type": "uint256"
+        },
+        {
+          "internalType": "uint256",
+          "name": "spentToday",
+          "type": "uint256"
+        },
+        {
+          "internalType": "uint256",
+          "name": "remainingDailyAllowance",
+          "type": "uint256"
+        },
+        {
+          "internalType": "uint256",
+          "name": "expiresAt",
+          "type": "uint256"
+        },
+        {
+          "internalType": "bool",
+          "name": "isActive",
+          "type": "bool"
+        }
+      ],
+      "stateMutability": "view",
+      "type": "function"
+    },
+    {
+      "inputs": [
+        {
+          "internalType": "bytes4",
+          "name": "selector",
+          "type": "bytes4"
+        }
+      ],
+      "name": "isSelectorAllowed",
+      "outputs": [
+        {
+          "internalType": "bool",
+          "name": "",
+          "type": "bool"
+        }
+      ],
+      "stateMutability": "pure",
+      "type": "function"
+    },
+    {
+      "inputs": [
+        {
+          "internalType": "address",
+          "name": "sessionKey",
+          "type": "address"
+        }
+      ],
+      "name": "revokeSession",
+      "outputs": [],
+      "stateMutability": "nonpayable",
+      "type": "function"
+    },
+    {
+      "inputs": [
+        {
+          "internalType": "address",
+          "name": "",
+          "type": "address"
+        },
+        {
+          "internalType": "address",
+          "name": "",
+          "type": "address"
+        }
+      ],
+      "name": "userSessions",
+      "outputs": [
+        {
+          "internalType": "address",
+          "name": "sessionKey",
+          "type": "address"
+        },
+        {
+          "internalType": "uint256",
+          "name": "maxTradeSize",
+          "type": "uint256"
+        },
+        {
+          "internalType": "uint256",
+          "name": "dailyVolumeCap",
+          "type": "uint256"
+        },
+        {
+          "internalType": "uint256",
+          "name": "spentToday",
+          "type": "uint256"
+        },
+        {
+          "internalType": "uint256",
+          "name": "lastSpendReset",
+          "type": "uint256"
+        },
+        {
+          "internalType": "uint256",
+          "name": "expiresAt",
+          "type": "uint256"
+        },
+        {
+          "internalType": "bool",
+          "name": "isActive",
+          "type": "bool"
+        }
+      ],
+      "stateMutability": "view",
+      "type": "function"
+    }
+  ]
+}

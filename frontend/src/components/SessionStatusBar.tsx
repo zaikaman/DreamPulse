@@ -1,7 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import {
   KeyIcon,
-  ShieldCheckIcon,
   ShieldExclamationIcon,
   AdjustmentsHorizontalIcon,
   XCircleIcon,
@@ -12,9 +11,10 @@ import {
   ClockIcon,
   ChevronRightIcon,
   CurrencyDollarIcon,
-  ExclamationTriangleIcon,
   SparklesIcon,
   CpuChipIcon,
+  ArrowDownTrayIcon,
+  ArrowUpTrayIcon,
 } from '@heroicons/react/24/outline';
 import type { SessionGrant } from '../types/index.js';
 import type { WalletState } from '../hooks/useSessionKey.js';
@@ -40,6 +40,11 @@ interface SessionStatusBarProps {
   isCopyTradeEnabled?: boolean;
   onToggleCopyTrade?: (enabled: boolean) => Promise<boolean>;
   deployedCustomCount?: number;
+  cloneAddress?: string | null;
+  cloneBalance?: string;
+  onWithdrawClone?: (amount?: number) => Promise<void>;
+  onOpenTradingWallet?: (tab: 'deposit' | 'withdraw') => void;
+  onOpenRiskModal?: () => void;
 }
 
 export const SessionStatusBar: React.FC<SessionStatusBarProps> = ({
@@ -54,6 +59,11 @@ export const SessionStatusBar: React.FC<SessionStatusBarProps> = ({
   isCopyTradeEnabled,
   onToggleCopyTrade,
   deployedCustomCount = 0,
+  cloneAddress,
+  cloneBalance,
+  onWithdrawClone,
+  onOpenTradingWallet,
+  onOpenRiskModal,
 }) => {
   const isConnected = wallet.isConnected;
   const isCorrectNetwork = wallet.isCorrectNetwork;
@@ -113,7 +123,8 @@ export const SessionStatusBar: React.FC<SessionStatusBarProps> = ({
   }, [activeSession?.expiresAt]);
 
   const handleCopy = () => {
-    navigator.clipboard.writeText(SOMNIA_ADDRESSES.operatorAccount);
+    const toCopy = activeSession?.sessionKeyAddress || SOMNIA_ADDRESSES.operatorAccount;
+    navigator.clipboard.writeText(toCopy);
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
   };
@@ -172,212 +183,263 @@ export const SessionStatusBar: React.FC<SessionStatusBarProps> = ({
     );
   }
 
+  // Execution Mode Pill Renderer
+  const renderExecutionMode = () => {
+    const hasCustom = deployedCustomCount > 0;
+    const hasProtocol = activeCopyTrade;
+
+    let modeLabel = 'COPILOT ONLY';
+    let modeBg = 'rgba(245, 158, 11, 0.12)';
+    let modeColor = '#fbbf24';
+    let modeBorder = 'rgba(245, 158, 11, 0.25)';
+    let modeIcon = <BoltIcon className="w-3 h-3" />;
+    let tooltipText = 'Terminal Copilot Only — Click to toggle Swarm Mirroring or deploy custom agents in Strategy Studio.';
+
+    if (hasCustom && hasProtocol) {
+      modeLabel = `HYBRID (${deployedCustomCount}C + SWARM)`;
+      modeBg = 'rgba(16, 185, 129, 0.14)';
+      modeColor = '#34d399';
+      modeBorder = 'rgba(16, 185, 129, 0.28)';
+      modeIcon = <SparklesIcon className="w-3 h-3 text-emerald-400" />;
+      tooltipText = `Hybrid Fleet: ${deployedCustomCount} custom agent(s) & Protocol Swarm Mirror active. Click to disable Protocol Mirror.`;
+    } else if (hasCustom && !hasProtocol) {
+      modeLabel = `CUSTOM FLEET (${deployedCustomCount})`;
+      modeBg = 'rgba(168, 85, 247, 0.14)';
+      modeColor = '#c084fc';
+      modeBorder = 'rgba(168, 85, 247, 0.3)';
+      modeIcon = <CpuChipIcon className="w-3 h-3 text-purple-400" />;
+      tooltipText = `Custom Fleet: ${deployedCustomCount} custom agent(s) trading autonomously. Protocol Swarm Mirror is OFF. Click to enable Swarm Mirror.`;
+    } else if (!hasCustom && hasProtocol) {
+      modeLabel = 'SWARM MIRROR';
+      modeBg = 'rgba(56, 189, 248, 0.14)';
+      modeColor = '#38bdf8';
+      modeBorder = 'rgba(56, 189, 248, 0.28)';
+      modeIcon = <BoltIcon className="w-3 h-3 text-sky-400" />;
+      tooltipText = 'Protocol Swarm Mirror is active — Click to disable (Terminal Copilot Only).';
+    }
+
+    const handleToggle = async () => {
+      const next = !activeCopyTrade;
+      setOptimisticCopyEnabled(next);
+      setIsTogglingCopy(true);
+      if (activeSession) {
+        activeSession.copyTradeEnabled = next;
+      }
+      if (typeof window !== 'undefined') {
+        window.dispatchEvent(new CustomEvent('dreampulse:session-update', { detail: { copyTradeEnabled: next } }));
+      }
+      try {
+        let success = true;
+        if (onToggleCopyTrade) {
+          success = await onToggleCopyTrade(next);
+        } else if (wallet.address) {
+          const res = await apiClient.toggleCopyTrade(wallet.address, next);
+          success = res?.success ?? true;
+        }
+        if (success === false) {
+          setOptimisticCopyEnabled(!next);
+          if (activeSession) {
+            activeSession.copyTradeEnabled = !next;
+          }
+          if (typeof window !== 'undefined') {
+            window.dispatchEvent(new CustomEvent('dreampulse:session-update', { detail: { copyTradeEnabled: !next } }));
+          }
+        } else {
+          setLocalCopyEnabled(next);
+        }
+      } catch (e) {
+        console.error('Failed to toggle copy-trade:', e);
+        setOptimisticCopyEnabled(!next);
+        if (activeSession) {
+          activeSession.copyTradeEnabled = !next;
+        }
+        if (typeof window !== 'undefined') {
+          window.dispatchEvent(new CustomEvent('dreampulse:session-update', { detail: { copyTradeEnabled: !next } }));
+        }
+      } finally {
+        setIsTogglingCopy(false);
+      }
+    };
+
+    return (
+      <button
+        type="button"
+        disabled={isTogglingCopy}
+        onClick={handleToggle}
+        className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-[10px] font-mono font-bold border transition-all duration-150 cursor-pointer hover:opacity-90 disabled:opacity-85 select-none active:scale-95"
+        style={{
+          background: modeBg,
+          color: modeColor,
+          borderColor: modeBorder,
+        }}
+        title={tooltipText}
+      >
+        {modeIcon}
+        <span>{modeLabel}</span>
+        {isTogglingCopy && (
+          <span className="inline-block w-1.5 h-1.5 rounded-full bg-current animate-ping ml-0.5" title="Syncing..." />
+        )}
+      </button>
+    );
+  };
+
   // Active Session Display
   if (isSessionActive && activeSession) {
     const spent = Number(activeSession.spentToday || 0);
     const isUnlimitedDaily = isUnlimitedAmount(activeSession.dailyVolumeCap);
     const cap = isUnlimitedDaily ? Infinity : Number(activeSession.dailyVolumeCap || 1);
     const spentPercent = isUnlimitedDaily ? 0 : Math.min(100, Math.max(0, (spent / cap) * 100));
+    const sessionKeyAddr = activeSession.sessionKeyAddress || SOMNIA_ADDRESSES.operatorAccount;
+    const sessionTooltip = `Non-Custodial Session Active (${timeRemaining ? `Expires in ${timeRemaining}` : 'Perpetual'})\nSession Key: ${sessionKeyAddr}\nClick to copy key address`;
+    const riskTooltip = `Risk Controls & Limits\nSingle Cap: ${formatCapAmount(activeSession.maxTradeSize)}\nDaily Budget: ${isUnlimitedDaily ? 'Unlimited' : `${(cap ?? 0).toLocaleString()} tUSDC`}\nToday's Spent: ${spent.toFixed(1)} tUSDC`;
 
     return (
       <div className="session-status-banner active">
+        {/* Left Cluster: Status + Trading Capital + Execution Mode */}
         <div className="session-banner-left">
-          <div className="status-badge-dot active" title="Active Non-Custodial Session">
-            <span className="live-dot-green"></span>
-            <ShieldCheckIcon className="w-3.5 h-3.5" />
+          {/* Integrated Status Badge with Copy */}
+          <button
+            type="button"
+            onClick={handleCopy}
+            className="group inline-flex items-center gap-2 px-2.5 py-1 rounded-lg bg-emerald-500/10 border border-emerald-500/25 hover:bg-emerald-500/20 hover:border-emerald-500/40 transition-all cursor-pointer text-left select-none"
+            title={sessionTooltip}
+          >
+            <div className="relative flex items-center justify-center w-2 h-2">
+              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+              <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
+            </div>
+            <div className="flex flex-col">
+              <span className="text-[10px] font-bold text-emerald-400 uppercase tracking-wider leading-none">
+                Session Active
+              </span>
+              <span className="text-[9px] font-mono text-emerald-400/70 group-hover:text-emerald-300 transition-colors flex items-center gap-1 mt-0.5">
+                {copied ? (
+                  <>
+                    <CheckIcon className="w-2.5 h-2.5 text-emerald-300" />
+                    <span>Copied!</span>
+                  </>
+                ) : (
+                  <>
+                    <span>{sessionKeyAddr.slice(0, 6)}...{sessionKeyAddr.slice(-4)}</span>
+                    <DocumentDuplicateIcon className="w-2.5 h-2.5 opacity-60 group-hover:opacity-100" />
+                  </>
+                )}
+              </span>
+            </div>
+          </button>
+
+          <div className="session-metric-divider hidden sm:block"></div>
+
+          {/* Primary Trading Wallet Balance & Capital Actions */}
+          {(cloneAddress || activeSession.accountAddress) && (
+            <>
+              <div className="session-metric-item">
+                <span className="metric-label">TRADING WALLET</span>
+                <div className="flex items-center gap-2">
+                  <span className="text-xs sm:text-sm font-mono font-bold text-emerald-400 tabular-nums leading-tight">
+                    ${cloneBalance || '0.00'} <span className="text-[10px] font-semibold text-emerald-400/70">tUSDC</span>
+                  </span>
+                  {onOpenTradingWallet && (
+                    <button
+                      type="button"
+                      onClick={() => onOpenTradingWallet('deposit')}
+                      className="inline-flex items-center gap-1 px-2 py-0.5 text-[11px] font-semibold bg-emerald-500/20 text-emerald-300 border border-emerald-500/35 rounded-md hover:bg-emerald-500/30 hover:border-emerald-500/50 transition-all cursor-pointer shadow-sm active:scale-95"
+                      title="Deposit funds into your isolated Trading Wallet"
+                    >
+                      <ArrowDownTrayIcon className="w-3 h-3" />
+                      <span>Deposit</span>
+                    </button>
+                  )}
+                  {parseFloat(cloneBalance || '0') > 0 && (onOpenTradingWallet || onWithdrawClone) && (
+                    <button
+                      type="button"
+                      onClick={() => (onOpenTradingWallet ? onOpenTradingWallet('withdraw') : onWithdrawClone?.())}
+                      className="inline-flex items-center gap-1 px-2 py-0.5 text-[11px] font-semibold bg-secondary/80 text-foreground border border-border/60 rounded-md hover:bg-secondary transition-all cursor-pointer active:scale-95"
+                      title="Withdraw funds from Trading Wallet to connected wallet"
+                    >
+                      <ArrowUpTrayIcon className="w-3 h-3" />
+                      <span>Withdraw</span>
+                    </button>
+                  )}
+                </div>
+              </div>
+
+              <div className="session-metric-divider hidden sm:block"></div>
+            </>
+          )}
+
+          {/* Single Cap */}
+          <div className="session-metric-divider hidden sm:block"></div>
+          <div className="session-metric-item">
+            <span className="metric-label">SINGLE CAP</span>
+            <span className="metric-value tabular-num font-mono">{formatCapAmount(activeSession.maxTradeSize)}</span>
           </div>
 
-          <div className="session-banner-metrics">
-            <div className="session-metric-item">
-              <span className="metric-label">OPERATOR</span>
-              <Button
-                variant="ghost"
-                size="sm"
-                className="operator-chip h-auto p-0 font-normal hover:bg-transparent"
-                onClick={handleCopy}
-                title="Click to copy Somnia Delegated Operator address"
-              >
-                <code>{SOMNIA_ADDRESSES.operatorAccount.slice(0, 6)}...{SOMNIA_ADDRESSES.operatorAccount.slice(-4)}</code>
-                {copied ? <CheckIcon className="w-3 h-3 copy-success-icon" /> : <DocumentDuplicateIcon className="w-3 h-3" />}
-              </Button>
+          {/* 24H Budget Meter */}
+          <div className="session-metric-divider hidden md:block"></div>
+          <div className="session-metric-item budget-meter-item">
+            <div className="budget-label-row">
+              <span className="metric-label">24H BUDGET</span>
+              <span className="budget-numbers tabular-num font-mono">
+                {isUnlimitedDaily
+                  ? `${spent.toFixed(1)} / Unlimited`
+                  : `${spent.toFixed(1)} / ${(cap ?? 0).toLocaleString()} tUSDC (${spentPercent.toFixed(0)}%)`}
+              </span>
             </div>
-
-            <div className="session-metric-divider hidden sm:block"></div>
-
-            <div className="session-metric-item">
-              <span className="metric-label">SINGLE CAP</span>
-              <span className="metric-value tabular-num font-mono">{formatCapAmount(activeSession.maxTradeSize)}</span>
+            <div className="budget-progress-track">
+              <div
+                className="budget-progress-fill"
+                style={{
+                  width: isUnlimitedDaily ? '100%' : `${spentPercent}%`,
+                  backgroundColor: isUnlimitedDaily
+                    ? 'rgba(0, 255, 204, 0.6)'
+                    : spentPercent > 85
+                    ? 'hsl(var(--destructive))'
+                    : spentPercent > 60
+                    ? '#f59e0b'
+                    : 'hsl(var(--primary))',
+                }}
+              ></div>
             </div>
+          </div>
 
-            <div className="session-metric-divider hidden sm:block"></div>
+          {/* Execution Mode */}
+          <div className="session-metric-divider hidden lg:block"></div>
+          <div className="session-metric-item">
+            <span className="metric-label">EXECUTION MODE</span>
+            {renderExecutionMode()}
+          </div>
 
-            <div className="session-metric-item budget-meter-item">
-              <div className="budget-label-row">
-                <span className="metric-label">24H VOLUME BUDGET</span>
-                <span className="budget-numbers tabular-num font-mono">
-                  {isUnlimitedDaily
-                    ? `${spent.toFixed(1)} / Unlimited`
-                    : `${spent.toFixed(1)} / ${(cap ?? 0).toLocaleString()} tUSDC (${spentPercent.toFixed(0)}%)`}
-                </span>
-              </div>
-              <div className="budget-progress-track">
-                <div
-                  className="budget-progress-fill"
-                  style={{
-                    width: isUnlimitedDaily ? '100%' : `${spentPercent}%`,
-                    backgroundColor: isUnlimitedDaily
-                      ? 'rgba(0, 255, 204, 0.6)'
-                      : spentPercent > 85
-                      ? 'hsl(var(--destructive))'
-                      : spentPercent > 60
-                      ? '#f59e0b'
-                      : 'hsl(var(--primary))',
-                  }}
-                ></div>
-              </div>
+          {/* Session Expiry */}
+          <div className="session-metric-divider hidden xl:block"></div>
+          <div className="session-metric-item">
+            <span className="metric-label">EXPIRES</span>
+            <div className="expiry-chip">
+              <ClockIcon className="w-3 h-3 text-muted-foreground" />
+              <span className="tabular-num">{timeRemaining || 'Perpetual'}</span>
             </div>
-
-            <div className="session-metric-divider hidden sm:block"></div>
-
-            <div className="session-metric-item">
-              <span className="metric-label">EXECUTION MODE</span>
-              {(() => {
-                const hasCustom = deployedCustomCount > 0;
-                const hasProtocol = activeCopyTrade;
-
-                let modeLabel = 'COPILOT ONLY';
-                let modeBg = 'rgba(245, 158, 11, 0.12)';
-                let modeColor = '#fbbf24';
-                let modeBorder = 'rgba(245, 158, 11, 0.25)';
-                let modeIcon = <BoltIcon className="w-3 h-3" />;
-                let tooltipText = 'Terminal Copilot Only — Click to toggle Swarm Mirroring or deploy custom agents in Strategy Studio.';
-
-                if (hasCustom && hasProtocol) {
-                  modeLabel = `HYBRID (${deployedCustomCount}C + SWARM)`;
-                  modeBg = 'rgba(16, 185, 129, 0.14)';
-                  modeColor = '#34d399';
-                  modeBorder = 'rgba(16, 185, 129, 0.28)';
-                  modeIcon = <SparklesIcon className="w-3 h-3 text-emerald-400" />;
-                  tooltipText = `Hybrid Fleet: ${deployedCustomCount} custom agent(s) & Protocol Swarm Mirror active. Click to disable Protocol Mirror.`;
-                } else if (hasCustom && !hasProtocol) {
-                  modeLabel = `CUSTOM FLEET (${deployedCustomCount})`;
-                  modeBg = 'rgba(168, 85, 247, 0.14)';
-                  modeColor = '#c084fc';
-                  modeBorder = 'rgba(168, 85, 247, 0.3)';
-                  modeIcon = <CpuChipIcon className="w-3 h-3 text-purple-400" />;
-                  tooltipText = `Custom Fleet: ${deployedCustomCount} custom agent(s) trading autonomously. Protocol Swarm Mirror is OFF. Click to enable Swarm Mirror.`;
-                } else if (!hasCustom && hasProtocol) {
-                  modeLabel = 'SWARM MIRROR';
-                  modeBg = 'rgba(56, 189, 248, 0.14)';
-                  modeColor = '#38bdf8';
-                  modeBorder = 'rgba(56, 189, 248, 0.28)';
-                  modeIcon = <BoltIcon className="w-3 h-3 text-sky-400" />;
-                  tooltipText = 'Protocol Swarm Mirror is active — Click to disable (Terminal Copilot Only).';
-                }
-
-                return (
-                  <button
-                    type="button"
-                    disabled={isTogglingCopy}
-                    onClick={async () => {
-                      const next = !activeCopyTrade;
-                      // Immediate 0ms optimistic switch: label, colors, and icons change instantly
-                      setOptimisticCopyEnabled(next);
-                      setIsTogglingCopy(true);
-                      if (activeSession) {
-                        activeSession.copyTradeEnabled = next;
-                      }
-                      if (typeof window !== 'undefined') {
-                        window.dispatchEvent(new CustomEvent('dreampulse:session-update', { detail: { copyTradeEnabled: next } }));
-                      }
-                      try {
-                        let success = true;
-                        if (onToggleCopyTrade) {
-                          success = await onToggleCopyTrade(next);
-                        } else if (wallet.address) {
-                          const res = await apiClient.toggleCopyTrade(wallet.address, next);
-                          success = res?.success ?? true;
-                        }
-                        if (success === false) {
-                          // Rollback on failure
-                          setOptimisticCopyEnabled(!next);
-                          if (activeSession) {
-                            activeSession.copyTradeEnabled = !next;
-                          }
-                          if (typeof window !== 'undefined') {
-                            window.dispatchEvent(new CustomEvent('dreampulse:session-update', { detail: { copyTradeEnabled: !next } }));
-                          }
-                        } else {
-                          setLocalCopyEnabled(next);
-                        }
-                      } catch (e) {
-                        console.error('Failed to toggle copy-trade:', e);
-                        setOptimisticCopyEnabled(!next);
-                        if (activeSession) {
-                          activeSession.copyTradeEnabled = !next;
-                        }
-                        if (typeof window !== 'undefined') {
-                          window.dispatchEvent(new CustomEvent('dreampulse:session-update', { detail: { copyTradeEnabled: !next } }));
-                        }
-                      } finally {
-                        setIsTogglingCopy(false);
-                      }
-                    }}
-                    className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[10px] font-mono font-bold border transition-all duration-150 cursor-pointer hover:opacity-90 disabled:opacity-85 select-none active:scale-95"
-                    style={{
-                      background: modeBg,
-                      color: modeColor,
-                      borderColor: modeBorder,
-                    }}
-                    title={tooltipText}
-                  >
-                    {modeIcon}
-                    <span>{modeLabel}</span>
-                    {isTogglingCopy && (
-                      <span className="inline-block w-1.5 h-1.5 rounded-full bg-current animate-ping ml-0.5" title="Syncing..." />
-                    )}
-                  </button>
-                );
-              })()}
-            </div>
-
-            <div className="session-metric-divider hidden sm:block"></div>
-
-            <div className="session-metric-item">
-              <span className="metric-label">EXPIRES</span>
-              <div className="expiry-chip">
-                <ClockIcon className="w-3 h-3" />
-                <span className="tabular-num">{timeRemaining}</span>
-              </div>
-            </div>
-
-            {isCollateralZero && onClaimFaucet && (
-              <>
-                <div className="session-metric-divider hidden sm:block"></div>
-                <div className="session-metric-item" style={{ color: 'var(--muted-foreground)', display: 'flex', alignItems: 'center', gap: '6px' }}>
-                  <ExclamationTriangleIcon className="w-3 h-3 text-amber-400" />
-                  <span style={{ fontSize: '11px', fontWeight: 500 }} className="font-mono text-muted-foreground">0.00 tUSDC Collateral</span>
-                  <Button
-                    variant="outline"
-                    size="xs"
-                    onClick={async () => {
-                      try {
-                        await onClaimFaucet(1000);
-                      } catch {}
-                    }}
-                    disabled={isFauceting}
-                    className="h-6 text-[10px] px-2 gap-1 border-border/60 bg-secondary/80 text-foreground hover:bg-secondary ml-1"
-                  >
-                    {isFauceting ? <Spinner size="xs" variant="amber" /> : <CurrencyDollarIcon className="w-3 h-3" />}
-                    <span>Claim 1k tUSDC</span>
-                  </Button>
-                </div>
-              </>
-            )}
           </div>
         </div>
 
+        {/* Right Cluster: Secondary Actions */}
         <div className="session-banner-actions">
+          {isCollateralZero && onClaimFaucet && (
+            <Button
+              variant="outline"
+              size="xs"
+              onClick={async () => {
+                try {
+                  await onClaimFaucet(1000);
+                } catch {}
+              }}
+              disabled={isFauceting}
+              className="h-7 text-xs px-2.5 gap-1.5 border-amber-500/30 bg-amber-500/10 text-amber-400 hover:bg-amber-500/20 cursor-pointer"
+            >
+              {isFauceting ? <Spinner size="xs" variant="amber" /> : <CurrencyDollarIcon className="w-3.5 h-3.5" />}
+              <span>Faucet</span>
+            </Button>
+          )}
+
           {onOpenFleetRisk && (
             <Button
               variant="outline"
@@ -390,16 +452,18 @@ export const SessionStatusBar: React.FC<SessionStatusBarProps> = ({
               <span>Fleet Risk</span>
             </Button>
           )}
+
           <Button
             variant="outline"
             size="sm"
-            onClick={() => onOpenModal()}
-            title="Configure Session Limits"
+            onClick={onOpenRiskModal || (() => onOpenModal())}
+            title={riskTooltip}
             className="h-7 text-xs px-2.5 gap-1.5 border-border/60 bg-secondary/50 hover:bg-secondary text-muted-foreground hover:text-foreground cursor-pointer"
           >
             <KeyIcon className="w-3.5 h-3.5" />
-            <span>Limits</span>
+            <span>Risk Limits</span>
           </Button>
+
           <Button
             variant="outline"
             size="sm"

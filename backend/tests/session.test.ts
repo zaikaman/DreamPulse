@@ -577,7 +577,97 @@ describe('Task T038 & T040: Session Management Service & Risk Guardrails', () =>
     expect(session.nonce).toBe(5);
     expect(session.isActive).toBe(true);
   });
+
+  it('registers and enforces Per-User Session Key model with isolated keys and caps', async () => {
+    const user1 = privateKeyToAccount(generatePrivateKey());
+    const user2 = privateKeyToAccount(generatePrivateKey());
+
+    const sessionPriv1 = generatePrivateKey();
+    const sessionPriv2 = generatePrivateKey();
+    const sessionKey1 = privateKeyToAccount(sessionPriv1);
+    const sessionKey2 = privateKeyToAccount(sessionPriv2);
+
+    expect(sessionKey1.address).not.toBe(sessionKey2.address);
+    expect(SOMNIA_ADDRESSES.sessionAccount).toBeDefined();
+    expect(SOMNIA_ADDRESSES.sessionAccount.startsWith('0x')).toBe(true);
+
+    // Register user1 with $20 max trade size, $200 daily cap, and dedicated session key
+    const session1 = await sessionService.registerSession({
+      userAddress: user1.address,
+      operatorAddress: liveOperator.address,
+      maxTradeSize: 20,
+      dailyVolumeCap: 200,
+      sessionKeyAddress: sessionKey1.address,
+      sessionKeyPrivateKey: sessionPriv1,
+      delegationContractAddress: SOMNIA_ADDRESSES.sessionAccount,
+    });
+
+    expect(session1.sessionKeyAddress).toBe(sessionKey1.address);
+    expect(session1.maxTradeSize).toBe(20);
+    expect(session1.dailyVolumeCap).toBe(200);
+    expect(session1.delegationContractAddress).toBe(SOMNIA_ADDRESSES.sessionAccount);
+
+    // Register user2 with $15 max trade size, $150 daily cap, and distinct session key
+    const session2 = await sessionService.registerSession({
+      userAddress: user2.address,
+      operatorAddress: liveOperator.address,
+      maxTradeSize: 15,
+      dailyVolumeCap: 150,
+      sessionKeyAddress: sessionKey2.address,
+      sessionKeyPrivateKey: sessionPriv2,
+      delegationContractAddress: SOMNIA_ADDRESSES.sessionAccount,
+    });
+
+    expect(session2.sessionKeyAddress).toBe(sessionKey2.address);
+    expect(session2.sessionKeyAddress).not.toBe(session1.sessionKeyAddress);
+
+    // Validate spend caps per user
+    expect(sessionService.validateTradeAllowance(session1.id, 20).allowed).toBe(true);
+    expect(sessionService.validateTradeAllowance(session1.id, 20.01).allowed).toBe(false);
+
+    expect(sessionService.validateTradeAllowance(session2.id, 15).allowed).toBe(true);
+    expect(sessionService.validateTradeAllowance(session2.id, 15.01).allowed).toBe(false);
+
+    // Revocation of user1's session does not affect user2
+    await sessionService.revokeSession(session1.id);
+    expect(sessionService.getSessionById(session1.id)?.isActive).toBe(false);
+    expect(sessionService.getSessionById(session2.id)?.isActive).toBe(true);
+  });
+
+  it('rejects a session key pair where the private key does not match the address', async () => {
+    const user = privateKeyToAccount(generatePrivateKey());
+    const realKey = privateKeyToAccount(generatePrivateKey());
+    const unrelatedPriv = generatePrivateKey();
+
+    await expect(
+      sessionService.registerSession({
+        userAddress: user.address,
+        operatorAddress: liveOperator.address,
+        maxTradeSize: 20,
+        dailyVolumeCap: 200,
+        sessionKeyAddress: realKey.address,
+        sessionKeyPrivateKey: unrelatedPriv,
+        delegationContractAddress: SOMNIA_ADDRESSES.sessionAccount,
+      }),
+    ).rejects.toThrow(/does not correspond/);
+  });
+
+  it('leaves legacy operator-relay sessions without a delegation contract', async () => {
+    const user = privateKeyToAccount(generatePrivateKey());
+
+    const session = await sessionService.registerSession({
+      userAddress: user.address,
+      operatorAddress: liveOperator.address,
+      maxTradeSize: 10,
+      dailyVolumeCap: 100,
+    });
+
+    expect(session.sessionKeyAddress).toBeUndefined();
+    expect(session.sessionKeyPrivateKey).toBeUndefined();
+    expect(session.delegationContractAddress).toBeUndefined();
+  });
 });
+
 
 
 

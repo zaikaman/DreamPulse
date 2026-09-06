@@ -35,6 +35,10 @@ interface StatCardsGridProps {
   onClaimFaucet?: (amount?: number) => Promise<void>;
   onOpenSessionModal?: () => void;
   onNavigateToTab?: (tab: string) => void;
+  cloneAddress?: string | null;
+  cloneBalance?: string;
+  onOpenTradingWallet?: (tab: 'deposit' | 'withdraw') => void;
+  onOpenRiskModal?: () => void;
 }
 
 export const StatCardsGrid: React.FC<StatCardsGridProps> = ({
@@ -51,6 +55,10 @@ export const StatCardsGrid: React.FC<StatCardsGridProps> = ({
   onClaimFaucet,
   onOpenSessionModal,
   onNavigateToTab,
+  cloneAddress,
+  cloneBalance,
+  onOpenTradingWallet,
+  onOpenRiskModal,
 }) => {
   const isConnected = !!wallet?.isConnected && !!wallet?.address;
   const isOperator =
@@ -210,15 +218,36 @@ export const StatCardsGrid: React.FC<StatCardsGridProps> = ({
       <div className="metrics-stat-grid">
         {perspective === 'PORTFOLIO' ? (
           <>
-            {/* User Card 1: Collateral Balance */}
-            <div className="stat-card">
+            {/* User Card 1: Trading Account Balance */}
+            <div
+              className="stat-card"
+              style={{ cursor: onOpenTradingWallet ? 'pointer' : 'default' }}
+              onClick={() => onOpenTradingWallet?.('deposit')}
+            >
               <div className="stat-card-header">
-                <span className="stat-card-title truncate">Trading Collateral</span>
+                <span className="stat-card-title truncate">Trading Account</span>
                 <div className="flex items-center gap-1.5 flex-shrink-0">
+                  {onOpenTradingWallet && (
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        onOpenTradingWallet('deposit');
+                      }}
+                      className="px-1.5 py-0.5 text-[10px] font-mono font-bold rounded bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 hover:bg-emerald-500/30 cursor-pointer inline-flex items-center gap-1 whitespace-nowrap transition-colors"
+                      title="Deposit TestUSDC into your isolated Trading Wallet"
+                    >
+                      <ArrowPathIcon className="w-2.5 h-2.5" />
+                      <span>+ Deposit</span>
+                    </button>
+                  )}
                   {onClaimFaucet && isCollateralZero && (
                     <button
                       type="button"
-                      onClick={() => onClaimFaucet(1000)}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        onClaimFaucet(1000);
+                      }}
                       disabled={isFauceting}
                       className="px-1.5 py-0.5 text-[10px] font-mono font-bold rounded bg-amber-500/20 text-amber-300 border border-amber-500/40 hover:bg-amber-500/30 cursor-pointer inline-flex items-center gap-1 whitespace-nowrap transition-colors"
                       title="Claim 1,000 TestUSDC for DreamDEX event trading"
@@ -230,15 +259,15 @@ export const StatCardsGrid: React.FC<StatCardsGridProps> = ({
                 </div>
               </div>
               <div className="stat-card-value font-mono text-cyan-400 truncate">
-                {userCollateral} <span className="text-xs font-normal text-muted-foreground">tUSDC</span>
+                {cloneBalance ? cloneBalance : userCollateral} <span className="text-xs font-normal text-muted-foreground">tUSDC</span>
               </div>
               <div className="stat-card-footer">
                 <span className="inline-flex items-center gap-1.5 font-mono text-[11px] text-emerald-400 whitespace-nowrap">
                   <span className="w-1.5 h-1.5 rounded-full bg-emerald-400" />
-                  <span>{wallet?.isConnected ? 'Connected' : 'Disconnected'}</span>
+                  <span>{cloneAddress ? 'Trading Wallet Active' : (wallet?.isConnected ? 'Connected' : 'Disconnected')}</span>
                 </span>
                 <span className="font-mono text-[11px] text-muted-foreground whitespace-nowrap truncate">
-                  Gas: <span className="text-foreground font-medium">{userNativeGas} STT</span>
+                  Wallet: <span className="text-foreground font-medium">{userCollateral} tUSDC</span> <span className="text-muted-foreground/80">({userNativeGas} STT)</span>
                 </span>
               </div>
             </div>
@@ -265,14 +294,14 @@ export const StatCardsGrid: React.FC<StatCardsGridProps> = ({
               </div>
             </div>
 
-            {/* User Card 3: Session Delegation Quota */}
+            {/* User Card 3: Session Delegation Quota & Risk */}
             <div
               className="stat-card"
-              style={{ cursor: onOpenSessionModal ? 'pointer' : 'default' }}
-              onClick={onOpenSessionModal}
+              style={{ cursor: (onOpenRiskModal || onOpenSessionModal) ? 'pointer' : 'default' }}
+              onClick={onOpenRiskModal || onOpenSessionModal}
             >
               <div className="stat-card-header">
-                <span className="stat-card-title truncate">Session Budget</span>
+                <span className="stat-card-title truncate">Risk Controls</span>
               </div>
               <div className="stat-card-value font-mono truncate">
                 {activeSession?.isActive
@@ -288,10 +317,10 @@ export const StatCardsGrid: React.FC<StatCardsGridProps> = ({
                   <>
                     <span className="inline-flex items-center gap-1.5 font-mono text-[11px] text-emerald-400 whitespace-nowrap">
                       <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
-                      <span>Active Grant</span>
+                      <span>Trading Account Active</span>
                     </span>
                     <span className="font-mono text-[11px] text-muted-foreground whitespace-nowrap truncate">
-                      Max/Trade: <span className="text-foreground font-medium">{formatCapAmount(activeSession.maxTradeSize)}</span>
+                      Cap: <span className="text-foreground font-medium">{formatCapAmount(activeSession.maxTradeSize)}</span>
                     </span>
                   </>
                 ) : (
@@ -301,7 +330,7 @@ export const StatCardsGrid: React.FC<StatCardsGridProps> = ({
                       <span>Direct Wallet</span>
                     </span>
                     <span className="font-mono text-[11px] text-cyan-400 hover:text-cyan-300 transition-colors whitespace-nowrap cursor-pointer">
-                      Configure →
+                      Activate →
                     </span>
                   </>
                 )}

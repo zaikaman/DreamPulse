@@ -8,6 +8,8 @@
     "explorerUrl": "https://shannon-explorer.somnia.network"
   },
   "contracts": {
+    "sessionAccountFactory": "0x94dd9c8b9a5684ab026480737fac911824ac995d",
+    "sessionAccountImpl": "0x92673153f231d87e2adb8b61321260dacf138858",
     "operatorPermissionsRegistry": "0x15C7e8CE38F021c5b45d098AaD788f63090bF20A",
     "binaryModule": "0x3ecC694Cef705358864a646142ac17A90E29e388",
     "marketsCore": "0x2802504314685D89bF6C992CA5a8e7cC78bc0294",
@@ -19,7 +21,7 @@
     "canonicalOperator": "0x93e300607c363E7D7a47e50f5c9fDf1723e859Cf"
   },
   "verificationSuite": {
-    "totalTests": 307,
+    "totalTests": 309,
     "testSuites": 22,
     "passingRate": "100%",
     "strictTypeScript": true,
@@ -30,9 +32,10 @@
       "name": "Path A: Autonomous Swarm Execution (LIMIT Order & Settlement Redemption)",
       "description": "Autonomous quantitative agent quotes a competitive LIMIT order on the Somnia CLOB, achieves matching engine fill, and executes settlement redemption upon winning contract maturity.",
       "delegation": {
+        "model": "Separate Smart Trading Account (EIP-1167 Clone) with isolated collateral vault",
         "userAddress": "0x93e300607c363E7D7a47e50f5c9fDf1723e859Cf",
         "role": "Protocol Swarm Master Operator & Delegated Executor",
-        "withdrawalPrivileges": "NONE (Zero withdrawal permissions on all user session vaults)"
+        "withdrawalPrivileges": "NONE (Zero withdrawal permissions on all user session vaults; withdrawals strictly pinned to owner EOA)"
       },
       "strategy": {
         "agentType": "Titan",
@@ -78,13 +81,17 @@
       "name": "Path B: Interactive Pro Trade Terminal Execution (Resting LIMIT Maker & Settlement Redemption)",
       "description": "Human forecaster interacts directly with the CLOB Trade Terminal, selects a price level on the depth ladder, places a resting LIMIT maker order, and receives settlement payout transfer upon winning market resolution.",
       "delegation": {
+        "model": "Separate Smart Trading Account (EIP-1167 Clone) with isolated collateral vault",
         "userAddress": "0x46cC04De981E603958e4612f877D72427c5b6544",
+        "smartAccountFactory": "0x94dd9c8b9a5684ab026480737fac911824ac995d",
+        "smartAccountImpl": "0x92673153f231d87e2adb8b61321260dacf138858",
         "sessionId": "6e72fe0c-1e91-4a0b-96d4-03ccaedf7d67",
         "operatorAddress": "0x93e300607c363E7D7a47e50f5c9fDf1723e859Cf",
         "nonce": 6,
         "onChainAuthorized": true,
         "delegationTxHash": "0xab2191086f101982e592e0fdd935f9a340db890b138f444cb2f99228a228d4aa",
-        "delegationExplorerUrl": "https://shannon-explorer.somnia.network/tx/0xab2191086f101982e592e0fdd935f9a340db890b138f444cb2f99228a228d4aa"
+        "delegationExplorerUrl": "https://shannon-explorer.somnia.network/tx/0xab2191086f101982e592e0fdd935f9a340db890b138f444cb2f99228a228d4aa",
+        "withdrawalPrivileges": "NONE (Withdrawals cryptographically restricted to owner EOA only; zero operator custody)"
       },
       "intent": {
         "terminalView": "TradeTerminalView",

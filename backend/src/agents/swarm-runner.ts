@@ -398,6 +398,11 @@ export class MultiAgentSwarmRunner {
                 vaultDepositAmount: userSession.vaultDepositAmount,
                 targetPoolAddress: userSession.targetPoolAddress,
                 onChainAuthorized: userSession.onChainAuthorized,
+                copyTradeEnabled: userSession.copyTradeEnabled,
+                sessionKeyAddress: userSession.sessionKeyAddress,
+                sessionKeyPrivateKey: userSession.sessionKeyPrivateKey,
+                delegationContractAddress: userSession.delegationContractAddress,
+                accountAddress: userSession.accountAddress,
               });
             }
 
@@ -575,6 +580,11 @@ export class MultiAgentSwarmRunner {
         vaultDepositAmount: session.vaultDepositAmount,
         targetPoolAddress: session.targetPoolAddress,
         onChainAuthorized: session.onChainAuthorized,
+        copyTradeEnabled: session.copyTradeEnabled,
+        sessionKeyAddress: session.sessionKeyAddress,
+        sessionKeyPrivateKey: session.sessionKeyPrivateKey,
+        delegationContractAddress: session.delegationContractAddress,
+        accountAddress: session.accountAddress,
       };
 
       // Per-user per-agent enabled checks
@@ -770,6 +780,11 @@ export class MultiAgentSwarmRunner {
         vaultDepositAmount: session.vaultDepositAmount,
         targetPoolAddress: session.targetPoolAddress,
         onChainAuthorized: session.onChainAuthorized,
+        copyTradeEnabled: session.copyTradeEnabled,
+        sessionKeyAddress: session.sessionKeyAddress,
+        sessionKeyPrivateKey: session.sessionKeyPrivateKey,
+        delegationContractAddress: session.delegationContractAddress,
+        accountAddress: session.accountAddress,
       };
 
       for (const market of matchingMarkets) {

@@ -31,6 +31,11 @@ interface OverviewViewProps {
   onOpenTradeTerminal?: (marketId: string) => void;
   wallet?: WalletState;
   activeSession?: SessionGrant | null;
+  cloneAddress?: string | null;
+  cloneBalance?: string;
+  onWithdrawClone?: (amount?: number) => Promise<void>;
+  onOpenTradingWallet?: (tab: 'deposit' | 'withdraw') => void;
+  onOpenRiskModal?: () => void;
   isLoading?: boolean;
   isFauceting?: boolean;
   onClaimFaucet?: (amount?: number) => Promise<void>;
@@ -51,6 +56,11 @@ const OverviewViewComponent: React.FC<OverviewViewProps> = ({
   onOpenTradeTerminal,
   wallet,
   activeSession,
+  cloneAddress,
+  cloneBalance,
+  onWithdrawClone,
+  onOpenTradingWallet,
+  onOpenRiskModal,
   isLoading = false,
   isFauceting,
   onClaimFaucet,
@@ -162,6 +172,11 @@ const OverviewViewComponent: React.FC<OverviewViewProps> = ({
           isCopyTradeEnabled={isCopyTradeEnabled}
           onToggleCopyTrade={toggleCopyTrade}
           deployedCustomCount={deployedCustomCount}
+          cloneAddress={cloneAddress}
+          cloneBalance={cloneBalance}
+          onWithdrawClone={onWithdrawClone}
+          onOpenTradingWallet={onOpenTradingWallet}
+          onOpenRiskModal={onOpenRiskModal}
         />
       )}
 
@@ -181,6 +196,10 @@ const OverviewViewComponent: React.FC<OverviewViewProps> = ({
         onClaimFaucet={onClaimFaucet}
         onOpenSessionModal={onOpenSessionModal}
         onNavigateToTab={onNavigateToTab}
+        cloneAddress={cloneAddress}
+        cloneBalance={cloneBalance}
+        onOpenTradingWallet={onOpenTradingWallet}
+        onOpenRiskModal={onOpenRiskModal}
       />
 
       {/* 2. Primary Focal Point: Top Arbitrage Opportunities - compact 4 rows */}

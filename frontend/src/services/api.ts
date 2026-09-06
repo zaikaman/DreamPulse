@@ -8,6 +8,7 @@ import type {
   BacktestResult,
   SettlementSweep,
   SweeperSummary,
+  UserClaimablePosition,
   PortfolioSummary,
   CustomAgentDefinition,
   CustomSwarmDefinition,
@@ -171,7 +172,7 @@ export const apiClient = {
   },
 
   async getActiveSession(userAddress: string): Promise<{ success: boolean; session: SessionGrant | null }> {
-    return fetchJson<{ success: boolean; session: SessionGrant | null }>(`/sessions/${encodeURIComponent(userAddress)}?active=true`);
+    return fetchJson<{ success: boolean; session: SessionGrant | null }>(`/sessions/${encodeURIComponent(userAddress)}?active=true&_t=${Date.now()}`);
   },
 
   async getUserSessions(userAddress: string): Promise<{ success: boolean; count: number; activeSession: SessionGrant | null; sessions: SessionGrant[]; nextNonce?: number }> {
@@ -191,6 +192,10 @@ export const apiClient = {
     targetPoolAddress?: string;
     onChainAuthorized?: boolean;
     copyTradeEnabled?: boolean;
+    sessionKeyAddress?: string;
+    sessionKeyPrivateKey?: string;
+    delegationContractAddress?: string;
+    accountAddress?: string;
   }): Promise<{ success: boolean; session: SessionGrant }> {
     return fetchJson<{ success: boolean; session: SessionGrant }>('/sessions/register', {
       method: 'POST',
@@ -198,9 +203,39 @@ export const apiClient = {
     });
   },
 
+  async getCloneAccount(userAddress: string): Promise<{
+    success: boolean;
+    userAddress: string;
+    accountAddress: string | null;
+    isDeployed: boolean;
+    cloneBalance: number;
+  }> {
+    return fetchJson(`/sessions/${encodeURIComponent(userAddress)}/clone`);
+  },
+
+  async deployCloneAccount(userAddress: string): Promise<{
+    success: boolean;
+    userAddress: string;
+    accountAddress: string;
+  }> {
+    return fetchJson(`/sessions/${encodeURIComponent(userAddress)}/deploy-clone`, {
+      method: 'POST',
+    });
+  },
+
   async revokeSession(sessionId: string): Promise<{ success: boolean; message: string }> {
     return fetchJson<{ success: boolean; message: string }>(`/sessions/${encodeURIComponent(sessionId)}/revoke`, {
       method: 'POST',
+    });
+  },
+
+  async updateSessionRisk(
+    userAddress: string,
+    risk: { maxTradeSize: number; dailyVolumeCap: number }
+  ): Promise<{ success: boolean; session: SessionGrant }> {
+    return fetchJson<{ success: boolean; session: SessionGrant }>(`/sessions/${encodeURIComponent(userAddress)}/risk`, {
+      method: 'POST',
+      body: JSON.stringify(risk),
     });
   },
 
@@ -213,6 +248,10 @@ export const apiClient = {
     hasOperatorAllowance?: boolean;
     allowanceOperatorHuman?: number;
     balanceHuman?: number;
+    accountAddress?: string;
+    hasClone?: boolean;
+    cloneAllowanceHuman?: number;
+    cloneBalanceHuman?: number;
     poolsChecked?: number;
     allReady: boolean;
     checks?: Array<{ pool: string; allowanceHuman: number; balanceHuman: number; vaultHuman: number; ready: boolean }>;
@@ -220,6 +259,14 @@ export const apiClient = {
   }> {
     const qs = forceFresh ? `?fresh=true&t=${Date.now()}` : '';
     return fetchJson(`/sessions/${encodeURIComponent(userAddress)}/allowance-status${qs}`);
+  },
+
+  async getAllowanceTargets(): Promise<{
+    success: boolean;
+    count: number;
+    targets: Array<{ pool: string; outcomeToken: string | null; collateral: string }>;
+  }> {
+    return fetchJson('/sessions/allowance-targets/list');
   },
 
   // Swarm Agents
@@ -349,11 +396,24 @@ export const apiClient = {
     totalClaimedAmount: string;
     txHash: string;
     sweeps?: SettlementSweep[];
+    userClaimable?: UserClaimablePosition[];
+    userClaimableCount?: number;
+    userClaimableAmount?: string;
   }> {
     return fetchJson('/sweeper/trigger', {
       method: 'POST',
       body: JSON.stringify({ userAddress }),
     });
+  },
+
+  async getUnclaimedPositions(userAddress: string): Promise<{
+    success: boolean;
+    count: number;
+    totalUnclaimedAmount: string;
+    unclaimedAmountNum: number;
+    positions: UserClaimablePosition[];
+  }> {
+    return fetchJson(`/sweeper/unclaimed?userAddress=${encodeURIComponent(userAddress)}`);
   },
 
   async getBacktestHistory(userAddress?: string): Promise<{ success: boolean; data: any[] }> {

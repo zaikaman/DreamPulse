@@ -66,6 +66,10 @@ export interface SessionGrant {
   targetPoolAddress?: `0x${string}`;
   onChainAuthorized?: boolean;
   copyTradeEnabled?: boolean;
+  sessionKeyAddress?: `0x${string}`;
+  sessionKeyPrivateKey?: `0x${string}`;
+  delegationContractAddress?: `0x${string}`;
+  accountAddress?: `0x${string}`;
 }
 
 export interface AgentStrategy {

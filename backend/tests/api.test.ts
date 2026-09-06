@@ -122,6 +122,7 @@ describe('Express REST API Endpoints', () => {
       totalClaimedAmount: '10.00 tUSDC',
       txHash: '0x1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef',
       sweeps: [],
+      userClaimable: [],
     });
 
     const res = await request(app)
