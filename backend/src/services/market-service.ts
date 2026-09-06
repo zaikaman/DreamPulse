@@ -28,7 +28,6 @@ export interface OrderBookDepth {
   noBids: OrderBookLevel[];
   noAsks: OrderBookLevel[];
   updatedAt: number;
-  isSeedDepth?: boolean;
 }
 
 export class MarketService extends EventEmitter {
@@ -96,7 +95,7 @@ export class MarketService extends EventEmitter {
         this.smoothedFairValues.set(market.id, evalResult.confluenceProbYes);
         market.fairValueYes = evalResult.fairValueYes;
         market.impliedProbYes = evalResult.impliedProbYes;
-        market.edgePercentage = market.isSeedDepth || market.isSynthetic ? 0 : evalResult.edgePercentage;
+        market.edgePercentage = evalResult.edgePercentage;
         market.convictionState = evalResult.convictionState;
         market.recommendedAction = evalResult.recommendedAction;
         market.recommendedOutcome = evalResult.recommendedOutcome;
@@ -444,8 +443,6 @@ export class MarketService extends EventEmitter {
           noTokenId: m.noTokenId,
           intervalSec,
           onchainStatus: m.status === 'Trading' ? MARKET_STATUS.Trading : undefined,
-          isSynthetic: false,
-          isSeedDepth: false,
         };
 
         if (status === 'Open' || status === 'Resolving') {
@@ -600,7 +597,6 @@ export class MarketService extends EventEmitter {
       noBids,
       noAsks,
       updatedAt: Date.now(),
-      isSeedDepth: false,
     };
 
     this.depthBooks.set(market.id, depth);
@@ -680,7 +676,7 @@ export class MarketService extends EventEmitter {
         this.smoothedFairValues.set(market.id, evalResult.confluenceProbYes);
         market.fairValueYes = evalResult.fairValueYes;
         market.impliedProbYes = evalResult.impliedProbYes;
-        market.edgePercentage = market.isSeedDepth || market.isSynthetic ? 0 : evalResult.edgePercentage;
+        market.edgePercentage = evalResult.edgePercentage;
         market.convictionState = evalResult.convictionState;
         market.recommendedAction = evalResult.recommendedAction;
         market.recommendedOutcome = evalResult.recommendedOutcome;
@@ -956,8 +952,6 @@ export class MarketService extends EventEmitter {
     const fair = calculateFairValue(spot, market.strikePrice, timeLeft, market.symbol, undefined, ticker?.priceHistory);
     const edge = calculateEdge(fair.fairValueYes, market.bestBidYes, market.bestAskYes);
 
-    market.isSeedDepth = false;
-    market.isSynthetic = false;
     market.fairValueYes = fair.fairValueYes;
     market.impliedProbYes = edge.impliedProbYes;
     market.edgePercentage = edge.edgePercentage;

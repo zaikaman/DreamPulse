@@ -112,30 +112,28 @@ export const TraderCockpitTicket: React.FC<TraderCockpitTicketProps> = ({
   const [pulseEffect, setPulseEffect] = useState<boolean>(false);
   const [isFauceting, setIsFauceting] = useState<boolean>(false);
 
-  // Market classification
-  const isSyntheticOrSeed = Boolean(market.isSynthetic || market.isSeedDepth);
   const spotPrice = currentSpotPrice || liveTick?.spotPrice || market.strikePrice || 0;
   const strike = market.strikePrice || 0;
 
-  // Real implied probability only (no synthetic 50% or sigmoid curve fallbacks)
+  // Real implied probability
   const rawProb = liveTick?.impliedProb ?? market.impliedProbYes;
-  const realProbYes = !isSyntheticOrSeed && typeof rawProb === 'number' && rawProb > 0 && rawProb < 1
+  const realProbYes = typeof rawProb === 'number' && rawProb > 0 && rawProb < 1
     ? rawProb
     : null;
 
-  // Implied odds (null if synthetic or empty)
+  // Implied odds
   const upOddsPct = realProbYes !== null ? Math.round(realProbYes * 100) : null;
   const downOddsPct = upOddsPct !== null ? Math.max(0, 100 - upOddsPct) : null;
 
-  // Real order book depth prices only (no hardcoded 0.50 fallbacks)
+  // Real order book depth prices
   const rawBestBid = bestBidYes ?? market.bestBidYes;
   const rawBestAsk = bestAskYes ?? market.bestAskYes;
 
-  const realBestBid = !isSyntheticOrSeed && typeof rawBestBid === 'number' && rawBestBid > 0 && rawBestBid < 1
+  const realBestBid = typeof rawBestBid === 'number' && rawBestBid > 0 && rawBestBid < 1
     ? rawBestBid
     : null;
 
-  const realBestAsk = !isSyntheticOrSeed && typeof rawBestAsk === 'number' && rawBestAsk > 0 && rawBestAsk < 1
+  const realBestAsk = typeof rawBestAsk === 'number' && rawBestAsk > 0 && rawBestAsk < 1
     ? rawBestAsk
     : null;
 

@@ -48,7 +48,7 @@ export function startMarketEmitter(tickIntervalMs: number = 100): void {
         const closeTime = new Date(market.closeTimestamp).getTime();
         const timeLeftSeconds = Math.max(0, Math.floor((closeTime - now) / 1000));
         const absEdge = Math.abs(market.edgePercentage);
-        const hasAnomaly = absEdge >= 0.03 && !market.isSynthetic && !market.isSeedDepth;
+        const hasAnomaly = absEdge >= 0.03;
 
         ticksBatch.push({
           marketId: market.id,

@@ -951,7 +951,7 @@ export class OrderService {
     let market = marketService.getMarketById(decision.targetMarketId);
     if (!market?.marketIdHex || market.marketIdHex.toLowerCase() === ZERO_ADDRESS.toLowerCase() || /^0x0+$/i.test(market.marketIdHex)) {
       const openOnChain = marketService.getActiveMarkets({ status: 'Open' }).find(
-        (m) => m.symbol === (market?.symbol || decision.targetMarketId) && m.marketIdHex && !m.isSynthetic
+        (m) => m.symbol === (market?.symbol || decision.targetMarketId) && m.marketIdHex
       );
       if (openOnChain) {
         market = openOnChain;
@@ -997,11 +997,11 @@ export class OrderService {
     let fillsQuantity = quantizedSize;
     let onchainOrderId: string | undefined;
 
-    // Guard against synthetic/rolling fallback markets with zero marketIdHex (market 0x000...). Those have no on-chain market and always revert with no data.
+    // Guard against markets with zero or uninitialized marketIdHex (market 0x000...). Those have no on-chain market and always revert with no data.
     const isZeroMarketId = !market?.marketIdHex || market.marketIdHex.toLowerCase() === ZERO_ADDRESS.toLowerCase() || /^0x0+$/i.test(market.marketIdHex);
     if (isZeroMarketId && onchain) {
-      // Synthetic market — do not attempt on-chain placement; would revert as placeBinaryOrder no data
-      console.info(`[OrderService] Skipping synthetic market ${decision.targetMarketId} (marketIdHex zero) pool ${onchain.pool} — no on-chain binary market`);
+      // Uninitialized marketIdHex — do not attempt on-chain placement; would revert as placeBinaryOrder no data
+      console.info(`[OrderService] Skipping market ${decision.targetMarketId} (marketIdHex zero) pool ${onchain.pool} — no on-chain binary market`);
       return null;
     }
 

@@ -97,7 +97,6 @@ apiRouter.get('/markets/:id/depth', (req: Request, res: Response) => {
     return res.json({
       success: true,
       marketId: market.id,
-      isSeedDepth: false,
       depth: {
         marketId: market.id,
         symbol: market.symbol,
@@ -110,7 +109,6 @@ apiRouter.get('/markets/:id/depth', (req: Request, res: Response) => {
         noBids: [],
         noAsks: [],
         updatedAt: Date.now(),
-        isSeedDepth: false,
       },
     });
   }
@@ -118,10 +116,8 @@ apiRouter.get('/markets/:id/depth', (req: Request, res: Response) => {
   return res.json({
     success: true,
     marketId: market?.id || depth?.marketId || id,
-    isSeedDepth: false,
     depth: {
       ...depth!,
-      isSeedDepth: false,
     },
   });
 });

@@ -42,13 +42,12 @@ const MarketsDepthViewComponent: React.FC<MarketsDepthViewProps> = ({
   onOpenSessionModal,
   onConnectWallet,
 }) => {
-  // Compute top edge anomaly contract — preserve signed edge and ignore synthetic/seed (edge forced 0)
+  // Compute top edge anomaly contract — preserve signed edge
   const topEdgeMarket = useMemo<{ market: Market | null; edge: number }>(() => {
     let topM: Market | null = null;
     let bestSignedEdge = 0;
     let bestAbsEdge = 0;
     markets.forEach((m) => {
-      if (m.isSynthetic || m.isSeedDepth) return;
       const tick = liveTicks.get(m.id);
       const signedEdge = tick?.edge ?? m.edgePercentage;
       const absEdge = Math.abs(signedEdge);

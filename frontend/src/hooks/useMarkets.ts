@@ -49,8 +49,6 @@ export function normalizeMarket(raw: any): Market {
     edgePercentage: Number(raw?.edgePercentage ?? raw?.edge_percentage ?? 0),
     poolAddress: raw?.poolAddress || raw?.pool_address,
     marketIdHex: raw?.marketIdHex || raw?.market_id_hex,
-    isSynthetic: Boolean(raw?.isSynthetic ?? raw?.is_synthetic),
-    isSeedDepth: Boolean(raw?.isSeedDepth ?? raw?.is_seed_depth),
     convictionState: raw?.convictionState,
     recommendedAction: raw?.recommendedAction,
     recommendedOutcome: raw?.recommendedOutcome,

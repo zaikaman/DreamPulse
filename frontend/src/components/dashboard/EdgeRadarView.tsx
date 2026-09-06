@@ -27,10 +27,9 @@ const EdgeRadarViewComponent: React.FC<EdgeRadarViewProps> = ({
 }) => {
   const selectedMarket = markets.find((m) => m.id === selectedMarketId) || markets[0];
   const selectedTick = selectedMarket ? liveTicks.get(selectedMarket.id) : undefined;
-  const isSyntheticOrSeed = Boolean(selectedMarket?.isSynthetic || selectedMarket?.isSeedDepth);
   const implied = selectedTick?.impliedProb ?? selectedMarket?.impliedProbYes ?? 0.5;
   const fair = selectedTick?.fairValue ?? selectedMarket?.fairValueYes ?? 0.5;
-  const edge = isSyntheticOrSeed ? 0 : (selectedTick?.edge ?? selectedMarket?.edgePercentage ?? 0);
+  const edge = selectedTick?.edge ?? selectedMarket?.edgePercentage ?? 0;
   const isYesEdge = edge > 0;
 
   return (
@@ -139,27 +138,25 @@ const EdgeRadarViewComponent: React.FC<EdgeRadarViewProps> = ({
                   variant="outline"
                   className={cn(
                     "text-[10px] font-mono px-1.5 py-0",
-                    isSyntheticOrSeed
-                      ? "text-muted-foreground bg-secondary/40 border-border/40"
-                      : Math.abs(edge) >= 0.03
+                    Math.abs(edge) >= 0.03
                       ? "bg-[#ffb700]/10 text-[#ffb700] border-[#ffb700]/30"
                       : "text-muted-foreground"
                   )}
                 >
-                  {isSyntheticOrSeed ? 'NEUTRAL' : Math.abs(edge) >= 0.03 ? 'ANOMALY' : 'EDGE'}
+                  {Math.abs(edge) >= 0.03 ? 'ANOMALY' : 'EDGE'}
                 </Badge>
               </div>
               <div
                 className={cn(
                   "font-mono text-lg font-bold",
-                  isSyntheticOrSeed || Math.abs(edge) < 0.01
+                  Math.abs(edge) < 0.01
                     ? "text-foreground"
                     : isYesEdge
                     ? "text-[#00e676]"
                     : "text-[#ff3366]"
                 )}
               >
-                {isSyntheticOrSeed ? '0.0%' : `${isYesEdge ? '+' : ''}${(edge * 100).toFixed(1)}%`}
+                {`${isYesEdge ? '+' : ''}${(edge * 100).toFixed(1)}%`}
               </div>
               <div className="text-[10px] font-mono text-muted-foreground mt-2">
                 {Math.abs(edge) < 0.01
@@ -184,16 +181,16 @@ const EdgeRadarViewComponent: React.FC<EdgeRadarViewProps> = ({
                 <span
                   className={cn(
                     "inline-flex items-center gap-1 px-2 py-0.5 rounded font-mono text-xs font-bold border",
-                    !isSyntheticOrSeed && Math.abs(edge) >= 0.03
+                    Math.abs(edge) >= 0.03
                       ? isYesEdge
                         ? "bg-[#00e676]/10 text-[#00e676] border-[#00e676]/30"
                         : "bg-[#ff3366]/10 text-[#ff3366] border-[#ff3366]/30"
                       : "bg-secondary/40 text-muted-foreground border-border/50"
                   )}
                 >
-                  {!isSyntheticOrSeed && Math.abs(edge) >= 0.03 && <BoltIcon className="w-3 h-3" />}
+                  {Math.abs(edge) >= 0.03 && <BoltIcon className="w-3 h-3" />}
                   <span>
-                    {!isSyntheticOrSeed && Math.abs(edge) >= 0.03
+                    {Math.abs(edge) >= 0.03
                       ? isYesEdge
                         ? 'BUY YES'
                         : 'BUY NO'
@@ -202,7 +199,7 @@ const EdgeRadarViewComponent: React.FC<EdgeRadarViewProps> = ({
                 </span>
               </div>
               <div className="text-[10px] font-mono text-muted-foreground mt-2">
-                {!isSyntheticOrSeed && Math.abs(edge) >= 0.03 ? 'Volt Urgency Fill' : 'Titan 2-Sided Quoting'}
+                {Math.abs(edge) >= 0.03 ? 'Volt Urgency Fill' : 'Titan 2-Sided Quoting'}
               </div>
             </div>
           </div>

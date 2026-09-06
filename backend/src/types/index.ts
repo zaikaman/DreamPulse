@@ -40,8 +40,6 @@ export interface Market {
   noTokenId?: string;
   intervalSec?: number;
   onchainStatus?: number;
-  isSynthetic?: boolean;
-  isSeedDepth?: boolean;
   // Confluence & Price Action Fields
   convictionState?: 'HIGH_CONVICTION' | 'MODERATE' | 'CAUTION_COUNTER_TREND' | 'NEUTRAL';
   recommendedAction?: 'BUY_UP' | 'BUY_DOWN' | 'WAIT';

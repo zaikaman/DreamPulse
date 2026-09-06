@@ -154,8 +154,6 @@ export function evaluateTradeConfluence(
     };
   }
 
-  const isSyntheticOrSeed = Boolean(market.isSynthetic || market.isSeedDepth);
-
   const spotDiff = spot - strike;
   const spotDiffPct = (spotDiff / strike) * 100;
   const pctDiffFormatted = Math.abs(spotDiffPct).toFixed(2);
@@ -226,7 +224,7 @@ export function evaluateTradeConfluence(
 
   // 3. Compute Theoretical Dynamic Fair Value
   const bsmFairProb = calculateBinaryYesProbability(spot, strike, vol, timeToExpiryYears);
-  const fairValueYes = isSyntheticOrSeed ? 0.50 : (liveTick?.fairValue && Math.abs(liveTick.spotPrice - spot) < 5 ? liveTick.fairValue : bsmFairProb);
+  const fairValueYes = liveTick?.fairValue && Math.abs(liveTick.spotPrice - spot) < 5 ? liveTick.fairValue : bsmFairProb;
 
   // 4. Resolve Order Book Implied Probability & Mathematical Edge
   let midYes = 0.50;
@@ -242,8 +240,8 @@ export function evaluateTradeConfluence(
     midYes = bsmFairProb;
   }
 
-  const impliedProbYes = isSyntheticOrSeed ? 0.50 : midYes;
-  const rawEdge = isSyntheticOrSeed ? 0 : Number((fairValueYes - impliedProbYes).toFixed(4));
+  const impliedProbYes = midYes;
+  const rawEdge = Number((fairValueYes - impliedProbYes).toFixed(4));
   const edge = Math.abs(rawEdge) < 0.004 ? 0 : rawEdge;
 
   const isYesEdge = edge >= 0.015;
@@ -264,14 +262,7 @@ export function evaluateTradeConfluence(
   let confidenceScore = 50;
   let rationale = '';
 
-  if (isSyntheticOrSeed) {
-    convictionState = 'NEUTRAL';
-    recommendedAction = 'WAIT';
-    recommendedOutcome = 'NONE';
-    winProbability = 50;
-    confidenceScore = 50;
-    rationale = `Market is synthetic/seed depth. Titan BSM & Confluence engine is observing initial quotes (${diffText}).`;
-  } else if (isCounterTrendConflict) {
+  if (isCounterTrendConflict) {
     convictionState = 'CAUTION_COUNTER_TREND';
     recommendedAction = 'WAIT';
     recommendedOutcome = 'NONE';

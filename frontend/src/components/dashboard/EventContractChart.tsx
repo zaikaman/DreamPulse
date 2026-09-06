@@ -126,21 +126,11 @@ export const EventContractChart: React.FC<EventContractChartProps> = ({
 
   const impliedProbYes = confluence.impliedProbYes;
   const fairValueYes = confluence.fairValueYes;
-  const isSyntheticOrSeed = Boolean(market.isSynthetic || market.isSeedDepth);
   const edge = confluence.edgePercentage;
   const isYesEdge = confluence.isYesEdge;
   const hasEdge = Math.abs(edge) >= 0.005;
 
   const aiBadge = useMemo(() => {
-    if (isSyntheticOrSeed) {
-      return {
-        text: `AI Fair ${(fairValueYes * 100).toFixed(1)}% (SEED)`,
-        bg: '#1e1035',
-        stroke: '#52525b',
-        color: '#a1a1aa',
-        w: 150,
-      };
-    }
     if (confluence.convictionState === 'CAUTION_COUNTER_TREND') {
       const text = `Caution: Divergence (Waiting)`;
       return { text, bg: 'rgba(255,183,0,0.15)', stroke: '#ffb700', color: '#ffb700', w: 185 };
@@ -169,7 +159,7 @@ export const EventContractChart: React.FC<EventContractChartProps> = ({
     const pct = fairValueYes >= 0.5 ? (fairValueYes * 100).toFixed(1) : ((1 - fairValueYes) * 100).toFixed(1);
     const d = fairValueYes >= 0.5 ? 'UP' : 'DOWN';
     return { text: `AI Fair ${pct}% ${d}`, bg: '#1e1035', stroke: '#7928ca', color: '#d8b4fe', w: 145 };
-  }, [fairValueYes, edge, isSyntheticOrSeed, hasEdge, isYesEdge, confluence]);
+  }, [fairValueYes, edge, hasEdge, isYesEdge, confluence]);
 
   // Re-seed price history when switching market, symbol, or timeframe range
   useEffect(() => {

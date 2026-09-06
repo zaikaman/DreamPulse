@@ -71,9 +71,8 @@ const OverviewViewComponent: React.FC<OverviewViewProps> = ({
   // Top 4 alpha opportunities (compact) 
   const opportunities = markets
     .map((m) => {
-      const isSyntheticOrSeed = Boolean(m.isSynthetic || m.isSeedDepth);
       const tick = liveTicks.get(m.id);
-      const edge = isSyntheticOrSeed ? 0 : (tick?.edge ?? m.edgePercentage);
+      const edge = tick?.edge ?? m.edgePercentage;
       const implied = tick?.impliedProb ?? m.impliedProbYes;
       const fair = tick?.fairValue ?? m.fairValueYes;
       return {
@@ -82,8 +81,7 @@ const OverviewViewComponent: React.FC<OverviewViewProps> = ({
         edge,
         implied,
         fair,
-        action: !isSyntheticOrSeed && edge > 0.01 ? 'BUY_YES' : !isSyntheticOrSeed && edge < -0.01 ? 'BUY_NO' : 'NEUTRAL',
-        isSyntheticOrSeed,
+        action: edge > 0.01 ? 'BUY_YES' : edge < -0.01 ? 'BUY_NO' : 'NEUTRAL',
       };
     })
     .sort((a, b) => b.absEdge - a.absEdge)

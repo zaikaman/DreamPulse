@@ -7,7 +7,7 @@ DreamPulse is an institutional-grade cyber-financial trading ecosystem for Dream
 - **Live application:** [dreampulse-ai.vercel.app](https://dreampulse-ai.vercel.app/)
 - **Auditable live cockpit:** [Swarm Cockpit](https://dreampulse-ai.vercel.app/#cockpit)
 - **Demo video:** [2 minutes 55 seconds on YouTube](https://youtu.be/SW0iNoZHMzw)
-- **Machine-readable evidence:** [`evidence.json`](./evidence.json)
+- **Machine-readable evidence:** [`evidence.json`](https://github.com/zaikaman/DreamPulse/blob/main/evidence.json)
 - **Repository:** [github.com/zaikaman/DreamPulse](https://github.com/zaikaman/DreamPulse)
 - **Somnia Shannon explorer:** [shannon-explorer.somnia.network](https://shannon-explorer.somnia.network)
 
@@ -103,19 +103,28 @@ DreamPulse never takes custody of user funds. The authorization flow is:
 
 Withdrawal, drain, and unrestricted transfer capabilities are not granted. Collateral is used only for the exact authorized order amount, while users retain wallet ownership and can revoke sessions.
 
-## On-Chain Deployments
+## Contract & Protocol Addresses
 
-| Contract | Address |
-| --- | --- |
-| `BatchApprove.sol` | [`0x12c9c45fa740ce7469dacff368b08ca7edcaac26`](https://shannon-explorer.somnia.network/address/0x12c9c45fa740ce7469dacff368b08ca7edcaac26) |
-| `OperatorPermissionsRegistry` | [`0x15C7e8CE38F021c5b45d098AaD788f63090bF20A`](https://shannon-explorer.somnia.network/address/0x15C7e8CE38F021c5b45d098AaD788f63090bF20A) |
-| `BinaryModule` | [`0x3ecC694Cef705358864a646142ac17A90E29e388`](https://shannon-explorer.somnia.network/address/0x3ecC694Cef705358864a646142ac17A90E29e388) |
-| `MarketsCore` | [`0x2802504314685D89bF6C992CA5a8e7cC78bc0294`](https://shannon-explorer.somnia.network/address/0x2802504314685D89bF6C992CA5a8e7cC78bc0294) |
-| `CLOBFactory` | [`0xb2BE8EE02F96379DB75f01802384593EBa9bfF04`](https://shannon-explorer.somnia.network/address/0xb2BE8EE02F96379DB75f01802384593EBa9bfF04) |
-| `BinarySettlement` | [`0xbF4a49e0Dfd092e5FBE8E5761064C49533e6Ed23`](https://shannon-explorer.somnia.network/address/0xbF4a49e0Dfd092e5FBE8E5761064C49533e6Ed23) |
-| `CollateralRouter` | [`0xbC0C9834B15ACE38bB50dDaa7d7f7C7CC4DC183C`](https://shannon-explorer.somnia.network/address/0xbC0C9834B15ACE38bB50dDaa7d7f7C7CC4DC183C) |
-| `OracleHub` | [`0xe40db387cC98601Dd11bd634fF2f3AD5686dE32b`](https://shannon-explorer.somnia.network/address/0xe40db387cC98601Dd11bd634fF2f3AD5686dE32b) |
-| `TestUSDC` | [`0x70a86D8842FB63C4Ad2b7cdddF530eBf1BB25d8E`](https://shannon-explorer.somnia.network/address/0x70a86D8842FB63C4Ad2b7cdddF530eBf1BB25d8E) |
+### Custom Smart Contract Deployed by DreamPulse
+DreamPulse authored and deployed **one custom smart contract** on Somnia Shannon Testnet to eliminate multi-pool approval friction for rolling prediction markets:
+
+| Contract | Address | Purpose |
+| --- | --- | --- |
+| `BatchApprove.sol` | [`0x12c9c45fa740ce7469dacff368b08ca7edcaac26`](https://shannon-explorer.somnia.network/address/0x12c9c45fa740ce7469dacff368b08ca7edcaac26) | 1-click batch token approval & operator delegation across all rolling binary pools |
+
+### Somnia & DreamDEX Protocol Contracts (Integrated)
+DreamPulse integrates directly with the existing on-chain protocol suite deployed by Somnia and DreamDEX:
+
+| Contract | Address | Description |
+| --- | --- | --- |
+| `OperatorPermissionsRegistry` | [`0x15C7e8CE38F021c5b45d098AaD788f63090bF20A`](https://shannon-explorer.somnia.network/address/0x15C7e8CE38F021c5b45d098AaD788f63090bF20A) | Somnia native session delegation registry |
+| `BinaryModule` | [`0x3ecC694Cef705358864a646142ac17A90E29e388`](https://shannon-explorer.somnia.network/address/0x3ecC694Cef705358864a646142ac17A90E29e388) | DreamDEX core binary market logic |
+| `MarketsCore` | [`0x2802504314685D89bF6C992CA5a8e7cC78bc0294`](https://shannon-explorer.somnia.network/address/0x2802504314685D89bF6C992CA5a8e7cC78bc0294) | DreamDEX market management contract |
+| `CLOBFactory` | [`0xb2BE8EE02F96379DB75f01802384593EBa9bfF04`](https://shannon-explorer.somnia.network/address/0xb2BE8EE02F96379DB75f01802384593EBa9bfF04) | Central Limit Order Book factory |
+| `BinarySettlement` | [`0xbF4a49e0Dfd092e5FBE8E5761064C49533e6Ed23`](https://shannon-explorer.somnia.network/address/0xbF4a49e0Dfd092e5FBE8E5761064C49533e6Ed23) | Settlement & direct collateral redemption |
+| `CollateralRouter` | [`0xbC0C9834B15ACE38bB50dDaa7d7f7C7CC4DC183C`](https://shannon-explorer.somnia.network/address/0xbC0C9834B15ACE38bB50dDaa7d7f7C7CC4DC183C) | Collateral vault routing |
+| `OracleHub` | [`0xe40db387cC98601Dd11bd634fF2f3AD5686dE32b`](https://shannon-explorer.somnia.network/address/0xe40db387cC98601Dd11bd634fF2f3AD5686dE32b) | Prophecy oracle settlement engine |
+| `TestUSDC` | [`0x70a86D8842FB63C4Ad2b7cdddF530eBf1BB25d8E`](https://shannon-explorer.somnia.network/address/0x70a86D8842FB63C4Ad2b7cdddF530eBf1BB25d8E) | Protocol trading collateral currency (6 decimals) |
 
 ## Live Evidence and Hackathon Fit
 
@@ -124,7 +133,7 @@ The live cockpit and [`evidence.json`](./evidence.json) provide an audit trail c
 | Judging area | DreamPulse evidence |
 | --- | --- |
 | Innovation | One product unifies CLOB trading, AI, no-code agents, backtesting, autonomous liquidity, social prediction, and settlement. |
-| Technical implementation | Direct DreamDEX SDK integration, deployed contracts, serialized nonce handling, risk guardrails, WebSocket telemetry, and 307 passing tests. |
+| Technical implementation | Direct DreamDEX SDK integration, custom BatchApprove contract deployment, serialized nonce handling, risk guardrails, WebSocket telemetry, and 307 passing tests. |
 | User experience | Institutional terminal, visual binary charts, one-click session authorization, command palette, onboarding wizard, and strategy builder. |
 | Ecosystem impact | Provides liquidity, reduces stale pricing, recycles settled capital, and makes automated prediction-market strategies accessible. |
 | Presentation | A focused 2:55 demo covers onboarding, terminal trading, Strategy Studio, swarms, telemetry, and settlement. |
@@ -204,7 +213,7 @@ The documented verification result is **307 tests passing across 22 suites**, wi
 
 ## License and Acknowledgements
 
-DreamPulse is released under the [MIT License](./LICENSE).
+DreamPulse is released under the [MIT License](https://github.com/zaikaman/DreamPulse/blob/main/LICENSE).
 
 Built with [Somnia](https://somnia.network), [DreamDEX](https://dreamdex.io), [`@somnia-chain/markets-sdk`](https://www.npmjs.com/package/@somnia-chain/markets-sdk), [Groq](https://groq.com), [Google Gemini](https://ai.google.dev), [Viem](https://viem.sh), and [Supabase](https://supabase.com).
 

@@ -37,7 +37,6 @@ describe('Express REST API Endpoints', () => {
       priceActionScore: 50,
       poolAddress: '0x2222222222222222222222222222222222222222',
       marketIdHex: '0x1111111111111111111111111111111111111111111111111111111111111111',
-      isSynthetic: false,
     };
     (marketService as any).markets.set(testOnchainMarket.id, testOnchainMarket);
     (marketService as any).markets.set('test-market-id', { ...testOnchainMarket, id: 'test-market-id' });

@@ -270,7 +270,6 @@ export class MultiAgentSwarmRunner {
             noBids: [],
             noAsks: [],
             updatedAt: Date.now(),
-            isSeedDepth: false,
           };
 
           // Sanitize order book depth for taker agents (Volt, Oracle) to prevent self-crossing against Titan's resting maker orders
@@ -649,7 +648,6 @@ export class MultiAgentSwarmRunner {
             noBids: [],
             noAsks: [],
             updatedAt: Date.now(),
-            isSeedDepth: false,
           };
           const depth = type === 'Volt' || type === 'Oracle' ? orderService.sanitizeDepthForSelfTrade(rawDepth, market.id, userAddr) : rawDepth;
 
@@ -808,7 +806,6 @@ export class MultiAgentSwarmRunner {
           noBids: [],
           noAsks: [],
           updatedAt: Date.now(),
-          isSeedDepth: false,
         };
 
         const depth = orderService.sanitizeDepthForSelfTrade(rawDepth, market.id, userAddr);

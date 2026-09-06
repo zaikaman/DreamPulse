@@ -91,9 +91,8 @@ export const TradeTerminalView: React.FC<TradeTerminalViewProps> = ({
     return evaluateTradeConfluence(market, tick, spot, undefined, recentThought?.reasoningText);
   }, [market, tick, spot, agentThoughts]);
 
-  const isSyntheticOrSeed = Boolean(market?.isSynthetic || market?.isSeedDepth);
   const rawProb = tick?.impliedProb ?? market?.impliedProbYes;
-  const realProbYes = !isSyntheticOrSeed && typeof rawProb === 'number' && rawProb > 0 && rawProb < 1 ? rawProb : null;
+  const realProbYes = typeof rawProb === 'number' && rawProb > 0 && rawProb < 1 ? rawProb : null;
   const isMarketUp = realProbYes !== null ? realProbYes >= 0.5 : null;
   const marketDirection = isMarketUp !== null ? (isMarketUp ? 'Up' : 'Down') : null;
   const marketConfidence = realProbYes !== null && isMarketUp !== null

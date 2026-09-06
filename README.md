@@ -26,8 +26,8 @@
 * **Auditable Live Cockpit**: [https://dreampulse-ai.vercel.app/#cockpit](https://dreampulse-ai.vercel.app/#cockpit) *(Real-time verified on-chain execution ledger, active agent states, and settlement telemetry)*
 * **Official 2:55 Demo Video**: [Watch Demo Video on YouTube (2m 55s)](https://youtu.be/SW0iNoZHMzw)
 * **Somnia Shannon Testnet Chain ID**: `50312`
-* **Custom `BatchApprove.sol` Deployment**: [`0x12c9c45fa740ce7469dacff368b08ca7edcaac26`](https://shannon-explorer.somnia.network/address/0x12c9c45fa740ce7469dacff368b08ca7edcaac26)
-* **Somnia OperatorPermissionsRegistry**: [`0x15C7e8CE38F021c5b45d098AaD788f63090bF20A`](https://shannon-explorer.somnia.network/address/0x15C7e8CE38F021c5b45d098AaD788f63090bF20A)
+* **Custom `BatchApprove.sol` (Sole DreamPulse Contract Deployment)**: [`0x12c9c45fa740ce7469dacff368b08ca7edcaac26`](https://shannon-explorer.somnia.network/address/0x12c9c45fa740ce7469dacff368b08ca7edcaac26)
+* **Somnia `OperatorPermissionsRegistry` (Native Protocol)**: [`0x15C7e8CE38F021c5b45d098AaD788f63090bF20A`](https://shannon-explorer.somnia.network/address/0x15C7e8CE38F021c5b45d098AaD788f63090bF20A)
 * **Machine-Readable Evidence Artifact**: [`evidence.json`](./evidence.json) *(Full audit trail, on-chain tx hashes, and JSON schemas)*
 * **Automated Verification Suite**: `npm run verify` *(307/307 Unit & Integration Tests Passing, 0 Typecheck Errors)*
 
@@ -510,15 +510,22 @@ A sleek banner embedded at the top of the **Overview**:
 
 ---
 
-## Smart Contracts & On-Chain Deployments
+## Smart Contracts & Protocol Addresses
 
-All DreamPulse interactions execute on the **Somnia Shannon Testnet**:
+All DreamPulse interactions execute on the **Somnia Shannon Testnet** (Chain ID `50312`).
 
-| Contract / Entity | Address | Description | Explorer Link |
+### 1. Custom Smart Contract Deployed by DreamPulse
+DreamPulse authored and deployed **one custom smart contract** on Somnia Shannon Testnet to solve the multi-pool approval and session delegation friction for rolling prediction markets:
+
+| Contract | Address | Description | Explorer Link |
 | :--- | :--- | :--- | :--- |
-| **Somnia Shannon Chain ID** | `50312` | High-Performance EVM Layer 1 (400k+ TPS) | [Somnia Explorer](https://shannon-explorer.somnia.network) |
-| **RPC Endpoint** | `https://dream-rpc.somnia.network` | Primary JSON-RPC Provider | — |
-| **`BatchApprove.sol`** | `0x12c9c45fa740ce7469dacff368b08ca7edcaac26` | 1-Click Multi-Pool Approval & Delegation Helper | [View on Explorer](https://shannon-explorer.somnia.network/address/0x12c9c45fa740ce7469dacff368b08ca7edcaac26) |
+| **`BatchApprove.sol`** | `0x12c9c45fa740ce7469dacff368b08ca7edcaac26` | 1-Click Multi-Pool Approval & Delegation Helper *(Custom DreamPulse Deployment)* | [View on Explorer](https://shannon-explorer.somnia.network/address/0x12c9c45fa740ce7469dacff368b08ca7edcaac26) |
+
+### 2. Somnia & DreamDEX Protocol Contracts (Integrated)
+DreamPulse integrates directly with the existing official protocol infrastructure deployed by Somnia and DreamDEX:
+
+| Protocol Contract | Address | Description | Explorer Link |
+| :--- | :--- | :--- | :--- |
 | **`OperatorPermissionsRegistry`** | `0x15C7e8CE38F021c5b45d098AaD788f63090bF20A` | Somnia Native Session Delegation Registry | [View on Explorer](https://shannon-explorer.somnia.network/address/0x15C7e8CE38F021c5b45d098AaD788f63090bF20A) |
 | **`BinaryModule`** | `0x3ecC694Cef705358864a646142ac17A90E29e388` | DreamDEX Core Binary Market Logic | [View on Explorer](https://shannon-explorer.somnia.network/address/0x3ecC694Cef705358864a646142ac17A90E29e388) |
 | **`MarketsCore`** | `0x2802504314685D89bF6C992CA5a8e7cC78bc0294` | DreamDEX Market Management Contract | [View on Explorer](https://shannon-explorer.somnia.network/address/0x2802504314685D89bF6C992CA5a8e7cC78bc0294) |
@@ -527,6 +534,13 @@ All DreamPulse interactions execute on the **Somnia Shannon Testnet**:
 | **`CollateralRouter`** | `0xbC0C9834B15ACE38bB50dDaa7d7f7C7CC4DC183C` | Collateral Vault Routing | [View on Explorer](https://shannon-explorer.somnia.network/address/0xbC0C9834B15ACE38bB50dDaa7d7f7C7CC4DC183C) |
 | **`OracleHub`** | `0xe40db387cC98601Dd11bd634fF2f3AD5686dE32b` | Prophecy Oracle Settlement Engine | [View on Explorer](https://shannon-explorer.somnia.network/address/0xe40db387cC98601Dd11bd634fF2f3AD5686dE32b) |
 | **`TestUSDC` (Collateral)** | `0x70a86D8842FB63C4Ad2b7cdddF530eBf1BB25d8E` | Protocol Trading Currency (6 decimals) | [View on Explorer](https://shannon-explorer.somnia.network/address/0x70a86D8842FB63C4Ad2b7cdddF530eBf1BB25d8E) |
+
+### 3. Network & Operator Endpoints
+
+| Entity | Value / Address | Description | Explorer Link |
+| :--- | :--- | :--- | :--- |
+| **Somnia Shannon Chain ID** | `50312` | High-Performance EVM Layer 1 (400k+ TPS) | [Somnia Explorer](https://shannon-explorer.somnia.network) |
+| **RPC Endpoint** | `https://dream-rpc.somnia.network` | Primary JSON-RPC Provider | — |
 | **Canonical Swarm Operator** | `0x93e300607c363E7D7a47e50f5c9fDf1723e859Cf` | Swarm Executor Wallet | [View on Explorer](https://shannon-explorer.somnia.network/address/0x93e300607c363E7D7a47e50f5c9fDf1723e859Cf) |
 
 ---
@@ -796,7 +810,7 @@ npm run verify
 
 | Verification Tier | Execution Environment | What Is Verified & Invariant Boundaries |
 | :--- | :--- | :--- |
-| 🟢 **Verified Live** | **Somnia Shannon Testnet & Production Cloud** | • **Live Smart Contracts**: Direct interaction with deployed `BatchApprove.sol` (`0x12c9c45fa740ce7469dacff368b08ca7edcaac26`), `OperatorPermissionsRegistry` (`0x15C7e8CE38F021c5b45d098AaD788f63090bF20A`), `BinaryModule`, `CLOBFactory`, and `TestUSDC`.<br />• **On-Chain Transactions**: Order placement (`placeOrderFor`), batch approvals, cancellation, and settlement redemptions confirmed via live JSON-RPC with receipts on Somnia Explorer.<br />• **Cloud Infrastructure**: Live Vercel frontend, Heroku backend daemon, Supabase PostgreSQL with RLS, and real-time sub-50ms WebSocket telemetry. |
+| 🟢 **Verified Live** | **Somnia Shannon Testnet & Production Cloud** | • **Live Smart Contracts**: Direct interaction with DreamPulse's custom deployed `BatchApprove.sol` (`0x12c9c45fa740ce7469dacff368b08ca7edcaac26`), alongside Somnia & DreamDEX protocol contracts (`OperatorPermissionsRegistry` `0x15C7e8CE38F021c5b45d098AaD788f63090bF20A`, `BinaryModule`, `CLOBFactory`, and `TestUSDC`).<br />• **On-Chain Transactions**: Order placement (`placeOrderFor`), batch approvals, cancellation, and settlement redemptions confirmed via live JSON-RPC with receipts on Somnia Explorer.<br />• **Cloud Infrastructure**: Live Vercel frontend, Heroku backend daemon, Supabase PostgreSQL with RLS, and real-time sub-50ms WebSocket telemetry. |
 | 🟡 **Simulated Lab** | **Historical Backtester & Synthetic Surfaces** | • **Historical Quantitative Backtesting**: High-resolution Binance 1s/1m historical tick replay with parameterized market frictions (4 bps slippage, protocol fees, 25ms execution latency).<br />• **Option Pricing Surfaces**: Black-Scholes binary CDF $\Phi(z)$ and EWMA volatility modeled against simulated price trajectories.<br />• **Chaos & Circuit Breakers**: Upstream RPC latency spikes, network partition retries, and indexer sync delays. |
 | 🔵 **Tested Locally** | **Automated Vitest Suite (Deterministic Mocks)** | • **Mathematical Invariants**: Closed-form Abramowitz-Stegun CDF polynomial approximation, Avellaneda-Stoikov inventory skew, Sharpe/Sortino ratios, integer quantization to 6-decimal micro-tUSDC.<br />• **Cryptographic & Non-Custodial Boundaries**: EIP-712 typed data hashing and signature recovery, session nonce tracking, single-trade risk ceilings ($20), and daily volume caps ($200) verified without consuming testnet gas.<br />• **Resilience & Fallback Paths**: Controlled mock injection verifying that if Groq API keys return HTTP 401 or exhaust quotas, the cognitive engine falls back to deterministic quantitative math logs; and if GraphQL indexers lag, the backend polls direct on-chain contract state. |
 

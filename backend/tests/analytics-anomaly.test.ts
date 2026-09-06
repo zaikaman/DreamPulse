@@ -46,20 +46,6 @@ describe('AnalyticsService & AnomalyService Comprehensive Suite', () => {
       expect(service.evaluateMarket(expiredMarket, 2500)).toBeNull();
     });
 
-    it('suppresses anomaly alerts on synthetic or seed depth markets', () => {
-      const syntheticMarket: Market = {
-        ...mockOpenMarket,
-        isSynthetic: true,
-      };
-      expect(service.evaluateMarket(syntheticMarket, 2500)).toBeNull();
-
-      const seedMarket: Market = {
-        ...mockOpenMarket,
-        isSeedDepth: true,
-      };
-      expect(service.evaluateMarket(seedMarket, 2500)).toBeNull();
-    });
-
     it('detects and classifies HIGH, MEDIUM, and LOW anomalies', () => {
       const highEdgeMarket: Market = {
         ...mockOpenMarket,
