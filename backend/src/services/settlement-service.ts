@@ -863,6 +863,16 @@ export class SettlementService {
 
         for (const order of userOrders) {
           if (order.status !== 'FILLED' && order.status !== 'PARTIALLY_FILLED') continue;
+          // Skip historical orders that have already been settled for more than 15 minutes
+          if (order.isSettled) {
+            const refTime = order.settledAt || order.createdAt;
+            if (refTime) {
+              const ageMs = Date.now() - new Date(refTime).getTime();
+              if (ageMs > 15 * 60 * 1000) continue;
+            } else {
+              continue;
+            }
+          }
 
           const market = marketService.getMarketById(order.marketId);
           const winningOutcome = market?.winningOutcome || order.marketSnapshot?.winningOutcome;
