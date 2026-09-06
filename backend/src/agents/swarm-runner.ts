@@ -302,20 +302,22 @@ export class MultiAgentSwarmRunner {
           if (decision && decision.action !== 'HOLD' && decision.action !== 'CANCEL_QUOTE' && decision.confidence >= requiredConfidence) {
             const now = Date.now();
             const lastTradeTime = this.lastTradeTimes.get(type) || 0;
+            // Execute under configured system operator address
+            const systemOperatorAddress = operatorAccount.address;
 
             // 1. Conservative In-Flight Risk Control: Wait for existing trade to resolve before opening a new one
-            // A. Don't enter another position on the same market until the current window resolves (swarm-wide single market cap)
-            if (orderService.hasActivePosition(undefined, market.id)) {
+            // A. Don't enter another position on the same market until the current window resolves (operator swarm-wide single market cap)
+            if (orderService.hasActivePosition(undefined, market.id, systemOperatorAddress)) {
               continue;
             }
 
             // B. Max 1 active trade at a time per agent (wait for settlement/expiry)
-            if (orderService.getActivePositionCount(type) >= 1) {
+            if (orderService.getActivePositionCount(type, systemOperatorAddress) >= 1) {
               continue;
             }
 
-            // C. Max 3 active positions concurrently across the entire swarm portfolio
-            if (orderService.getActivePositionCount() >= 3) {
+            // C. Max 3 active positions concurrently across the operator swarm portfolio
+            if (orderService.getActivePositionCount(undefined, systemOperatorAddress) >= 3) {
               continue;
             }
 
@@ -338,8 +340,6 @@ export class MultiAgentSwarmRunner {
             state.lastAction = `${decision.action}_${decision.targetOutcome || 'YES'}`;
             state.lastActionTimestamp = now;
 
-            // Execute under configured system operator address
-            const systemOperatorAddress = operatorAccount.address;
             const defaultSession: SessionGrant = {
               id: `session-${type.toLowerCase()}`,
               userAddress: systemOperatorAddress,

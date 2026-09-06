@@ -2599,12 +2599,19 @@ export class OrderService {
    * Checks if an agent has an active in-flight trade on a specific market (or any market)
    * that has not yet reached resolution / finalization.
    */
-  public hasActivePosition(agentType?: AgentType, marketId?: string): boolean {
+  public hasActivePosition(agentType?: AgentType, marketId?: string, userAddress?: string): boolean {
     const now = Date.now();
     return this.orders.some((o) => {
       if (agentType && o.agentType !== agentType) return false;
-      if (o.status !== 'FILLED' && o.status !== 'PARTIALLY_FILLED' && o.status !== 'PENDING') return false;
+      if (userAddress && o.userAddress && o.userAddress.toLowerCase() !== userAddress.toLowerCase()) return false;
       if (marketId && o.marketId.toLowerCase() !== marketId.toLowerCase()) return false;
+      if (o.status === 'PENDING') {
+        const orderAgeMs = now - new Date(o.createdAt).getTime();
+        // Stale resting quotes older than 90s do not block new market evaluations
+        if (orderAgeMs > 90_000) return false;
+      } else if (o.status !== 'FILLED' && o.status !== 'PARTIALLY_FILLED') {
+        return false;
+      }
 
       const market = marketService.getMarketById(o.marketId);
       if (!market) return false;
@@ -2624,7 +2631,13 @@ export class OrderService {
     return this.orders.filter((o) => {
       if (agentType && o.agentType !== agentType) return false;
       if (userAddress && o.userAddress && o.userAddress.toLowerCase() !== userAddress.toLowerCase()) return false;
-      if (o.status !== 'FILLED' && o.status !== 'PARTIALLY_FILLED' && o.status !== 'PENDING') return false;
+      if (o.status === 'PENDING') {
+        const orderAgeMs = now - new Date(o.createdAt).getTime();
+        // Stale resting quotes older than 90s do not count against active position limits
+        if (orderAgeMs > 90_000) return false;
+      } else if (o.status !== 'FILLED' && o.status !== 'PARTIALLY_FILLED') {
+        return false;
+      }
 
       const market = marketService.getMarketById(o.marketId);
       if (!market) return false;
