@@ -24,9 +24,8 @@
 
 * **Live Institutional DApp**: [https://dreampulse-ai.vercel.app](https://dreampulse-ai.vercel.app) *(or local `http://localhost:5174`)*
 * **Auditable Live Cockpit**: [https://dreampulse-ai.vercel.app/#cockpit](https://dreampulse-ai.vercel.app/#cockpit) *(Real-time verified on-chain execution ledger, active agent states, and settlement telemetry)*
-* **Official 2:55 Demo Video**: [Watch Demo Video on YouTube (2m 55s)](https://youtu.be/SW0iNoZHMzw)
+* **Official 2:55 Demo Video**: [Watch Demo Video on YouTube (2m 55s)](https://www.youtube.com/watch?v=IvF5sdUGXPg)
 * **Somnia Shannon Testnet Chain ID**: `50312`
-* **Custom `BatchApprove.sol` (Sole DreamPulse Contract Deployment)**: [`0x12c9c45fa740ce7469dacff368b08ca7edcaac26`](https://shannon-explorer.somnia.network/address/0x12c9c45fa740ce7469dacff368b08ca7edcaac26)
 * **Somnia `OperatorPermissionsRegistry` (Native Protocol)**: [`0x15C7e8CE38F021c5b45d098AaD788f63090bF20A`](https://shannon-explorer.somnia.network/address/0x15C7e8CE38F021c5b45d098AaD788f63090bF20A)
 * **Machine-Readable Evidence Artifact**: [`evidence.json`](./evidence.json) *(Full audit trail, on-chain tx hashes, and JSON schemas)*
 * **Automated Verification Suite**: `npm run verify` *(307/307 Unit & Integration Tests Passing, 0 Typecheck Errors)*
@@ -45,7 +44,7 @@
 9. [Protocol Swarms vs. Personal Swarms](#protocol-swarms-vs-personal-swarms)
 10. [Autonomous Zero-Loss Collateral Sweeper](#autonomous-zero-loss-collateral-sweeper)
 11. [Mathematical & Quantitative Foundation](#mathematical--quantitative-foundation)
-12. [Non-Custodial Session Delegation & BatchApprove.sol](#non-custodial-session-delegation--batchapprovesol)
+12. [Non-Custodial Session Delegation & Security Architecture](#non-custodial-session-delegation--security-architecture)
 13. [Dual LLM Engine Architecture (Groq Qwen + Google Gemini)](#dual-llm-engine-architecture-groq-qwen--google-gemini)
 14. [Full End-to-End System Flow](#full-end-to-end-system-flow)
 15. [Live Testnet Proof of Fills & Transactions](#live-testnet-proof-of-fills--transactions)
@@ -88,7 +87,7 @@ DreamPulse is structured into four tightly integrated operational layers:
    * **WebSocket Telemetry Gateway**: Sub-50ms real-time state streaming, live LLM thought broadcasts, and system health telemetry.
 
 4. **On-Chain Settlement Layer (`Somnia Shannon Testnet` · Chain ID `50312`)**
-   * **`BatchApprove.sol`**: Custom smart contract enabling 1-click multi-pool delegation and token allowance aggregation.
+   * **Somnia `OperatorPermissionsRegistry`**: Protocol-native 1-click global delegation and token routing with zero custody transfer.
    * **DreamDEX CLOB Contracts**: Rolling binary event market pools, order matching, and oracle settlement routing.
    * **Somnia Shannon EVM L1**: High-throughput EVM execution (400k+ TPS), sub-second block finality, and zero-slippage execution.
 
@@ -105,7 +104,7 @@ Decentralized Central Limit Order Book (CLOB) prediction markets are the fastest
 | **1. Cold-Start Liquidity** | Markets open with zero bids/asks or $>15\%$ spreads, alienating organic retail traders. | **Titan MM** seeds continuous two-sided liquidity within 2.5%–4.0% spreads scaled by real-time EWMA volatility. |
 | **2. Quote Staleness & Latency** | Underlying spot prices (e.g. BTC, ETH) jump violently, but resting limit orders take seconds to adjust. | **Volt Sniper** monitors 100ms spot velocity against order book VWAP to eliminate stale mispricings. |
 | **3. Vol Surface Mispricing** | Retail traders price binary contracts on raw sentiment rather than continuous Black-Scholes $\Phi(d_2)$. | **Oracle Arb** computes theoretical fair value and executes when post-spread edge exceeds $\ge 3.5\%$. |
-| **4. Multi-Pool Approval UX Friction** | Rolling 5m/15m/1h prediction markets create dozens of independent pool addresses, each requiring manual wallet popups. | **`BatchApprove.sol`** custom smart contract enables 1-click batch delegation across all active and rolling event pools. |
+| **4. Multi-Pool Approval UX Friction** | Rolling 5m/15m/1h prediction markets create dozens of independent pool addresses, each requiring manual wallet popups. | **Somnia Native Global Delegation** via `OperatorPermissionsRegistry.setOperatorApprovalGlobal` enables 1-click authorization across all rolling pools with zero popup fatigue. |
 | **5. Stranded Settlement Capital** | Traders must manually track contract expirations, wait for oracles, and claim payouts, stranding capital. | **Sweeper Daemon** autonomously batch-redeems winning shares across resolved pools and recycles collateral. |
 
 ---
@@ -244,7 +243,7 @@ DreamPulse coordinates an orchestrated **Multi-Agent Swarm** operating on a high
 * **Cognitive Reasoning Engine**: Real-time Groq LLM telemetry broadcasting structured rationale and conviction scores for every executed trade.
 * **Four Autonomous Agent Personas**: `Volt Sniper` (momentum taker), `Oracle Arb` (implied vol arb), `Titan MM` (inventory-skewed maker), and `Sweeper` (settlement daemon).
 * **Risk & Circuit Breakers**: Self-trade depth sanitization, serialized NonceManager queues, and per-session single-trade / daily volume caps.
-* **On-Chain Somnia Integration**: Direct non-custodial interaction with DreamDEX binary market pools, `OperatorPermissionsRegistry`, and `BatchApprove.sol`.
+* **On-Chain Somnia Integration**: Direct non-custodial interaction with DreamDEX binary market pools and Somnia's `OperatorPermissionsRegistry`.
 
 ### Hybrid Personal Swarm: Copy-Trading vs Isolated Per-Wallet Swarms
 
@@ -442,15 +441,15 @@ To protect operator and copy-trading capital against macro drift, DreamPulse imp
 
 ---
 
-## Non-Custodial Session Delegation & BatchApprove.sol
+## Non-Custodial Session Delegation & Security Architecture
 
-One of the largest UX hurdles in Web3 prediction markets is that **every newly deployed binary pool contract requires separate ERC-20 token approval and operator authorization**. 
+One of the largest UX hurdles in Web3 prediction markets is that **every newly deployed binary pool contract normally requires separate ERC-20 token approval and operator authorization**. 
 
-DreamPulse solves this with a **two-tier non-custodial authorization architecture**.
+DreamPulse solves this natively using **Somnia's protocol-level `OperatorPermissionsRegistry` global authorization architecture**.
 
 ### Non-Custodial Delegation Lifecycle:
 1. **Wallet Connection & Risk Configuration**: User connects wallet and configures delegation limits (single-trade cap and cumulative daily cap).
-2. **1-Click Batch Approval**: User signs a single transaction via `BatchApprove.sol`, executing `setOperatorApprovalForPool` across all active and rolling prediction pools in the `OperatorPermissionsRegistry`.
+2. **1-Click Global Approval**: User signs a single transaction calling `setOperatorApprovalGlobal` on the Somnia `OperatorPermissionsRegistry`, granting the operator key scoped trading permissions across all present and future rolling binary pools.
 3. **EIP-712 Session Authorization**: User signs an off-chain EIP-712 typed data message (`SessionGrant`) granting non-custodial execution authority within the configured caps.
 4. **Session Registration**: Frontend registers the session grant with the backend daemon via `POST /api/v1/sessions/register`.
 5. **Autonomous Scoped Execution**: The swarm operator invokes `placeOrderFor` on Somnia Shannon testnet. The registry verifies scoped permissions and executes the order directly from user collateral with zero custody transfer.
@@ -514,15 +513,8 @@ A sleek banner embedded at the top of the **Overview**:
 
 All DreamPulse interactions execute on the **Somnia Shannon Testnet** (Chain ID `50312`).
 
-### 1. Custom Smart Contract Deployed by DreamPulse
-DreamPulse authored and deployed **one custom smart contract** on Somnia Shannon Testnet to solve the multi-pool approval and session delegation friction for rolling prediction markets:
-
-| Contract | Address | Description | Explorer Link |
-| :--- | :--- | :--- | :--- |
-| **`BatchApprove.sol`** | `0x12c9c45fa740ce7469dacff368b08ca7edcaac26` | 1-Click Multi-Pool Approval & Delegation Helper *(Custom DreamPulse Deployment)* | [View on Explorer](https://shannon-explorer.somnia.network/address/0x12c9c45fa740ce7469dacff368b08ca7edcaac26) |
-
-### 2. Somnia & DreamDEX Protocol Contracts (Integrated)
-DreamPulse integrates directly with the existing official protocol infrastructure deployed by Somnia and DreamDEX:
+### Somnia & DreamDEX Protocol Contracts (Integrated)
+DreamPulse integrates directly with the official, audited protocol infrastructure deployed by Somnia and DreamDEX, ensuring non-custodial execution with zero intermediary smart contract risk:
 
 | Protocol Contract | Address | Description | Explorer Link |
 | :--- | :--- | :--- | :--- |
@@ -550,7 +542,7 @@ DreamPulse integrates directly with the existing official protocol infrastructur
 | Criteria & Weight | How DreamPulse Exceeds Expectations |
 | :--- | :--- |
 | **Innovation & Originality (20%)** | • Unifies consumer-facing trading, no-code agent creation, multi-agent swarms, quantitative simulation, and social prediction in a single cohesive platform.<br />• First implementation combining dual-engine LLM reasoning (Groq Qwen 3.8 + dedicated Google Gemini) with analytical Black-Scholes binary option mathematics.<br />• Solves the prediction market cold-start problem through automated, inventory-skewed market making. |
-| **Technical Implementation (25%)** | • Deep integration with `@somnia-chain/markets-sdk` across orders, depth ladders, cancellations, and settlement redemptions.<br />• **Battle-Tested On-Chain Performance**: Autonomous multi-agent pipeline executing with a sub-100ms loop and 1ms average evaluation latency on Somnia Shannon.<br />• 307/307 unit and integration tests passing with strict TypeScript compilation (0 errors) across 22 test suites.<br />• Built custom `BatchApprove.sol` smart contract deployed on Shannon Testnet to overcome protocol-level multi-pool approval barriers.<br />• Dynamic `NonceManager` handling sub-second on-chain concurrency and automated revert circuit breakers. |
+| **Technical Implementation (25%)** | • Deep integration with `@somnia-chain/markets-sdk` across orders, depth ladders, cancellations, and settlement redemptions.<br />• **Battle-Tested On-Chain Performance**: Autonomous multi-agent pipeline executing with a sub-100ms loop and 1ms average evaluation latency on Somnia Shannon.<br />• 307/307 unit and integration tests passing with strict TypeScript compilation (0 errors) across 22 test suites.<br />• Utilized Somnia's native `OperatorPermissionsRegistry` global delegation architecture to overcome multi-pool approval barriers with 100% audited protocol code.<br />• Dynamic `NonceManager` handling sub-second on-chain concurrency and automated revert circuit breakers. |
 | **User Experience & Design (20%)** | • High-aesthetic, minimalist institutional quant terminal inspired by modern hedge fund platforms (obsidian glassmorphism, GPU-accelerated Three.js Silk shader, and Radix UI primitives).<br />• **Interactive CLOB Trade Terminal**: 1-click depth ladder auto-fill, Limit & Market (IOC) order placement, collateral presets, live win payout calculations, and inline AI Alpha Copilot.<br />• Global Command Palette (`⌘K / Ctrl+K`) for sub-second keyboard-driven market navigation and execution.<br />• Zero-friction onboarding via 1-click non-custodial session delegation with strict single-trade caps and daily volume guardrails.<br />• Real-time WebSocket telemetry ($<50\text{ms}$ updates), live Black-Scholes Edge Radar, and procedural Web Audio acoustic feedback. |
 | **Business & Ecosystem Impact (20%)** | • **Continuous On-Chain Liquidity & Execution**: Swarm provides active two-sided liquidity and autonomous execution directly on Somnia DreamDEX markets (auditable at [`/#cockpit`](https://dreampulse-ai.vercel.app/#cockpit)).<br />• Directly solves the primary existential crisis of Event Contracts: stale quotes, wide spreads, and idle capital.<br />• Generates continuous, organic trading volume and liquidity on Somnia, showcasing its 400k+ TPS capacity.<br />• The `Sweeper` daemon guarantees that winning collateral is perpetually recycled back into active trading rather than remaining stranded.<br />• Democratizes strategy creation with no-code agent building, social leaderboards, and 1-click strategy cloning. |
 | **Presentation & Demo (15%)** | • Complete technical documentation, interactive architecture flowcharts, mathematical explanations, and full API references.<br />• Clear 2–3 minute video presentation script demonstrating end-to-end user onboarding, trade terminal, strategy studio, swarm execution, live thoughts, and on-chain settlements. |
@@ -569,7 +561,7 @@ DreamPulse integrates directly with the existing official protocol infrastructur
 ### Critical Friction Points & Edge Cases Encountered
 1. **Multi-Pool Approval Scalability**:
    * *Problem*: DreamDEX creates unique pool contract addresses for every rolling prediction window (e.g. BTC-5m, ETH-15m). Users had to approve every individual pool contract for both `TestUSDC` spending and `OperatorPermissionsRegistry` delegation.
-   * *How DreamPulse Solved It*: We wrote and deployed `BatchApprove.sol` to allow 1-click batch approvals and operator delegation across dozens of active and future pool addresses in a single transaction.
+   * *How DreamPulse Solved It*: We leveraged Somnia's native `OperatorPermissionsRegistry.setOperatorApprovalGlobal` to authorize operator delegation globally across all active and future binary pools in a single transaction.
    * *Recommendation for DreamDEX*: Implement a protocol-level Global Collateral Router allowance so users approve once globally for all binary pools created by `MarketCreatorFactory`.
 
 2. **Silent Rejections on Non-Matching IOC Orders**:
@@ -810,7 +802,7 @@ npm run verify
 
 | Verification Tier | Execution Environment | What Is Verified & Invariant Boundaries |
 | :--- | :--- | :--- |
-| 🟢 **Verified Live** | **Somnia Shannon Testnet & Production Cloud** | • **Live Smart Contracts**: Direct interaction with DreamPulse's custom deployed `BatchApprove.sol` (`0x12c9c45fa740ce7469dacff368b08ca7edcaac26`), alongside Somnia & DreamDEX protocol contracts (`OperatorPermissionsRegistry` `0x15C7e8CE38F021c5b45d098AaD788f63090bF20A`, `BinaryModule`, `CLOBFactory`, and `TestUSDC`).<br />• **On-Chain Transactions**: Order placement (`placeOrderFor`), batch approvals, cancellation, and settlement redemptions confirmed via live JSON-RPC with receipts on Somnia Explorer.<br />• **Cloud Infrastructure**: Live Vercel frontend, Heroku backend daemon, Supabase PostgreSQL with RLS, and real-time sub-50ms WebSocket telemetry. |
+| 🟢 **Verified Live** | **Somnia Shannon Testnet & Production Cloud** | • **Live Smart Contracts**: Direct interaction with Somnia & DreamDEX protocol contracts (`OperatorPermissionsRegistry` `0x15C7e8CE38F021c5b45d098AaD788f63090bF20A`, `BinaryModule`, `CLOBFactory`, `MarketsCore`, `BinarySettlement`, and `TestUSDC`).<br />• **On-Chain Transactions**: Order placement (`placeOrderFor`), global operator approvals, order cancellations, and settlement redemptions confirmed via live JSON-RPC with receipts on Somnia Explorer.<br />• **Cloud Infrastructure**: Live Vercel frontend, Heroku backend daemon, Supabase PostgreSQL with RLS, and real-time sub-50ms WebSocket telemetry. |
 | 🟡 **Simulated Lab** | **Historical Backtester & Synthetic Surfaces** | • **Historical Quantitative Backtesting**: High-resolution Binance 1s/1m historical tick replay with parameterized market frictions (4 bps slippage, protocol fees, 25ms execution latency).<br />• **Option Pricing Surfaces**: Black-Scholes binary CDF $\Phi(z)$ and EWMA volatility modeled against simulated price trajectories.<br />• **Chaos & Circuit Breakers**: Upstream RPC latency spikes, network partition retries, and indexer sync delays. |
 | 🔵 **Tested Locally** | **Automated Vitest Suite (Deterministic Mocks)** | • **Mathematical Invariants**: Closed-form Abramowitz-Stegun CDF polynomial approximation, Avellaneda-Stoikov inventory skew, Sharpe/Sortino ratios, integer quantization to 6-decimal micro-tUSDC.<br />• **Cryptographic & Non-Custodial Boundaries**: EIP-712 typed data hashing and signature recovery, session nonce tracking, single-trade risk ceilings ($20), and daily volume caps ($200) verified without consuming testnet gas.<br />• **Resilience & Fallback Paths**: Controlled mock injection verifying that if Groq API keys return HTTP 401 or exhaust quotas, the cognitive engine falls back to deterministic quantitative math logs; and if GraphQL indexers lag, the backend polls direct on-chain contract state. |
 
@@ -880,15 +872,15 @@ npm run verify
 ## 2–3 Minute Demo Video Walkthrough
 
 <p align="center">
-  <a href="https://youtu.be/SW0iNoZHMzw">
+  <a href="https://www.youtube.com/watch?v=IvF5sdUGXPg">
     <img src="https://img.shields.io/badge/YouTube-Watch%20Demo%20Video%20(2m%2055s)-red?style=for-the-badge&logo=youtube&logoColor=white" alt="Watch Demo Video" />
   </a>
 </p>
 
-* **Direct Video URL**: [https://youtu.be/SW0iNoZHMzw](https://youtu.be/SW0iNoZHMzw)
+* **Direct Video URL**: [https://www.youtube.com/watch?v=IvF5sdUGXPg](https://www.youtube.com/watch?v=IvF5sdUGXPg)
 * **Duration**: ~2 Minutes 55 Seconds (strictly within the hackathon's 2–3 minute requirement)
 * **Demonstrated Capabilities**:
-  1. **Non-Custodial Session Delegation**: 1-click batch authorization across rolling pools via `BatchApprove.sol` & `OperatorPermissionsRegistry` with zero custody transfer.
+  1. **Non-Custodial Session Delegation**: 1-click global authorization across rolling pools via Somnia `OperatorPermissionsRegistry` with zero custody transfer.
   2. **Pro CLOB Trade Terminal & AI Alpha Copilot**: Visual binary settlement chart, strike price lines, Black-Scholes mathematical edge detection, and 1-click execution.
   3. **Visual Strategy Studio & Quantitative Backtester**: No-code sentence rule AST builder with 14 indicators, dedicated Google Gemini copilot, and Binance historical backtesting.
   4. **Autonomous Multi-Agent Swarms & Sweeper**: Protocol vs. Personal Swarms (`Volt`, `Oracle`, `Titan`), real-time sub-50ms WebSocket telemetry, and zero-loss automated payout sweeping.

@@ -496,7 +496,6 @@ export async function verifyUserOrderTxHashOnChain(
       SOMNIA_ADDRESSES.binaryModule.toLowerCase(),
       SOMNIA_ADDRESSES.collateralRouter.toLowerCase(),
       SOMNIA_ADDRESSES.testUsdc.toLowerCase(),
-      SOMNIA_ADDRESSES.batchHelper.toLowerCase(),
     ]);
     if (market?.poolAddress) allowedTargets.add(market.poolAddress.toLowerCase());
     if (market?.id && market.id.startsWith('0x') && market.id.length === 42) allowedTargets.add(market.id.toLowerCase());

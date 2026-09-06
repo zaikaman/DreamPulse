@@ -6,7 +6,7 @@ DreamPulse is an institutional-grade cyber-financial trading ecosystem for Dream
 
 - **Live application:** [dreampulse-ai.vercel.app](https://dreampulse-ai.vercel.app/)
 - **Auditable live cockpit:** [Swarm Cockpit](https://dreampulse-ai.vercel.app/#cockpit)
-- **Demo video:** [2 minutes 55 seconds on YouTube](https://youtu.be/SW0iNoZHMzw)
+- **Demo video:** [2 minutes 55 seconds on YouTube](https://www.youtube.com/watch?v=IvF5sdUGXPg)
 - **Machine-readable evidence:** [`evidence.json`](https://github.com/zaikaman/DreamPulse/blob/main/evidence.json)
 - **Repository:** [github.com/zaikaman/DreamPulse](https://github.com/zaikaman/DreamPulse)
 - **Somnia Shannon explorer:** [shannon-explorer.somnia.network](https://shannon-explorer.somnia.network)
@@ -22,7 +22,7 @@ DreamDEX-style CLOB prediction markets face recurring problems: cold-start liqui
 | Empty books and wide spreads | Titan MM continuously posts inventory-aware two-sided liquidity. |
 | Spot moves faster than quotes | Volt Sniper detects short-term spot velocity and stale CLOB prices. |
 | Binary contracts are difficult to price & drift fades | Oracle Arb compares market odds with Black-Scholes fair value and realized volatility, guarded by a 3-layer quantitative defense against spot drift. |
-| Every rolling pool needs approvals | `BatchApprove.sol` batches multi-pool approvals and delegation. |
+| Every rolling pool needs approvals | Somnia `OperatorPermissionsRegistry` global authorization allows 1-click delegation across all rolling pools. |
 | Winning positions require manual claims | Sweeper detects finalized markets, batches redemptions, and sends tUSDC directly to wallets. |
 
 ## Product
@@ -96,7 +96,7 @@ DreamPulse uses deterministic, production-oriented math rather than sentiment-on
 DreamPulse never takes custody of user funds. The authorization flow is:
 
 1. The user connects a wallet and chooses single-trade and daily-volume limits.
-2. `BatchApprove.sol` batches pool approvals and operator delegation in one transaction.
+2. Somnia's native `OperatorPermissionsRegistry` authorizes global operator permissions (`setOperatorApprovalGlobal`) in a single transaction, eliminating per-pool prompts.
 3. The user signs an off-chain EIP-712 `SessionGrant`.
 4. The backend registers the session and enforces its limits.
 5. The operator can call only scoped trading functions such as `placeOrderFor`, `cancelOrderFor`, and `reduceOrderFor`.
@@ -105,15 +105,7 @@ Withdrawal, drain, and unrestricted transfer capabilities are not granted. Colla
 
 ## Contract & Protocol Addresses
 
-### Custom Smart Contract Deployed by DreamPulse
-DreamPulse authored and deployed **one custom smart contract** on Somnia Shannon Testnet to eliminate multi-pool approval friction for rolling prediction markets:
-
-| Contract | Address | Purpose |
-| --- | --- | --- |
-| `BatchApprove.sol` | [`0x12c9c45fa740ce7469dacff368b08ca7edcaac26`](https://shannon-explorer.somnia.network/address/0x12c9c45fa740ce7469dacff368b08ca7edcaac26) | 1-click batch token approval & operator delegation across all rolling binary pools |
-
-### Somnia & DreamDEX Protocol Contracts (Integrated)
-DreamPulse integrates directly with the existing on-chain protocol suite deployed by Somnia and DreamDEX:
+DreamPulse integrates directly with the audited on-chain protocol suite deployed by Somnia and DreamDEX, ensuring non-custodial execution with zero intermediary smart contract risk:
 
 | Contract | Address | Description |
 | --- | --- | --- |
@@ -133,7 +125,7 @@ The live cockpit and [`evidence.json`](./evidence.json) provide an audit trail c
 | Judging area | DreamPulse evidence |
 | --- | --- |
 | Innovation | One product unifies CLOB trading, AI, no-code agents, backtesting, autonomous liquidity, social prediction, and settlement. |
-| Technical implementation | Direct DreamDEX SDK integration, custom BatchApprove contract deployment, serialized nonce handling, risk guardrails, WebSocket telemetry, and 307 passing tests. |
+| Technical implementation | Direct DreamDEX SDK integration, native OperatorPermissionsRegistry delegation, serialized nonce handling, risk guardrails, WebSocket telemetry, and 307 passing tests. |
 | User experience | Institutional terminal, visual binary charts, one-click session authorization, command palette, onboarding wizard, and strategy builder. |
 | Ecosystem impact | Provides liquidity, reduces stale pricing, recycles settled capital, and makes automated prediction-market strategies accessible. |
 | Presentation | A focused 2:55 demo covers onboarding, terminal trading, Strategy Studio, swarms, telemetry, and settlement. |
@@ -144,7 +136,7 @@ Building DreamPulse against the Somnia Markets SDK surfaced several useful obser
 
 - Somnia’s fast finality and RPC performance support high-frequency on-chain loops.
 - The deterministic CLOB and viem interoperability make order execution straightforward.
-- Rolling markets create a multi-pool approval burden; `BatchApprove.sol` addresses it at the application layer.
+- Rolling markets create a multi-pool approval burden; DreamPulse utilizes Somnia's native `OperatorPermissionsRegistry` global authorization (`setOperatorApprovalGlobal`) to solve it cleanly in 1 click.
 - Non-matching IOC orders require careful depth checks and quantized crossing prices.
 - Concurrent agents require serialized nonce management, reset handling, and exponential backoff.
 - Newly created markets can appear in the indexer several seconds after on-chain activation, so DreamPulse cross-checks indexer data against direct contract reads.

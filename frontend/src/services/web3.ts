@@ -74,7 +74,6 @@ export const SOMNIA_ADDRESSES = {
   binaryModule: '0x3ecC694Cef705358864a646142ac17A90E29e388' as Address,
   marketsCore: '0x2802504314685D89bF6C992CA5a8e7cC78bc0294' as Address,
   collateralRouter: '0xbC0C9834B15ACE38bB50dDaa7d7f7C7CC4DC183C' as Address,
-  batchHelper: '0x12c9c45fa740ce7469dacff368b08ca7edcaac26' as Address,
 };
 
 /**
@@ -794,50 +793,6 @@ export class Web3Service {
     return lastHash;
   }
 
-  /**
-   * Check if an EOA is already delegated to Batch via EIP-7702 (code = 0xef0100 + batchAddress)
-   */
-  public async isDelegatedToBatch(owner: Address): Promise<boolean> {
-    try {
-      const code = await publicClient.getBytecode({ address: owner }) as string | undefined;
-      if (!code || code === '0x' || !code.startsWith('0xef0100')) return false;
-      return code.toLowerCase().includes(SOMNIA_ADDRESSES.batchHelper.toLowerCase().slice(2));
-    } catch { return false; }
-  }
-
-  /**
-   * Delegate user's EOA to BatchApprove helper via EIP-7702 (one-time, enables backend auto per-pool without further clicks).
-   * Must use executor:'self' so authorization is at nonce+1 when account sends its own tx (see batch-7702 subtlety).
-   */
-  public async delegateToBatch(userAddress: Address): Promise<Hex | undefined> {
-    if (await this.isDelegatedToBatch(userAddress)) return undefined;
-    const wallet = (await this.getWalletClient(userAddress)) as any;
-    if (typeof wallet.signAuthorization !== 'function') return undefined;
-    try {
-      const batchAddress = SOMNIA_ADDRESSES.batchHelper;
-      const authorization = await wallet.signAuthorization({
-        account: userAddress,
-        contractAddress: batchAddress,
-        chainId: somniaShannonTestnet.id,
-        executor: 'self',
-      } as any);
-      // Authorize delegation via self-call (to self with authorizationList). No calldata needed — just set code.
-      const hash = await wallet.sendTransaction({
-        account: userAddress,
-        to: userAddress,
-        data: '0x' as Hex,
-        authorizationList: [authorization],
-        chain: somniaShannonTestnet,
-      });
-      await publicClient.waitForTransactionReceipt({ hash });
-      return hash;
-    } catch (e: any) {
-      const msg = String(e?.message || '');
-      if (msg.includes('not support') || msg.includes('authorization') || msg.includes('7702')) return undefined;
-      console.warn('[Web3Service] delegateToBatch notice:', msg);
-      return undefined;
-    }
-  }
 
   /**
    * Ensures TestUSDC allowance and operator authorization.

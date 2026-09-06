@@ -8,7 +8,6 @@
     "explorerUrl": "https://shannon-explorer.somnia.network"
   },
   "contracts": {
-    "batchApprove": "0x12c9c45fa740ce7469dacff368b08ca7edcaac26",
     "operatorPermissionsRegistry": "0x15C7e8CE38F021c5b45d098AaD788f63090bF20A",
     "binaryModule": "0x3ecC694Cef705358864a646142ac17A90E29e388",
     "marketsCore": "0x2802504314685D89bF6C992CA5a8e7cC78bc0294",

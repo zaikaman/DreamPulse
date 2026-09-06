@@ -93,7 +93,6 @@ export const SOMNIA_ADDRESSES = {
   collateral: '0x70a86D8842FB63C4Ad2b7cdddF530eBf1BB25d8E' as Address,
   testUsdc: '0x70a86D8842FB63C4Ad2b7cdddF530eBf1BB25d8E' as Address,
   marketCreator: '0x5Ce69567dB39C8fBAd7e048bEfdbcCdfE67B44e6' as Address,
-  batchHelper: '0x12c9c45fa740ce7469dacff368b08ca7edcaac26' as Address,
 };
 
 /**
