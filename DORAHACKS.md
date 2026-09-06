@@ -6,7 +6,7 @@ DreamPulse is an institutional-grade cyber-financial trading ecosystem for Dream
 
 - **Live application:** [dreampulse-ai.vercel.app](https://dreampulse-ai.vercel.app/)
 - **Auditable live cockpit:** [Swarm Cockpit](https://dreampulse-ai.vercel.app/#cockpit)
-- **Demo video:** [2 minutes 55 seconds on YouTube](https://www.youtube.com/watch?v=IvF5sdUGXPg)
+- **Demo video:** [2 minutes 55 seconds on YouTube](https://www.youtube.com/watch?v=TMif6d-ilhc)
 - **Machine-readable evidence:** [`evidence.json`](https://github.com/zaikaman/DreamPulse/blob/main/evidence.json)
 - **Repository:** [github.com/zaikaman/DreamPulse](https://github.com/zaikaman/DreamPulse)
 - **Somnia Shannon explorer:** [shannon-explorer.somnia.network](https://shannon-explorer.somnia.network)

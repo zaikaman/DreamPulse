@@ -24,7 +24,7 @@
 
 * **Live Institutional DApp**: [https://dreampulse-ai.vercel.app](https://dreampulse-ai.vercel.app) *(or local `http://localhost:5174`)*
 * **Auditable Live Cockpit**: [https://dreampulse-ai.vercel.app/#cockpit](https://dreampulse-ai.vercel.app/#cockpit) *(Real-time verified on-chain execution ledger, active agent states, and settlement telemetry)*
-* **Official 2:55 Demo Video**: [Watch Demo Video on YouTube (2m 55s)](https://www.youtube.com/watch?v=IvF5sdUGXPg)
+* **Official 2:55 Demo Video**: [Watch Demo Video on YouTube (2m 55s)](https://www.youtube.com/watch?v=TMif6d-ilhc)
 * **Somnia Shannon Testnet Chain ID**: `50312`
 * **DreamPulse Smart Account Factory**: [`0x94dd9c8b9a5684ab026480737fac911824ac995d`](https://shannon-explorer.somnia.network/address/0x94dd9c8b9a5684ab026480737fac911824ac995d) *(Deploys per-user EIP-1167 Smart Trading Account clones)*
 * **DreamPulse Smart Account (Implementation)**: [`0x92673153f231d87e2adb8b61321260dacf138858`](https://shannon-explorer.somnia.network/address/0x92673153f231d87e2adb8b61321260dacf138858)
@@ -896,12 +896,12 @@ npm run verify
 ## 2–3 Minute Demo Video Walkthrough
 
 <p align="center">
-  <a href="https://www.youtube.com/watch?v=IvF5sdUGXPg">
+  <a href="https://www.youtube.com/watch?v=TMif6d-ilhc">
     <img src="https://img.shields.io/badge/YouTube-Watch%20Demo%20Video%20(2m%2055s)-red?style=for-the-badge&logo=youtube&logoColor=white" alt="Watch Demo Video" />
   </a>
 </p>
 
-* **Direct Video URL**: [https://www.youtube.com/watch?v=IvF5sdUGXPg](https://www.youtube.com/watch?v=IvF5sdUGXPg)
+* **Direct Video URL**: [https://www.youtube.com/watch?v=TMif6d-ilhc](https://www.youtube.com/watch?v=TMif6d-ilhc)
 * **Duration**: ~2 Minutes 55 Seconds (strictly within the hackathon's 2–3 minute requirement)
 * **Demonstrated Capabilities**:
   1. **Non-Custodial Smart Trading Account**: 1-click dedicated smart trading account clone deployment with ephemeral session keys, on-chain risk guardrails, and owner-pinned withdrawals.

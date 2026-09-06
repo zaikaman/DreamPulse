@@ -4,7 +4,7 @@
 **Target Venue**: Somnia × DreamDEX Event Contracts Hackathon  
 **Submission Requirement**: 2–3 Minute Demo Video (Judging: Innovation 20%, Technical 25%, UX 20%, Ecosystem Impact 20%, Presentation 15%)  
 **Live Application**: [https://dreampulse-ai.vercel.app](https://dreampulse-ai.vercel.app) *(or `http://localhost:5174`)*  
-**Somnia Shannon Testnet**: Chain ID `50312` | Operator Registry: [`0x15C7e8CE38F021c5b45d098AaD788f63090bF20A`](https://shannon-explorer.somnia.network/address/0x15C7e8CE38F021c5b45d098AaD788f63090bF20A)
+**Somnia Shannon Testnet**: Chain ID `50312` | Smart Trading Account Factory: [`0x94dd9c8b9a5684ab026480737fac911824ac995d`](https://shannon-explorer.somnia.network/address/0x94dd9c8b9a5684ab026480737fac911824ac995d)
 
 ---
 
@@ -12,7 +12,7 @@
 
 ```
 [0:00 ── 0:20] Scene 1: The Problem & Platform Solution (~20s | 31 words)
-[0:20 ── 0:47] Scene 2: Non-Custodial Onboarding & Session Delegation (~27s | 39 words)
+[0:20 ── 0:47] Scene 2: Smart Trading Wallet & Session Delegation (~27s | 39 words)
 [0:47 ── 1:31] Scene 3: Pro Trade Terminal & AI Copilot (~44s | 63 words)
 [1:31 ── 2:07] Scene 4: No-Code Strategy Studio & Backtester (~36s | 56 words)
 [2:07 ── 2:40] Scene 5: Autonomous Multi-Agent Swarms & Sweeper (~33s | 56 words)
@@ -33,16 +33,16 @@
 
 ---
 
-### Scene 2: Non-Custodial Onboarding & Session Delegation (0:20 – 0:47 | ~27s)
+### Scene 2: Smart Trading Wallet & Session Delegation (0:20 – 0:47 | ~27s)
 
 * **Judging Focus**: Technical Implementation (25%) | UX & Design (20%)
 * **Visual Action**:
-  1. Open the **Session Delegation Modal** from the top status bar.
-  2. Show the configurable risk bounds ($20 single-trade and $200 daily caps).
-  3. Click **"Authorize Session"** — show Somnia `OperatorPermissionsRegistry` global authorization with zero withdrawal permissions.
+  1. Open the **Smart Trading Account Modal** from the top status bar.
+  2. Show isolated collateral funding and on-chain risk bounds ($500 single-trade and $5,000 daily caps).
+  3. Click **"Deploy Smart Account"** / **"Authorize Session"** — show deterministic EIP-1167 clone deployment with ephemeral session key delegation and owner-pinned withdrawals.
 
 > **Voiceover (39 words)**:  
-> *"Onboarding takes seconds. In one seamless flow, traders authorize non-custodial session delegation. Somnia's Operator Registry authorizes all rolling prediction pools at once with strict trade and volume caps, granting zero withdrawal privileges. Custody never leaves your wallet."*
+> *"Onboarding takes seconds. In one seamless flow, traders deploy a dedicated smart trading wallet. Isolated from main funds, trades execute under strict on-chain risk caps using ephemeral keys, while withdrawals remain cryptographically pinned to your wallet. Custody never leaves your hands."*
 
 ---
 
@@ -102,12 +102,12 @@
 * **Visual Action**:
   1. Open **Swarm Arena** (`#arena`). Show dual-track leaderboards (AI Fleet vs Human Forecasters).
   2. Click **"Generate Proof-of-Alpha Card"** (`ProofOfAlphaModal`), switch theme, copy card image.
-  3. Close on the verified test suite badge: **307/307 tests passing (100%)**.
+  3. Close on the verified test suite badge: **309/309 tests passing (100%)**.
 
 > **Voiceover (35 words)**:  
 > *"In the Swarm Arena, track AI and forecaster leaderboards, clone winning strategies in one click, and export Proof-of-Alpha cards.*  
 > 
-> *With 307 automated tests passing and live testnet integration, DreamPulse accelerates the future of prediction markets on Somnia."*
+> *With 309 automated tests passing and live testnet integration, DreamPulse accelerates the future of prediction markets on Somnia."*
 
 ---
 
@@ -115,7 +115,7 @@
 
 > *"On-chain prediction markets suffer from wide spreads, stale quotes, and constant approval popups. DreamPulse solves this for DreamDEX and Somnia with an autonomous, multi-agent trading ecosystem and institutional execution terminal.  
 > 
-> Onboarding takes seconds. In one seamless flow, traders authorize non-custodial session delegation. Somnia's Operator Registry authorizes all rolling prediction pools at once with strict trade and volume caps, granting zero withdrawal privileges. Custody never leaves your wallet.  
+> Onboarding takes seconds. In one seamless flow, traders deploy a dedicated smart trading wallet. Isolated from main funds, trades execute under strict on-chain risk caps using ephemeral keys, while withdrawals remain cryptographically pinned to your wallet. Custody never leaves your hands.  
 > 
 > The Pro Trade Terminal brings binary contracts alive. Here is our visual settlement chart with strike levels and live payout zones, toggleable to the full CLOB order book in one click. Our AI Alpha Copilot continuously computes Black-Scholes fair value. When it spots a mispricing edge, one click auto-fills the ticket and executes directly on Somnia in under one hundred milliseconds without popup interruptions.  
 > 
@@ -123,7 +123,7 @@
 > 
 > Behind the scenes, four autonomous agents run a 100-millisecond loop: Volt snipes stale quotes, Oracle trades volatility mispricings, Titan provides two-sided liquidity, and Groq streams their live reasoning. Traders can mirror the swarm or run isolated personal configs. And our Settlement Sweeper automatically batch-redeems winning shares from finalized pools, transferring payouts directly to your wallet.  
 > 
-> In the Swarm Arena, track AI and forecaster leaderboards, clone winning strategies in one click, and export Proof-of-Alpha cards. With 307 automated tests passing and live testnet integration, DreamPulse accelerates the future of prediction markets on Somnia."*
+> In the Swarm Arena, track AI and forecaster leaderboards, clone winning strategies in one click, and export Proof-of-Alpha cards. With 309 automated tests passing and live testnet integration, DreamPulse accelerates the future of prediction markets on Somnia."*
 
 ---
 
