@@ -29,6 +29,7 @@ import { Spinner } from './ui/Spinner.js';
 import { Pagination } from './ui/Pagination.js';
 import { Badge } from './ui/badge.js';
 import { cn } from '../lib/utils.js';
+import { parseWeb3Error } from '../lib/errorUtils.js';
 
 interface SweeperControlsProps {
   userAddress?: string;
@@ -79,7 +80,8 @@ export const SweeperControls: React.FC<SweeperControlsProps> = ({
       setInternalCloneAddress(clone);
       if (clone) {
         const bal = await web3Service.getCloneBalance({ cloneAddress: clone });
-        setInternalCloneBalance((Number(bal) / 1e6).toFixed(2));
+        const balHuman = Number(bal) / 1e6;
+        setInternalCloneBalance((Math.floor(balHuman * 100) / 100).toFixed(2));
       } else {
         setInternalCloneBalance('0.00');
       }
@@ -371,7 +373,8 @@ export const SweeperControls: React.FC<SweeperControlsProps> = ({
       if (onRefreshPortfolio) onRefreshPortfolio();
     } catch (err: any) {
       console.warn('[SweeperControls] Clone withdrawal error:', err);
-      setSweepError(err.message || 'Failed to withdraw from smart account clone.');
+      const parsed = parseWeb3Error(err, 'withdraw');
+      setSweepError(parsed.message || 'Failed to withdraw from smart account clone.');
     } finally {
       setIsWithdrawingClone(false);
     }

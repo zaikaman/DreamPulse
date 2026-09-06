@@ -8,10 +8,12 @@ import {
   CurrencyDollarIcon,
   ExclamationCircleIcon,
   CheckCircleIcon,
+  InformationCircleIcon,
 } from '@heroicons/react/24/outline';
 import { Spinner } from './ui/Spinner.js';
 import { Button } from './ui/button.js';
 import type { WalletState } from '../hooks/useSessionKey.js';
+import { parseWeb3Error } from '../lib/errorUtils.js';
 
 interface TradingWalletModalProps {
   isOpen: boolean;
@@ -41,8 +43,13 @@ export const TradingWalletModal: React.FC<TradingWalletModalProps> = ({
   const [activeTab, setActiveTab] = useState<'deposit' | 'withdraw'>(initialTab);
   const [amountStr, setAmountStr] = useState<string>('50');
   const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError] = useState<{
+    title?: string;
+    message: string;
+    isUserRejection?: boolean;
+  } | null>(null);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
+  const [isMaxWithdraw, setIsMaxWithdraw] = useState<boolean>(false);
 
   useEffect(() => {
     if (isOpen) {
@@ -52,9 +59,11 @@ export const TradingWalletModal: React.FC<TradingWalletModalProps> = ({
       if (initialTab === 'deposit') {
         const walletBal = parseFloat(wallet.balanceCollateral || '0');
         setAmountStr(walletBal >= 50 ? '50' : walletBal > 0 ? walletBal.toFixed(2) : '10');
+        setIsMaxWithdraw(false);
       } else {
         const cBal = parseFloat(cloneBalance || '0');
-        setAmountStr(cBal > 0 ? cBal.toFixed(2) : '0');
+        setAmountStr(cBal > 0 ? cloneBalance : '0');
+        setIsMaxWithdraw(cBal > 0);
       }
     }
   }, [isOpen, initialTab, cloneBalance, wallet.balanceCollateral]);
@@ -69,30 +78,36 @@ export const TradingWalletModal: React.FC<TradingWalletModalProps> = ({
 
   const handleQuickPercent = (pct: number) => {
     const base = activeTab === 'deposit' ? walletBalanceNum : cloneBalanceNum;
-    const computed = (base * pct) / 100;
-    setAmountStr(computed > 0 ? computed.toFixed(2) : '0');
+    if (activeTab === 'withdraw' && pct === 100) {
+      setIsMaxWithdraw(true);
+      setAmountStr(cloneBalanceNum > 0 ? cloneBalance : '0');
+    } else {
+      setIsMaxWithdraw(false);
+      const computed = (base * pct) / 100;
+      setAmountStr(computed > 0 ? computed.toFixed(2) : '0');
+    }
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     const parsed = parseFloat(amountStr);
     if (isNaN(parsed) || parsed <= 0) {
-      setError('Please enter a valid amount greater than 0.');
+      setError({ message: 'Please enter a valid amount greater than 0.' });
       return;
     }
 
     if (activeTab === 'deposit' && parsed > walletBalanceNum) {
-      setError(`Amount exceeds your wallet balance of $${walletBalanceNum.toFixed(2)} tUSDC.`);
+      setError({ message: `Amount exceeds your wallet balance of $${walletBalanceNum.toFixed(2)} tUSDC.` });
       return;
     }
 
     if (activeTab === 'withdraw') {
       if (parsed < MIN_WITHDRAWAL) {
-        setError(`Minimum withdrawal is $${MIN_WITHDRAWAL.toFixed(2)} tUSDC.`);
+        setError({ message: `Minimum withdrawal is $${MIN_WITHDRAWAL.toFixed(2)} tUSDC.` });
         return;
       }
       if (parsed > cloneBalanceNum) {
-        setError(`Amount exceeds your trading account balance of $${cloneBalanceNum.toFixed(2)} tUSDC.`);
+        setError({ message: `Amount exceeds your trading account balance of $${cloneBalanceNum.toFixed(2)} tUSDC.` });
         return;
       }
     }
@@ -106,14 +121,16 @@ export const TradingWalletModal: React.FC<TradingWalletModalProps> = ({
         await onDeposit(parsed);
         setSuccessMessage(`Successfully deposited $${parsed.toFixed(2)} tUSDC into your Trading Wallet.`);
       } else {
-        await onWithdraw(parsed);
+        const isFullWithdraw = isMaxWithdraw || parsed >= cloneBalanceNum;
+        await onWithdraw(isFullWithdraw ? undefined : parsed);
         const netReceived = Math.max(0, parsed - WITHDRAWAL_FEE);
         setSuccessMessage(
           `Successfully withdrawn $${parsed.toFixed(2)} tUSDC ($${netReceived.toFixed(2)} net after $${WITHDRAWAL_FEE.toFixed(2)} fee) to your connected wallet.`
         );
       }
     } catch (err: any) {
-      setError(err?.message || 'Transaction failed. Please check wallet approval.');
+      const parsedErr = parseWeb3Error(err, activeTab);
+      setError(parsedErr);
     } finally {
       setIsSubmitting(false);
     }
@@ -156,6 +173,9 @@ export const TradingWalletModal: React.FC<TradingWalletModalProps> = ({
               setActiveTab('deposit');
               setError(null);
               setSuccessMessage(null);
+              setIsMaxWithdraw(false);
+              const walletBal = parseFloat(wallet.balanceCollateral || '0');
+              setAmountStr(walletBal >= 50 ? '50' : walletBal > 0 ? walletBal.toFixed(2) : '10');
             }}
             className={`flex items-center justify-center gap-2 py-2 rounded-lg font-semibold transition-all cursor-pointer ${
               activeTab === 'deposit'
@@ -172,6 +192,9 @@ export const TradingWalletModal: React.FC<TradingWalletModalProps> = ({
               setActiveTab('withdraw');
               setError(null);
               setSuccessMessage(null);
+              const cBal = parseFloat(cloneBalance || '0');
+              setAmountStr(cBal > 0 ? cloneBalance : '0');
+              setIsMaxWithdraw(cBal > 0);
             }}
             className={`flex items-center justify-center gap-2 py-2 rounded-lg font-semibold transition-all cursor-pointer ${
               activeTab === 'withdraw'
@@ -227,7 +250,10 @@ export const TradingWalletModal: React.FC<TradingWalletModalProps> = ({
                 step="any"
                 min="0"
                 value={amountStr}
-                onChange={(e) => setAmountStr(e.target.value)}
+                onChange={(e) => {
+                  setAmountStr(e.target.value);
+                  setIsMaxWithdraw(false);
+                }}
                 placeholder="0.00"
                 disabled={isSubmitting}
                 className="w-full h-11 px-3.5 pr-20 rounded-xl bg-background/80 border border-border/70 font-mono text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-primary focus:border-primary transition-all"
@@ -315,11 +341,28 @@ export const TradingWalletModal: React.FC<TradingWalletModalProps> = ({
             </div>
           )}
 
-          {/* Error Banner */}
+          {/* Error / Cancellation Banner */}
           {error && (
-            <div className="flex items-start gap-2 p-3 rounded-xl bg-rose-500/10 border border-rose-500/20 text-xs text-rose-300">
-              <ExclamationCircleIcon className="w-4 h-4 flex-shrink-0 mt-0.5 text-rose-400" />
-              <span>{error}</span>
+            <div
+              className={`flex items-start gap-2.5 p-3 rounded-xl text-xs transition-all ${
+                error.isUserRejection
+                  ? 'bg-amber-500/10 border border-amber-500/25 text-amber-300'
+                  : 'bg-rose-500/10 border border-rose-500/20 text-rose-300'
+              }`}
+            >
+              {error.isUserRejection ? (
+                <InformationCircleIcon className="w-4 h-4 flex-shrink-0 mt-0.5 text-amber-400" />
+              ) : (
+                <ExclamationCircleIcon className="w-4 h-4 flex-shrink-0 mt-0.5 text-rose-400" />
+              )}
+              <div className="flex-1 space-y-0.5">
+                {error.title && (
+                  <p className={`font-semibold ${error.isUserRejection ? 'text-amber-200' : 'text-rose-200'}`}>
+                    {error.title}
+                  </p>
+                )}
+                <p className="leading-relaxed">{error.message}</p>
+              </div>
             </div>
           )}
 

@@ -1730,13 +1730,18 @@ export class Web3Service {
   }): Promise<{ hash: Hex }> {
     const wallet = await this.getWalletClient(params.userAddress);
     const token = params.token || SOMNIA_ADDRESSES.testUsdc;
+    const actualBalance = await this.getCloneBalance({ cloneAddress: params.cloneAddress, token });
+    if (!actualBalance || actualBalance <= 0n) {
+      throw new Error('Clone balance is 0 or no funds available to withdraw');
+    }
+
     let withdrawAmount = params.amount;
-    if (!withdrawAmount) {
-      withdrawAmount = await this.getCloneBalance({ cloneAddress: params.cloneAddress, token });
+    // If no amount specified (Max withdrawal), or requested amount meets or exceeds actual balance (e.g. from rounding up in UI),
+    // clamp to exact actual balance so transaction never reverts with ERC20InsufficientBalance.
+    if (!withdrawAmount || withdrawAmount >= actualBalance) {
+      withdrawAmount = actualBalance;
     }
-    if (!withdrawAmount || withdrawAmount <= 0n) {
-      throw new Error('Clone balance is 0 or no amount specified');
-    }
+
     const MIN_WITHDRAWAL_AMOUNT = 1_000_000n; // 1 tUSDC (6 decimals)
     if (token.toLowerCase() === SOMNIA_ADDRESSES.testUsdc.toLowerCase() && withdrawAmount < MIN_WITHDRAWAL_AMOUNT) {
       throw new Error('Minimum withdrawal amount is 1.00 tUSDC');

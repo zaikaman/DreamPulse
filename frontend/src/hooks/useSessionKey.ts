@@ -278,7 +278,8 @@ export function useSessionKey(): UseSessionKeyReturn {
       setCloneAddress(clone);
       if (clone) {
         const bal = await web3Service.getCloneBalance({ cloneAddress: clone }).catch(() => 0n);
-        setCloneBalance((Number(bal) / 1e6).toFixed(2));
+        const balHuman = Number(bal) / 1e6;
+        setCloneBalance((Math.floor(balHuman * 100) / 100).toFixed(2));
       } else {
         setCloneBalance('0.00');
       }
@@ -299,7 +300,7 @@ export function useSessionKey(): UseSessionKeyReturn {
           setCloneAddress(getAddress(res.accountAddress) as Address);
         }
         if (typeof res.cloneBalanceHuman === 'number') {
-          setCloneBalance(res.cloneBalanceHuman.toFixed(2));
+          setCloneBalance((Math.floor(res.cloneBalanceHuman * 100) / 100).toFixed(2));
         }
 
         const checks: AllowanceStatusCheck[] = Array.isArray(res.checks)
@@ -710,7 +711,7 @@ export function useSessionKey(): UseSessionKeyReturn {
 
         return createdSession;
       } catch (err: any) {
-        const parsed = parseWeb3Error(err);
+        const parsed = parseWeb3Error(err, 'delegation');
         setError(parsed.message);
         throw err;
       } finally {
@@ -753,7 +754,7 @@ export function useSessionKey(): UseSessionKeyReturn {
         setActiveSession(null);
         purgeLegacySessionStorage();
       } catch (err: any) {
-        const parsed = parseWeb3Error(err);
+        const parsed = parseWeb3Error(err, 'revoke');
         setError(parsed.message);
         throw err;
       } finally {
@@ -799,7 +800,7 @@ export function useSessionKey(): UseSessionKeyReturn {
         refreshAllowanceStatus(true),
       ]);
     } catch (err: any) {
-      const parsed = parseWeb3Error(err);
+      const parsed = parseWeb3Error(err, 'withdraw');
       setError(parsed.message);
       throw err;
     } finally {
@@ -834,7 +835,7 @@ export function useSessionKey(): UseSessionKeyReturn {
         refreshAllowanceStatus(true),
       ]);
     } catch (err: any) {
-      const parsed = parseWeb3Error(err);
+      const parsed = parseWeb3Error(err, 'deposit');
       setError(parsed.message);
       throw err;
     } finally {
