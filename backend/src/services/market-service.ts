@@ -326,6 +326,7 @@ export class MarketService extends EventEmitter {
           quote: 'tUSDC',
           settle: 'tUSDC',
           active: status === 'Open' || status === 'Resolving',
+          indexed: true,
           contract: false,
           precision: {
             price: 6,

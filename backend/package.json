@@ -17,7 +17,7 @@
     "test:watch": "vitest"
   },
   "dependencies": {
-    "@somnia-chain/markets-sdk": "^0.28.1",
+    "@somnia-chain/markets-sdk": "^0.29.0",
     "@supabase/supabase-js": "^2.49.1",
     "@types/cors": "^2.8.17",
     "@types/express": "^4.17.21",

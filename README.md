@@ -545,7 +545,7 @@ All DreamPulse interactions execute on the **Somnia Shannon Testnet**:
 
 ## Developer Feedback Report (Somnia & DreamDEX SDK)
 
-*As requested in the official Hackathon Guidelines, the DreamPulse engineering team compiled this comprehensive developer feedback report based on building against `@somnia-chain/markets-sdk` (v0.28.1) and DreamDEX documentation on Somnia Shannon Testnet.*
+*As requested in the official Hackathon Guidelines, the DreamPulse engineering team compiled this comprehensive developer feedback report based on building against `@somnia-chain/markets-sdk` (v0.29.0) and DreamDEX documentation on Somnia Shannon Testnet.*
 
 ### What Works Exceptionally Well
 1. **High-Performance RPC & Finality**: Somnia's block times and sub-second confirmation enable real high-frequency on-chain trading loops that are impossible on standard Ethereum Layer 2s.
