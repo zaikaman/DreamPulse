@@ -91,16 +91,14 @@ export const TradeTerminalView: React.FC<TradeTerminalViewProps> = ({
     return evaluateTradeConfluence(market, tick, spot, undefined, recentThought?.reasoningText);
   }, [market, tick, spot, agentThoughts]);
 
-  // Continuous smooth fallback probability centered on strike
-  const smoothFallbackProb = strike > 0 && spot > 0
-    ? 1 / (1 + Math.exp(-Math.max(-4, Math.min(4, ((spot - strike) / (strike * 0.005)) * 2))))
-    : 0.50;
-
   const isSyntheticOrSeed = Boolean(market?.isSynthetic || market?.isSeedDepth);
-  const marketProbYes = isSyntheticOrSeed ? 0.5 : (tick?.impliedProb ?? market?.impliedProbYes ?? smoothFallbackProb);
-  const isMarketUp = marketProbYes >= 0.5;
-  const marketDirection = isMarketUp ? 'Up' : 'Down';
-  const marketConfidence = (isMarketUp ? marketProbYes * 100 : (1 - marketProbYes) * 100).toFixed(0);
+  const rawProb = tick?.impliedProb ?? market?.impliedProbYes;
+  const realProbYes = !isSyntheticOrSeed && typeof rawProb === 'number' && rawProb > 0 && rawProb < 1 ? rawProb : null;
+  const isMarketUp = realProbYes !== null ? realProbYes >= 0.5 : null;
+  const marketDirection = isMarketUp !== null ? (isMarketUp ? 'Up' : 'Down') : null;
+  const marketConfidence = realProbYes !== null && isMarketUp !== null
+    ? (isMarketUp ? realProbYes * 100 : (1 - realProbYes) * 100).toFixed(0)
+    : null;
   const depth = market ? depthMap.get(market.id) : undefined;
 
   const tickerData = market?.symbol
@@ -205,17 +203,19 @@ export const TradeTerminalView: React.FC<TradeTerminalViewProps> = ({
           {/* Right Side: Market Probability & Mode Toggles */}
           <div className="flex items-center gap-3 text-xs font-mono">
             {/* Market Probability */}
-            <div className="flex items-center gap-1.5">
-              <span className="text-muted-foreground text-[11px]">Market:</span>
-              <span className={cn(
-                "font-bold text-xs px-2 py-0.5 rounded border",
-                isMarketUp
-                  ? "bg-[#00e676]/10 text-[#00e676] border-[#00e676]/30"
-                  : "bg-[#ff3366]/10 text-[#ff3366] border-[#ff3366]/30"
-              )}>
-                {marketConfidence}% {marketDirection}
-              </span>
-            </div>
+            {marketConfidence !== null && marketDirection !== null && (
+              <div className="flex items-center gap-1.5">
+                <span className="text-muted-foreground text-[11px]">Market:</span>
+                <span className={cn(
+                  "font-bold text-xs px-2 py-0.5 rounded border",
+                  isMarketUp
+                    ? "bg-[#00e676]/10 text-[#00e676] border-[#00e676]/30"
+                    : "bg-[#ff3366]/10 text-[#ff3366] border-[#ff3366]/30"
+                )}>
+                  {marketConfidence}% {marketDirection}
+                </span>
+              </div>
+            )}
 
             {/* AI Alpha Confluence Badge */}
             {confluence && (

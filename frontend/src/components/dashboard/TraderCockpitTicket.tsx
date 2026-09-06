@@ -94,7 +94,7 @@ export const TraderCockpitTicket: React.FC<TraderCockpitTicketProps> = ({
 
   // Order Configuration State
   const [outcome, setOutcome] = useState<'YES' | 'NO'>('YES');
-  const [price, setPrice] = useState<number>(0.85);
+  const [price, setPrice] = useState<number | null>(null);
   const [collateralAmount, setCollateralAmount] = useState<number>(10);
   const [isManualPrice, setIsManualPrice] = useState<boolean>(false);
 
@@ -112,28 +112,35 @@ export const TraderCockpitTicket: React.FC<TraderCockpitTicketProps> = ({
   const [pulseEffect, setPulseEffect] = useState<boolean>(false);
   const [isFauceting, setIsFauceting] = useState<boolean>(false);
 
-  // Derive active live prices
-  const currentBestBid = bestBidYes ?? market.bestBidYes ?? 0.50;
-  const currentBestAsk = bestAskYes ?? market.bestAskYes ?? 0.50;
+  // Market classification
+  const isSyntheticOrSeed = Boolean(market.isSynthetic || market.isSeedDepth);
   const spotPrice = currentSpotPrice || liveTick?.spotPrice || market.strikePrice || 0;
   const strike = market.strikePrice || 0;
 
-  // Continuous regularized sigmoid probability centered on strike (prevents pin-risk step collapse)
-  const smoothFallbackProb = useMemo(() => {
-    if (!strike || strike <= 0 || !spotPrice || spotPrice <= 0) return 0.50;
-    const relOffset = (spotPrice - strike) / (strike * 0.005);
-    const sigmoid = 1 / (1 + Math.exp(-Math.max(-4, Math.min(4, relOffset * 2))));
-    return Number(sigmoid.toFixed(4));
-  }, [spotPrice, strike]);
+  // Real implied probability only (no synthetic 50% or sigmoid curve fallbacks)
+  const rawProb = liveTick?.impliedProb ?? market.impliedProbYes;
+  const realProbYes = !isSyntheticOrSeed && typeof rawProb === 'number' && rawProb > 0 && rawProb < 1
+    ? rawProb
+    : null;
 
-  const isSyntheticOrSeed = Boolean(market.isSynthetic || market.isSeedDepth);
-  const marketProbYes = isSyntheticOrSeed
-    ? 0.5
-    : (liveTick?.impliedProb ?? market.impliedProbYes ?? (currentBestAsk > 0 ? currentBestAsk : smoothFallbackProb));
+  // Implied odds (null if synthetic or empty)
+  const upOddsPct = realProbYes !== null ? Math.round(realProbYes * 100) : null;
+  const downOddsPct = upOddsPct !== null ? Math.max(0, 100 - upOddsPct) : null;
 
-  // Implied odds
-  const upOddsPct = Math.round(marketProbYes * 100);
-  const downOddsPct = Math.max(1, 100 - upOddsPct);
+  // Real order book depth prices only (no hardcoded 0.50 fallbacks)
+  const rawBestBid = bestBidYes ?? market.bestBidYes;
+  const rawBestAsk = bestAskYes ?? market.bestAskYes;
+
+  const realBestBid = !isSyntheticOrSeed && typeof rawBestBid === 'number' && rawBestBid > 0 && rawBestBid < 1
+    ? rawBestBid
+    : null;
+
+  const realBestAsk = !isSyntheticOrSeed && typeof rawBestAsk === 'number' && rawBestAsk > 0 && rawBestAsk < 1
+    ? rawBestAsk
+    : null;
+
+  const defaultUpPrice = realBestAsk;
+  const defaultDownPrice = realBestBid !== null ? Number((1.0 - realBestBid).toFixed(2)) : null;
 
   // Handle Ladder prefill triggers
   useEffect(() => {
@@ -154,10 +161,10 @@ export const TraderCockpitTicket: React.FC<TraderCockpitTicketProps> = ({
   // Adjust price automatically when switching outcomes in IOC mode
   useEffect(() => {
     if (!isManualPrice) {
-      const defaultPrice = outcome === 'YES' ? currentBestAsk : Number((1.0 - currentBestBid).toFixed(2));
-      setPrice(Math.min(0.99, Math.max(0.01, defaultPrice)));
+      const defaultPrice = outcome === 'YES' ? defaultUpPrice : defaultDownPrice;
+      setPrice(defaultPrice);
     }
-  }, [outcome, currentBestAsk, currentBestBid, isManualPrice]);
+  }, [outcome, defaultUpPrice, defaultDownPrice, isManualPrice]);
 
   // Available collateral balance
   const userBalance = useMemo(() => {
@@ -172,9 +179,12 @@ export const TraderCockpitTicket: React.FC<TraderCockpitTicketProps> = ({
   }, [collateralAmount, userBalance]);
 
   // Calculated Order Quantities & Payouts ($1.00/lot upon winning)
-  const calculations = useMemo(() => {
-    const validPrice = Math.max(0.01, Math.min(0.99, price));
-    const lotSize = Math.max(1, Math.floor(collateralAmount / validPrice));
+  const calculateTicketMetrics = (targetPrice: number | null, collateral: number) => {
+    if (targetPrice === null || isNaN(targetPrice) || targetPrice <= 0 || targetPrice >= 1 || collateral <= 0) {
+      return null;
+    }
+    const validPrice = Math.max(0.01, Math.min(0.99, targetPrice));
+    const lotSize = Math.max(1, Math.floor(collateral / validPrice));
     const totalCost = Number((lotSize * validPrice).toFixed(2));
     const grossPayout = Number((lotSize * 1.0).toFixed(2));
     const netProfit = Number((grossPayout - totalCost).toFixed(2));
@@ -189,7 +199,19 @@ export const TraderCockpitTicket: React.FC<TraderCockpitTicketProps> = ({
       rocPercent,
       payoutMultiplier,
     };
-  }, [price, collateralAmount]);
+  };
+
+  const upCalculations = useMemo(() => {
+    const targetPrice = outcome === 'YES' && isManualPrice ? price : defaultUpPrice;
+    return calculateTicketMetrics(targetPrice, collateralAmount);
+  }, [outcome, isManualPrice, price, defaultUpPrice, collateralAmount]);
+
+  const downCalculations = useMemo(() => {
+    const targetPrice = outcome === 'NO' && isManualPrice ? price : defaultDownPrice;
+    return calculateTicketMetrics(targetPrice, collateralAmount);
+  }, [outcome, isManualPrice, price, defaultDownPrice, collateralAmount]);
+
+  const calculations = outcome === 'YES' ? upCalculations : downCalculations;
 
   // Multi-Factor Confluence & High-Conviction Copilot Intelligence
   const confluence = useMemo(() => {
@@ -240,6 +262,11 @@ export const TraderCockpitTicket: React.FC<TraderCockpitTicketProps> = ({
 
     if (isTradingLocked) {
       setExecutionError('Trading is closed: Market has expired or is no longer open.');
+      return;
+    }
+
+    if (!calculations || calculations.lotSize <= 0 || price === null || price <= 0) {
+      setExecutionError('No liquidity available in orderbook. Select a price from the ladder to place a limit order.');
       return;
     }
 
@@ -520,14 +547,18 @@ export const TraderCockpitTicket: React.FC<TraderCockpitTicketProps> = ({
               <ArrowTrendingUpIcon className="w-4 h-4" />
               <span>Up</span>
             </span>
-            <span className="text-sm font-bold">{upOddsPct}%</span>
+            {upOddsPct !== null && (
+              <span className="text-sm font-bold">{upOddsPct}%</span>
+            )}
           </div>
 
-          <div className="text-[10px] text-muted-foreground">
+          <div className="text-[10px] text-muted-foreground min-h-[16px]">
             {collateralAmount > 0 ? (
-              <span className="text-[#00e676]/90 font-mono">
-                Payout: {calculations.payoutMultiplier}x (${calculations.grossPayout})
-              </span>
+              upCalculations ? (
+                <span className="text-[#00e676]/90 font-mono">
+                  Payout: {upCalculations.payoutMultiplier}x (${upCalculations.grossPayout})
+                </span>
+              ) : null
             ) : (
               <span>enter an amount</span>
             )}
@@ -553,14 +584,18 @@ export const TraderCockpitTicket: React.FC<TraderCockpitTicketProps> = ({
               <ArrowTrendingDownIcon className="w-4 h-4" />
               <span>Down</span>
             </span>
-            <span className="text-sm font-bold">{downOddsPct}%</span>
+            {downOddsPct !== null && (
+              <span className="text-sm font-bold">{downOddsPct}%</span>
+            )}
           </div>
 
-          <div className="text-[10px] text-muted-foreground">
+          <div className="text-[10px] text-muted-foreground min-h-[16px]">
             {collateralAmount > 0 ? (
-              <span className="text-[#ff3366]/90 font-mono">
-                Payout: {Number((1 / (1 - currentBestBid || 0.15)).toFixed(2))}x
-              </span>
+              downCalculations ? (
+                <span className="text-[#ff3366]/90 font-mono">
+                  Payout: {downCalculations.payoutMultiplier}x (${downCalculations.grossPayout})
+                </span>
+              ) : null
             ) : (
               <span>enter an amount</span>
             )}
@@ -726,11 +761,15 @@ export const TraderCockpitTicket: React.FC<TraderCockpitTicketProps> = ({
       <div className="p-2.5 rounded-xl bg-secondary/20 border border-border/30 text-xs space-y-1.5 mb-3 flex-shrink-0">
         <div className="flex items-center justify-between text-muted-foreground">
           <span>Cost (max loss)</span>
-          <span className="font-bold text-foreground">${calculations.totalCost.toFixed(2)} tUSDC</span>
+          <span className="font-bold text-foreground">
+            {calculations ? `$${calculations.totalCost.toFixed(2)} tUSDC` : '—'}
+          </span>
         </div>
         <div className="flex items-center justify-between text-muted-foreground">
           <span>Shares</span>
-          <span className="font-bold text-foreground">{calculations.lotSize.toLocaleString()}</span>
+          <span className="font-bold text-foreground">
+            {calculations ? calculations.lotSize.toLocaleString() : '—'}
+          </span>
         </div>
         <div className="flex items-center justify-between text-muted-foreground">
           <span>Strike</span>
@@ -853,7 +892,7 @@ export const TraderCockpitTicket: React.FC<TraderCockpitTicketProps> = ({
         ) : (
           <button
             type="button"
-            disabled={isSubmitting}
+            disabled={isSubmitting || !calculations || calculations.totalCost <= 0}
             onClick={handleExecuteOrder}
             className="w-full py-3 rounded-xl font-bold text-xs uppercase tracking-wider bg-[#00ffcc] hover:brightness-[1.08] text-[#060709] border border-[#00ffcc]/30 shadow-[0_0_14px_rgba(0,255,204,0.25)] transition-all cursor-pointer flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed active:scale-[0.99]"
           >
@@ -862,6 +901,10 @@ export const TraderCockpitTicket: React.FC<TraderCockpitTicketProps> = ({
                 <Spinner size="sm" />
                 <span className="text-[#060709] font-bold">Routing to Somnia Shannon...</span>
               </>
+            ) : !calculations ? (
+              <span className="text-[#060709] font-bold">
+                No Book Liquidity for {outcome === 'YES' ? 'UP' : 'DOWN'}
+              </span>
             ) : (
               <>
                 {activeSession?.isActive && <BoltIcon className="w-4 h-4 text-[#060709]" />}
