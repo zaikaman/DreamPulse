@@ -26,8 +26,8 @@
 * **Auditable Live Cockpit**: [https://dreampulse-ai.vercel.app/#cockpit](https://dreampulse-ai.vercel.app/#cockpit) *(Real-time verified on-chain execution ledger, active agent states, and settlement telemetry)*
 * **Official 2:55 Demo Video**: [Watch Demo Video on YouTube (2m 55s)](https://www.youtube.com/watch?v=Ld62mpVEb0U)
 * **Somnia Shannon Testnet Chain ID**: `50312`
-* **DreamPulse Smart Account Factory**: [`0x94dd9c8b9a5684ab026480737fac911824ac995d`](https://shannon-explorer.somnia.network/address/0x94dd9c8b9a5684ab026480737fac911824ac995d) *(Deploys per-user EIP-1167 Smart Trading Account clones)*
-* **DreamPulse Smart Account (Implementation)**: [`0x92673153f231d87e2adb8b61321260dacf138858`](https://shannon-explorer.somnia.network/address/0x92673153f231d87e2adb8b61321260dacf138858)
+* **DreamPulse Smart Account Factory (V2, current)**: [`0xf45589660652962a381c8420125bc4be90362081`](https://shannon-explorer.somnia.network/address/0xf45589660652962a381c8420125bc4be90362081) *(Deploys per-user EIP-1167 Smart Trading Account clones; source: `contracts/DreamPulseSessionAccountV2.sol`)*
+* **DreamPulse Smart Account V2 (Implementation, current)**: [`0x47ea804522bee0b6e98e5189e70de14843fdf886`](https://shannon-explorer.somnia.network/address/0x47ea804522bee0b6e98e5189e70de14843fdf886)
 * **Somnia `OperatorPermissionsRegistry` (Native Protocol)**: [`0x15C7e8CE38F021c5b45d098AaD788f63090bF20A`](https://shannon-explorer.somnia.network/address/0x15C7e8CE38F021c5b45d098AaD788f63090bF20A)
 * **Machine-Readable Evidence Artifact**: [`evidence.json`](./evidence.json) *(Full audit trail, on-chain tx hashes, and JSON schemas)*
 * **Automated Verification Suite**: `npm run verify` *(336/336 Unit & Integration Tests Passing, 0 Typecheck Errors)*
@@ -35,26 +35,26 @@
 ---
 
 ## Table of Contents
-1. [Executive Summary](#executive-summary)
-2. [Why DreamPulse: Problem & Architecture Solution](#why-dreampulse-problem--architecture-solution)
-3. [The Complete User Journey](#the-complete-user-journey)
-4. [Pro CLOB Trade Terminal & Order Execution Gateway](#pro-clob-trade-terminal--order-execution-gateway)
-5. [Swarm Arena, Strategy Leaderboards & Proof-of-Alpha](#swarm-arena-strategy-leaderboards--proof-of-alpha)
-6. [Visual Strategy Studio & Custom Agent Engine](#visual-strategy-studio--custom-agent-engine)
-7. [Historical Backtesting Engine & Risk Metrics](#historical-backtesting-engine--risk-metrics)
-8. [Autonomous Agent Personas (Volt, Oracle, Titan, Sweeper)](#autonomous-agent-personas-volt-oracle-titan-sweeper)
-9. [Protocol Swarms vs. Personal Swarms](#protocol-swarms-vs-personal-swarms)
-10. [Autonomous Zero-Loss Collateral Sweeper](#autonomous-zero-loss-collateral-sweeper)
+1. [Executive Summary & Vision](#executive-summary--vision)
+2. [The Core Problem & Market Opportunity](#the-core-problem--market-opportunity)
+3. [The 6 Core Platform Pillars](#the-6-core-platform-pillars)
+4. [1. Pro Trade Terminal with AI Alpha Copilot](#1-pro-trade-terminal-with-ai-alpha-copilot)
+5. [2. Visual Strategy Studio (No-Code Agent Builder)](#2-visual-strategy-studio-no-code-agent-builder)
+6. [3. Quantitative Backtester & Simulation Lab](#3-quantitative-backtester--simulation-lab)
+7. [4. Autonomous Multi-Agent Swarms (Protocol & Personal)](#4-autonomous-multi-agent-swarms-protocol--personal)
+8. [Autonomous Agent Personas](#autonomous-agent-personas)
+9. [5. Swarm Arena, Strategy Leaderboards & Proof-of-Alpha](#5-swarm-arena-strategy-leaderboards--proof-of-alpha)
+10. [6. Settlement Sweeper & Direct Payouts](#6-settlement-sweeper--direct-payouts)
 11. [Mathematical & Quantitative Foundation](#mathematical--quantitative-foundation)
-12. [Non-Custodial Session Delegation & Security Architecture](#non-custodial-session-delegation--security-architecture)
-13. [Dual LLM Engine Architecture (Groq Qwen + Google Gemini)](#dual-llm-engine-architecture-groq-qwen--google-gemini)
-14. [Full End-to-End System Flow](#full-end-to-end-system-flow)
-15. [Live Testnet Proof of Fills & Transactions](#live-testnet-proof-of-fills--transactions)
+12. [Non-Custodial Smart Trading Account & Security Architecture](#non-custodial-smart-trading-account--security-architecture)
+13. [Institutional Design System & Minimalist UI](#institutional-design-system--minimalist-ui)
+14. [Minimalist Onboarding & First-Run Activation Flow](#minimalist-onboarding--first-run-activation-flow)
+15. [Smart Contracts & Protocol Addresses](#smart-contracts--protocol-addresses)
 16. [Hackathon Judging Criteria Alignment](#hackathon-judging-criteria-alignment)
 17. [Developer Feedback Report (Somnia & DreamDEX SDK)](#developer-feedback-report-somnia--dreamdex-sdk)
-18. [Project Directory & File Structure](#project-directory--file-structure)
-19. [Environment Configuration & Variables](#environment-configuration--variables)
-20. [Local Development & Quickstart](#local-development--quickstart)
+18. [System Architecture & Execution Workflows](#system-architecture--execution-workflows)
+19. [API & WebSocket Telemetry Protocol](#api--websocket-telemetry-protocol)
+20. [Local Installation & Development Guide](#local-installation--development-guide)
 21. [Verification & Test Suite (336/336 Passing)](#verification--test-suite-336336-passing)
 22. [2–3 Minute Demo Video Walkthrough](#23-minute-demo-video-walkthrough)
 23. [Future Roadmap Beyond Hackathon](#future-roadmap-beyond-hackathon)
@@ -540,8 +540,8 @@ DreamPulse integrates directly with the official, audited protocol infrastructur
 
 | Protocol Contract | Address | Description | Explorer Link |
 | :--- | :--- | :--- | :--- |
-| **`DreamPulseSessionAccountFactory`** | `0x94dd9c8b9a5684ab026480737fac911824ac995d` | Factory deploying per-user EIP-1167 Smart Trading Account clones | [View on Explorer](https://shannon-explorer.somnia.network/address/0x94dd9c8b9a5684ab026480737fac911824ac995d) |
-| **`DreamPulseSessionAccount` (Impl)** | `0x92673153f231d87e2adb8b61321260dacf138858` | Smart account implementation with on-chain risk policies & pinned withdrawals | [View on Explorer](https://shannon-explorer.somnia.network/address/0x92673153f231d87e2adb8b61321260dacf138858) |
+| **`DreamPulseSessionAccountFactory` (V2, current)** | `0xf45589660652962a381c8420125bc4be90362081` | Factory deploying per-user EIP-1167 Smart Trading Account clones (`contracts/DreamPulseSessionAccountV2.sol`, deployed 2026-09-06) | [View on Explorer](https://shannon-explorer.somnia.network/address/0xf45589660652962a381c8420125bc4be90362081) |
+| **`DreamPulseSessionAccount` V2 (Impl, current)** | `0x47ea804522bee0b6e98e5189e70de14843fdf886` | Smart account implementation with on-chain risk policies & pinned withdrawals | [View on Explorer](https://shannon-explorer.somnia.network/address/0x47ea804522bee0b6e98e5189e70de14843fdf886) |
 | **`OperatorPermissionsRegistry`** | `0x15C7e8CE38F021c5b45d098AaD788f63090bF20A` | Somnia Native Session Delegation Registry | [View on Explorer](https://shannon-explorer.somnia.network/address/0x15C7e8CE38F021c5b45d098AaD788f63090bF20A) |
 | **`BinaryModule`** | `0x3ecC694Cef705358864a646142ac17A90E29e388` | DreamDEX Core Binary Market Logic | [View on Explorer](https://shannon-explorer.somnia.network/address/0x3ecC694Cef705358864a646142ac17A90E29e388) |
 | **`MarketsCore`** | `0x2802504314685D89bF6C992CA5a8e7cC78bc0294` | DreamDEX Market Management Contract | [View on Explorer](https://shannon-explorer.somnia.network/address/0x2802504314685D89bF6C992CA5a8e7cC78bc0294) |
@@ -550,6 +550,8 @@ DreamPulse integrates directly with the official, audited protocol infrastructur
 | **`CollateralRouter`** | `0xbC0C9834B15ACE38bB50dDaa7d7f7C7CC4DC183C` | Collateral Vault Routing | [View on Explorer](https://shannon-explorer.somnia.network/address/0xbC0C9834B15ACE38bB50dDaa7d7f7C7CC4DC183C) |
 | **`OracleHub`** | `0xe40db387cC98601Dd11bd634fF2f3AD5686dE32b` | Prophecy Oracle Settlement Engine | [View on Explorer](https://shannon-explorer.somnia.network/address/0xe40db387cC98601Dd11bd634fF2f3AD5686dE32b) |
 | **`TestUSDC` (Collateral)** | `0x70a86D8842FB63C4Ad2b7cdddF530eBf1BB25d8E` | Protocol Trading Currency (6 decimals) | [View on Explorer](https://shannon-explorer.somnia.network/address/0x70a86D8842FB63C4Ad2b7cdddF530eBf1BB25d8E) |
+
+> **V1 superseded by V2 (2026-09-06):** the previous factory (`0x94dd9c8b9a5684ab026480737fac911824ac995d`) and implementation (`0x92673153f231d87e2adb8b61321260dacf138858`) were replaced by the V2 pair above (factory deployment tx [`0xad87c9f3...413f8436`](https://shannon-explorer.somnia.network/tx/0xad87c9f3409252c4654b335fd20814f34156c583a2adbb082a9cc30d413f8436), block `481301389`). All backend (`backend/src/config/somnia.ts`) and frontend (`frontend/src/services/web3.ts`) code points at V2.
 
 ### 3. Network & Operator Endpoints
 
@@ -826,7 +828,7 @@ npm run verify
 
 | Verification Tier | Execution Environment | What Is Verified & Invariant Boundaries |
 | :--- | :--- | :--- |
-| 🟢 **Verified Live** | **Somnia Shannon Testnet & Production Cloud** | • **Live Smart Contracts**: Direct interaction with dedicated Smart Trading Account clones (`DreamPulseSessionAccountFactory` `0x94dd9c8b9a5684ab026480737fac911824ac995d`, `DreamPulseSessionAccount` `0x92673153f231d87e2adb8b61321260dacf138858`) and Somnia & DreamDEX protocol contracts (`BinaryModule`, `CLOBFactory`, `MarketsCore`, `BinarySettlement`, and `TestUSDC`).<br />• **On-Chain Transactions**: Order placement (`executeOrder` via clone), order cancellations, session authorizations, and settlement redemptions confirmed via live JSON-RPC with receipts on Somnia Explorer.<br />• **Cloud Infrastructure**: Live Vercel frontend, Heroku backend daemon, Supabase PostgreSQL with RLS, and real-time sub-50ms WebSocket telemetry. |
+| 🟢 **Verified Live** | **Somnia Shannon Testnet & Production Cloud** | • **Live Smart Contracts**: Direct interaction with dedicated Smart Trading Account clones V2 (`DreamPulseSessionAccountFactory` `0xf45589660652962a381c8420125bc4be90362081`, `DreamPulseSessionAccount` `0x47ea804522bee0b6e98e5189e70de14843fdf886`) and Somnia & DreamDEX protocol contracts (`BinaryModule`, `CLOBFactory`, `MarketsCore`, `BinarySettlement`, and `TestUSDC`).<br />• **On-Chain Transactions**: Order placement (`executeOrder` via clone), order cancellations, session authorizations, and settlement redemptions confirmed via live JSON-RPC with receipts on Somnia Explorer.<br />• **Cloud Infrastructure**: Live Vercel frontend, Heroku backend daemon, Supabase PostgreSQL with RLS, and real-time sub-50ms WebSocket telemetry. |
 | 🟡 **Simulated Lab** | **Historical Backtester & Synthetic Surfaces** | • **Historical Quantitative Backtesting**: High-resolution Binance 1s/1m historical tick replay with parameterized market frictions (4 bps slippage, protocol fees, 25ms execution latency).<br />• **Option Pricing Surfaces**: Black-Scholes binary CDF $\Phi(z)$ and EWMA volatility modeled against simulated price trajectories.<br />• **Chaos & Circuit Breakers**: Upstream RPC latency spikes, network partition retries, and indexer sync delays. |
 | 🔵 **Tested Locally** | **Automated Vitest Suite (Deterministic Mocks)** | • **Mathematical Invariants**: Closed-form Abramowitz-Stegun CDF polynomial approximation, Avellaneda-Stoikov inventory skew, Sharpe/Sortino ratios, integer quantization to 6-decimal micro-tUSDC.<br />• **Cryptographic & Non-Custodial Boundaries**: EIP-712 typed data hashing and signature recovery, session nonce tracking, single-trade risk ceilings ($20), and daily volume caps ($200) verified without consuming testnet gas.<br />• **Resilience & Fallback Paths**: Controlled mock injection verifying that if Groq API keys return HTTP 401 or exhaust quotas, the cognitive engine falls back to deterministic quantitative math logs; and if GraphQL indexers lag, the backend polls direct on-chain contract state. |
 

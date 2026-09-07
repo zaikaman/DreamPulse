@@ -112,8 +112,8 @@ DreamPulse integrates with the official Somnia & DreamDEX protocol suite alongsi
 
 | Contract | Address | Description |
 | --- | --- | --- |
-| `DreamPulseSessionAccountFactory` | [`0x94dd9c8b9a5684ab026480737fac911824ac995d`](https://shannon-explorer.somnia.network/address/0x94dd9c8b9a5684ab026480737fac911824ac995d) | Factory deploying per-user EIP-1167 smart trading account clones |
-| `DreamPulseSessionAccount` (Impl) | [`0x92673153f231d87e2adb8b61321260dacf138858`](https://shannon-explorer.somnia.network/address/0x92673153f231d87e2adb8b61321260dacf138858) | Smart account implementation with on-chain risk policies & pinned withdrawals |
+| `DreamPulseSessionAccountFactory` (V2, current) | [`0xf45589660652962a381c8420125bc4be90362081`](https://shannon-explorer.somnia.network/address/0xf45589660652962a381c8420125bc4be90362081) | Factory deploying per-user EIP-1167 smart trading account clones (`contracts/DreamPulseSessionAccountV2.sol`, deployed 2026-09-06) |
+| `DreamPulseSessionAccount` V2 (Impl, current) | [`0x47ea804522bee0b6e98e5189e70de14843fdf886`](https://shannon-explorer.somnia.network/address/0x47ea804522bee0b6e98e5189e70de14843fdf886) | Smart account implementation with on-chain risk policies & pinned withdrawals |
 | `OperatorPermissionsRegistry` | [`0x15C7e8CE38F021c5b45d098AaD788f63090bF20A`](https://shannon-explorer.somnia.network/address/0x15C7e8CE38F021c5b45d098AaD788f63090bF20A) | Somnia native session delegation registry |
 | `BinaryModule` | [`0x3ecC694Cef705358864a646142ac17A90E29e388`](https://shannon-explorer.somnia.network/address/0x3ecC694Cef705358864a646142ac17A90E29e388) | DreamDEX core binary market logic |
 | `MarketsCore` | [`0x2802504314685D89bF6C992CA5a8e7cC78bc0294`](https://shannon-explorer.somnia.network/address/0x2802504314685D89bF6C992CA5a8e7cC78bc0294) | DreamDEX market management contract |
@@ -122,6 +122,8 @@ DreamPulse integrates with the official Somnia & DreamDEX protocol suite alongsi
 | `CollateralRouter` | [`0xbC0C9834B15ACE38bB50dDaa7d7f7C7CC4DC183C`](https://shannon-explorer.somnia.network/address/0xbC0C9834B15ACE38bB50dDaa7d7f7C7CC4DC183C) | Collateral vault routing |
 | `OracleHub` | [`0xe40db387cC98601Dd11bd634fF2f3AD5686dE32b`](https://shannon-explorer.somnia.network/address/0xe40db387cC98601Dd11bd634fF2f3AD5686dE32b) | Prophecy oracle settlement engine |
 | `TestUSDC` | [`0x70a86D8842FB63C4Ad2b7cdddF530eBf1BB25d8E`](https://shannon-explorer.somnia.network/address/0x70a86D8842FB63C4Ad2b7cdddF530eBf1BB25d8E) | Protocol trading collateral currency (6 decimals) |
+
+> **V1 superseded by V2 (2026-09-06):** the previous factory (`0x94dd9c8b9a5684ab026480737fac911824ac995d`) and implementation (`0x92673153f231d87e2adb8b61321260dacf138858`) were replaced by the V2 pair above (factory deployment tx [`0xad87c9f3...413f8436`](https://shannon-explorer.somnia.network/tx/0xad87c9f3409252c4654b335fd20814f34156c583a2adbb082a9cc30d413f8436), block `481301389`). All backend and frontend code points at V2.
 
 ## Live Evidence and Hackathon Fit
 
