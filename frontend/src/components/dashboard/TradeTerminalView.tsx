@@ -16,8 +16,9 @@ import { EventContractChart } from './EventContractChart.js';
 import { TraderCockpitTicket, type LadderPrefillData } from './TraderCockpitTicket.js';
 import { RecentlySettledRounds } from './RecentlySettledRounds.js';
 import { lazyWithRetry } from '../../lib/lazy-with-retry.js';
+import { ViewErrorBoundary } from '../common/ViewErrorBoundary.js';
 // Retryable chunk import: a Wi-Fi blip while fetching this nested chunk is
-// absorbed here; anything worse is caught by the Trade Terminal view boundary.
+// absorbed here; anything worse is caught by the Order Book view boundary.
 const OrderBookDepth = lazyWithRetry(() => import('../OrderBookDepth.js').then((m) => ({ default: m.OrderBookDepth })) );
 import { ActivePositionsDrawer } from './ActivePositionsDrawer.js';
 import { cn } from '../../lib/utils.js';
@@ -438,22 +439,24 @@ export const TradeTerminalView: React.FC<TradeTerminalViewProps> = ({
             {/* Main Visual Arena */}
             <div className="flex-1 min-h-[320px] lg:min-h-0 overflow-hidden">
               {isBookVisible ? (
-                <React.Suspense fallback={<div className="h-full grid place-items-center text-xs text-muted-foreground">Loading order book…</div>}>
-                  <OrderBookDepth
-                    selectedMarket={market}
-                    liveDepth={depth}
-                    liveTick={tick}
-                    currentSpotPrice={spot}
-                    isLoading={isLoading}
-                    wallet={wallet}
-                    activeSession={activeSession}
-                    agentThoughts={agentThoughts}
-                    onOpenSessionModal={onOpenSessionModal}
-                    onConnectWallet={onConnectWallet}
-                    hideEmbeddedTicket={true}
-                    onPrefillOrder={(data) => setPrefillData(data)}
-                  />
-                </React.Suspense>
+                <ViewErrorBoundary viewName="Order Book" variant="minimal">
+                  <React.Suspense fallback={<div className="h-full grid place-items-center text-xs text-muted-foreground">Loading order book…</div>}>
+                    <OrderBookDepth
+                      selectedMarket={market}
+                      liveDepth={depth}
+                      liveTick={tick}
+                      currentSpotPrice={spot}
+                      isLoading={isLoading}
+                      wallet={wallet}
+                      activeSession={activeSession}
+                      agentThoughts={agentThoughts}
+                      onOpenSessionModal={onOpenSessionModal}
+                      onConnectWallet={onConnectWallet}
+                      hideEmbeddedTicket={true}
+                      onPrefillOrder={(data) => setPrefillData(data)}
+                    />
+                  </React.Suspense>
+                </ViewErrorBoundary>
               ) : market ? (
                 <EventContractChart
                   market={market}

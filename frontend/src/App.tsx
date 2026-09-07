@@ -249,14 +249,16 @@ export const App: React.FC = () => {
   // ----------------------------------------------------------------------------
   if (activeNav === 'Landing') {
     return (
-      <CinematicHero
-        onEnterConsole={(view) => {
-          const target = view || 'Overview';
-          handleNavigateView(target);
-        }}
-        walletAddress={wallet.address}
-        onConnectWallet={connectWallet}
-      />
+      <ViewErrorBoundary viewName="Landing" resetKeys={[activeNav]}>
+        <CinematicHero
+          onEnterConsole={(view) => {
+            const target = view || 'Overview';
+            handleNavigateView(target);
+          }}
+          walletAddress={wallet.address}
+          onConnectWallet={connectWallet}
+        />
+      </ViewErrorBoundary>
     );
   }
 
@@ -289,54 +291,60 @@ export const App: React.FC = () => {
       >
         {/* Dynamic Task-Oriented Main View */}
         {activeNav === 'Overview' ? (
-          <OverviewView
-            markets={markets}
-            liveTicks={liveTicks}
-            latencyMs={latencyMs}
-            agentThoughts={agentThoughts}
-            selectedMarketId={selectedMarketId}
-            onSelectMarket={setSelectedMarketId}
-            onNavigateToTab={(tab) => {
-              const target = tab as DashboardViewType;
-              handleNavigateView(target);
-            }}
-            onOpenTradeTerminal={handleOpenTradeTerminal}
-            wallet={wallet}
-            activeSession={activeSession}
-            cloneAddress={cloneAddress}
-            cloneBalance={cloneBalance}
-            onWithdrawClone={withdrawFromClone}
-            onOpenTradingWallet={handleOpenTradingWallet}
-            onOpenRiskModal={handleOpenRiskModal}
-            isFauceting={isSessionFauceting}
-            onClaimFaucet={claimCollateralFaucet}
-            onOpenSessionModal={handleOpenSessionModal}
-            onOpenTour={() => openOnboarding(0)}
-            onConnectWallet={connectWallet}
-            onSwitchNetwork={switchNetwork}
-            isLoading={isMarketsLoading}
-          />
+          <ViewErrorBoundary viewName="Overview" resetKeys={[activeNav]} onNavigateHome={() => handleNavigateView('Overview')}>
+            <OverviewView
+              markets={markets}
+              liveTicks={liveTicks}
+              latencyMs={latencyMs}
+              agentThoughts={agentThoughts}
+              selectedMarketId={selectedMarketId}
+              onSelectMarket={setSelectedMarketId}
+              onNavigateToTab={(tab) => {
+                const target = tab as DashboardViewType;
+                handleNavigateView(target);
+              }}
+              onOpenTradeTerminal={handleOpenTradeTerminal}
+              wallet={wallet}
+              activeSession={activeSession}
+              cloneAddress={cloneAddress}
+              cloneBalance={cloneBalance}
+              onWithdrawClone={withdrawFromClone}
+              onOpenTradingWallet={handleOpenTradingWallet}
+              onOpenRiskModal={handleOpenRiskModal}
+              isFauceting={isSessionFauceting}
+              onClaimFaucet={claimCollateralFaucet}
+              onOpenSessionModal={handleOpenSessionModal}
+              onOpenTour={() => openOnboarding(0)}
+              onConnectWallet={connectWallet}
+              onSwitchNetwork={switchNetwork}
+              isLoading={isMarketsLoading}
+            />
+          </ViewErrorBoundary>
         ) : activeNav === 'Edge Radar' ? (
-          <EdgeRadarView
-            markets={markets}
-            selectedMarketId={selectedMarketId}
-            onSelectMarket={setSelectedMarketId}
-            liveTicks={liveTicks}
-            onNavigateToDepth={() => {
-              handleOpenTradeTerminal(selectedMarketId || markets[0]?.id || '');
-            }}
-            isLoading={isMarketsLoading}
-          />
+          <ViewErrorBoundary viewName="Edge Radar" resetKeys={[activeNav]} onNavigateHome={() => handleNavigateView('Overview')}>
+            <EdgeRadarView
+              markets={markets}
+              selectedMarketId={selectedMarketId}
+              onSelectMarket={setSelectedMarketId}
+              liveTicks={liveTicks}
+              onNavigateToDepth={() => {
+                handleOpenTradeTerminal(selectedMarketId || markets[0]?.id || '');
+              }}
+              isLoading={isMarketsLoading}
+            />
+          </ViewErrorBoundary>
         ) : activeNav === 'Markets' || activeNav === 'Markets & Depth' ? (
-          <MarketsExplorerView
-            markets={markets}
-            selectedMarketId={selectedMarketId}
-            onSelectMarket={setSelectedMarketId}
-            onOpenTradeTerminal={handleOpenTradeTerminal}
-            liveTicks={liveTicks}
-            currentSpotPrices={currentSpotPrices}
-            isLoading={isMarketsLoading}
-          />
+          <ViewErrorBoundary viewName="Markets Explorer" resetKeys={[activeNav]} onNavigateHome={() => handleNavigateView('Overview')}>
+            <MarketsExplorerView
+              markets={markets}
+              selectedMarketId={selectedMarketId}
+              onSelectMarket={setSelectedMarketId}
+              onOpenTradeTerminal={handleOpenTradeTerminal}
+              liveTicks={liveTicks}
+              currentSpotPrices={currentSpotPrices}
+              isLoading={isMarketsLoading}
+            />
+          </ViewErrorBoundary>
         ) : activeNav === 'Trade Terminal' ? (
           <ViewErrorBoundary viewName="Trade Terminal" resetKeys={[activeNav]} onNavigateHome={() => handleNavigateView('Overview')}>
           <React.Suspense fallback={<ViewLoadingFallback label="Trade Terminal" />}>
@@ -360,14 +368,16 @@ export const App: React.FC = () => {
           </React.Suspense>
           </ViewErrorBoundary>
         ) : activeNav === 'AI Swarm Feed' ? (
-          <SwarmFeedView
-            agentThoughts={agentThoughts}
-            debugThoughts={debugThoughts}
-            isDebugEnabled={isDebugEnabled}
-            onToggleDebug={toggleDebugThoughts}
-            isConnected={isConnected}
-            userAddress={wallet.address || undefined}
-          />
+          <ViewErrorBoundary viewName="AI Swarm Feed" resetKeys={[activeNav]} onNavigateHome={() => handleNavigateView('Overview')}>
+            <SwarmFeedView
+              agentThoughts={agentThoughts}
+              debugThoughts={debugThoughts}
+              isDebugEnabled={isDebugEnabled}
+              onToggleDebug={toggleDebugThoughts}
+              isConnected={isConnected}
+              userAddress={wallet.address || undefined}
+            />
+          </ViewErrorBoundary>
         ) : activeNav === 'Swarm Cockpit' ? (
           <ViewErrorBoundary viewName="Swarm Cockpit" resetKeys={[activeNav]} onNavigateHome={() => handleNavigateView('Overview')}>
           <React.Suspense fallback={<ViewLoadingFallback label="Swarm Cockpit" />}>

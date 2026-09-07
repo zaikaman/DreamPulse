@@ -6,16 +6,16 @@ import { RainbowKitProvider, darkTheme } from '@rainbow-me/rainbowkit';
 import '@rainbow-me/rainbowkit/styles.css';
 
 import { wagmiConfig, queryClient } from './config/wagmi';
-import { RootErrorBoundary } from './components/common/ErrorBoundary.js';
+import { GlobalErrorBoundary } from './components/common/GlobalErrorBoundary.js';
 import App from './App';
 import './index.css';
 
-// RootErrorBoundary is the outermost layer: any uncaught render error that
+// GlobalErrorBoundary is the root & application boundary: any uncaught render error that
 // escapes the per-view boundaries (or a provider init failure) lands on a
-// branded recovery screen instead of unmounting the root into a white screen.
+// cyberpunk diagnostic recovery screen instead of unmounting into an empty white screen.
 ReactDOM.createRoot(document.getElementById('root')!).render(
   <React.StrictMode>
-    <RootErrorBoundary>
+    <GlobalErrorBoundary label="RootProviderBoundary">
       <WagmiProvider config={wagmiConfig}>
         <QueryClientProvider client={queryClient}>
           <RainbowKitProvider
@@ -28,10 +28,12 @@ ReactDOM.createRoot(document.getElementById('root')!).render(
             })}
             modalSize="compact"
           >
-            <App />
+            <GlobalErrorBoundary label="AppBoundary">
+              <App />
+            </GlobalErrorBoundary>
           </RainbowKitProvider>
         </QueryClientProvider>
       </WagmiProvider>
-    </RootErrorBoundary>
+    </GlobalErrorBoundary>
   </React.StrictMode>,
 );

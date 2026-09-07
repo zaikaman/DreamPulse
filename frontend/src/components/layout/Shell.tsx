@@ -1,14 +1,16 @@
 import React, { useState, Suspense } from "react";
-import { Header } from "./Header";
-import { Sidebar } from "./Sidebar";
-import { cn } from "../../lib/utils";
-import type { DashboardViewType } from "../landing/CinematicHero";
-import type { Market } from "../../types/index";
+import { Header } from "./Header.js";
+import { Sidebar } from "./Sidebar.js";
+import { cn } from "../../lib/utils.js";
+import type { DashboardViewType } from "../landing/CinematicHero.js";
+import type { Market } from "../../types/index.js";
+import { ViewErrorBoundary } from "../common/ViewErrorBoundary.js";
+import { lazyWithRetry } from "../../lib/lazy-with-retry.js";
 
-// PERF-08: Silk pulls in three + @react-three/fiber (~600KB). Lazy-load it so
-// the WebGL bundle splits into its own chunk and First Contentful Paint isn't
-// blocked by shader code the shell doesn't need synchronously.
-const Silk = React.lazy(() => import("../ui/Silk"));
+// PERF-08: Silk pulls in three + @react-three/fiber (~600KB). Lazy-load with retry so
+// the WebGL bundle splits into its own chunk, handles transient network drops, and
+// First Contentful Paint isn't blocked by shader code the shell doesn't need synchronously.
+const Silk = lazyWithRetry(() => import("../ui/Silk.js"));
 
 interface ShellProps {
   currentView: DashboardViewType;
@@ -102,19 +104,27 @@ export const Shell: React.FC<ShellProps> = ({
       {/* Ambient Silk Shader Dynamic Canvas Background */}
       <div className="fixed inset-0 pointer-events-none z-0 overflow-hidden select-none">
         <div className="absolute -top-[10%] -left-[10%] w-[120vw] h-[120vh] opacity-60 dark:opacity-50 transition-opacity duration-700">
-          <Suspense
-            fallback={
+          <ViewErrorBoundary
+            viewName="Ambient Canvas"
+            variant="minimal"
+            fallback={() => (
               <div className="w-full h-full bg-gradient-to-b from-secondary/15 via-background/40 to-background/80" />
-            }
+            )}
           >
-            <Silk
-              speed={10}
-              scale={0.9}
-              color="#59677b"
-              noiseIntensity={1}
-              rotation={0}
-            />
-          </Suspense>
+            <Suspense
+              fallback={
+                <div className="w-full h-full bg-gradient-to-b from-secondary/15 via-background/40 to-background/80" />
+              }
+            >
+              <Silk
+                speed={10}
+                scale={0.9}
+                color="#59677b"
+                noiseIntensity={1}
+                rotation={0}
+              />
+            </Suspense>
+          </ViewErrorBoundary>
         </div>
         {/* Subtle gradient vignette to preserve high contrast and readability */}
         <div className="absolute inset-0 bg-gradient-to-b from-background/20 via-background/40 to-background/70" />

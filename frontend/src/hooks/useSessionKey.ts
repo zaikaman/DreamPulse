@@ -159,6 +159,11 @@ export function useSessionKey(): UseSessionKeyReturn {
 
   // Track the wallet we last validated for — used to detect mismatch/tamper
   const lastValidatedWalletRef = useRef<Address | null>(null);
+  // Ref tracking current wallet state for event callbacks without triggering resubscription
+  const walletRef = useRef<WalletState>(wallet);
+  useEffect(() => {
+    walletRef.current = wallet;
+  }, [wallet]);
 
   // Purge legacy plaintext storage once on mount (defense for users upgrading from vulnerable builds)
   useEffect(() => {
@@ -912,22 +917,21 @@ export function useSessionKey(): UseSessionKeyReturn {
           disconnectWallet();
         } else {
           const newAddress = accounts[0] as Address;
-          setWallet((prev) => {
-            if (prev.isConnected && prev.address?.toLowerCase() === newAddress.toLowerCase()) {
-              return prev;
-            }
-            // Address actually changed -> invalidate previous session
-            setActiveSession(null);
-            lastValidatedWalletRef.current = null;
-            refreshBalances(newAddress);
-            fetchActiveSession(newAddress);
-            refreshAllowanceStatus().catch(() => {});
-            return {
-              ...prev,
-              isConnected: true,
-              address: newAddress,
-            };
-          });
+          const currentWallet = walletRef.current;
+          if (currentWallet.isConnected && currentWallet.address?.toLowerCase() === newAddress.toLowerCase()) {
+            return;
+          }
+          // Address actually changed -> invalidate previous session and execute side-effects outside state updater
+          setActiveSession(null);
+          lastValidatedWalletRef.current = null;
+          setWallet((prev) => ({
+            ...prev,
+            isConnected: true,
+            address: newAddress,
+          }));
+          refreshBalances(newAddress);
+          fetchActiveSession(newAddress);
+          refreshAllowanceStatus().catch(() => {});
         }
       },
       onChainChanged: (chainIdHex) => {

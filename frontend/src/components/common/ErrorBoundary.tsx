@@ -1,11 +1,4 @@
 import React from 'react';
-import {
-  ArrowPathIcon,
-  ExclamationTriangleIcon,
-  HomeIcon,
-  WifiIcon,
-} from '@heroicons/react/24/outline';
-import { Spinner } from '../ui/Spinner.js';
 import { isChunkLoadError } from '../../lib/lazy-with-retry.js';
 
 // ---------------------------------------------------------------------------
@@ -107,7 +100,7 @@ export class ErrorBoundary extends React.Component<ErrorBoundaryProps, ErrorBoun
 // Shared fallback chrome (keeps glass-card / heroicon visual language)
 // ---------------------------------------------------------------------------
 
-function ErrorDetails({ error, errorInfo }: { error: Error; errorInfo: React.ErrorInfo | null }): JSX.Element {
+export function ErrorDetails({ error, errorInfo }: { error: Error; errorInfo: React.ErrorInfo | null }): JSX.Element {
   return (
     <details
       style={{
@@ -139,7 +132,7 @@ function ErrorDetails({ error, errorInfo }: { error: Error; errorInfo: React.Err
   );
 }
 
-function ActionButton({
+export function ActionButton({
   onClick,
   icon,
   label,
@@ -189,7 +182,7 @@ function ActionButton({
   );
 }
 
-function errorCopy(error: Error): { title: string; body: string; chunk: boolean } {
+export function errorCopy(error: Error): { title: string; body: string; chunk: boolean } {
   const chunk = isChunkLoadError(error);
   if (chunk) {
     return {
@@ -206,259 +199,15 @@ function errorCopy(error: Error): { title: string; body: string; chunk: boolean 
 }
 
 // ---------------------------------------------------------------------------
-// RootErrorBoundary — last-resort full-viewport fallback for main.tsx
+// Re-exports for root and view error boundaries
 // ---------------------------------------------------------------------------
 
-export const RootErrorBoundary: React.FC<{
-  children: React.ReactNode;
-  onNavigateHome?: () => void;
-}> = ({ children, onNavigateHome }) => (
-  <ErrorBoundary
-    label="RootErrorBoundary"
-    fallback={({ error, errorInfo, reset }) => {
-      const copy = errorCopy(error);
-      return (
-        <div
-          role="alert"
-          style={{
-            minHeight: '100vh',
-            minWidth: '100vw',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            padding: '24px',
-            background:
-              'radial-gradient(1200px 600px at 50% -10%, rgba(0,255,204,0.08), transparent 60%), #090c13',
-            color: '#e7ecf3',
-          }}
-        >
-          <div
-            className="glass-card"
-            style={{
-              maxWidth: '620px',
-              width: '100%',
-              padding: '40px 36px',
-              borderRadius: '20px',
-              display: 'flex',
-              flexDirection: 'column',
-              alignItems: 'center',
-              textAlign: 'center',
-              gap: '14px',
-            }}
-          >
-            {copy.chunk ? (
-              <WifiIcon width={40} height={40} style={{ color: 'var(--trade-anomaly, #ffb700)' }} />
-            ) : (
-              <ExclamationTriangleIcon
-                width={40}
-                height={40}
-                style={{ color: 'var(--trade-no, #ff3366)' }}
-              />
-            )}
-            <p
-              style={{
-                fontSize: '11px',
-                letterSpacing: '0.22em',
-                textTransform: 'uppercase',
-                color: 'var(--muted-foreground, #a1a1aa)',
-                fontFamily: 'var(--font-mono, monospace)',
-              }}
-            >
-              DreamPulse Console
-            </p>
-            <h1 style={{ fontSize: '22px', fontWeight: 700, margin: 0 }}>{copy.title}</h1>
-            <p
-              style={{
-                fontSize: '13px',
-                lineHeight: 1.6,
-                color: 'var(--muted-foreground, #a1a1aa)',
-                margin: 0,
-                maxWidth: '480px',
-              }}
-            >
-              {copy.body}
-            </p>
-            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '10px', justifyContent: 'center', marginTop: '6px' }}>
-              <ActionButton
-                primary
-                onClick={reset}
-                icon={<ArrowPathIcon width={15} height={15} />}
-                label="Try again"
-              />
-              <ActionButton
-                onClick={() => window.location.reload()}
-                icon={<ArrowPathIcon width={15} height={15} />}
-                label="Reload app"
-              />
-              {onNavigateHome ? (
-                <ActionButton
-                  onClick={() => {
-                    reset();
-                    onNavigateHome();
-                  }}
-                  icon={<HomeIcon width={15} height={15} />}
-                  label="Back to Overview"
-                />
-              ) : null}
-            </div>
-            <ErrorDetails error={error} errorInfo={errorInfo} />
-          </div>
-        </div>
-      );
-    }}
-  >
-    {children}
-  </ErrorBoundary>
-);
+import { GlobalErrorBoundary } from './GlobalErrorBoundary.js';
+export { GlobalErrorBoundary };
+export { ViewErrorBoundary, ViewLoadingFallback } from './ViewErrorBoundary.js';
 
-// ---------------------------------------------------------------------------
-// ViewErrorBoundary — scoped fallback for one lazy dashboard view / dialog
-// ---------------------------------------------------------------------------
+/**
+ * RootErrorBoundary aliases GlobalErrorBoundary for full backward compatibility.
+ */
+export const RootErrorBoundary = GlobalErrorBoundary;
 
-export const ViewErrorBoundary: React.FC<{
-  children: React.ReactNode;
-  /** Human label shown in the fallback, e.g. "Analytics". */
-  viewName: string;
-  /** Auto-reset when these change (pass the active view so nav recovers). */
-  resetKeys?: unknown[];
-  /** Compact chrome for modal Suspense blocks; defaults to the card layout. */
-  variant?: 'card' | 'minimal';
-  onNavigateHome?: () => void;
-}> = ({ children, viewName, resetKeys, variant = 'card', onNavigateHome }) => (
-  <ErrorBoundary
-    label={`ViewErrorBoundary:${viewName}`}
-    resetKeys={resetKeys ?? [viewName]}
-    fallback={({ error, errorInfo, reset }) => {
-      const copy = errorCopy(error);
-      if (variant === 'minimal') {
-        return (
-          <div
-            role="alert"
-            className="glass-card"
-            style={{
-              padding: '14px 16px',
-              borderRadius: '12px',
-              display: 'flex',
-              alignItems: 'center',
-              gap: '12px',
-              fontSize: '12px',
-              color: 'var(--muted-foreground, #a1a1aa)',
-            }}
-          >
-            <ExclamationTriangleIcon
-              width={18}
-              height={18}
-              style={{ flexShrink: 0, color: 'var(--trade-anomaly, #ffb700)' }}
-            />
-            <span style={{ flex: 1 }}>
-              {viewName} failed to load{copy.chunk ? ' (network hiccup)' : ''}.
-            </span>
-            <button
-              type="button"
-              onClick={reset}
-              style={{
-                display: 'inline-flex',
-                alignItems: 'center',
-                gap: '6px',
-                padding: '6px 12px',
-                borderRadius: '999px',
-                fontSize: '12px',
-                fontWeight: 600,
-                color: '#fff',
-                background: 'rgba(0,255,204,0.12)',
-                border: '1px solid rgba(0,255,204,0.35)',
-                cursor: 'pointer',
-              }}
-            >
-              <ArrowPathIcon width={13} height={13} />
-              <span>Retry</span>
-            </button>
-          </div>
-        );
-      }
-      return (
-        <div
-          role="alert"
-          className="glass-card"
-          style={{
-            minHeight: '340px',
-            display: 'flex',
-            flexDirection: 'column',
-            alignItems: 'center',
-            justifyContent: 'center',
-            textAlign: 'center',
-            gap: '12px',
-            padding: '40px 24px',
-            borderRadius: '16px',
-          }}
-        >
-          {copy.chunk ? (
-            <WifiIcon width={32} height={32} style={{ color: 'var(--trade-anomaly, #ffb700)' }} />
-          ) : (
-            <ExclamationTriangleIcon
-              width={32}
-              height={32}
-              style={{ color: 'var(--trade-no, #ff3366)' }}
-            />
-          )}
-          <h2 style={{ fontSize: '16px', fontWeight: 700, margin: 0 }}>
-            {viewName} {copy.chunk ? 'was interrupted' : 'ran into a problem'}
-          </h2>
-          <p
-            style={{
-              fontSize: '12px',
-              lineHeight: 1.6,
-              color: 'var(--muted-foreground, #a1a1aa)',
-              margin: 0,
-              maxWidth: '420px',
-            }}
-          >
-            {copy.body}
-          </p>
-          <div style={{ display: 'flex', flexWrap: 'wrap', gap: '10px', justifyContent: 'center', marginTop: '4px' }}>
-            <ActionButton
-              primary
-              onClick={reset}
-              icon={<ArrowPathIcon width={15} height={15} />}
-              label={`Reload ${viewName}`}
-            />
-            {onNavigateHome ? (
-              <ActionButton
-                onClick={() => {
-                  reset();
-                  onNavigateHome();
-                }}
-                icon={<HomeIcon width={15} height={15} />}
-                label="Back to Overview"
-              />
-            ) : null}
-          </div>
-          <ErrorDetails error={error} errorInfo={errorInfo} />
-        </div>
-      );
-    }}
-  >
-    {children}
-  </ErrorBoundary>
-);
-
-// ---------------------------------------------------------------------------
-// ViewLoadingFallback — single shared Suspense skeleton for lazy views
-// ---------------------------------------------------------------------------
-
-export const ViewLoadingFallback: React.FC<{ label: string }> = ({ label }) => (
-  <div
-    className="glass-card"
-    style={{
-      minHeight: '340px',
-      display: 'flex',
-      flexDirection: 'column',
-      alignItems: 'center',
-      justifyContent: 'center',
-      gap: '12px',
-    }}
-  >
-    <Spinner size="lg" />
-    <span style={{ fontSize: '13px', color: 'var(--muted-foreground)' }}>Loading {label}...</span>
-  </div>
-);
