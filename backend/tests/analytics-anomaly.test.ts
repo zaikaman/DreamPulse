@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach, vi } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { AnomalyService, anomalyService, normalizeMarketSymbol } from '../src/services/anomaly-service.js';
 import { analyticsService } from '../src/services/analytics-service.js';
 import { orderService } from '../src/services/order-service.js';
@@ -30,6 +30,10 @@ describe('AnalyticsService & AnomalyService Comprehensive Suite', () => {
 
     beforeEach(() => {
       service = new AnomalyService(0.03);
+    });
+
+    afterEach(() => {
+      service.stop();
     });
 
     it('returns null for closed or resolved markets', () => {
@@ -156,6 +160,123 @@ describe('AnalyticsService & AnomalyService Comprehensive Suite', () => {
       service.evaluateMarket(mockOpenMarket, 2500);
       expect(getSpotTickerSpy).toHaveBeenCalledWith('ETH/USD');
       getSpotTickerSpy.mockRestore();
+    });
+
+    it('BE-BUG-09: prunes cached anomalies when evaluateMarket is called for closed, resolving, or expired markets', () => {
+      // 1. Detect and cache an active anomaly
+      const highEdgeMarket: Market = {
+        ...mockOpenMarket,
+        id: 'market-leak-test-1',
+        bestBidYes: 0.10,
+        bestAskYes: 0.12,
+      };
+      const report = service.evaluateMarket(highEdgeMarket, 2600);
+      expect(report).not.toBeNull();
+      expect(service.getCacheSize()).toBe(1);
+
+      // 2. Calling evaluateMarket with status: 'Closed' prunes it from cache
+      const closedMarket: Market = {
+        ...highEdgeMarket,
+        status: 'Closed',
+      };
+      const closedResult = service.evaluateMarket(closedMarket, 2600);
+      expect(closedResult).toBeNull();
+      expect(service.getCacheSize()).toBe(0);
+      expect(service.getActiveAnomalies()).toHaveLength(0);
+
+      // 3. Re-add and verify expired closeTimestamp also prunes
+      service.evaluateMarket(highEdgeMarket, 2600);
+      expect(service.getCacheSize()).toBe(1);
+
+      const expiredMarket: Market = {
+        ...highEdgeMarket,
+        closeTimestamp: new Date(Date.now() - 5000).toISOString(),
+      };
+      service.evaluateMarket(expiredMarket, 2600);
+      expect(service.getCacheSize()).toBe(0);
+    });
+
+    it('BE-BUG-09: prunes entries via pruneMarket, pruneMarkets, and pruneResolvedOrCancelled', () => {
+      const market1: Market = { ...mockOpenMarket, id: 'market-prune-1', bestBidYes: 0.10, bestAskYes: 0.12 };
+      const market2: Market = { ...mockOpenMarket, id: 'market-prune-2', bestBidYes: 0.10, bestAskYes: 0.12 };
+      const market3: Market = { ...mockOpenMarket, id: 'market-prune-3', bestBidYes: 0.10, bestAskYes: 0.12 };
+
+      service.evaluateMarket(market1, 2600);
+      service.evaluateMarket(market2, 2600);
+      service.evaluateMarket(market3, 2600);
+      expect(service.getCacheSize()).toBe(3);
+
+      // Explicit single prune
+      expect(service.pruneMarket('market-prune-1')).toBe(true);
+      expect(service.getCacheSize()).toBe(2);
+
+      // Batch prune by status transition
+      const prunedCount = service.pruneResolvedOrCancelled([
+        { id: 'market-prune-2', status: 'RESOLVED' },
+        { id: 'market-prune-3', status: 'CANCELLED' },
+      ]);
+      expect(prunedCount).toBe(2);
+      expect(service.getCacheSize()).toBe(0);
+    });
+
+    it('BE-BUG-09: prunes inactive markets absent from active market feed via pruneInactiveMarkets', () => {
+      const marketA: Market = { ...mockOpenMarket, id: 'market-active-a', bestBidYes: 0.10, bestAskYes: 0.12 };
+      const marketB: Market = { ...mockOpenMarket, id: 'market-stale-b', bestBidYes: 0.10, bestAskYes: 0.12 };
+
+      service.evaluateMarket(marketA, 2600);
+      service.evaluateMarket(marketB, 2600);
+      expect(service.getCacheSize()).toBe(2);
+
+      // Only market-active-a is in active feed
+      const activeIds = new Set(['market-active-a']);
+      const pruned = service.pruneInactiveMarkets(activeIds);
+      expect(pruned).toBe(1);
+      expect(service.getCacheSize()).toBe(1);
+      expect(service.getActiveAnomalies()[0].marketId).toBe('market-active-a');
+    });
+
+    it('BE-BUG-09: prunes expired anomalies on TTL expiration and lazy getActiveAnomalies check', () => {
+      const shortTtlService = new AnomalyService(0.03, { ttlMs: 50, autoCleanup: false });
+      const market: Market = { ...mockOpenMarket, id: 'market-ttl-1', bestBidYes: 0.10, bestAskYes: 0.12 };
+
+      shortTtlService.evaluateMarket(market, 2600);
+      expect(shortTtlService.getCacheSize()).toBe(1);
+
+      // Advance time beyond TTL
+      const future = Date.now() + 100;
+      const pruned = shortTtlService.pruneExpired(future);
+      expect(pruned).toBe(1);
+      expect(shortTtlService.getCacheSize()).toBe(0);
+
+      // Also test lazy purge via getActiveAnomalies
+      shortTtlService.evaluateMarket(market, 2600);
+      expect(shortTtlService.getCacheSize()).toBe(1);
+
+      // Fast-forward TTL via spy on Date.now
+      const nowSpy = vi.spyOn(Date, 'now').mockReturnValue(Date.now() + 200);
+      const active = shortTtlService.getActiveAnomalies();
+      expect(active).toHaveLength(0);
+      expect(shortTtlService.getCacheSize()).toBe(0);
+      nowSpy.mockRestore();
+
+      shortTtlService.stop();
+    });
+
+    it('BE-BUG-09: emits anomaly_removed and anomalies_pruned events on lifecycle eviction', () => {
+      const removedSpy = vi.fn();
+      const prunedSpy = vi.fn();
+      service.on('anomaly_removed', removedSpy);
+      service.on('anomalies_pruned', prunedSpy);
+
+      const market: Market = { ...mockOpenMarket, id: 'market-events-1', bestBidYes: 0.10, bestAskYes: 0.12 };
+      service.evaluateMarket(market, 2600);
+
+      service.pruneMarket('market-events-1');
+      expect(removedSpy).toHaveBeenCalledWith({ marketId: 'market-events-1' });
+
+      service.evaluateMarket(market, 2600);
+      service.pruneMarkets(['market-events-1']);
+      expect(prunedSpy).toHaveBeenCalledWith(expect.objectContaining({ prunedCount: 1 }));
     });
   });
 

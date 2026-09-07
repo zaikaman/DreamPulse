@@ -5,6 +5,7 @@ import { SOMNIA_ADDRESSES, somniaExchange, MARKET_STATUS } from '../config/somni
 import { env } from '../config/env.js';
 import { getServiceSupabase, supabase, isPersistenceEnabled } from '../config/supabase.js';
 import { priceFeedService, type SpotTicker } from './price-feed-service.js';
+import { anomalyService } from './anomaly-service.js';
 import type { UnifiedMarket, UnifiedOrderBook, BinaryMarket, BinaryOrderBook } from '@somnia-chain/markets-sdk';
 import type { Address, Hex } from 'viem';
 
@@ -115,6 +116,9 @@ export class MarketService extends EventEmitter {
       const firstKey = this.historicalMarkets.keys().next().value;
       if (firstKey) this.historicalMarkets.delete(firstKey);
     }
+    // BE-BUG-09: Prune any active anomalies cached for this market ID upon archiving/finalizing
+    anomalyService.pruneMarket(market.id);
+    this.emit('market_archived', { marketId: market.id, status: market.status });
   }
 
   /**
@@ -669,6 +673,8 @@ export class MarketService extends EventEmitter {
           const ticker = this.spotPrices.get(market.symbol);
           market.settlementPrice = ticker?.price || market.strikePrice;
         }
+        // BE-BUG-09: Prune anomalies when market transitions out of Open to Resolving
+        anomalyService.pruneMarket(id);
         void import('./order-service.js').then((mod) => {
           void mod.orderService.syncResolvedOrdersPnLAsync({ force: true });
         }).catch(() => {});
