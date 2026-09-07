@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import {
   BoltIcon,
   CheckCircleIcon,
@@ -100,6 +100,11 @@ export const TraderCockpitTicket: React.FC<TraderCockpitTicketProps> = ({
   const [amountInput, setAmountInput] = useState<string>('10');
   const [isManualPrice, setIsManualPrice] = useState<boolean>(false);
 
+  // Tracking refs to safely recalibrate price on outcome toggles and prevent cross-market pollution
+  const prevOutcomeRef = useRef<'YES' | 'NO'>(outcome);
+  const prevMarketIdRef = useRef<string>(market.id);
+  const lastPrefillTimestampRef = useRef<number | null>(null);
+
   // Execution State
   const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
   const [executionError, setExecutionError] = useState<string | null>(null);
@@ -144,7 +149,9 @@ export const TraderCockpitTicket: React.FC<TraderCockpitTicketProps> = ({
 
   // Handle Ladder prefill triggers
   useEffect(() => {
-    if (prefillData) {
+    if (prefillData && prefillData.timestamp !== lastPrefillTimestampRef.current) {
+      lastPrefillTimestampRef.current = prefillData.timestamp;
+      prevOutcomeRef.current = prefillData.outcome;
       setOutcome(prefillData.outcome);
       setPrice(Number(prefillData.price.toFixed(2)));
       setIsManualPrice(true);
@@ -162,13 +169,39 @@ export const TraderCockpitTicket: React.FC<TraderCockpitTicketProps> = ({
     }
   }, [prefillData, sizingMode]);
 
-  // Adjust price automatically when switching outcomes in IOC mode
+  // Adjust price automatically when switching outcomes in IOC mode or recalibrate manual price
+  // to complementary value (1.0 - currentPrice) to prevent pricing inversion risk (FE-BUG-07)
   useEffect(() => {
-    if (!isManualPrice) {
+    // If market switched, reset manual price override and re-seed from order book
+    if (prevMarketIdRef.current !== market.id) {
+      prevMarketIdRef.current = market.id;
+      setIsManualPrice(false);
+      const defaultPrice = outcome === 'YES' ? defaultUpPrice : defaultDownPrice;
+      setPrice(defaultPrice);
+      prevOutcomeRef.current = outcome;
+      return;
+    }
+
+    const isOutcomeToggled = prevOutcomeRef.current !== outcome;
+    prevOutcomeRef.current = outcome;
+
+    if (isOutcomeToggled) {
+      if (isManualPrice && price !== null && !isNaN(price) && price > 0 && price < 1) {
+        // Recalibrate manual price to complementary value (1.0 - currentPrice) to prevent inversion risk
+        const invertedPrice = Math.max(0.01, Math.min(0.99, Number((1.0 - price).toFixed(2))));
+        setPrice(invertedPrice);
+      } else {
+        // Fall back to market best ask for the toggled outcome
+        const defaultPrice = outcome === 'YES' ? defaultUpPrice : defaultDownPrice;
+        setPrice(defaultPrice);
+        setIsManualPrice(false);
+      }
+    } else if (!isManualPrice) {
+      // Keep tracking market best ask updates when not in manual price mode
       const defaultPrice = outcome === 'YES' ? defaultUpPrice : defaultDownPrice;
       setPrice(defaultPrice);
     }
-  }, [outcome, defaultUpPrice, defaultDownPrice, isManualPrice]);
+  }, [outcome, defaultUpPrice, defaultDownPrice, isManualPrice, price, market.id]);
 
   // Available collateral balance
   const userBalance = useMemo(() => {
@@ -563,7 +596,7 @@ export const TraderCockpitTicket: React.FC<TraderCockpitTicketProps> = ({
           <div className="flex items-center justify-between text-[11px] font-mono mb-1.5 px-0.5 text-muted-foreground">
             <span>
               Receives: <strong className="text-foreground">{calculations.lotSize.toLocaleString()} {calculations.lotSize === 1 ? 'Share' : 'Shares'}</strong>
-              <span className="text-[10px] text-muted-foreground/80"> (~${calculations.validPrice.toFixed(2)}/sh)</span>
+              <span className="text-[10px] text-muted-foreground/80"> (~${calculations.validPrice.toFixed(2)}/sh{isManualPrice ? ' · Limit' : ''})</span>
             </span>
             <span>
               Actual Cost: <strong className="text-brand-cyan">${calculations.totalCost.toFixed(2)} tUSDC</strong>
@@ -664,8 +697,12 @@ export const TraderCockpitTicket: React.FC<TraderCockpitTicketProps> = ({
         <button
           type="button"
           onClick={() => {
-            setOutcome('YES');
-            setIsManualPrice(false);
+            if (outcome !== 'YES') {
+              setOutcome('YES');
+            } else if (isManualPrice) {
+              setIsManualPrice(false);
+              setPrice(defaultUpPrice);
+            }
           }}
           className={cn(
             "flex flex-col p-3 rounded-xl border transition-all cursor-pointer text-left relative overflow-hidden",
@@ -701,8 +738,12 @@ export const TraderCockpitTicket: React.FC<TraderCockpitTicketProps> = ({
         <button
           type="button"
           onClick={() => {
-            setOutcome('NO');
-            setIsManualPrice(false);
+            if (outcome !== 'NO') {
+              setOutcome('NO');
+            } else if (isManualPrice) {
+              setIsManualPrice(false);
+              setPrice(defaultDownPrice);
+            }
           }}
           className={cn(
             "flex flex-col p-3 rounded-xl border transition-all cursor-pointer text-left relative overflow-hidden",
@@ -912,7 +953,7 @@ export const TraderCockpitTicket: React.FC<TraderCockpitTicketProps> = ({
             </span>
             {calculations && (
               <span className="block text-[9px] text-muted-foreground/80">
-                @ ${calculations.validPrice.toFixed(2)} / share
+                @ ${calculations.validPrice.toFixed(2)} / share{isManualPrice ? ' (Limit)' : ''}
               </span>
             )}
           </div>
