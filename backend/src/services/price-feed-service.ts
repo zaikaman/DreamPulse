@@ -30,6 +30,20 @@ const COINBASE_PAIRS: Record<string, string> = {
   'ETH/USD': 'ETH-USD',
 };
 
+export interface RealPriceHistoryPoint {
+  time: number;
+  price: number;
+  source: 'live-tick' | 'exchange-kline';
+}
+
+export interface RealPriceHistoryResult {
+  points: RealPriceHistoryPoint[];
+  sources: Array<'live-tick' | 'exchange-kline'>;
+  isPartial: boolean;
+  from: number | null;
+  to: number | null;
+}
+
 export class PriceFeedService extends EventEmitter {
   private spotPrices: Map<string, SpotTicker> = new Map();
   private ws: WebSocket | null = null;
@@ -316,6 +330,128 @@ export class PriceFeedService extends EventEmitter {
   }
 
   private historicalPriceCache = new Map<string, number>();
+  private priceHistoryKlinesCache = new Map<string, { at: number; points: Array<{ time: number; price: number }> }>();
+  private static readonly PRICE_HISTORY_CACHE_TTL_MS = 10_000;
+
+  /**
+   * Returns REAL historical spot prices for charting — no synthesis.
+   * Combines the in-memory live-tick ring buffer (Binance WS / Coinbase REST,
+   * up to ~600 recent ticks) with Binance exchange klines (close prices) to
+   * backfill depth beyond the live buffer. Never fabricates points: when the
+   * exchange is unreachable only the locally observed ticks are returned with
+   * isPartial=true so the UI can render an explicit "Recent Trades Only" view.
+   */
+  public async getRealPriceHistory(
+    symbol: string,
+    lookbackSec: number,
+    maxPoints = 120,
+  ): Promise<RealPriceHistoryResult> {
+    const clampedLookback = Math.min(86400, Math.max(60, Math.floor(lookbackSec) || 300));
+    const clampedMax = Math.min(500, Math.max(10, Math.floor(maxPoints) || 120));
+    const now = Date.now();
+    const since = now - clampedLookback * 1000;
+
+    const liveTicks = (this.spotPrices.get(symbol)?.priceHistory || [])
+      .filter((p) => p.timestamp >= since && p.price > 0)
+      .map((p) => ({ time: p.timestamp, price: p.price, source: 'live-tick' as const }));
+
+    const oldestLive = liveTicks.length > 0 ? liveTicks[0].time : null;
+    const liveCoversFullRange = oldestLive != null && oldestLive <= since + 5000;
+
+    const downsample = <T>(arr: T[]): T[] => {
+      if (arr.length <= clampedMax) return arr;
+      const out: T[] = [];
+      const step = (arr.length - 1) / (clampedMax - 1);
+      for (let i = 0; i < clampedMax; i++) {
+        out.push(arr[Math.min(arr.length - 1, Math.round(i * step))]);
+      }
+      return out;
+    };
+
+    // Live buffer already covers the requested window — pure live ticks.
+    if (liveCoversFullRange) {
+      const points = downsample(liveTicks);
+      return {
+        points,
+        sources: ['live-tick'],
+        isPartial: false,
+        from: points[0]?.time ?? null,
+        to: points[points.length - 1]?.time ?? null,
+      };
+    }
+
+    // Backfill older depth from Binance exchange klines (real close prices).
+    const interval = clampedLookback <= 3600 ? '1m' : clampedLookback <= 14400 ? '3m' : '15m';
+    const binanceSymbol = REVERSE_SYMBOL_MAPPINGS[symbol] || symbol.replace('/', '');
+    const cacheKey = `${binanceSymbol}:${interval}:${Math.floor(since / 60000)}:${clampedLookback}`;
+    const cached = this.priceHistoryKlinesCache.get(cacheKey);
+    let klinePoints: Array<{ time: number; price: number; source: 'exchange-kline' }> | null =
+      cached && now - cached.at < PriceFeedService.PRICE_HISTORY_CACHE_TTL_MS
+        ? cached.points.map((p) => ({ ...p, source: 'exchange-kline' as const }))
+        : null;
+
+    if (!klinePoints) {
+      try {
+        const url =
+          `https://api.binance.com/api/v3/klines?symbol=${encodeURIComponent(binanceSymbol)}` +
+          `&interval=${interval}&startTime=${since}&endTime=${now}&limit=1000`;
+        const controller = new AbortController();
+        const timeout = setTimeout(() => controller.abort(), 4000);
+        const res = await fetch(url, { signal: controller.signal });
+        clearTimeout(timeout);
+        if (res.ok) {
+          const klines = (await res.json()) as Array<Array<string | number>>;
+          if (Array.isArray(klines)) {
+            const parsed = klines
+              .map((k) => ({
+                time: Number(k[0]),
+                price: parseFloat(String(k[4])),
+              }))
+              .filter((p) => Number.isFinite(p.time) && Number.isFinite(p.price) && p.price > 0 && p.time >= since - 60000)
+              .sort((a, b) => a.time - b.time)
+              .map((p) => ({ ...p, source: 'exchange-kline' as const }));
+            klinePoints = parsed;
+            if (this.priceHistoryKlinesCache.size > 200) {
+              const firstKey = this.priceHistoryKlinesCache.keys().next().value;
+              if (firstKey) this.priceHistoryKlinesCache.delete(firstKey);
+            }
+            this.priceHistoryKlinesCache.set(cacheKey, { at: now, points: parsed });
+          }
+        }
+      } catch {
+        klinePoints = null;
+      }
+    }
+
+    if (!klinePoints || klinePoints.length === 0) {
+      // Exchange unreachable: return only locally observed real ticks.
+      const points = downsample(liveTicks);
+      return {
+        points,
+        sources: liveTicks.length > 0 ? ['live-tick'] : [],
+        isPartial: true,
+        from: points[0]?.time ?? null,
+        to: points[points.length - 1]?.time ?? null,
+      };
+    }
+
+    // Merge: klines for older depth + live ticks newer than the last kline.
+    const lastKlineTime = klinePoints[klinePoints.length - 1].time;
+    const freshTicks = liveTicks.filter((t) => t.time > lastKlineTime);
+    const merged = downsample([...klinePoints, ...freshTicks]);
+    const sources: Array<'live-tick' | 'exchange-kline'> = [
+      'exchange-kline',
+      ...(freshTicks.length > 0 ? ['live-tick' as const] : []),
+    ];
+    return {
+      points: merged,
+      sources,
+      // Partial when neither source reaches back to the requested window start.
+      isPartial: merged.length === 0 || (merged[0]?.time ?? now) > since + 120_000,
+      from: merged[0]?.time ?? null,
+      to: merged[merged.length - 1]?.time ?? null,
+    };
+  }
 
   /**
    * Fetches historical close price for a symbol at a specific timestamp (used for accurate post-expiry settlement).

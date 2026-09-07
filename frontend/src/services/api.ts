@@ -158,6 +158,27 @@ export const apiClient = {
     return fetchJson<{ success: boolean; data: Record<string, { symbol: string; price: number; change1m: number; change5m: number; high24h: number; low24h: number; volume24h: number; timestamp: number }> }>('/markets/spot');
   },
 
+  // Real spot price history (live ticks + exchange klines). Never synthesized —
+  // when isPartial is true only locally observed ticks were available.
+  async getPriceHistory(symbol: string, lookbackSec: number, maxPoints = 120): Promise<{
+    success: boolean;
+    symbol: string;
+    lookbackSec: number;
+    count: number;
+    points: Array<{ time: number; price: number }>;
+    sources: Array<'live-tick' | 'exchange-kline'>;
+    isPartial: boolean;
+    from: number | null;
+    to: number | null;
+  }> {
+    const qp = new URLSearchParams({
+      symbol,
+      lookbackSec: String(lookbackSec),
+      maxPoints: String(maxPoints),
+    });
+    return fetchJson(`/markets/price-history?${qp.toString()}`);
+  },
+
   async getFuturePools(params?: { horizonHours?: number; window?: string }): Promise<{ success: boolean; count: number; pools: string[]; horizonHours: number }> {
     const qp = new URLSearchParams();
     if (params?.horizonHours) qp.append('horizonHours', params.horizonHours.toString());

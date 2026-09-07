@@ -73,6 +73,39 @@ apiRouter.get('/markets/spot', (_req: Request, res: Response) => {
   });
 });
 
+// Real spot price history for event-contract charts — live ticks + exchange
+// klines only. Never synthesizes data: when exchange backfill is unavailable
+// the response contains only locally observed ticks with isPartial=true so
+// the frontend renders an explicit "Recent Trades Only" view.
+apiRouter.get('/markets/price-history', async (req: Request, res: Response) => {
+  try {
+    const symbol = typeof req.query.symbol === 'string' ? req.query.symbol : '';
+    if (!symbol || !symbol.includes('/')) {
+      return res.status(400).json({ success: false, error: 'Missing or invalid symbol parameter (e.g. BTC/USD)' });
+    }
+    const lookbackSec = req.query.lookbackSec !== undefined
+      ? Math.min(86400, Math.max(60, parseInt(req.query.lookbackSec as string, 10) || 300))
+      : 300;
+    const maxPoints = req.query.maxPoints !== undefined
+      ? Math.min(500, Math.max(10, parseInt(req.query.maxPoints as string, 10) || 120))
+      : 120;
+    const history = await marketService.getPriceHistory(symbol, lookbackSec, maxPoints);
+    return res.json({
+      success: true,
+      symbol,
+      lookbackSec,
+      count: history.points.length,
+      points: history.points.map((p) => ({ time: p.time, price: p.price })),
+      sources: history.sources,
+      isPartial: history.isPartial,
+      from: history.from,
+      to: history.to,
+    });
+  } catch (err: any) {
+    return res.status(500).json({ success: false, error: err?.message || 'Failed to fetch price history' });
+  }
+});
+
 apiRouter.get('/markets/anomalies', (req: Request, res: Response) => {
   const threshold = req.query.threshold ? parseFloat(req.query.threshold as string) : undefined;
   const spotPrices = marketService.getAllSpotTickers();

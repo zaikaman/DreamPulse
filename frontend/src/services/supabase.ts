@@ -17,10 +17,71 @@ import { createClient, SupabaseClient, RealtimeChannel } from '@supabase/supabas
  * Private tables would return 0 rows under RLS and are blocked at the code level
  * to prevent accidental regression and noisy anon error logs.
  */
-const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || 'https://mock-project.supabase.co';
-const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY || 'mock-anon-key';
+const supabaseUrl = import.meta.env.VITE_SUPABASE_URL as string | undefined;
+const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY as string | undefined;
 
-export const supabaseBrowser: SupabaseClient = createClient(supabaseUrl, supabaseAnonKey, {
+export const isSupabaseConfigured = Boolean(supabaseUrl && supabaseAnonKey);
+export const supabaseConfigError: string | null = isSupabaseConfigured
+  ? null
+  : 'Missing VITE_SUPABASE_URL or VITE_SUPABASE_ANON_KEY — Supabase realtime/database is disabled until configured.';
+
+if (!isSupabaseConfigured) {
+  console.error(
+    '[Supabase] Missing VITE_SUPABASE_URL or VITE_SUPABASE_ANON_KEY. ' +
+      'Set them in your environment (Vercel project settings for preview deployments). ' +
+      'Supabase realtime/database calls will fail until configured.',
+  );
+}
+
+export const SUPABASE_CONFIG_BANNER_ID = 'dreampulse-supabase-config-banner';
+
+/**
+ * Injects a visible configuration error banner when Supabase env is missing,
+ * so misconfiguration fails loudly instead of silently querying a mock domain.
+ * Also dispatches `dreampulse:supabase-config-error` for React shells to render
+ * their own banner. Safe to call multiple times (idempotent).
+ */
+export function showSupabaseConfigBanner(): void {
+  if (isSupabaseConfigured || typeof window === 'undefined' || typeof document === 'undefined') return;
+  try {
+    window.dispatchEvent(
+      new CustomEvent('dreampulse:supabase-config-error', { detail: { message: supabaseConfigError } }),
+    );
+  } catch {}
+  try {
+    if (document.getElementById(SUPABASE_CONFIG_BANNER_ID)) return;
+    const banner = document.createElement('div');
+    banner.id = SUPABASE_CONFIG_BANNER_ID;
+    banner.setAttribute('role', 'alert');
+    banner.setAttribute(
+      'style',
+      'position:fixed;top:0;left:0;right:0;z-index:9999;' +
+        'background:#7f1d1d;color:#fecaca;font:600 13px/1.5 system-ui,sans-serif;' +
+        'padding:10px 16px;text-align:center;border-bottom:1px solid #ef4444;',
+    );
+    banner.textContent =
+      'Configuration error: VITE_SUPABASE_URL / VITE_SUPABASE_ANON_KEY is not set. ' +
+      'Database and realtime updates are disabled until configured.';
+    document.body?.prepend(banner);
+  } catch {}
+}
+
+if (typeof window !== 'undefined' && !isSupabaseConfigured) {
+  // Defer to after DOM parse so document.body exists when bundled via <script type="module">.
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', showSupabaseConfigBanner, { once: true });
+  } else {
+    showSupabaseConfigBanner();
+  }
+}
+
+// Placeholder keeps createClient from throwing at import time when env is missing.
+// All realtime helpers short-circuit to a noop channel below, and REST goes through
+// backend /api/v1/* — so this URL is never silently queried for real data.
+const effectiveSupabaseUrl = supabaseUrl ?? 'https://misconfigured.supabase.co';
+const effectiveSupabaseAnonKey = supabaseAnonKey ?? 'misconfigured-anon-key';
+
+export const supabaseBrowser: SupabaseClient = createClient(effectiveSupabaseUrl, effectiveSupabaseAnonKey, {
   auth: {
     persistSession: false,
     autoRefreshToken: false,
@@ -142,6 +203,10 @@ export function subscribeToTable<T = any>(
   onUpdate?: (payload: T) => void,
   onDelete?: (payload: T) => void,
 ): RealtimeChannel {
+  if (!isSupabaseConfigured) {
+    console.error(`[Supabase] subscribeToTable('${table}') skipped — Supabase env is not configured.`);
+    return createNoopChannel();
+  }
   if (!PUBLIC_REALTIME_TABLES.has(table) && PRIVATE_REALTIME_TABLES.has(table)) {
     console.warn(
       `[Supabase] Blocked anon realtime subscription to private table '${table}' — anon RLS denies it. Use subscribeToPrivateTable(userAddress, ...) after wallet-verify (sets auth.jwt()->>'user_address'). See 012_harden_rls_policies.sql.`,
@@ -196,6 +261,10 @@ export function subscribeToPrivateTable<T = any>(
   onDelete?: (payload: T) => void,
   addressField: string = 'user_address',
 ): RealtimeChannel {
+  if (!isSupabaseConfigured) {
+    console.error(`[Supabase] subscribeToPrivateTable('${table}') skipped — Supabase env is not configured.`);
+    return createNoopChannel();
+  }
   const lower = userAddress.toLowerCase();
   const needsJwt = PRIVATE_REALTIME_TABLES.has(table);
   if (needsJwt && !getStoredSupabaseJwt()) {

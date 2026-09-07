@@ -10,6 +10,7 @@ import type { Market, AgentThoughtLog } from '../../types/index.js';
 import type { MarketTickData } from '../../hooks/useTelemetry.js';
 import { useMarketCountdown } from '../../hooks/useMarketCountdown.js';
 import { evaluateTradeConfluence } from '../../lib/confluence.js';
+import { apiClient } from '../../services/api.js';
 import { cn } from '../../lib/utils.js';
 
 interface EventContractChartProps {
@@ -37,63 +38,11 @@ function getLookbackSeconds(range: 'RTC' | '15m' | '1h' | 'ALL', windowDuration?
   return 300;
 }
 
-function generatePriceHistoryForRange(
-  range: 'RTC' | '15m' | '1h' | 'ALL',
-  strikePrice: number,
-  curSpot: number,
-  windowDuration?: string,
-): PricePoint[] {
-  const now = Date.now();
-  const history: PricePoint[] = [];
-  const effectiveSpot = curSpot > 0 ? curSpot : strikePrice;
-  const basePrice = strikePrice > 0 ? strikePrice : effectiveSpot;
-  if (basePrice <= 0) {
-    return [];
-  }
-  const durationSec = getLookbackSeconds(range, windowDuration);
-
-  // Resolution and points count scaled to timeframe
-  const numPoints = range === 'RTC' ? 40 : range === '15m' ? 60 : range === '1h' ? 80 : 100;
-  const stepMs = (durationSec * 1000) / numPoints;
-
-  // Realistic starting drift offset per timeframe
-  const maxOffsetPct = range === 'RTC' ? 0.0008 : range === '15m' ? 0.0025 : range === '1h' ? 0.006 : 0.015;
-  const seed = Math.abs(Math.sin(basePrice * 100 + durationSec) * 10000) % 1;
-  const startPrice = basePrice * (1 + (seed - 0.5) * maxOffsetPct);
-
-  // Multi-frequency harmonic counts: higher timeframes exhibit denser multi-wave structure
-  const primaryCycles = range === 'RTC' ? 1.5 : range === '15m' ? 3.5 : range === '1h' ? 6.5 : 11.0;
-  const secondaryCycles = primaryCycles * 2.6;
-  const microCycles = primaryCycles * 6.8;
-
-  const volatility = range === 'RTC' ? 0.0003 : range === '15m' ? 0.0007 : range === '1h' ? 0.0016 : 0.0038;
-
-  for (let i = numPoints; i >= 0; i--) {
-    const t = now - i * stepMs;
-    const progress = (numPoints - i) / numPoints; // 0.0 (start) to 1.0 (now)
-
-    // Linear trend connecting start to current spot
-    const driftPath = startPrice + progress * (effectiveSpot - startPrice);
-
-    // Brownian bridge factor: variance smoothly pinches to 0 at now so it connects seamlessly to live spot
-    const bridgeFactor = 1 - Math.pow(progress, 2.2);
-
-    // Superposition of macro trend, swing cycle, and micro tick structure
-    const wave1 = Math.sin((progress * primaryCycles + seed) * Math.PI * 2) * 0.55;
-    const wave2 = Math.cos((progress * secondaryCycles + seed * 2) * Math.PI * 2) * 0.30;
-    const wave3 = Math.sin((progress * microCycles + seed * 3) * Math.PI * 2) * 0.15;
-
-    const totalOscillation = (wave1 + wave2 + wave3) * basePrice * volatility * bridgeFactor;
-    const price = Number((driftPath + totalOscillation).toFixed(2));
-    history.push({ time: t, price });
-  }
-
-  // Ensure last point is exactly current live spot
-  if (history.length > 0) {
-    history[history.length - 1].price = effectiveSpot;
-    history[history.length - 1].time = now;
-  }
-  return history;
+function getMaxPointsForRange(range: 'RTC' | '15m' | '1h' | 'ALL'): number {
+  if (range === 'RTC') return 120;
+  if (range === '15m') return 120;
+  if (range === '1h') return 150;
+  return 200;
 }
 
 export const EventContractChart: React.FC<EventContractChartProps> = ({
@@ -114,9 +63,15 @@ export const EventContractChart: React.FC<EventContractChartProps> = ({
   const spot = currentSpotPrice || liveTick?.spotPrice || market.strikePrice || 0;
   const isITM = strike > 0 && spot > 0 ? spot >= strike : false;
 
-  // Local price history trail based on active timeRange
-  const [priceHistory, setPriceHistory] = useState<PricePoint[]>(() => {
-    return generatePriceHistoryForRange('RTC', strike, spot, market.windowDuration);
+  // Real price history trail: live ticks + exchange klines fetched from the
+  // backend. Never synthesized — when the exchange backfill is unavailable the
+  // chart renders only locally observed ticks ("Recent Trades Only").
+  const [priceHistory, setPriceHistory] = useState<PricePoint[]>([]);
+  const [historyLoading, setHistoryLoading] = useState<boolean>(true);
+  const [historyMeta, setHistoryMeta] = useState<{ isPartial: boolean; sources: string[]; count: number }>({
+    isPartial: true,
+    sources: [],
+    count: 0,
   });
 
   // Evaluate Multi-Factor Confluence
@@ -161,11 +116,38 @@ export const EventContractChart: React.FC<EventContractChartProps> = ({
     return { text: `AI Fair ${pct}% ${d}`, bg: '#1e1035', stroke: '#7928ca', color: '#d8b4fe', w: 145 };
   }, [fairValueYes, edge, hasEdge, isYesEdge, confluence]);
 
-  // Re-seed price history when switching market, symbol, or timeframe range
+  // Fetch REAL price history when switching market, symbol, or timeframe range.
+  // No synthetic fallback: on failure the chart shows only subsequently observed
+  // live ticks (or an explicit empty state), never fabricated waves.
   useEffect(() => {
-    const history = generatePriceHistoryForRange(timeRange, strike, spot, market.windowDuration);
-    setPriceHistory(history);
-  }, [market.id, market.symbol, timeRange]);
+    let cancelled = false;
+    setHistoryLoading(true);
+    const lookbackSec = getLookbackSeconds(timeRange, market.windowDuration);
+    const maxPoints = getMaxPointsForRange(timeRange);
+    apiClient
+      .getPriceHistory(market.symbol, lookbackSec, maxPoints)
+      .then((res) => {
+        if (cancelled || !res?.success) return;
+        const pts = (res.points || [])
+          .filter((p) => Number.isFinite(p?.price) && p.price > 0 && Number.isFinite(p?.time))
+          .sort((a, b) => a.time - b.time)
+          .map((p) => ({ time: p.time, price: p.price }));
+        setPriceHistory(pts);
+        setHistoryMeta({ isPartial: res.isPartial, sources: res.sources || [], count: pts.length });
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setPriceHistory([]);
+          setHistoryMeta({ isPartial: true, sources: [], count: 0 });
+        }
+      })
+      .finally(() => {
+        if (!cancelled) setHistoryLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [market.id, market.symbol, timeRange, market.windowDuration]);
 
   // Real-time dynamic countdown & formatted expiry (30s lock removed)
   const { formattedCountdown, formattedExpiry, isExpired } = useMarketCountdown(
@@ -175,29 +157,31 @@ export const EventContractChart: React.FC<EventContractChartProps> = ({
   );
   const isResolving = (market.status === 'Resolving' || isExpired) && market.status !== 'Finalized' && isExpired;
 
-  // Track live spot price changes (frozen if round ended / resolving)
+  // Append REAL live spot ticks only (frozen if round ended / resolving).
+  // Never fabricates history: seeds from the first observed tick when the
+  // backend returned no depth yet.
   useEffect(() => {
-    if (!spot || isNaN(spot) || isResolving) return;
+    if (!spot || isNaN(spot) || spot <= 0 || isResolving) return;
     setPriceHistory((prev) => {
-      // Re-anchor and regenerate if priceHistory was empty or initialized to 0s before ticker arrival
-      if (spot > 0 && (prev.length === 0 || prev[0].price === 0 || prev.some((p) => p.price === 0))) {
-        return generatePriceHistoryForRange(timeRange, strike, spot, market.windowDuration);
-      }
       const now = Date.now();
+      if (prev.length === 0) {
+        setHistoryMeta((m) => ({ ...m, isPartial: true, count: 1 }));
+        return [{ time: now, price: spot }];
+      }
       const last = prev[prev.length - 1];
       const throttleMs = timeRange === 'RTC' ? 1000 : timeRange === '15m' ? 3000 : 8000;
       if (last && now - last.time < throttleMs) {
-        // Update last point
+        // Update last point in place with the real observed spot
         const updated = [...prev];
         updated[updated.length - 1] = { time: now, price: spot };
         return updated;
       }
       const next = [...prev, { time: now, price: spot }];
-      const maxPts = timeRange === 'RTC' ? 120 : timeRange === '15m' ? 90 : 80;
-      if (next.length > maxPts) next.shift();
+      const maxPts = getMaxPointsForRange(timeRange);
+      if (next.length > maxPts) next.splice(0, next.length - maxPts);
       return next;
     });
-  }, [spot, timeRange, strike, market.windowDuration, isResolving]);
+  }, [spot, timeRange, isResolving]);
 
   // Handle responsive canvas sizing
   useEffect(() => {
@@ -251,17 +235,31 @@ export const EventContractChart: React.FC<EventContractChartProps> = ({
   const futureWidth = chartWidth * 0.28;
   const splitX = padding.left + pastWidth;
 
-  // Map historical points to SVG coordinates
+  // Map historical points to SVG coordinates by actual timestamp so real
+  // exchange candles and live ticks keep true time spacing (no resampling).
+  const timeDomain = useMemo(() => {
+    if (priceHistory.length === 0) return null;
+    const from = priceHistory[0].time;
+    const to = priceHistory[priceHistory.length - 1].time;
+    return { from, to, span: Math.max(1, to - from) };
+  }, [priceHistory]);
+
+  const getX = (time: number) => {
+    if (!timeDomain) return padding.left;
+    const ratio = (time - timeDomain.from) / timeDomain.span;
+    return padding.left + Math.min(1, Math.max(0, ratio)) * pastWidth;
+  };
+
   const svgPoints = useMemo(() => {
-    if (priceHistory.length === 0) return '';
+    if (priceHistory.length === 0 || !timeDomain) return '';
     return priceHistory
-      .map((p, index) => {
-        const x = padding.left + (index / Math.max(1, priceHistory.length - 1)) * pastWidth;
+      .map((p) => {
+        const x = getX(p.time);
         const y = getY(p.price);
         return `${x.toFixed(1)},${y.toFixed(1)}`;
       })
       .join(' ');
-  }, [priceHistory, pastWidth, minPrice, priceRange, chartHeight, padding.top, padding.left]);
+  }, [priceHistory, timeDomain, pastWidth, minPrice, priceRange, chartHeight, padding.top, padding.left]);
 
   const currentY = getY(spot);
   const strikeY = getY(strike);
@@ -280,28 +278,31 @@ export const EventContractChart: React.FC<EventContractChartProps> = ({
   const aiConeBottomY = getY(aiPredictedTarget - strike * 0.0008);
   const aiLabelY = Math.max(padding.top + 16, Math.min(padding.top + chartHeight - 12, aiTargetY > padding.top + 28 ? aiTargetY - 10 : aiTargetY + 20));
 
-  // Handle crosshair hover
+  // Handle crosshair hover — snap to the nearest real point by screen x
   const handleMouseMove = (e: React.MouseEvent<SVGSVGElement>) => {
     const rect = e.currentTarget.getBoundingClientRect();
     const mouseX = e.clientX - rect.left;
-    if (mouseX < padding.left || mouseX > splitX) {
+    if (mouseX < padding.left || mouseX > splitX || priceHistory.length === 0) {
       setHoverPoint(null);
       return;
     }
-    const relativeX = (mouseX - padding.left) / pastWidth;
-    const pointIndex = Math.min(
-      priceHistory.length - 1,
-      Math.max(0, Math.round(relativeX * (priceHistory.length - 1)))
-    );
-    const p = priceHistory[pointIndex];
-    if (p) {
-      const y = getY(p.price);
+    let nearest = priceHistory[0];
+    let nearestDist = Infinity;
+    for (const p of priceHistory) {
+      const dist = Math.abs(getX(p.time) - mouseX);
+      if (dist < nearestDist) {
+        nearestDist = dist;
+        nearest = p;
+      }
+    }
+    if (nearest) {
+      const y = getY(nearest.price);
       setHoverPoint({
-        x: mouseX,
+        x: getX(nearest.time),
         y,
-        price: p.price,
-        time: new Date(p.time).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' }),
-        delta: p.price - strike,
+        price: nearest.price,
+        time: new Date(nearest.time).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' }),
+        delta: nearest.price - strike,
       });
     }
   };
@@ -352,6 +353,37 @@ export const EventContractChart: React.FC<EventContractChartProps> = ({
             <SparklesIcon className="w-3.5 h-3.5 text-[#d8b4fe]" />
             <span className="hidden sm:inline">AI Forecast</span>
           </button>
+
+          {/* Data provenance: real feed only, explicit when depth is limited */}
+          <span
+            className={cn(
+              "hidden sm:inline-flex items-center px-2 py-0.5 rounded text-[10px] font-mono border",
+              historyLoading
+                ? "text-muted-foreground border-border/40 bg-secondary/30"
+                : priceHistory.length === 0
+                  ? "text-[#ffb700] border-[#ffb700]/40 bg-[#ffb700]/10"
+                  : historyMeta.isPartial
+                    ? "text-[#ffb700] border-[#ffb700]/40 bg-[#ffb700]/10"
+                    : "text-[#00e676] border-[#00e676]/40 bg-[#00e676]/10"
+            )}
+            title={
+              historyLoading
+                ? "Fetching real spot ticks and exchange candles"
+                : priceHistory.length === 0
+                  ? "No real ticks observed yet for this window — showing empty state, no simulated data"
+                  : historyMeta.isPartial
+                    ? `Showing ${priceHistory.length} locally observed real ticks only — exchange backfill unavailable`
+                    : `Showing ${priceHistory.length} real points from live ticks + exchange candles`
+            }
+          >
+            {historyLoading
+              ? "Loading real feed…"
+              : priceHistory.length === 0
+                ? "No real ticks yet"
+                : historyMeta.isPartial
+                  ? `Recent Trades Only • ${priceHistory.length} real ticks`
+                  : `Live • Real feed • ${priceHistory.length} pts`}
+          </span>
 
           {/* Timeframe Buttons */}
           <div className="hidden md:flex items-center bg-secondary/30 rounded-lg p-0.5 border border-border/30 text-[10px]">
@@ -557,15 +589,19 @@ export const EventContractChart: React.FC<EventContractChartProps> = ({
             />
           )}
 
-          {/* Active Spot Price Glowing Head */}
-          <circle cx={splitX} cy={currentY} r="5" fill="#00ffcc" filter="url(#glow)" />
-          <circle cx={splitX} cy={currentY} r="2.5" fill="#ffffff" />
+          {/* Active Spot Price Glowing Head — only when a real spot was observed */}
+          {spot > 0 && (
+            <g>
+              <circle cx={splitX} cy={currentY} r="5" fill="#00ffcc" filter="url(#glow)" />
+              <circle cx={splitX} cy={currentY} r="2.5" fill="#ffffff" />
 
-          {/* Pulse Ripple Effect at Spot */}
-          <circle cx={splitX} cy={currentY} r="9" fill="none" stroke="#00ffcc" strokeWidth="1" opacity="0.6">
-            <animate attributeName="r" values="5;14" dur="1.8s" repeatCount="indefinite" />
-            <animate attributeName="opacity" values="0.8;0" dur="1.8s" repeatCount="indefinite" />
-          </circle>
+              {/* Pulse Ripple Effect at Spot */}
+              <circle cx={splitX} cy={currentY} r="9" fill="none" stroke="#00ffcc" strokeWidth="1" opacity="0.6">
+                <animate attributeName="r" values="5;14" dur="1.8s" repeatCount="indefinite" />
+                <animate attributeName="opacity" values="0.8;0" dur="1.8s" repeatCount="indefinite" />
+              </circle>
+            </g>
+          )}
 
           {/* Interactive Hover Crosshair */}
           {hoverPoint && (
@@ -596,7 +632,9 @@ export const EventContractChart: React.FC<EventContractChartProps> = ({
 
           {/* Time Labels on Bottom Axis */}
           <text x={padding.left + 5} y={height - 12} fill="#71717a" fontSize="10" fontFamily="JetBrains Mono, monospace">
-            {timeRange === 'RTC' ? `${market.windowDuration || '5m'} round` : `${timeRange} ago`}
+            {historyMeta.isPartial && !historyLoading
+              ? `Recent Trades Only • ${timeRange === 'RTC' ? `${market.windowDuration || '5m'} round` : timeRange}`
+              : timeRange === 'RTC' ? `${market.windowDuration || '5m'} round` : `${timeRange} ago`}
           </text>
           <text x={splitX - 35} y={height - 12} fill="#00ffcc" fontSize="10" fontFamily="JetBrains Mono, monospace" fontWeight="bold">
             now {new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false })}
@@ -605,6 +643,21 @@ export const EventContractChart: React.FC<EventContractChartProps> = ({
             {formattedExpiry}
           </text>
         </svg>
+
+        {/* Empty state: no real ticks yet — never render fabricated data */}
+        {!historyLoading && priceHistory.length === 0 && (
+          <div className="absolute inset-0 z-20 flex flex-col items-center justify-center gap-1.5 bg-background/60 backdrop-blur-[1px] text-center px-6">
+            <div className="text-xs font-mono font-bold text-[#ffb700] border border-[#ffb700]/40 bg-[#ffb700]/10 rounded px-2 py-0.5">
+              Recent Trades Only
+            </div>
+            <div className="text-xs font-mono text-muted-foreground">
+              No real ticks observed yet for {market.symbol} in this window.
+            </div>
+            <div className="text-[10px] font-mono text-muted-foreground/70">
+              Chart populates from live spot ticks + exchange candles — no simulated history.
+            </div>
+          </div>
+        )}
 
         {/* Hover Tooltip Overlay */}
         {hoverPoint && (

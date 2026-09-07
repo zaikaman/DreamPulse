@@ -960,6 +960,14 @@ export class MarketService extends EventEmitter {
   }
 
   /**
+   * Real spot price history for charting — live ticks + exchange klines.
+   * Never synthesizes points; returns only observed market data.
+   */
+  public async getPriceHistory(symbol: string, lookbackSec: number, maxPoints = 120) {
+    return priceFeedService.getRealPriceHistory(symbol, lookbackSec, maxPoints);
+  }
+
+  /**
    * Updates resting prices on a market book and recalculates depth & edge.
    */
   public updateMarketBookQuotes(
