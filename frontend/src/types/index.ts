@@ -61,6 +61,7 @@ export interface SessionGrant {
   maxTradeSize: number;
   dailyVolumeCap: number;
   spentToday: number;
+  lastSpendResetTimestamp?: number;
   expiresAt: string;
   isActive: boolean;
   nonce?: number;

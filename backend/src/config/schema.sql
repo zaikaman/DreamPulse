@@ -51,6 +51,7 @@ CREATE TABLE IF NOT EXISTS public.sessions (
     max_trade_size NUMERIC(18, 4) NOT NULL,
     daily_volume_cap NUMERIC(18, 4) NOT NULL,
     spent_today NUMERIC(18, 4) NOT NULL DEFAULT 0,
+    last_spend_reset_timestamp BIGINT,
     expires_at TIMESTAMPTZ NOT NULL,
     is_active BOOLEAN NOT NULL DEFAULT TRUE,
     on_chain_tx_hash VARCHAR(66),
@@ -72,6 +73,8 @@ CREATE TABLE IF NOT EXISTS public.sessions (
     CONSTRAINT valid_user_address CHECK (user_address ~ '^0x[a-fA-F0-9]{40}$'),
     CONSTRAINT valid_operator_address CHECK (operator_address ~ '^0x[a-fA-F0-9]{40}$')
 );
+
+ALTER TABLE public.sessions ADD COLUMN IF NOT EXISTS last_spend_reset_timestamp BIGINT;
 
 CREATE UNIQUE INDEX IF NOT EXISTS idx_sessions_user_nonce ON public.sessions(lower(user_address), nonce);
 

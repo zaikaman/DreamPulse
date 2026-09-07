@@ -268,14 +268,12 @@ export const CinematicHero: React.FC<CinematicHeroProps> = ({
           >
             <div className="relative size-[18px] flex items-center justify-center">
               <Bars3Icon
-                className={`size-[18px] absolute transition-all duration-300 ease-out ${
-                  isMobileMenuOpen ? "rotate-90 opacity-0 scale-50" : "rotate-0 opacity-100 scale-100"
-                }`}
+                className={`size-[18px] absolute transition-all duration-300 ease-out ${isMobileMenuOpen ? "rotate-90 opacity-0 scale-50" : "rotate-0 opacity-100 scale-100"
+                  }`}
               />
               <XMarkIcon
-                className={`size-[18px] absolute transition-all duration-300 ease-out ${
-                  isMobileMenuOpen ? "rotate-0 opacity-100 scale-100" : "-rotate-90 opacity-0 scale-50"
-                }`}
+                className={`size-[18px] absolute transition-all duration-300 ease-out ${isMobileMenuOpen ? "rotate-0 opacity-100 scale-100" : "-rotate-90 opacity-0 scale-50"
+                  }`}
               />
             </div>
           </button>
@@ -284,11 +282,10 @@ export const CinematicHero: React.FC<CinematicHeroProps> = ({
 
       {/* 4. Mobile Menu Dropdown (below lg) */}
       <div
-        className={`lg:hidden absolute top-[72px] inset-x-4 sm:inset-x-6 z-40 bg-gray-950/95 backdrop-blur-xl border border-gray-800/80 shadow-2xl rounded-2xl p-4 transition-all duration-300 ease-out ${
-          isMobileMenuOpen
+        className={`lg:hidden absolute top-[72px] inset-x-4 sm:inset-x-6 z-40 bg-gray-950/95 backdrop-blur-xl border border-gray-800/80 shadow-2xl rounded-2xl p-4 transition-all duration-300 ease-out ${isMobileMenuOpen
             ? "translate-y-0 opacity-100 pointer-events-auto"
             : "-translate-y-4 opacity-0 pointer-events-none"
-        }`}
+          }`}
       >
         <div className="flex flex-col space-y-1">
           {navLinks.map((link, idx) => (
@@ -339,9 +336,8 @@ export const CinematicHero: React.FC<CinematicHeroProps> = ({
         <div className="flex flex-col md:flex-row md:items-end justify-between gap-6 md:gap-8">
           {/* Left Side: Metadata Badges, Title, Description, Showcase CTAs */}
           <div
-            className={`flex-1 transition-opacity duration-200 ${
-              isTransitioning ? "opacity-40" : "opacity-100"
-            }`}
+            className={`flex-1 transition-opacity duration-200 ${isTransitioning ? "opacity-40" : "opacity-100"
+              }`}
           >
             {/* Badges Row */}
             <div
@@ -415,9 +411,8 @@ export const CinematicHero: React.FC<CinematicHeroProps> = ({
                   <div
                     key={i}
                     onClick={() => setCurrentSlideIndex(i)}
-                    className={`h-1.5 rounded-full transition-all cursor-pointer ${
-                      currentSlideIndex === i ? "w-5 bg-white" : "w-1.5 bg-white/30"
-                    }`}
+                    className={`h-1.5 rounded-full transition-all cursor-pointer ${currentSlideIndex === i ? "w-5 bg-white" : "w-1.5 bg-white/30"
+                      }`}
                   />
                 ))}
               </div>

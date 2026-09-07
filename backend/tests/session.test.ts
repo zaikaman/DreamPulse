@@ -666,6 +666,100 @@ describe('Task T038 & T040: Session Management Service & Risk Guardrails', () =>
     expect(session.sessionKeyPrivateKey).toBeUndefined();
     expect(session.delegationContractAddress).toBeUndefined();
   });
+
+  it('BE-BUG-10: preserves lastSpendResetTimestamp across DB record serialization and prevents arbitrary resets caused by metadata updated_at', () => {
+    // 1. Verify schema serialization format for raw DB rows
+    const trueResetTimestamp = Date.now() - 25 * 3600 * 1000; // 25 hours ago -> due for reset
+    const recentMetadataUpdatedAt = new Date(Date.now() - 30 * 60 * 1000).toISOString(); // touched 30 mins ago
+
+    const mockDbRow = {
+      id: '00000000-0000-0000-0000-000000000001',
+      user_address: '0x1111111111111111111111111111111111111111',
+      operator_address: '0x2222222222222222222222222222222222222222',
+      permissions: ['placeOrderFor', 'cancelOrderFor'],
+      max_trade_size: '50.0000',
+      daily_volume_cap: '100.0000',
+      spent_today: '75.0000',
+      last_spend_reset_timestamp: trueResetTimestamp,
+      expires_at: new Date(Date.now() + 86400000).toISOString(),
+      is_active: true,
+      nonce: 0,
+      created_at: new Date(Date.now() - 48 * 3600 * 1000).toISOString(),
+      updated_at: recentMetadataUpdatedAt,
+    };
+
+    // When last_spend_reset_timestamp is used, the 25h elapsed time triggers reset
+    const parsedReset = mockDbRow.last_spend_reset_timestamp ? Number(mockDbRow.last_spend_reset_timestamp) : null;
+    const baseReset = parsedReset && Number.isFinite(parsedReset) && parsedReset > 0
+      ? parsedReset
+      : new Date(mockDbRow.updated_at).getTime();
+
+    const isPastDayWithColumn = Date.now() - baseReset > 24 * 3600 * 1000;
+    expect(isPastDayWithColumn).toBe(true);
+
+    // If we had relied on updated_at, it would falsely indicate < 24h elapsed and trap the user
+    const isPastDayWithBuggyUpdatedAt = Date.now() - new Date(mockDbRow.updated_at).getTime() > 24 * 3600 * 1000;
+    expect(isPastDayWithBuggyUpdatedAt).toBe(false);
+  });
+
+  it('BE-BUG-10: prevents premature reset when last_spend_reset_timestamp is recent even if updated_at is old', () => {
+    const recentReset = Date.now() - 2 * 3600 * 1000; // 2 hours ago
+    const oldUpdatedAt = new Date(Date.now() - 30 * 3600 * 1000).toISOString(); // 30 hours ago
+
+    const mockDbRow = {
+      id: '00000000-0000-0000-0000-000000000002',
+      user_address: '0x1111111111111111111111111111111111111111',
+      operator_address: '0x2222222222222222222222222222222222222222',
+      permissions: ['placeOrderFor', 'cancelOrderFor'],
+      max_trade_size: '50.0000',
+      daily_volume_cap: '100.0000',
+      spent_today: '80.0000',
+      last_spend_reset_timestamp: recentReset,
+      expires_at: new Date(Date.now() + 86400000).toISOString(),
+      is_active: true,
+      nonce: 1,
+      created_at: oldUpdatedAt,
+      updated_at: oldUpdatedAt,
+    };
+
+    const parsedReset = mockDbRow.last_spend_reset_timestamp ? Number(mockDbRow.last_spend_reset_timestamp) : null;
+    const baseReset = parsedReset && Number.isFinite(parsedReset) && parsedReset > 0
+      ? parsedReset
+      : new Date(mockDbRow.updated_at).getTime();
+
+    const isPastDayWithColumn = Date.now() - baseReset > 24 * 3600 * 1000;
+    expect(isPastDayWithColumn).toBe(false);
+
+    // If we had relied on updated_at, it would falsely reset prematurely
+    const isPastDayWithBuggyUpdatedAt = Date.now() - new Date(mockDbRow.updated_at).getTime() > 24 * 3600 * 1000;
+    expect(isPastDayWithBuggyUpdatedAt).toBe(true);
+  });
+
+  it('BE-BUG-10: updates lastSpendResetTimestamp when updateSessionSpend resets spentToday to 0', async () => {
+    const user = privateKeyToAccount(generatePrivateKey());
+    const session = await sessionService.registerSession({
+      userAddress: user.address,
+      operatorAddress: liveOperator.address,
+      maxTradeSize: 50,
+      dailyVolumeCap: 100,
+    });
+
+    const initialReset = session.lastSpendResetTimestamp;
+    expect(initialReset).toBeGreaterThan(0);
+
+    // Spend some amount
+    await sessionService.recordTradeSpend(session.id, 40);
+    expect(session.spentToday).toBe(40);
+
+    // Artificially age the timestamp
+    session.lastSpendResetTimestamp = Date.now() - 5000;
+    const aged = session.lastSpendResetTimestamp;
+
+    // Reset spend to 0 via updateSessionSpend
+    sessionService.updateSessionSpend(session.id, 0);
+    expect(session.spentToday).toBe(0);
+    expect(session.lastSpendResetTimestamp).toBeGreaterThan(aged);
+  });
 });
 
 

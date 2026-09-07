@@ -168,10 +168,21 @@ export class SessionService {
                   existing.isActive = false;
                 }
                 const incomingSpent = Number(row.spent_today || 0);
-                if (Number.isFinite(incomingSpent) && incomingSpent > existing.spentToday) {
-                  existing.spentToday = incomingSpent;
-                } else if (Number.isFinite(incomingSpent) && incomingSpent < existing.spentToday) {
-                  console.warn(`[SessionService] Ignoring CDC spent_today decrease for session ${row.id} (${existing.spentToday} -> ${incomingSpent})`);
+                let isLegitReset = false;
+                if (row.last_spend_reset_timestamp !== undefined && row.last_spend_reset_timestamp !== null) {
+                  const incomingReset = Number(row.last_spend_reset_timestamp);
+                  if (Number.isFinite(incomingReset) && incomingReset > existing.lastSpendResetTimestamp) {
+                    existing.lastSpendResetTimestamp = incomingReset;
+                    existing.spentToday = incomingSpent;
+                    isLegitReset = true;
+                  }
+                }
+                if (!isLegitReset) {
+                  if (Number.isFinite(incomingSpent) && incomingSpent > existing.spentToday) {
+                    existing.spentToday = incomingSpent;
+                  } else if (Number.isFinite(incomingSpent) && incomingSpent < existing.spentToday) {
+                    console.warn(`[SessionService] Ignoring CDC spent_today decrease for session ${row.id} (${existing.spentToday} -> ${incomingSpent})`);
+                  }
                 }
                 if (existing.onChainAuthorized && row.on_chain_authorized !== true) {
                   existing.onChainAuthorized = false;
@@ -198,6 +209,12 @@ export class SessionService {
                 existing.copyTradeEnabled = userSwarmService.hasUserConfig(row.user_address)
                   ? userSwarmService.isCopyTradeEnabled(row.user_address)
                   : (row.copy_trade_enabled === true);
+                if (row.last_spend_reset_timestamp !== undefined && row.last_spend_reset_timestamp !== null) {
+                  const parsed = Number(row.last_spend_reset_timestamp);
+                  if (Number.isFinite(parsed) && parsed > 0) {
+                    existing.lastSpendResetTimestamp = Math.max(existing.lastSpendResetTimestamp, parsed);
+                  }
+                }
                 existing.updatedAt = row.updated_at || new Date().toISOString();
                 // SEC-02: drive the active-session index from the in-memory
                 // fail-closed flag (existing.isActive), never from the raw CDC
@@ -269,9 +286,24 @@ export class SessionService {
       const isActive = row.is_active && expiresTimestamp > now;
 
       const updatedAtTimestamp = new Date(row.updated_at || row.created_at).getTime();
-      const isPastDay = now - updatedAtTimestamp > 24 * 3600 * 1000;
+      const parsedResetTimestamp = row.last_spend_reset_timestamp ? Number(row.last_spend_reset_timestamp) : null;
+      const baseResetTimestamp = parsedResetTimestamp && Number.isFinite(parsedResetTimestamp) && parsedResetTimestamp > 0
+        ? parsedResetTimestamp
+        : updatedAtTimestamp;
+      const isPastDay = now - baseResetTimestamp > 24 * 3600 * 1000;
       const spentToday = isPastDay ? 0 : Number(row.spent_today || 0);
-      const lastSpendResetTimestamp = isPastDay ? now : updatedAtTimestamp;
+      const lastSpendResetTimestamp = isPastDay ? now : baseResetTimestamp;
+
+      if (isPastDay && isSessionPersistenceEnabled()) {
+        void supabase
+          .from('sessions')
+          .update({
+            spent_today: 0,
+            last_spend_reset_timestamp: now,
+            updated_at: new Date(now).toISOString(),
+          })
+          .eq('id', row.id);
+      }
 
       const record: SessionRecord = {
         id: row.id,
@@ -633,6 +665,7 @@ export class SessionService {
           max_trade_size: maxTradeSize,
           daily_volume_cap: dailyVolumeCap,
           spent_today: 0,
+          last_spend_reset_timestamp: now,
           expires_at: expiresAt,
           is_active: isActive,
           nonce: nonce,
@@ -732,10 +765,26 @@ export class SessionService {
           const row = data[0];
           const expiresTimestamp = new Date(row.expires_at).getTime();
           if (expiresTimestamp > Date.now()) {
+            const nowMs = Date.now();
             const updatedAtTimestamp = new Date(row.updated_at || row.created_at).getTime();
-            const isPastDay = Date.now() - updatedAtTimestamp > 24 * 3600 * 1000;
+            const parsedResetTimestamp = row.last_spend_reset_timestamp ? Number(row.last_spend_reset_timestamp) : null;
+            const baseResetTimestamp = parsedResetTimestamp && Number.isFinite(parsedResetTimestamp) && parsedResetTimestamp > 0
+              ? parsedResetTimestamp
+              : updatedAtTimestamp;
+            const isPastDay = nowMs - baseResetTimestamp > 24 * 3600 * 1000;
             const spentToday = isPastDay ? 0 : Number(row.spent_today || 0);
-            const lastSpendResetTimestamp = isPastDay ? Date.now() : updatedAtTimestamp;
+            const lastSpendResetTimestamp = isPastDay ? nowMs : baseResetTimestamp;
+
+            if (isPastDay && isSessionPersistenceEnabled()) {
+              void supabase
+                .from('sessions')
+                .update({
+                  spent_today: 0,
+                  last_spend_reset_timestamp: lastSpendResetTimestamp,
+                  updated_at: new Date(nowMs).toISOString(),
+                })
+                .eq('id', row.id);
+            }
 
             const record: SessionRecord = {
               id: row.id,
@@ -804,6 +853,17 @@ export class SessionService {
     if (now - session.lastSpendResetTimestamp > 24 * 3600 * 1000) {
       session.spentToday = 0;
       session.lastSpendResetTimestamp = now;
+      session.updatedAt = new Date(now).toISOString();
+      if (isSessionPersistenceEnabled()) {
+        void supabase
+          .from('sessions')
+          .update({
+            spent_today: 0,
+            last_spend_reset_timestamp: now,
+            updated_at: session.updatedAt,
+          })
+          .eq('id', session.id);
+      }
     }
 
     if (userSwarmService.hasUserConfig(session.userAddress)) {
@@ -1018,7 +1078,11 @@ export class SessionService {
       if (isSessionPersistenceEnabled()) {
         void supabase
           .from('sessions')
-          .update({ spent_today: 0, updated_at: session.updatedAt })
+          .update({
+            spent_today: 0,
+            last_spend_reset_timestamp: now,
+            updated_at: session.updatedAt,
+          })
           .eq('id', session.id);
       }
     }
@@ -1075,7 +1139,11 @@ export class SessionService {
     if (isSessionPersistenceEnabled()) {
       void supabase
         .from('sessions')
-        .update({ spent_today: session.spentToday, updated_at: session.updatedAt })
+        .update({
+          spent_today: session.spentToday,
+          last_spend_reset_timestamp: session.lastSpendResetTimestamp,
+          updated_at: session.updatedAt,
+        })
         .eq('id', session.id);
     }
 
