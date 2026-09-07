@@ -84,6 +84,12 @@ const envSchema = z.object({
   SUPABASE_JWT_SECRET: z.string().optional(),
   SUPABASE_JWT_EXPIRY_SECONDS: z.coerce.number().default(86400),
 
+  // SEC-01: AES-256-GCM key for encrypting ephemeral session signing keys at
+  // rest (sessions.session_key_private_key holds ciphertext only, never
+  // plaintext). 64 hex chars preferred. Optional: when unset the relay runs
+  // fail-closed (memory-only keys, NULL persisted) instead of leaking plaintext.
+  SESSION_KEY_ENCRYPTION_KEY: z.string().optional(),
+
   // Protocol addresses & APIs (Somnia Shannon Testnet)
   REST_API_URL: z.string().default('https://stg.api.dreamdex.io/v0'),
   DREAMDEX_REGISTRY_ADDRESS: z.string().default('0x3ecC694Cef705358864a646142ac17A90E29e388'),

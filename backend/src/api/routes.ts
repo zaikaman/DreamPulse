@@ -21,13 +21,13 @@ import { getSessionAccount, getCloneAllowance, getCloneBalance, CLONE_ZERO_ADDRE
 
 export const apiRouter = Router();
 
-// SECURITY: session_key_private_key is a live signing key held by the backend
-// relay only. It must never leave the server on unauthenticated (optional-auth)
-// read paths — GET /sessions/:userAddress is public by design. Strip it from
-// every session object returned by GET endpoints. The POST /sessions/register
-// response intentionally still returns the full record once to the
-// just-authenticated owner (the frontend already holds the key in memory and
-// needs the echoed record to hydrate state without a second round-trip).
+// SEC-01: session_key_private_key is a live signing key held by the backend
+// relay only (AES-256-GCM ciphertext at rest, plaintext in backend memory
+// only). It must NEVER leave the server — not on GET reads, not on the
+// POST /sessions/register echo either. The frontend generates the ephemeral
+// key locally and already holds it in memory; it hydrates state from its own
+// copy, so the server has no reason to echo key material. Every session object
+// returned by this router is passed through stripSessionSecrets().
 function stripSessionSecrets<T>(session: T): T {
   if (!session || typeof session !== 'object') return session;
   const copy = { ...(session as Record<string, unknown>) };
@@ -438,7 +438,9 @@ apiRouter.post('/sessions/register', requireWalletAuth, async (req: Request, res
 
     return res.status(201).json({
       success: true,
-      session,
+      // SEC-01: never echo the signing key — the caller generated it and holds
+      // it in memory. Echoing would put live key material on the wire needlessly.
+      session: stripSessionSecrets(session),
     });
   } catch (err: any) {
     return res.status(400).json({

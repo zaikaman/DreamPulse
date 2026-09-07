@@ -379,6 +379,10 @@ export function useSessionKey(): UseSessionKeyReturn {
       const data = await apiClient.getActiveSession(address);
       const s = data?.session || (data as any)?.activeSession;
       if (data?.success && s) {
+        // SEC-01: the backend NEVER returns signing-key material (stripped in
+        // routes.ts). The ephemeral private key lives only in this tab's memory
+        // from createSession(). Never hydrate it from server/CDC payloads —
+        // preserve the existing in-memory key when the session id matches.
         const grant: SessionGrant = {
           id: s.id,
           userAddress: (s.userAddress || address) as `0x${string}`,
@@ -395,14 +399,16 @@ export function useSessionKey(): UseSessionKeyReturn {
           onChainAuthorized: s.onChainAuthorized === true,
           copyTradeEnabled: Boolean(s.copyTradeEnabled),
           sessionKeyAddress: s.sessionKeyAddress,
-          sessionKeyPrivateKey: s.sessionKeyPrivateKey,
+          sessionKeyPrivateKey: undefined,
           delegationContractAddress: s.delegationContractAddress,
           accountAddress: s.accountAddress,
         };
 
         if (isSessionValid(grant, address)) {
           lastValidatedWalletRef.current = address;
-          setActiveSession(grant);
+          setActiveSession((prev) =>
+            prev && prev.id === grant.id ? { ...grant, sessionKeyPrivateKey: prev.sessionKeyPrivateKey } : grant,
+          );
           if (s.accountAddress && isAddress(s.accountAddress)) {
             setCloneAddress(getAddress(s.accountAddress) as Address);
           }
@@ -971,10 +977,15 @@ export function useSessionKey(): UseSessionKeyReturn {
     restoreSupabaseAuthIfCached().catch(() => {});
   }, []);
 
-  // Authenticated Supabase Realtime for private `sessions` — uses JWT with
-  // `user_address` claim (POST /api/v1/auth/wallet-verify → setSupabaseAuth).
-  // Filter `user_address=eq.<lower>` ensures RLS owner check passes.
-  // Falls back to polling below if JWT not configured or user rejects signature.
+  // Session non-secret state sync.
+  // SEC-01: public.sessions was REMOVED from the supabase_realtime CDC
+  // publication (migration 023) because rows carry session-key ciphertext.
+  // The backend REST poller below is the source of truth for session state.
+  // This channel is retained only as a best-effort instant signal for
+  // non-secret fields (is_active / spent_today / revocation). It NEVER trusts
+  // `session_key_private_key` from CDC payloads — the ephemeral key lives only
+  // in this tab's memory from createSession(). Any key material present in a
+  // payload is scrubbed and the in-memory key is preserved on id match.
   useEffect(() => {
     if (!wallet.address) return;
     const lower = wallet.address.toLowerCase();
@@ -1009,12 +1020,16 @@ export function useSessionKey(): UseSessionKeyReturn {
               onChainAuthorized: newRow.on_chain_authorized === true,
               copyTradeEnabled: newRow.copy_trade_enabled === true,
               sessionKeyAddress: newRow.session_key_address,
-              sessionKeyPrivateKey: newRow.session_key_private_key,
+              sessionKeyPrivateKey: undefined,
               delegationContractAddress: newRow.delegation_contract_address,
               accountAddress: newRow.account_address,
             };
             if (isSessionValid(updated, lower)) {
-              setActiveSession(updated);
+              setActiveSession((prev) =>
+                prev && prev.id === updated.id
+                  ? { ...updated, sessionKeyPrivateKey: prev.sessionKeyPrivateKey }
+                  : updated,
+              );
               if (newRow.account_address && isAddress(newRow.account_address)) {
                 setCloneAddress(getAddress(newRow.account_address) as Address);
               }
@@ -1041,12 +1056,16 @@ export function useSessionKey(): UseSessionKeyReturn {
               onChainAuthorized: updatedRow.on_chain_authorized === true,
               copyTradeEnabled: updatedRow.copy_trade_enabled === true,
               sessionKeyAddress: updatedRow.session_key_address,
-              sessionKeyPrivateKey: updatedRow.session_key_private_key,
+              sessionKeyPrivateKey: undefined,
               delegationContractAddress: updatedRow.delegation_contract_address,
               accountAddress: updatedRow.account_address,
             };
             if (isSessionValid(updated, lower)) {
-              setActiveSession(updated);
+              setActiveSession((prev) =>
+                prev && prev.id === updated.id
+                  ? { ...updated, sessionKeyPrivateKey: prev.sessionKeyPrivateKey }
+                  : updated,
+              );
               if (updatedRow.account_address && isAddress(updatedRow.account_address)) {
                 setCloneAddress(getAddress(updatedRow.account_address) as Address);
               }

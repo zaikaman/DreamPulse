@@ -4,6 +4,12 @@ import { supabase, isPersistenceEnabled } from '../config/supabase.js';
 import { SOMNIA_ADDRESSES, operatorAccount, publicClient } from '../config/somnia.js';
 import { userSwarmService } from './user-swarm-service.js';
 import {
+  decryptSessionPrivateKey,
+  encryptSessionPrivateKey,
+  isEncryptedSessionKeyValue,
+  isSessionKeyEncryptionConfigured,
+} from './session-key-crypto.js';
+import {
   verifySessionDelegationSignature,
   validateZeroCustodyInvariants,
   getSessionAccount,
@@ -136,7 +142,10 @@ export class SessionService {
                 existing.sessionKeyAddress = row.session_key_address
                   ? (getAddress(row.session_key_address) as Address)
                   : undefined;
-                existing.sessionKeyPrivateKey = (row.session_key_private_key as Hex) || undefined;
+                // SEC-01: column holds AES-256-GCM ciphertext only — decrypt to
+                // memory (service_role read). Plaintext/ciphertext is never
+                // re-broadcast: sessions are dropped from supabase_realtime.
+                existing.sessionKeyPrivateKey = decryptSessionPrivateKey(row.session_key_private_key) ?? existing.sessionKeyPrivateKey;
                 existing.delegationContractAddress = row.delegation_contract_address
                   ? (getAddress(row.delegation_contract_address) as Address)
                   : undefined;
@@ -214,7 +223,7 @@ export class SessionService {
         targetPoolAddress: row.target_pool_address ? (getAddress(row.target_pool_address) as Address) : undefined,
         onChainAuthorized: row.on_chain_authorized === true,
         sessionKeyAddress: row.session_key_address ? (getAddress(row.session_key_address) as Address) : undefined,
-        sessionKeyPrivateKey: (row.session_key_private_key as Hex) || undefined,
+        sessionKeyPrivateKey: decryptSessionPrivateKey(row.session_key_private_key),
         delegationContractAddress: row.delegation_contract_address ? (getAddress(row.delegation_contract_address) as Address) : undefined,
         accountAddress: (row as any).account_address ? (getAddress((row as any).account_address) as Address) : undefined,
         copyTradeEnabled: userSwarmService.hasUserConfig(row.user_address)
@@ -527,6 +536,22 @@ export class SessionService {
 
     if (isSessionPersistenceEnabled()) {
       try {
+        // SEC-01: NEVER persist plaintext signing keys. The column holds
+        // AES-256-GCM ciphertext only. Without SESSION_KEY_ENCRYPTION_KEY we
+        // persist NULL (fail-closed, memory-only relay) rather than leak.
+        let encryptedPrivateKey: string | null = null;
+        if (sessionKeyPrivateKey) {
+          if (isSessionKeyEncryptionConfigured()) {
+            encryptedPrivateKey = encryptSessionPrivateKey(sessionKeyPrivateKey);
+          } else if (process.env.NODE_ENV !== 'test') {
+            console.warn(
+              '[SessionService] SESSION_KEY_ENCRYPTION_KEY unset — persisting session WITHOUT private key (memory-only relay). Set the key on Heroku for durable keys.',
+            );
+          }
+          if (encryptedPrivateKey && !isEncryptedSessionKeyValue(encryptedPrivateKey)) {
+            throw new Error('Session key encryption invariant violated — refusing plaintext DB write');
+          }
+        }
         await supabase.from('sessions').insert({
           id: sessionId,
           user_address: normalizedUser,
@@ -544,7 +569,7 @@ export class SessionService {
           target_pool_address: targetPoolAddress || null,
           copy_trade_enabled: sessionRecord.copyTradeEnabled ?? false,
           session_key_address: sessionKeyAddress || null,
-          session_key_private_key: sessionKeyPrivateKey || null,
+          session_key_private_key: encryptedPrivateKey,
           delegation_contract_address: delegationContractAddress || null,
           account_address: accountAddress || null,
         });
@@ -656,7 +681,7 @@ export class SessionService {
               targetPoolAddress: row.target_pool_address ? (getAddress(row.target_pool_address) as Address) : undefined,
               onChainAuthorized: row.on_chain_authorized === true,
               sessionKeyAddress: row.session_key_address ? (getAddress(row.session_key_address) as Address) : undefined,
-              sessionKeyPrivateKey: (row.session_key_private_key as Hex) || undefined,
+              sessionKeyPrivateKey: decryptSessionPrivateKey(row.session_key_private_key),
               delegationContractAddress: row.delegation_contract_address ? (getAddress(row.delegation_contract_address) as Address) : undefined,
               accountAddress: (row as any).account_address ? (getAddress((row as any).account_address) as Address) : undefined,
               copyTradeEnabled: userSwarmService.hasUserConfig(row.user_address)

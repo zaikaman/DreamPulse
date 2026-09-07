@@ -60,6 +60,10 @@ CREATE TABLE IF NOT EXISTS public.sessions (
     copy_trade_enabled BOOLEAN NOT NULL DEFAULT FALSE,
     nonce BIGINT NOT NULL DEFAULT 0,
     session_key_address VARCHAR(42),
+    -- SEC-01: holds AES-256-GCM ciphertext ONLY (format v1.<iv>.<tag>.<ct>),
+    -- produced by backend/src/services/session-key-crypto.ts via
+    -- SESSION_KEY_ENCRYPTION_KEY. NEVER store or accept plaintext here.
+    -- Plaintext lives only in backend memory + originating browser memory.
     session_key_private_key TEXT,
     delegation_contract_address VARCHAR(42),
     account_address VARCHAR(42),
@@ -561,9 +565,12 @@ END $$;
 DO $$
 DECLARE
   tbl text;
+  -- SEC-01: public.sessions is INTENTIONALLY excluded. Its rows carry
+  -- session signing-key ciphertext and must never be broadcast over Supabase
+  -- Realtime CDC to browsers. Session state reaches the frontend via
+  -- backend REST (/api/v1/sessions/*, secrets stripped), never via CDC.
   tables text[] := ARRAY[
     'public.markets',
-    'public.sessions',
     'public.agent_strategies',
     'public.orders',
     'public.sweeps',
@@ -593,4 +600,31 @@ BEGIN
     END IF;
   END LOOP;
 END $$;
+
+-- SEC-01: drop any pre-fix CDC broadcast of sessions (fresh deploys that ran
+-- the old schema, or live projects migrating forward). Idempotent: only drops
+-- when the table is actually a member of the publication.
+DO $$
+BEGIN
+  IF EXISTS (
+    SELECT 1 FROM pg_publication_tables
+    WHERE pubname = 'supabase_realtime'
+      AND schemaname = 'public'
+      AND tablename = 'sessions'
+  ) THEN
+    EXECUTE 'ALTER PUBLICATION supabase_realtime DROP TABLE public.sessions';
+  END IF;
+END $$;
+
+-- SEC-01: burn any pre-fix plaintext keys that may still sit in the column.
+-- Ciphertext rows (v1.<iv>.<tag>.<ct>) are preserved; only legacy 0x-plaintext
+-- is nulled so affected users transparently re-authorize via the Session Modal.
+UPDATE public.sessions
+SET session_key_private_key = NULL,
+    updated_at = NOW()
+WHERE session_key_private_key IS NOT NULL
+  AND session_key_private_key NOT LIKE 'v1.%';
+
+COMMENT ON COLUMN public.sessions.session_key_private_key IS
+  'SEC-01: AES-256-GCM ciphertext only (v1.<iv>.<tag>.<ct>). Never plaintext. Decryptable only by the backend relay via SESSION_KEY_ENCRYPTION_KEY. Never broadcast over Realtime; never returned by the API.';
 
