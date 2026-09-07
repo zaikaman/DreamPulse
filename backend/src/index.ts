@@ -15,6 +15,8 @@ import {
 installProcessSafetyHandlers();
 
 const app = express();
+// Enable trust proxy for accurate client IP resolution behind Heroku/reverse proxies
+app.set('trust proxy', 1);
 const server = http.createServer(app);
 
 // Global Middleware - SEC-06: explicit allowlist, no wildcard or *.vercel.app bypass

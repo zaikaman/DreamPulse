@@ -15,6 +15,7 @@ import { userSwarmService } from '../services/user-swarm-service.js';
 import { socialCopyService } from '../services/social-copy-service.js';
 import { leaderboardService, type ArenaTimeframe, type ArenaSortBy } from '../services/leaderboard-service.js';
 import { requireWalletAuth, optionalWalletAuth } from '../middleware/wallet-auth.js';
+import { aiGenerationRateLimiter } from '../middleware/rate-limiter.js';
 import { telemetryWsGateway } from '../websocket/server.js';
 import { supabase, isPersistenceEnabled } from '../config/supabase.js';
 import { getSessionAccount, getCloneAllowance, getCloneBalance, CLONE_ZERO_ADDRESS } from '../config/permissions-abi.js';
@@ -1719,13 +1720,16 @@ apiRouter.post('/agents/custom/:id/reset-circuit-breaker', requireWalletAuth, as
   }
 });
 
-apiRouter.post('/agents/generate', async (req: Request, res: Response) => {
+apiRouter.post('/agents/generate', requireWalletAuth, aiGenerationRateLimiter, async (req: Request, res: Response) => {
   try {
     const { prompt } = req.body;
-    if (!prompt || typeof prompt !== 'string') {
+    if (!prompt || typeof prompt !== 'string' || !prompt.trim()) {
       return res.status(400).json({ success: false, error: 'Prompt is required' });
     }
-    const generated = await customAgentService.generateAgentFromPrompt(prompt);
+    if (prompt.trim().length > 2000) {
+      return res.status(400).json({ success: false, error: 'Prompt exceeds maximum length of 2000 characters' });
+    }
+    const generated = await customAgentService.generateAgentFromPrompt(prompt.trim());
     res.json({ success: true, data: generated });
   } catch (err: any) {
     res.status(500).json({ success: false, error: err.message || 'Failed to generate agent strategy' });

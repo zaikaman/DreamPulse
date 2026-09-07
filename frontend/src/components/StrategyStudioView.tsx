@@ -510,6 +510,11 @@ export const StrategyStudioView: React.FC<StrategyStudioViewProps> = ({
   // AI Prompt submission
   const handleGeneratePrompt = async () => {
     if (!aiPrompt.trim()) return;
+    if (!wallet.isConnected || !wallet.address) {
+      setAiStatusMsg('Please connect your wallet to synthesize AI strategies.');
+      if (onConnectWallet) onConnectWallet();
+      return;
+    }
     setAiStatusMsg('Synthesizing strategy with AI architect...');
     const result = await generateFromPrompt(aiPrompt.trim());
     if (result) {
