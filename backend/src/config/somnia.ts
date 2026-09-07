@@ -73,31 +73,48 @@ export const somniaShannonTestnet = defineChain({
 });
 
 /**
+ * Operator key material. Derived first so SOMNIA_ADDRESSES.operatorAccount
+ * always matches the signing key (previously a separately hardcoded address
+ * that could drift from OPERATOR_PRIVATE_KEY).
+ */
+const operatorPrivateKey = (
+  env.OPERATOR_PRIVATE_KEY.startsWith('0x')
+    ? env.OPERATOR_PRIVATE_KEY
+    : `0x${env.OPERATOR_PRIVATE_KEY}`
+) as `0x${string}`;
+
+export const operatorAccount = privateKeyToAccount(operatorPrivateKey, { nonceManager });
+
+/**
  * Somnia and DreamDEX Protocol Deployed Contract Addresses on Shannon Testnet.
+ * Sourced from environment (SOMNIA_* vars in backend/.env / Heroku config) —
+ * no hardcoded deployment addresses below besides type-level fallbacks.
  */
 export const SOMNIA_ADDRESSES = {
   chainId: 50312,
   decimals: 6, // TestUSDC decimals
   // Core protocol contracts (CREATE3 deterministic)
-  binaryModule: '0x3ecC694Cef705358864a646142ac17A90E29e388' as Address,
-  marketsCore: '0x2802504314685D89bF6C992CA5a8e7cC78bc0294' as Address,
-  clobFactory: '0xb2BE8EE02F96379DB75f01802384593EBa9bfF04' as Address,
-  binaryPoolImpl: '0x82A1FcdaA2daC2fC7D5f9909D43E68021eE966FD' as Address,
-  binarySettlement: '0xbF4a49e0Dfd092e5FBE8E5761064C49533e6Ed23' as Address,
-  collateralRouter: '0xbC0C9834B15ACE38bB50dDaa7d7f7C7CC4DC183C' as Address,
-  marketCreatorFactory: '0xE6bEE93cE87c9E6e62aCb621caa7832EE47b4F6B' as Address,
-  oracleHub: '0xe40db387cC98601Dd11bd634fF2f3AD5686dE32b' as Address,
-  operatorPermissionsRegistry: '0x15C7e8CE38F021c5b45d098AaD788f63090bF20A' as Address,
-  operatorAccount: '0x93e300607c363E7D7a47e50f5c9fDf1723e859Cf' as Address,
-  sessionAccount: '0xff16EF28861F90201aB0B00e46f6c7683AFacee5' as Address,
+  binaryModule: env.SOMNIA_BINARY_MODULE as Address,
+  marketsCore: env.SOMNIA_MARKETS_CORE as Address,
+  clobFactory: env.SOMNIA_CLOB_FACTORY as Address,
+  binaryPoolImpl: env.SOMNIA_BINARY_POOL_IMPL as Address,
+  binarySettlement: env.SOMNIA_BINARY_SETTLEMENT as Address,
+  collateralRouter: env.SOMNIA_COLLATERAL_ROUTER as Address,
+  marketCreatorFactory: env.SOMNIA_MARKET_CREATOR_FACTORY as Address,
+  oracleHub: env.SOMNIA_ORACLE_HUB as Address,
+  operatorPermissionsRegistry: env.OPERATOR_PERMISSIONS_REGISTRY_ADDRESS as Address,
+  operatorAccount: operatorAccount.address,
+  sessionAccount: env.SOMNIA_SESSION_ACCOUNT as Address,
   /** V2 implementation with 1 tUSDC withdrawal fee and 1 tUSDC min threshold */
-  sessionAccountImpl: '0x47ea804522bee0b6e98e5189e70de14843fdf886' as Address,
+  sessionAccountImpl: env.SOMNIA_SESSION_ACCOUNT_IMPL as Address,
   /** V2 factory deploying one trading account clone per user (current model). */
-  sessionAccountFactory: '0xf45589660652962a381c8420125bc4be90362081' as Address,
+  sessionAccountFactory: env.SOMNIA_SESSION_ACCOUNT_FACTORY as Address,
+  /** Pre-SEC-03 factory (migration grace-period checks only). */
+  sessionAccountFactoryLegacy: env.SOMNIA_SESSION_ACCOUNT_FACTORY_LEGACY as Address,
   // Faucet & Live Market Creators
-  collateral: '0x70a86D8842FB63C4Ad2b7cdddF530eBf1BB25d8E' as Address,
-  testUsdc: '0x70a86D8842FB63C4Ad2b7cdddF530eBf1BB25d8E' as Address,
-  marketCreator: '0x5Ce69567dB39C8fBAd7e048bEfdbcCdfE67B44e6' as Address,
+  collateral: env.SOMNIA_TEST_USDC as Address,
+  testUsdc: env.SOMNIA_TEST_USDC as Address,
+  marketCreator: env.SOMNIA_MARKET_CREATOR as Address,
 };
 
 /**
@@ -111,14 +128,6 @@ export const publicClient: PublicClient = createPublicClient({
 /**
  * Viem Wallet Client initialized with Operator Private Key and NonceManager for autonomous swarm executions.
  */
-const operatorPrivateKey = (
-  env.OPERATOR_PRIVATE_KEY.startsWith('0x')
-    ? env.OPERATOR_PRIVATE_KEY
-    : `0x${env.OPERATOR_PRIVATE_KEY}`
-) as `0x${string}`;
-
-export const operatorAccount = privateKeyToAccount(operatorPrivateKey, { nonceManager });
-
 export const walletClient: WalletClient = createWalletClient({
   account: operatorAccount,
   chain: somniaShannonTestnet,

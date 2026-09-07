@@ -28,6 +28,7 @@ import {
   SESSION_CLONE_ABI,
   getSessionAccount,
   checkOnChainOperatorAuthorization,
+  isTrustedPoolAddress,
 } from '../config/permissions-abi.js';
 import type { IAgentDecision, OrderBookDepth, OrderBookLevel } from '../agents/base-agent.js';
 import type {
@@ -1390,6 +1391,20 @@ export class OrderService {
                   throw new Error(
                     `No trading account clone found for trader ${targetTrader}. Please authorize a session to deploy your trading account.`,
                   );
+                }
+
+                // SEC-03 defense-in-depth: refuse to relay to a pool the
+                // canonical registry does not recognize. The clone enforces
+                // this on-chain as the authoritative gate; this pre-flight
+                // only surfaces a clear error earlier. RPC-inconclusive
+                // (null) proceeds — on-chain fail-closed validation remains.
+                if (process.env.NODE_ENV !== 'test') {
+                  const poolTrusted = await isTrustedPoolAddress(onchain.pool as Address).catch(() => null);
+                  if (poolTrusted === false) {
+                    this.lastExecutionFailureReason = `Pool ${onchain.pool} is not recognized by the DreamDEX settlement registry. Order refused to protect funds.`;
+                    console.warn(`[OrderService] [${source}] Untrusted pool refused for trader ${targetTrader}: ${onchain.pool}`);
+                    return null;
+                  }
                 }
 
                 // Check isolated clone vault balance

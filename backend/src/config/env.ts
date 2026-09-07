@@ -95,6 +95,27 @@ const envSchema = z.object({
   DREAMDEX_REGISTRY_ADDRESS: z.string().default('0x3ecC694Cef705358864a646142ac17A90E29e388'),
   OPERATOR_PERMISSIONS_REGISTRY_ADDRESS: z.string().default('0x15C7e8CE38F021c5b45d098AaD788f63090bF20A'),
   DREAMDEX_VENUE_ID: z.string().default('0x679795a0195a1b76cdebb7c51d74e058aee92919b8c3389af86ef24535e8a28c'),
+
+  // Canonical Somnia / DreamDEX contract addresses. Single source of truth
+  // for backend chain reads/writes — override via environment (local .env or
+  // `heroku config:set -a dreampulse-backend`) instead of editing code.
+  // Defaults track the Somnia Shannon Testnet deployments.
+  SOMNIA_BINARY_MODULE: z.string().default('0x3ecC694Cef705358864a646142ac17A90E29e388'),
+  SOMNIA_MARKETS_CORE: z.string().default('0x2802504314685D89bF6C992CA5a8e7cC78bc0294'),
+  SOMNIA_CLOB_FACTORY: z.string().default('0xb2BE8EE02F96379DB75f01802384593EBa9bfF04'),
+  SOMNIA_BINARY_POOL_IMPL: z.string().default('0x82A1FcdaA2daC2fC7D5f9909D43E68021eE966FD'),
+  SOMNIA_BINARY_SETTLEMENT: z.string().default('0xbF4a49e0Dfd092e5FBE8E5761064C49533e6Ed23'),
+  SOMNIA_COLLATERAL_ROUTER: z.string().default('0xbC0C9834B15ACE38bB50dDaa7d7f7C7CC4DC183C'),
+  SOMNIA_MARKET_CREATOR_FACTORY: z.string().default('0xE6bEE93cE87c9E6e62aCb621caa7832EE47b4F6B'),
+  SOMNIA_ORACLE_HUB: z.string().default('0xe40db387cC98601Dd11bd634fF2f3AD5686dE32b'),
+  SOMNIA_MARKET_CREATOR: z.string().default('0x5Ce69567dB39C8fBAd7e048bEfdbcCdfE67B44e6'),
+  SOMNIA_TEST_USDC: z.string().default('0x70a86D8842FB63C4Ad2b7cdddF530eBf1BB25d8E'),
+  // DreamPulse session contracts (updated on redeploy — see deploy scripts).
+  SOMNIA_SESSION_ACCOUNT: z.string().default('0xa85ec9a6A0845eeb642E1DCE12780E9b4cFD37F8'),
+  SOMNIA_SESSION_ACCOUNT_IMPL: z.string().default('0x6177d1E24C838789c1367fC9B66Bcf689C6ff60F'),
+  SOMNIA_SESSION_ACCOUNT_FACTORY: z.string().default('0xA0C2eaAe0438bCB6DD0FA2Cc2317BEDB8Ff25e94'),
+  // Pre-SEC-03 factory, kept for migration grace-period checks only.
+  SOMNIA_SESSION_ACCOUNT_FACTORY_LEGACY: z.string().default('0xf45589660652962a381c8420125bc4be90362081'),
 });
 
 export const env = envSchema.parse({

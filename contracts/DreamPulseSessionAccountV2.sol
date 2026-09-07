@@ -44,8 +44,23 @@ interface IBinaryModuleMinimal {
  *    withdrawing the clone's full token balance is always safe. Funds locked
  *    on the CLOB simply are not in the clone balance and are withdrawable
  *    after they auto-deliver back (cancel/expiry/fill).
+ *  - Every external call target is allowlisted on-chain (SEC-03): `executeOrder`
+ *    only forwards to pools approved by the canonical BinarySettlement registry
+ *    (`isPoolApproved`) or explicitly allowlisted by the owner, and
+ *    `redeemWinnings` only talks to the pinned `trustedModule`. A compromised
+ *    session key therefore cannot redirect approvals or token-operator grants
+ *    to an attacker contract.
+ *  - `executeOrder`, `redeemWinnings` and `withdraw` are reentrancy-guarded:
+ *    a malicious pool cannot re-enter the clone mid-trade to double-spend
+ *    session caps or drain funds.
  */
 contract DreamPulseSessionAccount {
+    // Minimal reentrancy guard (self-contained: this file compiles with plain
+    // solc standard-JSON and cannot import OpenZeppelin). State starts at 0
+    // for already-deployed clones, which is treated as NOT_ENTERED.
+    uint256 private constant _NOT_ENTERED = 1;
+    uint256 private constant _ENTERED = 2;
+
     struct SessionPolicy {
         uint256 maxTradeSize;   // Collateral units (6 decimals for tUSDC)
         uint256 dailyVolumeCap; // Collateral units per 24h rolling window
@@ -59,6 +74,24 @@ contract DreamPulseSessionAccount {
     address public collateral;
     address public feeRecipient;
     bool private initialized;
+
+    // SEC-03 pool allowlist. `poolRegistry` is the canonical DreamDEX
+    // BinarySettlement contract exposing `isPoolApproved(address) -> bool`.
+    // `authorizedPools` is an owner-curated emergency/extension allowlist
+    // (covers pre-registry clones while `poolRegistry` is unset, and any
+    // future pool type the registry does not track). Either source passing
+    // authorizes the pool; when `poolRegistry` is set, a pool it does NOT
+    // approve is rejected even if it speaks the pool ABI (an attacker
+    // contract can fake view functions but cannot fake registry approval).
+    address public poolRegistry;
+    // Canonical BinaryModule for `redeemWinnings`. Zero = legacy permissive
+    // mode (pre-migration clones); once set, only that module is callable.
+    address public trustedModule;
+    mapping(address => bool) public authorizedPools;
+
+    // Reentrancy status. Appended after all pre-existing storage so deployed
+    // EIP-1167 clones keep their layout (their slot reads 0 = NOT_ENTERED).
+    uint256 private _reentrancyStatus;
 
     // sessionKey => SessionPolicy
     mapping(address => SessionPolicy) public sessionPolicies;
@@ -107,6 +140,9 @@ contract DreamPulseSessionAccount {
         address indexed caller
     );
     event Withdrawn(address indexed user, address indexed token, uint256 amount, uint256 fee);
+    event PoolRegistryUpdated(address indexed oldRegistry, address indexed newRegistry);
+    event TrustedModuleUpdated(address indexed oldModule, address indexed newModule);
+    event PoolAuthorizationUpdated(address indexed pool, bool allowed);
 
     error NotOwner();
     error AlreadyInitialized();
@@ -122,23 +158,103 @@ contract DreamPulseSessionAccount {
     error TransferFailed();
     error InvalidRecipient();
     error WithdrawalTooSmall(uint256 amount, uint256 minRequired);
+    error InvalidPool(address pool);
+    error InvalidModule(address module);
+    error ReentrantCall();
 
     modifier onlyOwner() {
         if (msg.sender != owner) revert NotOwner();
         _;
     }
 
+    modifier nonReentrant() {
+        if (_reentrancyStatus == _ENTERED) revert ReentrantCall();
+        _reentrancyStatus = _ENTERED;
+        _;
+        _reentrancyStatus = _NOT_ENTERED;
+    }
+
     /**
      * @notice One-time initializer, called atomically by the factory in the
      * same transaction as deployment.
+     * @dev 3-arg overload kept for backward compatibility (registry/module
+     * left unset; the owner must call setPoolRegistry/setTrustedModule to
+     * enable SEC-03 enforcement on such clones).
      */
     function init(address _owner, address _collateral, address _feeRecipient) external {
+        init(_owner, _collateral, _feeRecipient, address(0), address(0));
+    }
+
+    /**
+     * @notice One-time initializer with SEC-03 pool-registry pinning.
+     * The factory passes its canonical `poolRegistry` (BinarySettlement) and
+     * `trustedModule` (BinaryModule) so new clones are protected from birth.
+     */
+    function init(
+        address _owner,
+        address _collateral,
+        address _feeRecipient,
+        address _poolRegistry,
+        address _trustedModule
+    ) public {
         if (initialized) revert AlreadyInitialized();
         if (_owner == address(0) || _collateral == address(0)) revert InvalidSessionKey();
         initialized = true;
         owner = _owner;
         collateral = _collateral;
         feeRecipient = _feeRecipient;
+        poolRegistry = _poolRegistry;
+        trustedModule = _trustedModule;
+    }
+
+    /**
+     * @notice Pin or rotate the canonical pool registry (BinarySettlement).
+     * Owner-only. Pass address(0) to fall back to explicit-allowlist mode.
+     */
+    function setPoolRegistry(address _registry) external onlyOwner {
+        if (_registry != address(0) && _registry.code.length == 0) revert InvalidPool(_registry);
+        emit PoolRegistryUpdated(poolRegistry, _registry);
+        poolRegistry = _registry;
+    }
+
+    /**
+     * @notice Pin or rotate the canonical redeem module (BinaryModule).
+     * Owner-only. While unset (address(0)), any module is accepted for
+     * backward compatibility with pre-migration clones.
+     */
+    function setTrustedModule(address _module) external onlyOwner {
+        if (_module != address(0) && _module.code.length == 0) revert InvalidModule(_module);
+        emit TrustedModuleUpdated(trustedModule, _module);
+        trustedModule = _module;
+    }
+
+    /**
+     * @notice Explicitly allowlist or delist a pool contract. Owner-only.
+     * EOAs and the zero address can never be allowlisted: approving an EOA
+     * would let its key holder pull clone funds via transferFrom.
+     */
+    function setPoolAuthorization(address pool, bool allowed) external onlyOwner {
+        if (pool.code.length == 0) revert InvalidPool(pool);
+        authorizedPools[pool] = allowed;
+        emit PoolAuthorizationUpdated(pool, allowed);
+    }
+
+    /**
+     * @notice Returns true when `pool` may receive trades from this clone:
+     * explicitly allowlisted by the owner, or approved by the canonical
+     * on-chain registry. Fail-closed: unknown registries, reverted
+     * staticcalls and malformed returndata all yield false.
+     */
+    function isPoolAuthorized(address pool) public view returns (bool) {
+        if (pool == address(0)) return false;
+        if (authorizedPools[pool]) return true;
+        address registry = poolRegistry;
+        if (registry == address(0)) return false;
+        (bool ok, bytes memory ret) = registry.staticcall(
+            abi.encodeWithSignature("isPoolApproved(address)", pool)
+        );
+        if (!ok || ret.length < 32) return false;
+        return abi.decode(ret, (bool));
     }
 
     /**
@@ -198,12 +314,17 @@ contract DreamPulseSessionAccount {
      * shortfall from the owner via the one-time clone approval, tops up the
      * pool allowance for exactly this trade, forwards the call, then zeroes
      * the residual pool allowance so no standing approval remains.
+     * @dev SEC-03: `targetPool` must be authorized (registry-approved or
+     * owner-allowlisted) BEFORE any approval is granted: a compromised
+     * session key cannot point the clone at an attacker contract to siphon
+     * `tradeCost` via the just-granted allowance. Reentrancy-guarded so a
+     * malicious pool cannot re-enter mid-trade.
      */
     function executeOrder(
         address targetPool,
         bytes calldata callData,
         uint256 tradeCost
-    ) external payable returns (bytes memory) {
+    ) external payable nonReentrant returns (bytes memory) {
         SessionPolicy storage policy = sessionPolicies[msg.sender];
 
         if (!policy.isActive) revert SessionNotActive();
@@ -222,6 +343,11 @@ contract DreamPulseSessionAccount {
             revert ExceedsDailyVolumeCap(policy.spentToday + tradeCost, policy.dailyVolumeCap);
         }
         policy.spentToday += tradeCost;
+
+        // SEC-03: validate the pool BEFORE pulling funds or granting the
+        // per-trade approval. Caps are enforced first so existing
+        // over-cap/expired/selector reverts keep their behavior.
+        if (!isPoolAuthorized(targetPool)) revert InvalidPool(targetPool);
 
         if (tradeCost > 0) {
             uint256 currentBal = IERC20Minimal(collateral).balanceOf(address(this));
@@ -248,6 +374,10 @@ contract DreamPulseSessionAccount {
      * Permissionless by design: the payout can only land in the clone, which
      * only the owner can withdraw from — anyone (e.g. the backend sweeper)
      * may trigger it, nobody can steal through it.
+     * @dev SEC-03: `module` is pinned to `trustedModule` once set. Without
+     * the pin, this permissionless entry point would let anyone grant an
+     * attacker contract ERC-6909 operator rights over the clone's outcome
+     * tokens via the setOperator call below.
      */
     function redeemWinnings(
         address module,
@@ -255,7 +385,8 @@ contract DreamPulseSessionAccount {
         bytes32 marketId,
         uint8 outcomeIdx,
         uint256 amount
-    ) external {
+    ) external nonReentrant {
+        if (trustedModule != address(0) && module != trustedModule) revert InvalidModule(module);
         if (!IERC6909Minimal(outcomeToken).isOperator(address(this), module)) {
             IERC6909Minimal(outcomeToken).setOperator(module, true);
         }
@@ -269,7 +400,7 @@ contract DreamPulseSessionAccount {
      * contract, even with a compromised session key.
      * Enforces minimum 1 tUSDC withdrawal and deducts 1 tUSDC withdrawal fee for collateral.
      */
-    function withdraw(address token, uint256 amount) external onlyOwner {
+    function withdraw(address token, uint256 amount) external onlyOwner nonReentrant {
         if (token == collateral) {
             if (amount < MIN_WITHDRAWAL_AMOUNT) revert WithdrawalTooSmall(amount, MIN_WITHDRAWAL_AMOUNT);
             uint256 fee = WITHDRAWAL_FEE;
@@ -290,7 +421,7 @@ contract DreamPulseSessionAccount {
     /**
      * @notice Withdraw native STT (e.g. leftover gas sponsorship) to the owner.
      */
-    function withdrawNative() external onlyOwner {
+    function withdrawNative() external onlyOwner nonReentrant {
         uint256 bal = address(this).balance;
         (bool ok, ) = payable(owner).call{value: bal}("");
         if (!ok) revert TransferFailed();
@@ -352,6 +483,12 @@ contract DreamPulseSessionAccountFactory {
     address public immutable implementation;
     address public feeRecipient;
     address public owner;
+    // Canonical SEC-03 trust anchors forwarded to every new clone at deploy
+    // time: BinarySettlement registry (`isPoolApproved`) and BinaryModule.
+    // Zero until the factory owner configures them; clones deployed while
+    // zero fall back to owner-allowlist mode until migrated.
+    address public poolRegistry;
+    address public trustedModule;
 
     // user => clone
     mapping(address => address) public accounts;
@@ -360,9 +497,12 @@ contract DreamPulseSessionAccountFactory {
 
     event AccountDeployed(address indexed user, address indexed account, uint256 nonce);
     event FeeRecipientUpdated(address indexed oldRecipient, address indexed newRecipient);
+    event PoolRegistryUpdated(address indexed oldRegistry, address indexed newRegistry);
+    event TrustedModuleUpdated(address indexed oldModule, address indexed newModule);
 
     error DeploymentFailed();
     error NotOwner();
+    error InvalidAddress();
 
     constructor(address _implementation, address _feeRecipient) {
         implementation = _implementation;
@@ -374,6 +514,28 @@ contract DreamPulseSessionAccountFactory {
         if (msg.sender != owner) revert NotOwner();
         emit FeeRecipientUpdated(feeRecipient, _newFeeRecipient);
         feeRecipient = _newFeeRecipient;
+    }
+
+    /**
+     * @notice Set the canonical pool registry forwarded to new clones.
+     * Must be a contract (the BinarySettlement `isPoolApproved` registry).
+     */
+    function setPoolRegistry(address _registry) external {
+        if (msg.sender != owner) revert NotOwner();
+        if (_registry != address(0) && _registry.code.length == 0) revert InvalidAddress();
+        emit PoolRegistryUpdated(poolRegistry, _registry);
+        poolRegistry = _registry;
+    }
+
+    /**
+     * @notice Set the canonical redeem module forwarded to new clones.
+     * Must be a contract (the BinaryModule).
+     */
+    function setTrustedModule(address _module) external {
+        if (msg.sender != owner) revert NotOwner();
+        if (_module != address(0) && _module.code.length == 0) revert InvalidAddress();
+        emit TrustedModuleUpdated(trustedModule, _module);
+        trustedModule = _module;
     }
 
     function _proxyInitCode() internal view returns (bytes memory) {
@@ -407,7 +569,7 @@ contract DreamPulseSessionAccountFactory {
             }
             userNonces[user] = nonce + 1;
             if (account == address(0)) continue;
-            try DreamPulseSessionAccount(account).init(user, collateral, feeRecipient) {} catch {
+            try DreamPulseSessionAccount(account).init(user, collateral, feeRecipient, poolRegistry, trustedModule) {} catch {
                 continue;
             }
             // Reaching here with a foreign owner means a squatted,

@@ -71,14 +71,40 @@ export const SOMNIA_ADDRESSES = {
   decimals: 6, // TestUSDC decimals — canonical for caps (maxTradeSize / dailyVolumeCap)
   operatorPermissionsRegistry: '0x15C7e8CE38F021c5b45d098AaD788f63090bF20A' as Address,
   operatorAccount: '0x93e300607c363E7D7a47e50f5c9fDf1723e859Cf' as Address,
-  sessionAccount: '0xff16EF28861F90201aB0B00e46f6c7683AFacee5' as Address,
-  sessionAccountImpl: '0x47ea804522bee0b6e98e5189e70de14843fdf886' as Address,
-  sessionAccountFactory: '0xf45589660652962a381c8420125bc4be90362081' as Address,
+  sessionAccount: '0xa85ec9a6A0845eeb642E1DCE12780E9b4cFD37F8' as Address,
+  sessionAccountImpl: '0x6177d1E24C838789c1367fC9B66Bcf689C6ff60F' as Address,
+  sessionAccountFactory: '0xA0C2eaAe0438bCB6DD0FA2Cc2317BEDB8Ff25e94' as Address,
   testUsdc: '0x70a86D8842FB63C4Ad2b7cdddF530eBf1BB25d8E' as Address,
   binaryModule: '0x3ecC694Cef705358864a646142ac17A90E29e388' as Address,
   marketsCore: '0x2802504314685D89bF6C992CA5a8e7cC78bc0294' as Address,
   collateralRouter: '0xbC0C9834B15ACE38bB50dDaa7d7f7C7CC4DC183C' as Address,
+  clobFactory: '0xb2BE8EE02F96379DB75f01802384593EBa9bfF04' as Address,
+  binarySettlement: '0xbF4a49e0Dfd092e5FBE8E5761064C49533e6Ed23' as Address,
 };
+
+/**
+ * SEC-11 bounded-allowance policy: approvals always default to the exact
+ * amount needed for the user's stated intent — never a hardcoded infinite
+ * (1M / maxUint256) grant. Standing allowances for future trades default to
+ * `DEFAULT_STANDING_ALLOWANCE`; any caller may pass an explicit `amount` of
+ * any size (e.g. approving exactly a 10,000 tUSDC deposit), with no
+ * protocol-imposed ceiling — it is the user's wallet. Pair with
+ * `revokeErc20Approval` so users can zero any grant at any time.
+ */
+export const DEFAULT_STANDING_ALLOWANCE = parseUnits('1000', 6);
+/** Minimum standing allowance that suppresses repeat approval prompts. */
+export const MIN_TRADING_ALLOWANCE = parseUnits('1000', 6);
+
+/** Minimal BinarySettlement registry surface for pool-trust checks. */
+export const BINARY_SETTLEMENT_REGISTRY_ABI = [
+  {
+    type: 'function',
+    name: 'isPoolApproved',
+    stateMutability: 'view',
+    inputs: [{ name: 'pool', type: 'address' }],
+    outputs: [{ name: '', type: 'bool' }],
+  },
+] as const;
 
 export const SESSION_FACTORY_ABI = [
   {
@@ -188,6 +214,58 @@ export const SESSION_CLONE_ABI = [
     stateMutability: 'view',
     inputs: [],
     outputs: [{ name: '', type: 'address' }],
+  },
+  {
+    type: 'function',
+    name: 'poolRegistry',
+    stateMutability: 'view',
+    inputs: [],
+    outputs: [{ name: '', type: 'address' }],
+  },
+  {
+    type: 'function',
+    name: 'trustedModule',
+    stateMutability: 'view',
+    inputs: [],
+    outputs: [{ name: '', type: 'address' }],
+  },
+  {
+    type: 'function',
+    name: 'authorizedPools',
+    stateMutability: 'view',
+    inputs: [{ name: '', type: 'address' }],
+    outputs: [{ name: '', type: 'bool' }],
+  },
+  {
+    type: 'function',
+    name: 'isPoolAuthorized',
+    stateMutability: 'view',
+    inputs: [{ name: 'pool', type: 'address' }],
+    outputs: [{ name: '', type: 'bool' }],
+  },
+  {
+    type: 'function',
+    name: 'setPoolRegistry',
+    stateMutability: 'nonpayable',
+    inputs: [{ name: '_registry', type: 'address' }],
+    outputs: [],
+  },
+  {
+    type: 'function',
+    name: 'setTrustedModule',
+    stateMutability: 'nonpayable',
+    inputs: [{ name: '_module', type: 'address' }],
+    outputs: [],
+  },
+  {
+    type: 'function',
+    name: 'setPoolAuthorization',
+    stateMutability: 'nonpayable',
+    inputs: [
+      { name: 'pool', type: 'address' },
+      { name: 'allowed', type: 'bool' },
+    ],
+    outputs: [],
   },
   {
     type: 'function',
@@ -856,14 +934,17 @@ export class Web3Service {
           args: [params.userAddress, spender],
         });
 
-        // BinaryPool copy-trades need allowance to cover trade size; approve max if below 1000 tUSDC threshold
-        const needThreshold = params.pool ? parseUnits('1000', 6) : amountRaw;
+        // SEC-11: approve exactly the deposit intent (any size — depositing
+        // 10,000 tUSDC approves exactly 10,000), or the default standing
+        // allowance when no deposit was requested. Never an infinite grant.
+        const approvalAmount = amountRaw > 0n ? amountRaw : DEFAULT_STANDING_ALLOWANCE;
+        const needThreshold = params.pool ? MIN_TRADING_ALLOWANCE : amountRaw;
         if (allowance < needThreshold) {
           const appHash = await wallet.writeContract({
             address: token,
             abi: ERC20_ABI,
             functionName: 'approve',
-            args: [spender, parseUnits('1000000', 6)], // 1,000,000 tUSDC allowance for seamless trading
+            args: [spender, approvalAmount],
           });
           await publicClient.waitForTransactionReceipt({ hash: appHash });
           result.approvalHash = appHash;
@@ -962,7 +1043,7 @@ export class Web3Service {
       }).catch(() => 0n),
     ]);
 
-    const minAllowance = parseUnits('1000', 6);
+    const minAllowance = MIN_TRADING_ALLOWANCE;
     const needsOperator = !isGloballyAuthed;
     const hasOperatorAllowance = (currentAllowance as bigint) >= minAllowance;
 
@@ -981,13 +1062,17 @@ export class Web3Service {
   }
 
   /**
-   * Single approve(operator) for TestUSDC — one MAX that covers all future pools via transferFrom through operator.
+   * Single bounded approve(operator) for TestUSDC — defaults to
+   * `DEFAULT_STANDING_ALLOWANCE` (SEC-11), covering current and future pools
+   * via transferFrom through operator without exposing the full balance.
+   * Pass an explicit `amount` matching the user's real intent (any size) —
+   * e.g. exactly the amount being deposited for trading.
    * Used for the 2-click-forever model: 1 approve(operator) + 1 EIP-712 SessionDelegation.
    * Backend will handle per-pool setOperatorApprovalForPool via meta-tx/EIP-7702 without further user clicks.
    */
   public async approveOperatorForTestUsdc(params: { userAddress: Address; operator?: Address; amount?: bigint }): Promise<Hex | undefined> {
     const operator = params.operator || SOMNIA_ADDRESSES.operatorAccount;
-    const amount = params.amount || parseUnits('1000000', 6);
+    const amount = params.amount ?? DEFAULT_STANDING_ALLOWANCE;
     const token = SOMNIA_ADDRESSES.testUsdc;
     try {
       const allowance = await publicClient.readContract({
@@ -1028,7 +1113,7 @@ export class Web3Service {
       }).catch(() => 0n),
     ]);
 
-    const minAllowance = parseUnits('1000', 6);
+    const minAllowance = MIN_TRADING_ALLOWANCE;
     const needsApprove = (currentAllowance as bigint) < minAllowance;
     const needsOp = !isGloballyAuthed;
 
@@ -1049,12 +1134,14 @@ export class Web3Service {
 
   /**
    * Ensures TestUSDC allowance and operator authorization.
-   * Single approve(operator, MAX) covers all current and future binary prediction pools.
+   * Single bounded approve(operator) covers all current and future binary
+   * prediction pools. Pass the user's real trading intent as `amount`.
    */
   public async ensureAllowancesForPools(params: {
     userAddress: Address;
     pools?: Address[];
     token?: Address;
+    amount?: bigint;
   }): Promise<Hex[]> {
     const token = params.token || SOMNIA_ADDRESSES.testUsdc;
     const operator = SOMNIA_ADDRESSES.operatorAccount;
@@ -1069,7 +1156,7 @@ export class Web3Service {
       }).catch(() => 0n),
     ]);
 
-    const minAllowance = parseUnits('1000', 6);
+    const minAllowance = MIN_TRADING_ALLOWANCE;
     const needsOperator = !isGloballyAuthed;
     const hasOperatorAllowance = (currentAllowance as bigint) >= minAllowance;
 
@@ -1081,7 +1168,7 @@ export class Web3Service {
       if (res.hash) hashes.push(res.hash);
     }
     if (!hasOperatorAllowance) {
-      const appHash = await this.approveOperatorForTestUsdc({ userAddress: params.userAddress, operator });
+      const appHash = await this.approveOperatorForTestUsdc({ userAddress: params.userAddress, operator, amount: params.amount });
       if (appHash) hashes.push(appHash);
     }
     return hashes;
@@ -1255,6 +1342,54 @@ export class Web3Service {
   }
 
   /**
+   * Reads whether a pool is recognized by the canonical DreamDEX registry.
+   * Returns null when the registry cannot be reached (RPC failure) so
+   * callers can distinguish "definitively untrusted" (false) from
+   * "unknown" (null).
+   */
+  public async isTrustedPool(pool: Address): Promise<boolean | null> {
+    try {
+      const approved = await publicClient.readContract({
+        address: SOMNIA_ADDRESSES.binarySettlement,
+        abi: BINARY_SETTLEMENT_REGISTRY_ABI,
+        functionName: 'isPoolApproved',
+        args: [pool],
+      });
+      return Boolean(approved);
+    } catch {
+      return null;
+    }
+  }
+
+  /**
+   * Fail-closed pool gate for every path that approves a pool to pull user
+   * funds (SEC-03/SEC-11): throws unless the pool is registry-approved or
+   * explicitly allowlisted on the user's clone. Never approve an unknown
+   * contract to spend TestUSDC.
+   */
+  public async requireTrustedPool(pool: Address, cloneAddress?: Address): Promise<void> {
+    if (cloneAddress) {
+      try {
+        const allowlisted = await publicClient.readContract({
+          address: cloneAddress,
+          abi: SESSION_CLONE_ABI,
+          functionName: 'isPoolAuthorized',
+          args: [pool],
+        });
+        if (allowlisted) return;
+      } catch {
+        // Clone predates SEC-03 (no isPoolAuthorized): fall through to registry.
+      }
+    }
+    const trusted = await this.isTrustedPool(pool);
+    if (trusted !== true) {
+      throw new Error(
+        `Pool ${pool} is not recognized by the DreamDEX settlement registry. Approval refused to protect your funds.`,
+      );
+    }
+  }
+
+  /**
    * Reads the owner's TestUSDC allowance to a specific pool.
    */
   public async getPoolAllowance(params: {
@@ -1275,8 +1410,11 @@ export class Web3Service {
   }
 
   /**
-   * Approves a single pool to auto-pull TestUSDC escrow (max approval,
-   * one tx per pool). Skips when allowance already covers the threshold.
+   * Approves a single pool to auto-pull TestUSDC escrow for exactly `amount
+   * ?? DEFAULT_STANDING_ALLOWANCE` (SEC-11 — never an infinite grant).
+   * Skips when allowance already covers the required threshold. Refuses
+   * unknown pools (SEC-03). Pass the user's real trading intent as `amount`
+   * (any size) whenever it is known.
    */
   public async approvePoolForTestUsdc(params: {
     userAddress: Address;
@@ -1285,9 +1423,10 @@ export class Web3Service {
     amount?: bigint;
   }): Promise<Hex | undefined> {
     const token = params.token || SOMNIA_ADDRESSES.testUsdc;
-    const amount = params.amount || parseUnits('1000000', 6);
+    await this.requireTrustedPool(params.pool);
+    const amount = params.amount ?? DEFAULT_STANDING_ALLOWANCE;
     const current = await this.getPoolAllowance({ owner: params.userAddress, pool: params.pool, token });
-    if (current >= parseUnits('1000', 6)) return undefined;
+    if (current >= MIN_TRADING_ALLOWANCE) return undefined;
     const wallet = await this.getWalletClient(params.userAddress);
     const hash = await wallet.writeContract({
       address: token,
@@ -1302,11 +1441,13 @@ export class Web3Service {
   /**
    * Ensures TestUSDC allowances for a list of pools. Returns tx hashes for
    * newly granted approvals (empty when everything was already approved).
+   * Pass the user's real per-pool trading intent as `amount` (any size).
    */
   public async ensurePoolAllowances(params: {
     userAddress: Address;
     pools: Address[];
     token?: Address;
+    amount?: bigint;
   }): Promise<Hex[]> {
     const hashes: Hex[] = [];
     const unique = Array.from(new Set(params.pools.map((p) => p.toLowerCase())));
@@ -1316,6 +1457,7 @@ export class Web3Service {
           userAddress: params.userAddress,
           pool: pool as Address,
           token: params.token,
+          amount: params.amount,
         });
         if (hash) hashes.push(hash);
       } catch (err: any) {
@@ -1607,15 +1749,19 @@ export class Web3Service {
   }
 
   /**
-   * Ensures the user has granted TestUSDC allowance to their clone.
-   * In V2, this ONE single approval covers all 66+ pools forever.
+   * Ensures the user has granted TestUSDC allowance to their own clone.
+   * Approves exactly `amount ?? DEFAULT_STANDING_ALLOWANCE` (SEC-11 — never
+   * infinite): the clone only ever pulls per-trade shortfalls, bounded
+   * on-chain by the session's maxTradeSize/dailyVolumeCap, and only the
+   * owner can withdraw from the clone. Pass the user's real trading float
+   * as `amount` (any size); re-approve when it is exhausted.
    */
   public async ensureCloneAllowance(params: {
     userAddress: Address;
     cloneAddress: Address;
     amount?: bigint;
   }): Promise<Hex | undefined> {
-    const minAllowance = params.amount ?? parseUnits('100', 6);
+    const approvalAmount = params.amount ?? DEFAULT_STANDING_ALLOWANCE;
     try {
       const current = await publicClient.readContract({
         address: SOMNIA_ADDRESSES.testUsdc,
@@ -1623,19 +1769,101 @@ export class Web3Service {
         functionName: 'allowance',
         args: [params.userAddress, params.cloneAddress],
       });
-      if (current >= minAllowance) return undefined;
+      if (current >= approvalAmount) return undefined;
     } catch {}
 
     const wallet = await this.getWalletClient(params.userAddress);
-    const maxUint256 = 115792089237316195423570985008687907853269984665640564039457584007913129639935n;
     const hash = await wallet.writeContract({
       address: SOMNIA_ADDRESSES.testUsdc,
       abi: ERC20_ABI,
       functionName: 'approve',
-      args: [params.cloneAddress, maxUint256],
+      args: [params.cloneAddress, approvalAmount],
     });
     await publicClient.waitForTransactionReceipt({ hash });
     return hash;
+  }
+
+  /**
+   * Zeroes an ERC-20 grant (SEC-11 hygiene): lets the user revoke any
+   * pool/operator/clone allowance in one transaction. No-op when already zero.
+   */
+  public async revokeErc20Approval(params: {
+    userAddress: Address;
+    spender: Address;
+    token?: Address;
+  }): Promise<Hex | undefined> {
+    const token = params.token || SOMNIA_ADDRESSES.testUsdc;
+    try {
+      const current = await publicClient.readContract({
+        address: token,
+        abi: ERC20_ABI,
+        functionName: 'allowance',
+        args: [params.userAddress, params.spender],
+      });
+      if (current === 0n) return undefined;
+    } catch {}
+    const wallet = await this.getWalletClient(params.userAddress);
+    const hash = await wallet.writeContract({
+      address: token,
+      abi: ERC20_ABI,
+      functionName: 'approve',
+      args: [params.spender, 0n],
+    });
+    await publicClient.waitForTransactionReceipt({ hash });
+    return hash;
+  }
+
+  /**
+   * One-time SEC-03 migration for pre-registry clones: pins the canonical
+   * pool registry (BinarySettlement) and redeem module (BinaryModule) when
+   * unset. New factory clones are pre-configured, making this a read-only
+   * no-op for them. Owner-only writes; safe to call on every authorize.
+   */
+  public async ensureCloneSecurityConfig(params: {
+    userAddress: Address;
+    cloneAddress: Address;
+  }): Promise<{ registryHash?: Hex; moduleHash?: Hex }> {
+    const result: { registryHash?: Hex; moduleHash?: Hex } = {};
+    const wallet = await this.getWalletClient(params.userAddress);
+    try {
+      const registry = await publicClient.readContract({
+        address: params.cloneAddress,
+        abi: SESSION_CLONE_ABI,
+        functionName: 'poolRegistry',
+      }).catch(() => null);
+      if (registry === '0x0000000000000000000000000000000000000000') {
+        const hash = await wallet.writeContract({
+          address: params.cloneAddress,
+          abi: SESSION_CLONE_ABI,
+          functionName: 'setPoolRegistry',
+          args: [SOMNIA_ADDRESSES.binarySettlement],
+        });
+        await publicClient.waitForTransactionReceipt({ hash });
+        result.registryHash = hash;
+      }
+    } catch (err: any) {
+      console.warn('[Web3Service] Clone registry migration notice:', err?.message || err);
+    }
+    try {
+      const trusted = await publicClient.readContract({
+        address: params.cloneAddress,
+        abi: SESSION_CLONE_ABI,
+        functionName: 'trustedModule',
+      }).catch(() => null);
+      if (trusted === '0x0000000000000000000000000000000000000000') {
+        const hash = await wallet.writeContract({
+          address: params.cloneAddress,
+          abi: SESSION_CLONE_ABI,
+          functionName: 'setTrustedModule',
+          args: [SOMNIA_ADDRESSES.binaryModule],
+        });
+        await publicClient.waitForTransactionReceipt({ hash });
+        result.moduleHash = hash;
+      }
+    } catch (err: any) {
+      console.warn('[Web3Service] Clone module migration notice:', err?.message || err);
+    }
+    return result;
   }
 
   /**
@@ -1649,6 +1877,14 @@ export class Web3Service {
     dailyVolumeCap: number;
     durationHours: number;
   }): Promise<{ hash: Hex }> {
+    // SEC-03 migration: pin registry/module on pre-registry clones first.
+    // Best-effort — on-chain fail-closed validation protects funds regardless.
+    await this.ensureCloneSecurityConfig({
+      userAddress: params.userAddress,
+      cloneAddress: params.cloneAddress,
+    }).catch((err: any) => {
+      console.warn('[Web3Service] Clone security-config notice:', err?.message || err);
+    });
     const wallet = await this.getWalletClient(params.userAddress);
     const maxTradeRaw = parseUnits(params.maxTradeSize.toString(), 6);
     const dailyCapRaw = parseUnits(params.dailyVolumeCap.toString(), 6);
@@ -1970,6 +2206,9 @@ export class Web3Service {
     const orderTypeEnum = params.orderType === 'IOC' ? 2 : 0;
     const expireTimestampNs = BigInt(Math.floor(Date.now() / 1000) + 3600) * 1_000_000_000n;
 
+    // SEC-03: never approve (or call) an unrecognized pool contract.
+    await this.requireTrustedPool(params.poolAddress);
+
     // Check TestUSDC allowance for the pool
     const token = SOMNIA_ADDRESSES.testUsdc;
     const currentAllowance = await publicClient.readContract({
@@ -1979,13 +2218,14 @@ export class Web3Service {
       args: [params.userAddress, params.poolAddress],
     });
 
+    // SEC-11: approve exactly this order's escrow cost — nothing more.
     const neededAllowance = (rawPrice * rawQuantity) / one;
     if (currentAllowance < neededAllowance) {
       const approveTx = await wallet.writeContract({
         address: token,
         abi: ERC20_ABI,
         functionName: 'approve',
-        args: [params.poolAddress, parseUnits('1000000', 6)],
+        args: [params.poolAddress, neededAllowance],
       });
       await publicClient.waitForTransactionReceipt({ hash: approveTx });
     }

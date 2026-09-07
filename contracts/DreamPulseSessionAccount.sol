@@ -11,8 +11,26 @@ pragma solidity ^0.8.20;
  *  - Prohibits arbitrary transfers, approvals, and withdrawals.
  *  - Revocable in 1 tx by the user's EOA.
  *  - Compatible with both Smart Account relay and EIP-7702 EOA delegation.
+ *  - SEC-03: every `targetPool` must be authorized on-chain (canonical
+ *    BinarySettlement `isPoolApproved` registry or owner allowlist) before
+ *    any external call is forwarded; `executeOrder`/`executeFromSelf` are
+ *    reentrancy-guarded.
  */
 contract DreamPulseSessionAccount {
+    // Minimal reentrancy guard (self-contained, no OpenZeppelin import so the
+    // file still compiles with plain solc standard-JSON).
+    uint256 private constant _NOT_ENTERED = 1;
+    uint256 private constant _ENTERED = 2;
+
+    address public owner;
+
+    // SEC-03 pool allowlist. See DreamPulseSessionAccountV2 for semantics:
+    // `poolRegistry` = canonical BinarySettlement `isPoolApproved` registry,
+    // `authorizedPools` = centrally managed emergency/extension allowlist.
+    address public poolRegistry;
+    mapping(address => bool) public authorizedPools;
+
+    uint256 private _reentrancyStatus;
     struct SessionPolicy {
         address sessionKey;
         uint256 maxTradeSize;   // Collateral units (6 decimals for tUSDC, e.g. 20 * 1e6)
@@ -62,6 +80,10 @@ contract DreamPulseSessionAccount {
         bytes4 selector
     );
 
+    event PoolRegistryUpdated(address indexed oldRegistry, address indexed newRegistry);
+    event PoolAuthorizationUpdated(address indexed pool, bool allowed);
+
+    error NotOwner();
     error SessionNotActive();
     error SessionExpired();
     error ExceedsMaxTradeSize(uint256 requested, uint256 maxAllowed);
@@ -71,6 +93,63 @@ contract DreamPulseSessionAccount {
     error InvalidSessionKey();
     error InvalidDuration();
     error InvalidCapLimits();
+    error InvalidPool(address pool);
+    error InvalidAddress();
+    error ReentrantCall();
+
+    modifier onlyOwner() {
+        if (msg.sender != owner) revert NotOwner();
+        _;
+    }
+
+    modifier nonReentrant() {
+        if (_reentrancyStatus == _ENTERED) revert ReentrantCall();
+        _reentrancyStatus = _ENTERED;
+        _;
+        _reentrancyStatus = _NOT_ENTERED;
+    }
+
+    constructor() {
+        owner = msg.sender;
+        _reentrancyStatus = _NOT_ENTERED;
+    }
+
+    /**
+     * @notice Pin or rotate the canonical pool registry (BinarySettlement).
+     * Owner-only. Pass address(0) to fall back to explicit-allowlist mode.
+     */
+    function setPoolRegistry(address _registry) external onlyOwner {
+        if (_registry != address(0) && _registry.code.length == 0) revert InvalidPool(_registry);
+        emit PoolRegistryUpdated(poolRegistry, _registry);
+        poolRegistry = _registry;
+    }
+
+    /**
+     * @notice Explicitly allowlist or delist a pool contract. Owner-only.
+     * EOAs and the zero address can never be allowlisted.
+     */
+    function setPoolAuthorization(address pool, bool allowed) external onlyOwner {
+        if (pool.code.length == 0) revert InvalidPool(pool);
+        authorizedPools[pool] = allowed;
+        emit PoolAuthorizationUpdated(pool, allowed);
+    }
+
+    /**
+     * @notice Returns true when `pool` may receive forwarded trading calls:
+     * explicitly allowlisted, or approved by the canonical on-chain registry.
+     * Fail-closed on any registry malfunction.
+     */
+    function isPoolAuthorized(address pool) public view returns (bool) {
+        if (pool == address(0)) return false;
+        if (authorizedPools[pool]) return true;
+        address registry = poolRegistry;
+        if (registry == address(0)) return false;
+        (bool ok, bytes memory ret) = registry.staticcall(
+            abi.encodeWithSignature("isPoolApproved(address)", pool)
+        );
+        if (!ok || ret.length < 32) return false;
+        return abi.decode(ret, (bool));
+    }
 
     /**
      * @notice Authorize an ephemeral session key for the calling user with explicit on-chain risk caps.
@@ -138,7 +217,7 @@ contract DreamPulseSessionAccount {
         address targetPool,
         bytes calldata callData,
         uint256 tradeCost
-    ) external payable returns (bytes memory) {
+    ) external payable nonReentrant returns (bytes memory) {
         SessionPolicy storage policy = userSessions[user][msg.sender];
 
         if (!policy.isActive) revert SessionNotActive();
@@ -161,6 +240,9 @@ contract DreamPulseSessionAccount {
 
         policy.spentToday += tradeCost;
 
+        // SEC-03: only forward to registry-approved or allowlisted pools.
+        if (!isPoolAuthorized(targetPool)) revert InvalidPool(targetPool);
+
         (bool success, bytes memory result) = targetPool.call{value: msg.value}(callData);
         if (!success) {
             revert ExecutionFailed(result);
@@ -179,7 +261,7 @@ contract DreamPulseSessionAccount {
         address targetPool,
         bytes calldata callData,
         uint256 tradeCost
-    ) external payable returns (bytes memory) {
+    ) external payable nonReentrant returns (bytes memory) {
         address user = address(this);
         SessionPolicy storage policy = userSessions[user][msg.sender];
 
@@ -201,6 +283,9 @@ contract DreamPulseSessionAccount {
         }
 
         policy.spentToday += tradeCost;
+
+        // SEC-03: only forward to registry-approved or allowlisted pools.
+        if (!isPoolAuthorized(targetPool)) revert InvalidPool(targetPool);
 
         (bool success, bytes memory result) = targetPool.call{value: msg.value}(callData);
         if (!success) {

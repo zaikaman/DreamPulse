@@ -1,11 +1,16 @@
 {
   "contractName": "DreamPulseSessionAccount",
-  "address": "0xff16ef28861f90201ab0b00e46f6c7683afacee5",
+  "address": "0xa85ec9a6a0845eeb642e1dce12780e9b4cfd37f8",
   "chainId": 50312,
-  "blockNumber": "481103348",
-  "transactionHash": "0x6b9fe60b53bf2bda0c6733a01854a9887c71444359dff7b33981a3c75068b457",
-  "deployedAt": "2026-09-06T08:31:23.262Z",
+  "blockNumber": "482138312",
+  "transactionHash": "0xd1b8f8eecaf5b09ec7ab16f67b9fee7352dfc23228d76894c9065e4ce59423e9",
+  "deployedAt": "2026-09-07T13:16:42.572Z",
   "abi": [
+    {
+      "inputs": [],
+      "stateMutability": "nonpayable",
+      "type": "constructor"
+    },
     {
       "inputs": [
         {
@@ -51,6 +56,11 @@
     },
     {
       "inputs": [],
+      "name": "InvalidAddress",
+      "type": "error"
+    },
+    {
+      "inputs": [],
       "name": "InvalidCapLimits",
       "type": "error"
     },
@@ -60,8 +70,29 @@
       "type": "error"
     },
     {
+      "inputs": [
+        {
+          "internalType": "address",
+          "name": "pool",
+          "type": "address"
+        }
+      ],
+      "name": "InvalidPool",
+      "type": "error"
+    },
+    {
       "inputs": [],
       "name": "InvalidSessionKey",
+      "type": "error"
+    },
+    {
+      "inputs": [],
+      "name": "NotOwner",
+      "type": "error"
+    },
+    {
+      "inputs": [],
+      "name": "ReentrantCall",
       "type": "error"
     },
     {
@@ -120,6 +151,44 @@
         }
       ],
       "name": "OrderExecuted",
+      "type": "event"
+    },
+    {
+      "anonymous": false,
+      "inputs": [
+        {
+          "indexed": true,
+          "internalType": "address",
+          "name": "pool",
+          "type": "address"
+        },
+        {
+          "indexed": false,
+          "internalType": "bool",
+          "name": "allowed",
+          "type": "bool"
+        }
+      ],
+      "name": "PoolAuthorizationUpdated",
+      "type": "event"
+    },
+    {
+      "anonymous": false,
+      "inputs": [
+        {
+          "indexed": true,
+          "internalType": "address",
+          "name": "oldRegistry",
+          "type": "address"
+        },
+        {
+          "indexed": true,
+          "internalType": "address",
+          "name": "newRegistry",
+          "type": "address"
+        }
+      ],
+      "name": "PoolRegistryUpdated",
       "type": "event"
     },
     {
@@ -353,6 +422,25 @@
       "inputs": [
         {
           "internalType": "address",
+          "name": "",
+          "type": "address"
+        }
+      ],
+      "name": "authorizedPools",
+      "outputs": [
+        {
+          "internalType": "bool",
+          "name": "",
+          "type": "bool"
+        }
+      ],
+      "stateMutability": "view",
+      "type": "function"
+    },
+    {
+      "inputs": [
+        {
+          "internalType": "address",
           "name": "targetPool",
           "type": "address"
         },
@@ -464,6 +552,25 @@
     {
       "inputs": [
         {
+          "internalType": "address",
+          "name": "pool",
+          "type": "address"
+        }
+      ],
+      "name": "isPoolAuthorized",
+      "outputs": [
+        {
+          "internalType": "bool",
+          "name": "",
+          "type": "bool"
+        }
+      ],
+      "stateMutability": "view",
+      "type": "function"
+    },
+    {
+      "inputs": [
+        {
           "internalType": "bytes4",
           "name": "selector",
           "type": "bytes4"
@@ -481,6 +588,32 @@
       "type": "function"
     },
     {
+      "inputs": [],
+      "name": "owner",
+      "outputs": [
+        {
+          "internalType": "address",
+          "name": "",
+          "type": "address"
+        }
+      ],
+      "stateMutability": "view",
+      "type": "function"
+    },
+    {
+      "inputs": [],
+      "name": "poolRegistry",
+      "outputs": [
+        {
+          "internalType": "address",
+          "name": "",
+          "type": "address"
+        }
+      ],
+      "stateMutability": "view",
+      "type": "function"
+    },
+    {
       "inputs": [
         {
           "internalType": "address",
@@ -489,6 +622,37 @@
         }
       ],
       "name": "revokeSession",
+      "outputs": [],
+      "stateMutability": "nonpayable",
+      "type": "function"
+    },
+    {
+      "inputs": [
+        {
+          "internalType": "address",
+          "name": "pool",
+          "type": "address"
+        },
+        {
+          "internalType": "bool",
+          "name": "allowed",
+          "type": "bool"
+        }
+      ],
+      "name": "setPoolAuthorization",
+      "outputs": [],
+      "stateMutability": "nonpayable",
+      "type": "function"
+    },
+    {
+      "inputs": [
+        {
+          "internalType": "address",
+          "name": "_registry",
+          "type": "address"
+        }
+      ],
+      "name": "setPoolRegistry",
       "outputs": [],
       "stateMutability": "nonpayable",
       "type": "function"

@@ -647,6 +647,44 @@ export async function checkOnChainOperatorAuthorization(
 }
 
 /**
+ * Canonical DreamDEX BinarySettlement pool registry (SEC-03 trust anchor).
+ * `isPoolApproved` is the on-chain source of truth for genuine pools —
+ * attacker contracts can fake pool view functions but cannot fake registry
+ * approval.
+ */
+export const BINARY_SETTLEMENT_REGISTRY_ABI = [
+  {
+    type: 'function',
+    name: 'isPoolApproved',
+    stateMutability: 'view',
+    inputs: [{ name: 'pool', type: 'address' }],
+    outputs: [{ name: '', type: 'bool' }],
+  },
+] as const;
+
+/**
+ * Defense-in-depth pool-trust probe used before the backend relays a trade
+ * to a clone's `executeOrder` (the clone itself enforces this on-chain and
+ * is the authoritative gate).
+ * Returns true/false when the registry answered, null on RPC failure so
+ * callers can proceed (on-chain fail-closed validation remains) instead of
+ * treating an outage as untrusted.
+ */
+export async function isTrustedPoolAddress(pool: Address): Promise<boolean | null> {
+  try {
+    const approved = await publicClient.readContract({
+      address: SOMNIA_ADDRESSES.binarySettlement,
+      abi: BINARY_SETTLEMENT_REGISTRY_ABI,
+      functionName: 'isPoolApproved',
+      args: [pool],
+    });
+    return Boolean(approved);
+  } catch {
+    return null;
+  }
+}
+
+/**
  * V2 per-user clone + factory ABIs (current non-custodial model).
  * Clones trade as themselves (self-send selectors); no registry grant exists.
  */
@@ -727,6 +765,58 @@ export const SESSION_CLONE_ABI = [
   },
   {
     type: 'function',
+    name: 'poolRegistry',
+    stateMutability: 'view',
+    inputs: [],
+    outputs: [{ name: '', type: 'address' }],
+  },
+  {
+    type: 'function',
+    name: 'trustedModule',
+    stateMutability: 'view',
+    inputs: [],
+    outputs: [{ name: '', type: 'address' }],
+  },
+  {
+    type: 'function',
+    name: 'authorizedPools',
+    stateMutability: 'view',
+    inputs: [{ name: '', type: 'address' }],
+    outputs: [{ name: '', type: 'bool' }],
+  },
+  {
+    type: 'function',
+    name: 'isPoolAuthorized',
+    stateMutability: 'view',
+    inputs: [{ name: 'pool', type: 'address' }],
+    outputs: [{ name: '', type: 'bool' }],
+  },
+  {
+    type: 'function',
+    name: 'setPoolRegistry',
+    stateMutability: 'nonpayable',
+    inputs: [{ name: '_registry', type: 'address' }],
+    outputs: [],
+  },
+  {
+    type: 'function',
+    name: 'setTrustedModule',
+    stateMutability: 'nonpayable',
+    inputs: [{ name: '_module', type: 'address' }],
+    outputs: [],
+  },
+  {
+    type: 'function',
+    name: 'setPoolAuthorization',
+    stateMutability: 'nonpayable',
+    inputs: [
+      { name: 'pool', type: 'address' },
+      { name: 'allowed', type: 'bool' },
+    ],
+    outputs: [],
+  },
+  {
+    type: 'function',
     name: 'isSelectorAllowed',
     stateMutability: 'pure',
     inputs: [{ name: 'selector', type: 'bytes4' }],
@@ -779,6 +869,34 @@ export const SESSION_FACTORY_ABI = [
     stateMutability: 'view',
     inputs: [{ name: '', type: 'address' }],
     outputs: [{ name: '', type: 'address' }],
+  },
+  {
+    type: 'function',
+    name: 'poolRegistry',
+    stateMutability: 'view',
+    inputs: [],
+    outputs: [{ name: '', type: 'address' }],
+  },
+  {
+    type: 'function',
+    name: 'trustedModule',
+    stateMutability: 'view',
+    inputs: [],
+    outputs: [{ name: '', type: 'address' }],
+  },
+  {
+    type: 'function',
+    name: 'setPoolRegistry',
+    stateMutability: 'nonpayable',
+    inputs: [{ name: '_registry', type: 'address' }],
+    outputs: [],
+  },
+  {
+    type: 'function',
+    name: 'setTrustedModule',
+    stateMutability: 'nonpayable',
+    inputs: [{ name: '_module', type: 'address' }],
+    outputs: [],
   },
 ] as const;
 
@@ -1018,6 +1136,30 @@ export const DREAM_PULSE_SESSION_ACCOUNT_ABI = [
     stateMutability: 'pure',
     inputs: [{ name: 'selector', type: 'bytes4' }],
     outputs: [{ name: '', type: 'bool' }],
+  },
+  {
+    type: 'function',
+    name: 'isPoolAuthorized',
+    stateMutability: 'view',
+    inputs: [{ name: 'pool', type: 'address' }],
+    outputs: [{ name: '', type: 'bool' }],
+  },
+  {
+    type: 'function',
+    name: 'setPoolRegistry',
+    stateMutability: 'nonpayable',
+    inputs: [{ name: '_registry', type: 'address' }],
+    outputs: [],
+  },
+  {
+    type: 'function',
+    name: 'setPoolAuthorization',
+    stateMutability: 'nonpayable',
+    inputs: [
+      { name: 'pool', type: 'address' },
+      { name: 'allowed', type: 'bool' },
+    ],
+    outputs: [],
   },
 ] as const;
 

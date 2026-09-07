@@ -4,7 +4,7 @@ import path from 'path';
 import solc from 'solc';
 import { fileURLToPath } from 'url';
 import { type Hex } from 'viem';
-import { walletClient, publicClient, operatorAccount, executeOperatorTx, somniaShannonTestnet } from '../config/somnia.js';
+import { walletClient, publicClient, operatorAccount, executeOperatorTx, somniaShannonTestnet, SOMNIA_ADDRESSES } from '../config/somnia.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -69,6 +69,27 @@ async function main() {
   console.log(`>>> Implementation: ${implRes.address}`);
   console.log(`>>> Factory:        ${factoryRes.address}`);
   console.log(`======================================================\n`);
+
+  // SEC-03: pin the canonical trust anchors on the factory so every clone
+  // deployed via deployFor inherits the BinarySettlement pool registry and
+  // the BinaryModule redeem target from birth.
+  for (const [fn, value, label] of [
+    ['setPoolRegistry', SOMNIA_ADDRESSES.binarySettlement, 'pool registry (BinarySettlement)'],
+    ['setTrustedModule', SOMNIA_ADDRESSES.binaryModule, 'trusted module (BinaryModule)'],
+  ] as const) {
+    const cfgHash = await executeOperatorTx(() =>
+      walletClient.writeContract({
+        address: factoryRes.address,
+        abi: factory.abi,
+        functionName: fn,
+        args: [value],
+        account: operatorAccount,
+        chain: somniaShannonTestnet,
+      }),
+    );
+    await publicClient.waitForTransactionReceipt({ hash: cfgHash, timeout: 60_000 });
+    console.log(`  factory ${label} pinned: ${value} (tx: ${cfgHash})`);
+  }
 
   const artifact = {
     contractName: 'DreamPulseSessionAccountFactory',

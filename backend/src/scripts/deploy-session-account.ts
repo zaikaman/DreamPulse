@@ -4,7 +4,7 @@ import path from 'path';
 import solc from 'solc';
 import { fileURLToPath } from 'url';
 import { type Hex } from 'viem';
-import { walletClient, publicClient, operatorAccount, executeOperatorTx, somniaShannonTestnet } from '../config/somnia.js';
+import { walletClient, publicClient, operatorAccount, executeOperatorTx, somniaShannonTestnet, SOMNIA_ADDRESSES } from '../config/somnia.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -77,6 +77,20 @@ async function main() {
   console.log(`>>> Address: ${contractAddress}`);
   console.log(`>>> Block:   ${receipt.blockNumber}`);
   console.log(`======================================================\n`);
+
+  // SEC-03: pin the canonical pool registry (operator is contract owner).
+  const pinHash = await executeOperatorTx(async () => {
+    return await walletClient.writeContract({
+      address: contractAddress,
+      abi,
+      functionName: 'setPoolRegistry',
+      args: [SOMNIA_ADDRESSES.binarySettlement],
+      account: operatorAccount,
+      chain: somniaShannonTestnet,
+    });
+  });
+  await publicClient.waitForTransactionReceipt({ hash: pinHash, timeout: 60_000 });
+  console.log(`>>> poolRegistry (BinarySettlement) pinned: ${SOMNIA_ADDRESSES.binarySettlement} (tx: ${pinHash})`);
 
   const artifact = {
     contractName: 'DreamPulseSessionAccount',

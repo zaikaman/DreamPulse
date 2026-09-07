@@ -428,12 +428,16 @@ export class SessionService {
         const factoryAccount = await this.getOrCreateClone(normalizedUser);
         if (factoryAccount && factoryAccount.toLowerCase() !== CLONE_ZERO_ADDRESS.toLowerCase()) {
           if (accountAddress && accountAddress.toLowerCase() !== factoryAccount.toLowerCase()) {
-            throw new Error(`accountAddress ${accountAddress} is not the registered trading account for ${normalizedUser}`);
+            // Stale client (e.g. holding a pre-redeploy clone address):
+            // the factory registry is source of truth — adopt it instead of
+            // rejecting the session.
+            console.warn(
+              `[SessionService] Adopting factory clone ${factoryAccount} over stale client account ${accountAddress} for ${normalizedUser}`,
+            );
           }
           accountAddress = factoryAccount;
         }
       } catch (err: any) {
-        if (err?.message?.startsWith('accountAddress')) throw err;
         if (process.env.NODE_ENV !== 'test') {
           console.warn('[SessionService] Clone lookup/deployment warning:', err?.message || err);
         }
