@@ -1,4 +1,5 @@
 import { isAddress, getAddress, type Address, type Hex } from 'viem';
+import type { RealtimeChannel } from '@supabase/supabase-js';
 import { supabase, isPersistenceEnabled } from '../config/supabase.js';
 import { sessionService } from './session-service.js';
 import { orderService, quantizeOrder } from './order-service.js';
@@ -44,6 +45,10 @@ function toRelationRecord(row: any): SocialCopyRelation {
 export class SocialCopyService {
   private relations = new Map<string, SocialCopyRelation>();
   private readyPromise: Promise<void>;
+  // PERF-06: realtime resilience — resubscribe with backoff on channel drops.
+  private realtimeChannel: RealtimeChannel | null = null;
+  private realtimeRetryCount = 0;
+  private realtimeRetryTimer: NodeJS.Timeout | null = null;
 
   constructor() {
     this.readyPromise = this.loadFromDb().catch((err) => {
@@ -59,8 +64,13 @@ export class SocialCopyService {
   private initRealtime(): void {
     if (!isPersistenceEnabled()) return;
     try {
-      supabase
-        .channel('public:social_copy_trades')
+      if (this.realtimeChannel) {
+        try { void supabase.removeChannel(this.realtimeChannel); } catch {}
+        this.realtimeChannel = null;
+      }
+      const channel = supabase.channel('public:social_copy_trades');
+      this.realtimeChannel = channel;
+      channel
         .on(
           'postgres_changes',
           { event: '*', schema: 'public', table: 'social_copy_trades' },
@@ -72,9 +82,27 @@ export class SocialCopyService {
             }
           }
         )
-        .subscribe();
+        // PERF-06: status callback with automatic resubscription on drops.
+        .subscribe((status, err) => this.handleRealtimeStatus(status, err));
     } catch (err: any) {
       console.warn('[SocialCopyService] Realtime subscription warning:', err?.message || err);
+    }
+  }
+
+  private handleRealtimeStatus(status: string, err?: Error): void {
+    if (status === 'SUBSCRIBED') {
+      this.realtimeRetryCount = 0;
+      return;
+    }
+    if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT' || status === 'CLOSED') {
+      console.warn(`[SocialCopyService] Realtime channel public:social_copy_trades status=${status} — scheduling resubscribe`, (err as any)?.message || '');
+      if (this.realtimeRetryTimer || !isPersistenceEnabled()) return;
+      const delay = Math.min(30_000, 1000 * 2 ** this.realtimeRetryCount++);
+      this.realtimeRetryTimer = setTimeout(() => {
+        this.realtimeRetryTimer = null;
+        this.initRealtime();
+      }, delay);
+      if (typeof this.realtimeRetryTimer.unref === 'function') this.realtimeRetryTimer.unref();
     }
   }
 

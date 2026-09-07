@@ -1,5 +1,6 @@
 import { isAddress, getAddress, type Address, type Hex } from 'viem';
 import { privateKeyToAccount } from 'viem/accounts';
+import type { RealtimeChannel } from '@supabase/supabase-js';
 import { supabase, isPersistenceEnabled } from '../config/supabase.js';
 import { SOMNIA_ADDRESSES, operatorAccount, publicClient } from '../config/somnia.js';
 import { userSwarmService } from './user-swarm-service.js';
@@ -109,6 +110,12 @@ export class SessionService {
   private authRefreshInFlight: Promise<void> | null = null;
   private static readonly AUTH_REFRESH_MS = 60_000;
 
+  // PERF-06: realtime resilience state — a dropped channel must resubscribe,
+  // otherwise the backend goes deaf to session revocations silently.
+  private realtimeChannel: RealtimeChannel | null = null;
+  private realtimeRetryCount = 0;
+  private realtimeRetryTimer: NodeJS.Timeout | null = null;
+
   constructor() {
     this.loadActiveSessionsFromDb()
       .then(() => this.refreshOnChainAuthorizations())
@@ -121,8 +128,14 @@ export class SessionService {
   private initRealtime(): void {
     if (!isSessionPersistenceEnabled()) return;
     try {
-      supabase
-        .channel('public:sessions_backend')
+      // Drop any stale channel before (re)subscribing to avoid channel leaks.
+      if (this.realtimeChannel) {
+        try { void supabase.removeChannel(this.realtimeChannel); } catch {}
+        this.realtimeChannel = null;
+      }
+      const channel = supabase.channel('public:sessions_backend');
+      this.realtimeChannel = channel;
+      channel
         .on(
           'postgres_changes',
           { event: '*', schema: 'public', table: 'sessions' },
@@ -199,9 +212,29 @@ export class SessionService {
             }
           }
         )
-        .subscribe();
+        // PERF-06: status callback — silently dropped channels resubscribe
+        // with backoff instead of leaving the backend deaf to revocations.
+        .subscribe((status, err) => this.handleRealtimeStatus(status, err));
     } catch (err: any) {
       console.warn('[SessionService] Realtime subscription warning:', err?.message || err);
+    }
+  }
+
+  private handleRealtimeStatus(status: string, err?: Error): void {
+    if (status === 'SUBSCRIBED') {
+      this.realtimeRetryCount = 0;
+      return;
+    }
+    if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT' || status === 'CLOSED') {
+      console.warn(`[SessionService] Realtime channel public:sessions_backend status=${status} — scheduling resubscribe`, (err as any)?.message || '');
+      if (this.realtimeRetryTimer || !isSessionPersistenceEnabled()) return;
+      const delay = Math.min(30_000, 1000 * 2 ** this.realtimeRetryCount++);
+      this.realtimeRetryTimer = setTimeout(() => {
+        this.realtimeRetryTimer = null;
+        this.initRealtime();
+      }, delay);
+      // Avoid leaking the timer handle across process teardown in tests.
+      if (typeof this.realtimeRetryTimer.unref === 'function') this.realtimeRetryTimer.unref();
     }
   }
 
@@ -300,10 +333,12 @@ export class SessionService {
     // 2. Query Supabase if persistence is enabled
     if (isSessionPersistenceEnabled()) {
       try {
+        // PERF-03: .eq()/.in() keep the sessions B-Tree usable; .ilike() forces
+        // a sequential scan. Both casings cover legacy mixed-case rows.
         const { data, error } = await supabase
           .from('sessions')
           .select('nonce')
-          .ilike('user_address', normalizedUser)
+          .in('user_address', Array.from(new Set([normalizedUser, userKey])))
           .order('nonce', { ascending: false })
           .limit(1);
 
@@ -372,7 +407,7 @@ export class SessionService {
           const { data } = await supabase
             .from('sessions')
             .select('id')
-            .ilike('user_address', normalizedUser)
+            .in('user_address', Array.from(new Set([normalizedUser, userKey])))
             .eq('nonce', parsedNonce)
             .limit(1);
           if (data && data.length > 0) {

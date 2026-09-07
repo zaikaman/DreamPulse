@@ -1,4 +1,4 @@
-import React, { forwardRef, useRef, useMemo, useLayoutEffect, useEffect } from 'react';
+import React, { forwardRef, useRef, useMemo, useLayoutEffect, useEffect, useState } from 'react';
 import { Canvas, useFrame, useThree } from '@react-three/fiber';
 import { Color, Mesh, ShaderMaterial, IUniform } from 'three';
 
@@ -84,6 +84,9 @@ interface SilkPlaneProps {
 
 const SilkPlane = forwardRef<Mesh, SilkPlaneProps>(function SilkPlane({ uniforms }, ref) {
   const { viewport } = useThree();
+  const invalidate = useThree((s) => s.invalidate);
+  const mountedRef = useRef(true);
+  const frameTimer = useRef<number | null>(null);
 
   useLayoutEffect(() => {
     if (ref && 'current' in ref && ref.current) {
@@ -91,13 +94,39 @@ const SilkPlane = forwardRef<Mesh, SilkPlaneProps>(function SilkPlane({ uniforms
     }
   }, [ref, viewport]);
 
-  useFrame((_, delta) => {
+  useEffect(() => {
+    mountedRef.current = true;
+    // Guarantee one static frame paints even when the loop never auto-runs
+    // (prefers-reduced-motion or tab hidden at mount).
+    invalidate();
+    return () => {
+      mountedRef.current = false;
+      if (frameTimer.current !== null) {
+        clearTimeout(frameTimer.current);
+        frameTimer.current = null;
+      }
+    };
+  }, [invalidate]);
+
+  useFrame((state, delta) => {
+    // PERF-09: never schedule another frame while the tab is hidden — the
+    // demand loop halts and the GPU idles until visibilitychange kicks it.
+    if (typeof document !== 'undefined' && document.hidden) return;
     if (ref && 'current' in ref && ref.current) {
       const material = ref.current.material as ShaderMaterial;
       if (material && material.uniforms && material.uniforms.uTime) {
-        material.uniforms.uTime.value += 0.1 * delta;
+        // Clamp delta so a backgrounded tab doesn't cause a time jump on return.
+        material.uniforms.uTime.value += 0.1 * Math.min(delta, 0.1);
       }
     }
+    // Self-perpetuating demand loop capped at ~30fps instead of 60-120fps.
+    if (frameTimer.current !== null) clearTimeout(frameTimer.current);
+    frameTimer.current = window.setTimeout(() => {
+      frameTimer.current = null;
+      if (mountedRef.current && (typeof document === 'undefined' || !document.hidden)) {
+        state.invalidate();
+      }
+    }, 1000 / 30);
   });
 
   return (
@@ -149,6 +178,30 @@ export const Silk: React.FC<SilkProps> = ({
   style,
 }) => {
   const meshRef = useRef<Mesh>(null);
+  const invalidateRef = useRef<(() => void) | null>(null);
+  // PERF-09: static single frame for reduced-motion users (no render loop).
+  const reduceMotion = useMemo(
+    () =>
+      typeof window !== 'undefined' &&
+      typeof window.matchMedia === 'function' &&
+      window.matchMedia('(prefers-reduced-motion: reduce)').matches,
+    [],
+  );
+  const [tabVisible, setTabVisible] = useState(
+    () => typeof document === 'undefined' || !document.hidden,
+  );
+
+  useEffect(() => {
+    if (typeof document === 'undefined') return;
+    const onVisibility = () => {
+      const visible = !document.hidden;
+      setTabVisible(visible);
+      // Restart the halted demand loop when returning to the tab.
+      if (visible) invalidateRef.current?.();
+    };
+    document.addEventListener('visibilitychange', onVisibility);
+    return () => document.removeEventListener('visibilitychange', onVisibility);
+  }, []);
 
   const uniforms = useMemo<SilkUniforms>(
     () => ({
@@ -175,13 +228,17 @@ export const Silk: React.FC<SilkProps> = ({
       <div className={className} style={{ width: '100%', height: '100%', ...style }}>
         <Canvas
           dpr={[1, 1.5]}
-          frameloop="always"
+          // PERF-09: on-demand rendering driven by SilkPlane's throttled
+          // invalidate loop (~30fps, paused when hidden) instead of an
+          // unthrottled 60-120fps always-on loop.
+          frameloop={tabVisible && !reduceMotion ? 'demand' : 'never'}
           gl={{
             alpha: true,
             antialias: false,
             powerPreference: 'low-power',
           }}
-          onCreated={({ gl }) => {
+          onCreated={({ gl, invalidate }) => {
+            invalidateRef.current = invalidate;
             gl.domElement.addEventListener(
               'webglcontextlost',
               (event) => {

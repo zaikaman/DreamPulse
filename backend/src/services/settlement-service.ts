@@ -168,6 +168,11 @@ export class SettlementService {
       return;
     }
     const normalized = getAddress(userAddress).toLowerCase();
+    // PERF-03: .ilike() invalidates the sweeps B-Tree index (sequential scan).
+    // Match both canonical casings with .in() instead — index-backed BitmapOr
+    // that also covers legacy rows stored in either checksummed or lower case.
+    const checksummed = getAddress(userAddress);
+    const addressVariants = Array.from(new Set([checksummed, normalized]));
     if (this.loadedUsers.has(normalized)) {
       return;
     }
@@ -179,7 +184,7 @@ export class SettlementService {
         const { data, error } = await supabase
           .from('sweeps')
           .select('*')
-          .ilike('user_address', normalized)
+          .in('user_address', addressVariants)
           .neq('status', 'FAILED')
           .order('claimed_at', { ascending: false })
           .range(page * pageSize, (page + 1) * pageSize - 1);
@@ -266,7 +271,9 @@ export class SettlementService {
           await marketService.ensureMarketPersisted(sweep.marketId, 'BTC/USD').catch(() => {});
           await supabase.from('sweeps').insert({
             id: sweep.id,
-            user_address: sweep.userAddress,
+            // Canonical checksummed casing so reads converge on one form
+            // (legacy mixed-case rows are still matched via addressVariants).
+            user_address: getAddress(sweep.userAddress),
             market_id: sweep.marketId,
             winning_outcome: sweep.winningOutcome,
             claimable_amount: sweep.claimableAmount,

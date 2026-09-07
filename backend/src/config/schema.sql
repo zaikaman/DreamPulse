@@ -281,8 +281,18 @@ CREATE INDEX IF NOT EXISTS idx_orders_user_source_created ON public.orders(user_
 CREATE INDEX IF NOT EXISTS idx_orders_settled_at ON public.orders(settled_at DESC) WHERE is_settled = TRUE;
 CREATE INDEX IF NOT EXISTS idx_orders_market ON public.orders(market_id, status);
 CREATE INDEX IF NOT EXISTS idx_sweeps_user ON public.sweeps(user_address, status);
+-- PERF-03: functional lower() indexes so case-insensitive lookups stay index-backed
+-- (plain B-Tree indexes cannot satisfy ILIKE / lower() predicates).
+CREATE INDEX IF NOT EXISTS idx_sweeps_user_lower ON public.sweeps(lower(user_address));
 CREATE INDEX IF NOT EXISTS idx_agent_logs_created ON public.agent_logs(created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_agent_logs_type ON public.agent_logs(agent_type, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_agent_logs_type_lower ON public.agent_logs(lower(agent_type));
+-- PERF-01: PostgreSQL does NOT auto-index FK columns. Without these, every
+-- sessions row delete/revoke forces sequential scans of orders/agent_strategies.
+CREATE INDEX IF NOT EXISTS idx_orders_session_id ON public.orders(session_id);
+CREATE INDEX IF NOT EXISTS idx_agent_strategies_session_id ON public.agent_strategies(session_id);
+-- PERF-02: agent_strategies RLS evaluates lower(user_address) per row — back it.
+CREATE INDEX IF NOT EXISTS idx_agent_strategies_user_lower ON public.agent_strategies(lower(user_address));
 CREATE INDEX IF NOT EXISTS idx_backtests_user ON public.backtests(user_address, created_at DESC);
 
 -- ------------------------------------------------------------------------------
@@ -470,6 +480,8 @@ CREATE TABLE IF NOT EXISTS public.daily_pnl (
 );
 
 CREATE INDEX IF NOT EXISTS idx_daily_pnl_user_day ON public.daily_pnl(user_address, day DESC);
+-- PERF-10: equity-curve reads filter case-insensitively on user_address + day.
+CREATE INDEX IF NOT EXISTS idx_daily_pnl_user_day_lower ON public.daily_pnl(lower(user_address), day DESC);
 CREATE INDEX IF NOT EXISTS idx_daily_pnl_source_day ON public.daily_pnl(source, day DESC);
 
 ALTER TABLE public.daily_pnl ENABLE ROW LEVEL SECURITY;
@@ -507,6 +519,18 @@ CREATE INDEX IF NOT EXISTS idx_social_copy_target_active ON public.social_copy_t
 CREATE INDEX IF NOT EXISTS idx_social_copy_copier ON public.social_copy_trades(copier_address);
 CREATE INDEX IF NOT EXISTS idx_social_copy_copier_lower ON public.social_copy_trades(lower(copier_address));
 CREATE INDEX IF NOT EXISTS idx_social_copy_target_lower ON public.social_copy_trades(lower(target_address));
+-- PERF-05: the UNIQUE(copier_address, target_address) constraint is case-sensitive,
+-- so a checksummed + a lowercased row for the same pair co-exist and cause double
+-- copy-trade executions. Collapse legacy case-variant duplicates (keep earliest),
+-- then enforce case-insensitive uniqueness. Writes are checksummed via
+-- getAddress() in social-copy-service, so this index is a backstop, not the hot path.
+DELETE FROM public.social_copy_trades a
+USING public.social_copy_trades b
+WHERE a.ctid > b.ctid
+  AND lower(a.copier_address) = lower(b.copier_address)
+  AND lower(a.target_address) = lower(b.target_address);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_social_copy_pair_lower
+  ON public.social_copy_trades(lower(copier_address), lower(target_address));
 
 ALTER TABLE public.social_copy_trades ENABLE ROW LEVEL SECURITY;
 

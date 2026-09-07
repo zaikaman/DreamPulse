@@ -98,12 +98,24 @@ class TelemetryClient {
   private userAddress: string | null = null;
   private isDebugEnabled = false;
 
+  // PERF-07: application-level watchdog. Browser WebSocket handles protocol
+  // ping frames silently (no JS events), so a silently black-holed path
+  // leaves readyState === OPEN forever while telemetry freezes. If no packet
+  // arrives for STALE_MS, probe with an app-level ping; if the ping goes
+  // unanswered, force a reconnect.
+  private lastMessageAt = 0;
+  private pingSentAt = 0;
+  private watchdogTimer: number | null = null;
+  private static readonly WATCHDOG_STALE_MS = 30_000;
+  private static readonly WATCHDOG_CHECK_MS = 10_000;
+
   private listeners: Map<TelemetryEventType, Set<TelemetryEventCallback>> = new Map();
 
   constructor() {
     // Auto-connect when browser window is ready
     if (typeof window !== 'undefined') {
       this.connect();
+      this.startWatchdog();
 
       // Optimize on background tab / foreground visibility change
       document.addEventListener('visibilitychange', () => {
@@ -112,6 +124,39 @@ class TelemetryClient {
           this.connect();
         }
       });
+    }
+  }
+
+  private startWatchdog(): void {
+    if (this.watchdogTimer !== null) return;
+    this.watchdogTimer = window.setInterval(() => this.checkWatchdog(), TelemetryClient.WATCHDOG_CHECK_MS);
+  }
+
+  private checkWatchdog(): void {
+    const ws = this.ws;
+    if (!ws || ws.readyState !== WebSocket.OPEN) return;
+    const now = Date.now();
+    if (now - this.lastMessageAt <= TelemetryClient.WATCHDOG_STALE_MS) return;
+
+    if (this.pingSentAt > this.lastMessageAt) {
+      // App-level ping went unanswered — half-open zombie socket. Kill it;
+      // handleDisconnect() schedules the reconnect with backoff.
+      try {
+        ws.close();
+      } catch {
+        // Ignore close errors — handleDisconnect() covers the reconnect.
+      }
+      this.pingSentAt = 0;
+      this.handleDisconnect();
+      return;
+    }
+
+    // Stale but unprobed — dispatch an app-level ping (server replies 'pong').
+    try {
+      ws.send(JSON.stringify({ action: 'ping' }));
+      this.pingSentAt = now;
+    } catch {
+      this.handleDisconnect();
     }
   }
 
@@ -154,6 +199,8 @@ class TelemetryClient {
       this.ws.onopen = () => {
         this.isConnected = true;
         this.reconnectAttempts = 0;
+        this.lastMessageAt = Date.now();
+        this.pingSentAt = 0;
         this.emit('status', { isConnected: true, latencyMs: this.latencyMs });
 
         // Send initial channel subscriptions
@@ -161,6 +208,8 @@ class TelemetryClient {
       };
 
       this.ws.onmessage = (event: MessageEvent) => {
+        // Any socket data proves liveness — stamp before parsing.
+        this.lastMessageAt = Date.now();
         this.handleMessage(event.data);
       };
 
@@ -279,6 +328,11 @@ class TelemetryClient {
         case 'connected':
           this.latencyMs = Math.max(4, now - this.pingTime);
           this.emit('status', { isConnected: true, latencyMs: this.latencyMs });
+          break;
+
+        case 'pong':
+          // Watchdog probe reply — refresh the latency readout.
+          this.latencyMs = this.pingSentAt > 0 ? Math.max(1, now - this.pingSentAt) : this.latencyMs;
           break;
 
         case 'market_ticks':

@@ -902,7 +902,13 @@ apiRouter.get('/agents/logs', async (req: Request, res: Response) => {
         .limit(limit);
 
       if (agentType) {
-        query = query.ilike('agent_type', agentType);
+        // PERF-03: exact .eq() keeps the idx_agent_logs_type B-Tree usable.
+        // ILIKE on a B-Tree column forces a sequential scan; normalize the
+        // input against the canonical enum case-insensitively instead.
+        const canonical = ['Volt', 'Oracle', 'Titan', 'Sweeper', 'Manual', 'CUSTOM'].find(
+          (t) => t.toLowerCase() === agentType.trim().toLowerCase(),
+        );
+        query = query.eq('agent_type', canonical ?? agentType.trim());
       }
 
       const { data, error } = await query;

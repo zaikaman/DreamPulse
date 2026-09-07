@@ -1,4 +1,5 @@
 import { isAddress, getAddress, type Address } from 'viem';
+import type { RealtimeChannel } from '@supabase/supabase-js';
 import { supabase, isPersistenceEnabled } from '../config/supabase.js';
 import type { AgentType } from '../types/index.js';
 
@@ -64,6 +65,10 @@ export class UserSwarmService {
   private cache = new Map<string, PersonalSwarmConfig>();
   private userLocks = new Map<string, Promise<any>>();
   private readyPromise: Promise<void>;
+  // PERF-06: realtime resilience — resubscribe with backoff on channel drops.
+  private realtimeChannel: RealtimeChannel | null = null;
+  private realtimeRetryCount = 0;
+  private realtimeRetryTimer: NodeJS.Timeout | null = null;
 
   constructor() {
     this.readyPromise = this.loadFromDb().catch(() => {});
@@ -77,8 +82,13 @@ export class UserSwarmService {
   private initRealtime(): void {
     if (!isPersistenceEnabled()) return;
     try {
-      supabase
-        .channel('public:user_swarm_configs')
+      if (this.realtimeChannel) {
+        try { void supabase.removeChannel(this.realtimeChannel); } catch {}
+        this.realtimeChannel = null;
+      }
+      const channel = supabase.channel('public:user_swarm_configs');
+      this.realtimeChannel = channel;
+      channel
         .on(
           'postgres_changes',
           { event: '*', schema: 'public', table: 'user_swarm_configs' },
@@ -89,9 +99,27 @@ export class UserSwarmService {
             }
           }
         )
-        .subscribe();
+        // PERF-06: status callback with automatic resubscription on drops.
+        .subscribe((status, err) => this.handleRealtimeStatus(status, err));
     } catch (err: any) {
       console.warn('[UserSwarmService] Realtime subscription warning:', err?.message || err);
+    }
+  }
+
+  private handleRealtimeStatus(status: string, err?: Error): void {
+    if (status === 'SUBSCRIBED') {
+      this.realtimeRetryCount = 0;
+      return;
+    }
+    if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT' || status === 'CLOSED') {
+      console.warn(`[UserSwarmService] Realtime channel public:user_swarm_configs status=${status} — scheduling resubscribe`, (err as any)?.message || '');
+      if (this.realtimeRetryTimer || !isPersistenceEnabled()) return;
+      const delay = Math.min(30_000, 1000 * 2 ** this.realtimeRetryCount++);
+      this.realtimeRetryTimer = setTimeout(() => {
+        this.realtimeRetryTimer = null;
+        this.initRealtime();
+      }, delay);
+      if (typeof this.realtimeRetryTimer.unref === 'function') this.realtimeRetryTimer.unref();
     }
   }
 

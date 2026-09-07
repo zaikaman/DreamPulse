@@ -706,6 +706,40 @@ export class OrderService {
     return isPersistenceEnabled();
   }
 
+  /**
+   * PERF-04: chunk order settlement updates into batches of 10 concurrent requests
+   * to avoid saturating Node's HTTP socket pool (maxSockets = 50) and prevent 504 gateway timeouts.
+   */
+  private static readonly SETTLEMENT_BATCH_SIZE = 10;
+
+  private async flushOrderSettlementRows(
+    rows: Array<{ id: string; pnl: number; status: string; is_settled: boolean; settled_at: string }>,
+  ): Promise<void> {
+    if (!this.isPersistenceEnabled() || rows.length === 0) return;
+    for (let i = 0; i < rows.length; i += OrderService.SETTLEMENT_BATCH_SIZE) {
+      const chunk = rows.slice(i, i + OrderService.SETTLEMENT_BATCH_SIZE);
+      await Promise.allSettled(
+        chunk.map(async (r) => {
+          try {
+            const res = await supabase
+              .from('orders')
+              .update({
+                pnl: r.pnl,
+                status: r.status,
+                is_settled: r.is_settled,
+                settled_at: r.settled_at,
+              } as any)
+              .eq('id', r.id);
+            if (res.error && res.error.message?.includes('is_settled')) {
+              // Legacy table without settlement columns fallback
+              await supabase.from('orders').update({ pnl: r.pnl, status: r.status } as any).eq('id', r.id);
+            }
+          } catch {}
+        }),
+      );
+    }
+  }
+
   private isGenericCustomName(name?: string | null): boolean {
     if (!name || typeof name !== 'string') return true;
     const n = name.trim();
@@ -2885,7 +2919,8 @@ export class OrderService {
     if (targetOrders.length === 0) return 0;
 
     const updatedEvents: Array<{ orderId: string; marketId: string; pnl: number; outcome: string; winningOutcome: string }> = [];
-    const dbUpdates: Array<Promise<any>> = [];
+    // PERF-04: collect settlement rows for a single batched flush (see flushOrderSettlementRows).
+    const settlementRows: Array<{ id: string; pnl: number; status: string; is_settled: boolean; settled_at: string }> = [];
     const nowIso = new Date().toISOString();
 
     for (const order of targetOrders) {
@@ -2935,24 +2970,13 @@ export class OrderService {
         });
 
         if (this.isPersistenceEnabled()) {
-          dbUpdates.push(
-            (async () => {
-              try {
-                const res = await supabase
-                  .from('orders')
-                  .update({
-                    pnl: 0,
-                    status: order.status,
-                    is_settled: true,
-                    settled_at: order.settledAt,
-                  })
-                  .eq('id', order.id);
-                if (res.error && res.error.message.includes('is_settled')) {
-                  await supabase.from('orders').update({ pnl: 0, status: order.status }).eq('id', order.id);
-                }
-              } catch {}
-            })(),
-          );
+          settlementRows.push({
+            id: order.id,
+            pnl: 0,
+            status: order.status,
+            is_settled: true,
+            settled_at: order.settledAt || nowIso,
+          });
         }
         continue;
       }
@@ -3001,30 +3025,17 @@ export class OrderService {
       }
 
       if (this.isPersistenceEnabled()) {
-        dbUpdates.push(
-          (async () => {
-            try {
-              const res = await supabase
-                .from('orders')
-                .update({
-                  pnl: order.pnl,
-                  status: order.status,
-                  is_settled: true,
-                  settled_at: order.settledAt,
-                })
-                .eq('id', order.id);
-              if (res.error && res.error.message.includes('is_settled')) {
-                await supabase.from('orders').update({ pnl: order.pnl, status: order.status }).eq('id', order.id);
-              }
-            } catch {}
-          })(),
-        );
+        settlementRows.push({
+          id: order.id,
+          pnl: order.pnl,
+          status: order.status,
+          is_settled: true,
+          settled_at: order.settledAt || nowIso,
+        });
       }
     }
 
-    if (this.isPersistenceEnabled() && dbUpdates.length > 0) {
-      await Promise.allSettled(dbUpdates);
-    }
+    await this.flushOrderSettlementRows(settlementRows);
 
     if (updatedEvents.length > 0) {
       // Sync pre-aggregated daily_pnl for fast analytics (issue #16)
@@ -3095,7 +3106,8 @@ export class OrderService {
     }
 
     let correctedCount = 0;
-    const dbUpdates: Array<Promise<any>> = [];
+    // PERF-04: batched flush (see flushOrderSettlementRows) instead of N concurrent PATCHes.
+    const reconcileRows: Array<{ id: string; pnl: number; status: string; is_settled: boolean; settled_at: string }> = [];
     const nowIso = new Date().toISOString();
 
     for (const order of hexOrders) {
@@ -3113,24 +3125,13 @@ export class OrderService {
           order.isSettled = true;
           order.settledAt = order.settledAt || nowIso;
           this.restingMakerQuotes.delete(order.id);
-          dbUpdates.push(
-            (async () => {
-              try {
-                const res = await supabase
-                  .from('orders')
-                  .update({
-                    pnl: 0,
-                    status: order.status,
-                    is_settled: true,
-                    settled_at: order.settledAt,
-                  })
-                  .eq('id', order.id);
-                if (res.error && res.error.message.includes('is_settled')) {
-                  await supabase.from('orders').update({ pnl: 0, status: order.status }).eq('id', order.id);
-                }
-              } catch {}
-            })(),
-          );
+          reconcileRows.push({
+            id: order.id,
+            pnl: 0,
+            status: order.status,
+            is_settled: true,
+            settled_at: order.settledAt || nowIso,
+          });
         }
         continue;
       }
@@ -3146,29 +3147,18 @@ export class OrderService {
         order.isSettled = true;
         order.settledAt = order.settledAt || nowIso;
 
-        dbUpdates.push(
-          (async () => {
-            try {
-              const res = await supabase
-                .from('orders')
-                .update({
-                  pnl: truePnl,
-                  status: order.status,
-                  is_settled: true,
-                  settled_at: order.settledAt,
-                })
-                .eq('id', order.id);
-              if (res.error && res.error.message.includes('is_settled')) {
-                await supabase.from('orders').update({ pnl: truePnl, status: order.status }).eq('id', order.id);
-              }
-            } catch {}
-          })(),
-        );
+        reconcileRows.push({
+          id: order.id,
+          pnl: truePnl,
+          status: order.status,
+          is_settled: true,
+          settled_at: order.settledAt || nowIso,
+        });
       }
     }
 
     if (correctedCount > 0) {
-      await Promise.allSettled(dbUpdates);
+      await this.flushOrderSettlementRows(reconcileRows);
       this.cachedPnlByKey.clear();
       this.notifyStateChange();
       console.log(`[OrderService] Reconciled and corrected ${correctedCount} orders with on-chain truth.`);
@@ -3198,6 +3188,8 @@ export class OrderService {
     if (!force && now - this.lastPnlSyncAt < 700) return;
     const doSync = async () => {
       const updatedOrderPnlEvents: Array<{ orderId: string; marketId: string; pnl: number; outcome: string; winningOutcome: string }> = [];
+      // PERF-04: collect settlement rows for one batched flush at the end.
+      const pnlSyncRows: Array<{ id: string; pnl: number; status: string; is_settled: boolean; settled_at: string }> = [];
       // Only unsettled candidates
       const candidates = this.orders.filter(
         (o) => !o.isSettled && (o.status === 'FILLED' || o.status === 'PARTIALLY_FILLED' || o.status === 'PENDING'),
@@ -3429,19 +3421,13 @@ export class OrderService {
           });
 
           if (this.isPersistenceEnabled()) {
-            void (async () => {
-              try {
-                const res = await supabase.from('orders').update({
-                  pnl: 0,
-                  status: order.status,
-                  is_settled: true,
-                  settled_at: order.settledAt,
-                }).eq('id', order.id);
-                if (res.error && res.error.message.includes('is_settled')) {
-                  await supabase.from('orders').update({ pnl: 0, status: order.status }).eq('id', order.id);
-                }
-              } catch {}
-            })();
+            pnlSyncRows.push({
+              id: order.id,
+              pnl: 0,
+              status: order.status,
+              is_settled: true,
+              settled_at: order.settledAt as string,
+            });
           }
           continue;
         }
@@ -3454,19 +3440,13 @@ export class OrderService {
         this.restingMakerQuotes.delete(order.id);
         updatedOrderPnlEvents.push({ orderId: order.id, marketId: order.marketId, pnl: order.pnl, outcome: order.outcome, winningOutcome });
         if (this.isPersistenceEnabled()) {
-          void (async () => {
-            try {
-              const res = await supabase.from('orders').update({
-                pnl: order.pnl,
-                status: order.status,
-                is_settled: true,
-                settled_at: order.settledAt,
-              }).eq('id', order.id);
-              if (res.error && res.error.message.includes('is_settled')) {
-                await supabase.from('orders').update({ pnl: order.pnl, status: order.status }).eq('id', order.id);
-              }
-            } catch {}
-          })();
+          pnlSyncRows.push({
+            id: order.id,
+            pnl: order.pnl,
+            status: order.status,
+            is_settled: true,
+            settled_at: order.settledAt as string,
+          });
         }
           // Synchronize realized PnL and win rate to matching deployed custom agent
           if (order.agentType === 'CUSTOM' && order.userAddress) {
@@ -3491,6 +3471,9 @@ export class OrderService {
         }
 
       if (updatedOrderPnlEvents.length > 0) {
+        // PERF-04: single batched flush (fire-and-forget, as before) instead of
+        // one floating PATCH per settled order.
+        void this.flushOrderSettlementRows(pnlSyncRows).catch(() => {});
         // Sync pre-aggregated daily_pnl for fast analytics (issue #16)
         const settledBatch = candidates.filter((c) => updatedOrderPnlEvents.some((e) => e.orderId === c.id));
         void this.syncDailyPnlForOrders(settledBatch).catch(() => {});

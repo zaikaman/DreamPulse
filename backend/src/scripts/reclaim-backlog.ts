@@ -47,7 +47,9 @@ async function main() {
     const { data, error } = await supabase
       .from('orders')
       .select('*')
-      .ilike('user_address', op.toLowerCase())
+      // PERF-03: index-backed exact match (both canonical casings, since
+      // orders persist raw caller casing) instead of ILIKE sequential scan.
+      .in('user_address', Array.from(new Set([op, op.toLowerCase()])))
       .gt('pnl', 0)
       .order('created_at', { ascending: false })
       .range(page * pageSize, (page + 1) * pageSize - 1);
