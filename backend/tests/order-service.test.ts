@@ -1,12 +1,19 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
-import { OrderService, orderService, computeRealizedPnl, resolveOnchainWinningOutcome } from '../src/services/order-service.js';
+import {
+  OrderService,
+  orderService,
+  computeRealizedPnl,
+  resolveOnchainWinningOutcome,
+  verifyUserOrderTxHashOnChain,
+} from '../src/services/order-service.js';
 import { marketService } from '../src/services/market-service.js';
 import { sessionService } from '../src/services/session-service.js';
-import { operatorAccount } from '../src/config/somnia.js';
+import { operatorAccount, publicClient, SOMNIA_ADDRESSES } from '../src/config/somnia.js';
+import { orderBookEventsAbi } from '@somnia-chain/markets-sdk';
 import type { IAgentDecision } from '../src/agents/base-agent.js';
 import type { Market, SessionGrant } from '../src/types/index.js';
 import type { SessionRecord } from '../src/services/session-service.js';
-import type { Address, Hex } from 'viem';
+import { type Address, type Hex, encodeEventTopics, encodeAbiParameters } from 'viem';
 
 describe('OrderService Comprehensive Suite', () => {
   let service: OrderService;
@@ -678,6 +685,289 @@ describe('OrderService Comprehensive Suite', () => {
 
     const totalPnl = await service.getTotalRealizedPnlAsync(undefined, userAddress);
     expect(totalPnl).toBe(0);
+  });
+
+  describe('SEC-04: Order txHash Replay & Semantic Verification', () => {
+    it('rejects replaying the same txHash in submitUserOrder', async () => {
+      const validTxHash = '0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa';
+      await service.submitUserOrder({
+        userAddress,
+        marketId: mockMarket.id,
+        outcome: 'YES',
+        direction: 'BUY',
+        orderType: 'LIMIT',
+        price: 0.50,
+        lotSize: 10.0,
+        txHash: validTxHash,
+      });
+
+      // Replaying the exact same txHash must be rejected
+      await expect(
+        service.submitUserOrder({
+          userAddress,
+          marketId: mockMarket.id,
+          outcome: 'YES',
+          direction: 'BUY',
+          orderType: 'LIMIT',
+          price: 0.50,
+          lotSize: 10.0,
+          txHash: validTxHash,
+        }),
+      ).rejects.toThrow('400 Replay detected');
+    });
+
+    it('rejects transaction if receipt reverted on-chain', async () => {
+      const revertedHash = '0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb';
+      vi.spyOn(publicClient, 'getTransactionReceipt').mockResolvedValueOnce({
+        status: 'reverted',
+        from: userAddress,
+        to: mockMarket.poolAddress,
+        logs: [],
+      } as any);
+
+      const result = await verifyUserOrderTxHashOnChain(revertedHash, userAddress, mockMarket);
+      expect(result.isValid).toBe(false);
+      expect(result.errorReason).toContain('Transaction reverted on-chain');
+    });
+
+    it('rejects transaction if receipt sender does not match authenticated user', async () => {
+      const mismatchHash = '0xcccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc';
+      vi.spyOn(publicClient, 'getTransactionReceipt').mockResolvedValueOnce({
+        status: 'success',
+        from: '0x9999999999999999999999999999999999999999',
+        to: mockMarket.poolAddress,
+        logs: [],
+      } as any);
+
+      const result = await verifyUserOrderTxHashOnChain(mismatchHash, userAddress, mockMarket);
+      expect(result.isValid).toBe(false);
+      expect(result.errorReason).toContain('does not match authenticated user');
+    });
+
+    it('rejects transaction if receipt contains only ERC20 transfers/approvals without OrderPlaced/OrderFilled', async () => {
+      const fakeTxHash = '0xdddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd';
+      vi.spyOn(publicClient, 'getTransactionReceipt').mockResolvedValueOnce({
+        status: 'success',
+        from: userAddress,
+        to: SOMNIA_ADDRESSES.testUsdc,
+        logs: [
+          {
+            address: SOMNIA_ADDRESSES.testUsdc,
+            topics: ['0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef'],
+            data: '0x0000000000000000000000000000000000000000000000000000000000000000',
+          },
+        ],
+      } as any);
+
+      const result = await verifyUserOrderTxHashOnChain(fakeTxHash, userAddress, mockMarket, {
+        marketId: mockMarket.id,
+        outcome: 'YES',
+        direction: 'BUY',
+        price: 0.50,
+        lotSize: 10,
+      });
+
+      expect(result.isValid).toBe(false);
+      expect(result.errorReason).toContain('Arbitrary transfers or approvals cannot be accepted as orders');
+    });
+
+    it('validates receipt with decoded OrderPlaced event matching pool, price, and size', async () => {
+      const validHash = '0xeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee';
+      const topics = encodeEventTopics({
+        abi: orderBookEventsAbi,
+        eventName: 'OrderPlaced',
+        args: {
+          orderId: 101n,
+        },
+      });
+      const data = encodeAbiParameters(
+        [
+          {
+            name: 'placedOrder',
+            type: 'tuple',
+            components: [
+              { name: 'orderId', type: 'uint128' },
+              { name: 'isBid', type: 'bool' },
+              { name: 'owner', type: 'address' },
+              { name: 'userData', type: 'uint64' },
+              { name: 'price', type: 'uint256' },
+              { name: 'fullQuantity', type: 'uint256' },
+              { name: 'quantityRemaining', type: 'uint256' },
+              { name: 'expireTimestampNs', type: 'uint64' },
+            ],
+          },
+        ],
+        [
+          {
+            orderId: 101n,
+            isBid: true,
+            owner: userAddress,
+            userData: 0n,
+            price: 500_000n, // 0.50 * 1e6
+            fullQuantity: 10_000_000n, // 10 * 1e6
+            quantityRemaining: 10_000_000n,
+            expireTimestampNs: BigInt(Date.now()) * 1_000_000n,
+          },
+        ],
+      );
+
+      vi.spyOn(publicClient, 'getTransactionReceipt').mockResolvedValueOnce({
+        status: 'success',
+        from: userAddress,
+        to: mockMarket.poolAddress,
+        logs: [
+          {
+            address: mockMarket.poolAddress,
+            topics,
+            data,
+          },
+        ],
+      } as any);
+
+      const result = await verifyUserOrderTxHashOnChain(validHash, userAddress, mockMarket, {
+        marketId: mockMarket.id,
+        outcome: 'YES',
+        direction: 'BUY',
+        price: 0.50,
+        lotSize: 10,
+      });
+
+      expect(result.isValid).toBe(true);
+      expect(result.verifiedStatus).toBe('PENDING');
+      expect(result.onchainOrderId).toBe('101');
+    });
+
+    it('rejects order if price on-chain does not match parameter price', async () => {
+      const priceMismatchHash = '0xffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff';
+      const topics = encodeEventTopics({
+        abi: orderBookEventsAbi,
+        eventName: 'OrderPlaced',
+        args: {
+          orderId: 102n,
+        },
+      });
+      const data = encodeAbiParameters(
+        [
+          {
+            name: 'placedOrder',
+            type: 'tuple',
+            components: [
+              { name: 'orderId', type: 'uint128' },
+              { name: 'isBid', type: 'bool' },
+              { name: 'owner', type: 'address' },
+              { name: 'userData', type: 'uint64' },
+              { name: 'price', type: 'uint256' },
+              { name: 'fullQuantity', type: 'uint256' },
+              { name: 'quantityRemaining', type: 'uint256' },
+              { name: 'expireTimestampNs', type: 'uint64' },
+            ],
+          },
+        ],
+        [
+          {
+            orderId: 102n,
+            isBid: true,
+            owner: userAddress,
+            userData: 0n,
+            price: 500_000n, // 0.50 * 1e6
+            fullQuantity: 10_000_000n,
+            quantityRemaining: 10_000_000n,
+            expireTimestampNs: BigInt(Date.now()) * 1_000_000n,
+          },
+        ],
+      );
+
+      vi.spyOn(publicClient, 'getTransactionReceipt').mockResolvedValueOnce({
+        status: 'success',
+        from: userAddress,
+        to: mockMarket.poolAddress,
+        logs: [
+          {
+            address: mockMarket.poolAddress,
+            topics,
+            data,
+          },
+        ],
+      } as any);
+
+      // We expect 0.75, but on-chain event is 0.50
+      const result = await verifyUserOrderTxHashOnChain(priceMismatchHash, userAddress, mockMarket, {
+        marketId: mockMarket.id,
+        outcome: 'YES',
+        direction: 'BUY',
+        price: 0.75,
+        lotSize: 10,
+      });
+
+      expect(result.isValid).toBe(false);
+      expect(result.errorReason).toContain('does not match order parameter price');
+    });
+
+    it('rejects order if size on-chain does not match parameter size', async () => {
+      const sizeMismatchHash = '0x1010101010101010101010101010101010101010101010101010101010101010';
+      const topics = encodeEventTopics({
+        abi: orderBookEventsAbi,
+        eventName: 'OrderPlaced',
+        args: {
+          orderId: 103n,
+        },
+      });
+      const data = encodeAbiParameters(
+        [
+          {
+            name: 'placedOrder',
+            type: 'tuple',
+            components: [
+              { name: 'orderId', type: 'uint128' },
+              { name: 'isBid', type: 'bool' },
+              { name: 'owner', type: 'address' },
+              { name: 'userData', type: 'uint64' },
+              { name: 'price', type: 'uint256' },
+              { name: 'fullQuantity', type: 'uint256' },
+              { name: 'quantityRemaining', type: 'uint256' },
+              { name: 'expireTimestampNs', type: 'uint64' },
+            ],
+          },
+        ],
+        [
+          {
+            orderId: 103n,
+            isBid: true,
+            owner: userAddress,
+            userData: 0n,
+            price: 500_000n,
+            fullQuantity: 10_000_000n, // 10 * 1e6
+            quantityRemaining: 10_000_000n,
+            expireTimestampNs: BigInt(Date.now()) * 1_000_000n,
+          },
+        ],
+      );
+
+      vi.spyOn(publicClient, 'getTransactionReceipt').mockResolvedValueOnce({
+        status: 'success',
+        from: userAddress,
+        to: mockMarket.poolAddress,
+        logs: [
+          {
+            address: mockMarket.poolAddress,
+            topics,
+            data,
+          },
+        ],
+      } as any);
+
+      // We expect 50 lots, but on-chain event is 10 lots
+      const result = await verifyUserOrderTxHashOnChain(sizeMismatchHash, userAddress, mockMarket, {
+        marketId: mockMarket.id,
+        outcome: 'YES',
+        direction: 'BUY',
+        price: 0.50,
+        lotSize: 50,
+      });
+
+      expect(result.isValid).toBe(false);
+      expect(result.errorReason).toContain('does not match order parameter lotSize');
+    });
   });
 
   it('throws if order ID is not found', async () => {

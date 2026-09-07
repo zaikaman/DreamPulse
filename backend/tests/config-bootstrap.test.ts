@@ -71,6 +71,7 @@ describe('Config, Cookies, Blockchain & System Bootstrap Suite', () => {
       expect(headers['Set-Cookie']).toBeDefined();
       expect(String(headers['Set-Cookie'])).toContain(JWT_COOKIE_NAME);
       expect(String(headers['Set-Cookie'])).toContain('HttpOnly');
+      expect(String(headers['Set-Cookie'])).toContain('SameSite=Lax');
 
       clearAuthCookie(res);
       expect(String(headers['Set-Cookie'])).toContain('Max-Age=0');

@@ -40,6 +40,9 @@ const WS_MAX_CONNECTIONS_PER_IP = 10; // judge opens 2 tabs = 2, attacker scanni
 const WS_RATE_LIMIT_WINDOW_MS = 1_000;
 const WS_RATE_LIMIT_MAX_PER_IP = 30; // 30 msgs / sec / IP
 const WS_RATE_LIMIT_MAX_PER_SOCKET = 20; // 20 msgs / sec / socket
+const WS_RATE_LIMIT_VIOLATIONS_BEFORE_CLOSE = 3; // consecutive violating windows before disconnect
+const WS_RATE_LIMIT_VIOLATION_DECAY_MS = 30_000; // violations forgiven after 30s without abuse
+const WS_RATE_LIMIT_STALE_BUCKET_MS = 60_000; // drop idle IP buckets (prevents memory leak)
 const WS_MAX_INVALID_ATTEMPTS = 5; // close after 5 malformed/validation failures
 const WS_MAX_BUFFERED_AMOUNT = 512 * 1024; // 512 KiB — skip slow clients, prevents back-pressure OOM
 const WS_THROTTLE_SWARM_PNL_MS = 500; // coalesce swarm PnL bursts
@@ -139,7 +142,17 @@ export class TelemetryWebSocketServer {
 
   // Rate-limiting & connection tracking
   private ipConnectionCount: Map<string, number> = new Map();
-  private ipBuckets: Map<string, { count: number; windowStart: number; violations: number }> = new Map();
+  private ipBuckets: Map<
+    string,
+    {
+      count: number;
+      windowStart: number;
+      windowSeq: number;
+      violations: number;
+      lastViolationAt: number;
+      violatedWindowSeq: number;
+    }
+  > = new Map();
   private socketBuckets: Map<WebSocket, { count: number; windowStart: number }> = new Map();
 
   // Broadcast throttling & initial state cache
@@ -316,7 +329,8 @@ export class TelemetryWebSocketServer {
     this.cleanupInterval = setInterval(() => {
       const now = Date.now();
       for (const [ip, bucket] of this.ipBuckets) {
-        if (now - bucket.windowStart > 60_000) {
+        const lastActivity = Math.max(bucket.windowStart, bucket.lastViolationAt);
+        if (now - lastActivity > WS_RATE_LIMIT_STALE_BUCKET_MS) {
           this.ipBuckets.delete(ip);
         }
       }
@@ -337,21 +351,41 @@ export class TelemetryWebSocketServer {
   private checkRateLimit(ws: WebSocket, ip: string): boolean {
     const now = Date.now();
 
-    // Per-IP sliding window
+    // Per-IP sliding window.
+    // BE-BUG-03 fix: violations must decay and count at most once per window.
+    // Previously `violations` never reset and incremented on EVERY excess message,
+    // so a single 33-msg burst (rapid market switching / tab refresh) instantly
+    // latched violations>=3 and all future traffic closed with 1008 until restart.
     let ipBucket = this.ipBuckets.get(ip);
     if (!ipBucket) {
-      ipBucket = { count: 1, windowStart: now, violations: 0 };
+      ipBucket = { count: 1, windowStart: now, windowSeq: 0, violations: 0, lastViolationAt: 0, violatedWindowSeq: -1 };
       this.ipBuckets.set(ip, ipBucket);
     } else {
       if (now - ipBucket.windowStart > WS_RATE_LIMIT_WINDOW_MS) {
+        // New window — forgive stale violations so well-behaved clients recover.
+        if (ipBucket.violations > 0 && now - ipBucket.lastViolationAt > WS_RATE_LIMIT_VIOLATION_DECAY_MS) {
+          ipBucket.violations = 0;
+        }
         ipBucket.count = 1;
         ipBucket.windowStart = now;
+        // Monotonic sequence (not the timestamp) identifies the window — immune to
+        // clock granularity / NTP jumps where two windows could share one timestamp.
+        ipBucket.windowSeq += 1;
       } else {
         ipBucket.count += 1;
         if (ipBucket.count > WS_RATE_LIMIT_MAX_PER_IP) {
-          ipBucket.violations += 1;
+          // Count at most ONE violation per window: sustained abuse = consecutive
+          // violating windows; a single bursty window can never disconnect alone.
+          if (ipBucket.violatedWindowSeq !== ipBucket.windowSeq) {
+            if (ipBucket.violations > 0 && now - ipBucket.lastViolationAt > WS_RATE_LIMIT_VIOLATION_DECAY_MS) {
+              ipBucket.violations = 0;
+            }
+            ipBucket.violations += 1;
+            ipBucket.lastViolationAt = now;
+            ipBucket.violatedWindowSeq = ipBucket.windowSeq;
+          }
           this.sendToClient(ws, { event: 'error', error: 'Rate limited: too many messages', timestamp: now });
-          if (ipBucket.violations >= 3) {
+          if (ipBucket.violations >= WS_RATE_LIMIT_VIOLATIONS_BEFORE_CLOSE) {
             try {
               ws.close(1008, 'Rate limited');
             } catch {}

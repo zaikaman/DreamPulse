@@ -194,6 +194,7 @@ CREATE TABLE IF NOT EXISTS public.orders (
 
 CREATE INDEX IF NOT EXISTS idx_orders_custom_agent ON public.orders(custom_agent_id, is_settled, created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_orders_user_custom_agent ON public.orders(user_address, custom_agent_id, created_at DESC);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_orders_tx_hash_unique ON public.orders(tx_hash) WHERE tx_hash IS NOT NULL;
 
 -- Ensure columns and foreign key exist if table was already created in an earlier migration
 DO $$

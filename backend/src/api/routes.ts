@@ -1316,9 +1316,12 @@ apiRouter.get('/sweeper/unclaimed', optionalWalletAuth, async (req: Request, res
 
 apiRouter.post('/sweeper/trigger', requireWalletAuth, async (req: Request, res: Response) => {
   try {
-    const { userAddress } = req.body;
-    const targetAddress = req.walletAddress || userAddress || operatorAccount.address;
-    const result = await settlementService.triggerBatchSweep(targetAddress);
+    const targetAddress = req.walletAddress || req.body?.userAddress;
+    if (!targetAddress || typeof targetAddress !== 'string' || !isAddress(targetAddress.trim())) {
+      return res.status(401).json({ success: false, error: 'Valid wallet authentication required to trigger settlement sweep' });
+    }
+    const normalizedTarget = getAddress(targetAddress.trim()) as Address;
+    const result = await settlementService.triggerBatchSweep(normalizedTarget);
 
     const userClaimable = Array.isArray(result.userClaimable) ? result.userClaimable : [];
     res.json({

@@ -44,15 +44,10 @@ function appendSetCookie(res: Response, cookieStr: string): void {
 
 /**
  * Builds a hardened cookie string.
- * Production: Secure + HttpOnly + SameSite=None (cross-site Vercel ↔ Heroku) + Partitioned where supported.
- * SameSite=None requires Secure (https) — Heroku/Vercel are https in prod, http in local dev.
- * In local dev (http) we degrade to SameSite=Lax without Secure so the cookie still works over http://localhost.
- *
- * NOTE ON SAFARI / WEBKIT COMPATIBILITY:
- * Safari / WebKit does not currently implement CHIPS (Cookies Having Independent Partitioned State) and
- * silently ignores the `Partitioned` attribute. However, Safari still honors `SameSite=None; Secure`.
- * Because DreamPulse implements dual-mode authentication (cookies + Authorization bearer header / EIP-712 /
- * localStorage session tokens), Safari ignoring `Partitioned` is non-fatal and authentication falls back gracefully.
+ * Production: Secure + HttpOnly + SameSite=Lax (CSRF hardened).
+ * SameSite=Lax prevents cross-site request forgery attacks by ensuring the cookie is not sent
+ * on cross-site subrequests (fetch, XHR, images, frames) initiated from third-party origins.
+ * In local dev (http) we keep SameSite=Lax without Secure so cookies work over http://localhost.
  */
 function buildCookieString(
   name: string,
@@ -60,19 +55,15 @@ function buildCookieString(
   opts: { maxAgeSec?: number; expires?: Date; path?: string; httpOnly?: boolean },
 ): string {
   const isHttps = process.env.NODE_ENV === 'production' || process.env.FRONTEND_ORIGIN?.startsWith('https');
-  // For cross-site to work, SameSite=None + Secure is required. For same-site dev, Lax is sufficient.
-  const sameSite = isHttps ? 'None' : 'Lax';
+  // SameSite=Lax prevents CSRF attacks by disallowing cookie transmission on cross-origin subrequests
+  const sameSite = 'Lax';
   const secure = isHttps ? '; Secure' : '';
-  // Partitioned (CHIPS) improves cross-site isolation when supported (Chrome, Edge, Firefox).
-  // Note: Safari ignores Partitioned, which is non-fatal due to bearer token / dual-mode auth fallback.
-  const partitioned = isHttps && sameSite === 'None' ? '; Partitioned' : '';
   const parts = [
     `${name}=${encodeURIComponent(value)}`,
     `Path=${opts.path || '/'}`,
     opts.httpOnly !== false ? 'HttpOnly' : '',
-    sameSite ? `SameSite=${sameSite}` : '',
+    `SameSite=${sameSite}`,
     secure,
-    partitioned,
     opts.maxAgeSec !== undefined ? `Max-Age=${Math.max(0, Math.floor(opts.maxAgeSec))}` : '',
     opts.expires ? `Expires=${opts.expires.toUTCString()}` : '',
   ].filter(Boolean);

@@ -139,13 +139,17 @@ export class MarketService extends EventEmitter {
     }, 250);
 
     // Periodic on-chain indexer & CLOB polling loop (every 5 seconds)
-    this.onchainPollInterval = setInterval(async () => {
-      await this.pollOnChainMarkets().catch(() => {});
+    this.onchainPollInterval = setInterval(() => {
+      void this.pollOnChainMarkets().catch((err) => {
+        console.warn('[MarketService] Periodic on-chain poll notice:', err?.message || err);
+      });
     }, 5000);
 
     // Periodic Supabase DB sync (every 5 seconds)
-    this.dbSyncInterval = setInterval(async () => {
-      await this.syncActiveMarketsToDatabase().catch(() => {});
+    this.dbSyncInterval = setInterval(() => {
+      void this.syncActiveMarketsToDatabase().catch((err) => {
+        console.warn('[MarketService] Periodic DB sync notice:', err?.message || err);
+      });
     }, 5000);
 
     this.isInitialized = true;
@@ -160,17 +164,38 @@ export class MarketService extends EventEmitter {
     if (this.isPolling) return;
     this.isPolling = true;
     try {
-      const fetchLiveMarketsPromise = somniaExchange.client.listLiveBinaryMarkets({ limit: 100 });
-      const fetchRecentMarketsPromise = somniaExchange.client.listBinaryMarkets({ limit: 60 });
-      const timeoutPromise = new Promise<BinaryMarket[]>((_, reject) =>
-        setTimeout(() => reject(new Error('SomniaMarkets indexer timeout')), timeoutMs),
-      );
-      const [liveRes, recentRes] = await Promise.allSettled([
-        Promise.race([fetchLiveMarketsPromise, timeoutPromise]),
-        Promise.race([fetchRecentMarketsPromise, timeoutPromise]),
+      let liveTimer: NodeJS.Timeout | undefined;
+      let recentTimer: NodeJS.Timeout | undefined;
+
+      // BE-BUG-01: Attach immediate .catch to underlying promises to prevent unhandled rejection leaks when timeout fires first
+      const livePromise = somniaExchange.client.listLiveBinaryMarkets({ limit: 100 }).catch((err) => {
+        console.warn('[MarketService] Live binary markets fetch notice:', err?.message || err);
+        return [] as BinaryMarket[];
+      });
+      const recentPromise = somniaExchange.client.listBinaryMarkets({ limit: 60 }).catch((err) => {
+        console.warn('[MarketService] Recent binary markets fetch notice:', err?.message || err);
+        return [] as BinaryMarket[];
+      });
+
+      const [rawLive, rawRecent] = await Promise.all([
+        Promise.race([
+          livePromise,
+          new Promise<BinaryMarket[]>((resolve) => {
+            liveTimer = setTimeout(() => resolve([]), timeoutMs);
+          }),
+        ]).finally(() => {
+          if (liveTimer) clearTimeout(liveTimer);
+        }),
+        Promise.race([
+          recentPromise,
+          new Promise<BinaryMarket[]>((resolve) => {
+            recentTimer = setTimeout(() => resolve([]), timeoutMs);
+          }),
+        ]).finally(() => {
+          if (recentTimer) clearTimeout(recentTimer);
+        }),
       ]);
-      const rawLive = liveRes.status === 'fulfilled' ? liveRes.value : [];
-      const rawRecent = recentRes.status === 'fulfilled' ? recentRes.value : [];
+
       const marketDedupeMap = new Map<string, BinaryMarket>();
       for (const m of rawLive) {
         if (m?.marketId) marketDedupeMap.set(String(m.marketId).toLowerCase(), m);
@@ -202,9 +227,16 @@ export class MarketService extends EventEmitter {
       const obPromises = liveBinaryMarkets.map(async (m) => {
         if (m.poolAddress) {
           try {
-            const fetchPromise = somniaExchange.client.getBinaryOrderBook(m.poolAddress as Address, { depth: 5, decimals: 6 });
-            const obTimeout = new Promise<null>((resolve) => setTimeout(() => resolve(null), 2500));
-            return await Promise.race([fetchPromise, obTimeout]);
+            let timer: NodeJS.Timeout | undefined;
+            const fetchPromise = somniaExchange.client
+              .getBinaryOrderBook(m.poolAddress as Address, { depth: 5, decimals: 6 })
+              .catch(() => null);
+            const obTimeout = new Promise<null>((resolve) => {
+              timer = setTimeout(() => resolve(null), 2500);
+            });
+            return await Promise.race([fetchPromise, obTimeout]).finally(() => {
+              if (timer) clearTimeout(timer);
+            });
           } catch {
             return null;
           }

@@ -18,10 +18,10 @@ describe('Bootstrap Lifecycle & HTTP Server Harness', () => {
   });
 
   it('handles CORS headers across various origin headers', async () => {
-    const resVercel = await request(app)
+    const resAllowed = await request(app)
       .get('/api/health')
-      .set('Origin', 'https://dreampulse-preview.vercel.app');
-    expect(resVercel.status).toBe(200);
+      .set('Origin', 'https://dreampulse.vercel.app');
+    expect(resAllowed.status).toBe(200);
 
     const resLocalhost = await request(app)
       .get('/api/health')
@@ -30,6 +30,11 @@ describe('Bootstrap Lifecycle & HTTP Server Harness', () => {
 
     const resNoOrigin = await request(app).get('/api/health');
     expect(resNoOrigin.status).toBe(200);
+
+    const resBlocked = await request(app)
+      .get('/api/health')
+      .set('Origin', 'https://attacker.vercel.app');
+    expect(resBlocked.status).toBe(403);
   });
 
   it('correctly normalizes OPERATOR_PRIVATE_KEY without 0x prefix or with quotes', () => {

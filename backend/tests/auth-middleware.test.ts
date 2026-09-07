@@ -16,8 +16,6 @@ import {
   authenticateRequest,
   requireWalletAuth,
   optionalWalletAuth,
-  isSweeperTriggerRequest,
-  checkSessionDelegationAuth,
 } from '../src/middleware/wallet-auth.js';
 import { sessionService } from '../src/services/session-service.js';
 import { JWT_COOKIE_NAME } from '../src/config/cookie.js';
@@ -743,13 +741,7 @@ describe('AuthService & WalletAuth Middleware Comprehensive Suite', () => {
       expect(res.valid).toBe(false);
     });
 
-    it('detects isSweeperTriggerRequest for sweeper endpoints', () => {
-      expect(isSweeperTriggerRequest({ path: '/api/v1/sweeper/trigger' } as Request)).toBe(true);
-      expect(isSweeperTriggerRequest({ originalUrl: '/sweeper/trigger' } as Request)).toBe(true);
-      expect(isSweeperTriggerRequest({ url: '/api/v1/orders/place' } as Request)).toBe(false);
-    });
-
-    it('allows users with active session delegation to trigger batch sweeps', async () => {
+    it('rejects unauthenticated sweeper trigger request even if user has active session delegation (SEC-05)', async () => {
       vi.spyOn(sessionService, 'getUserActiveSession').mockResolvedValue({
         id: 'session-123',
         userAddress: userAddress as any,
@@ -774,9 +766,35 @@ describe('AuthService & WalletAuth Middleware Comprehensive Suite', () => {
         headers: {},
       } as unknown as Request;
 
+      // An unauthenticated request must return null address (no session bypass)
+      const auth = await authenticateRequest(req);
+      expect(auth.address).toBeNull();
+      expect(auth.method).toBeNull();
+    });
+
+    it('authenticates sweeper trigger request with valid Bearer JWT', async () => {
+      const validPayload = {
+        aud: 'authenticated',
+        role: 'authenticated',
+        sub: userAddress.toLowerCase(),
+        user_address: userAddress.toLowerCase(),
+        exp: Math.floor(Date.now() / 1000) + 3600,
+      };
+      const token = jwt.sign(validPayload, mockJwtSecret, { algorithm: 'HS256' });
+
+      const req = {
+        originalUrl: '/api/v1/sweeper/trigger',
+        headers: {
+          authorization: `Bearer ${token}`,
+        },
+        body: {
+          userAddress,
+        },
+      } as unknown as Request;
+
       const auth = await authenticateRequest(req);
       expect(auth.address?.toLowerCase()).toBe(userAddress.toLowerCase());
-      expect(auth.method).toBe('session');
+      expect(auth.method).toBe('bearer');
       expect(auth.error).toBeNull();
 
       const { res } = createMockRes();
@@ -784,10 +802,42 @@ describe('AuthService & WalletAuth Middleware Comprehensive Suite', () => {
       await requireWalletAuth(req, res, next);
       expect(next).toHaveBeenCalled();
       expect((req as any).walletAddress?.toLowerCase()).toBe(userAddress.toLowerCase());
-      expect((req as any).authMethod).toBe('session');
+      expect((req as any).authMethod).toBe('bearer');
     });
 
-    it('allows sweeper trigger when JWT is expired but active session delegation exists', async () => {
+    it('rejects sweeper trigger request with address spoofing', async () => {
+      const validPayload = {
+        aud: 'authenticated',
+        role: 'authenticated',
+        sub: userAddress.toLowerCase(),
+        user_address: userAddress.toLowerCase(),
+        exp: Math.floor(Date.now() / 1000) + 3600,
+      };
+      const token = jwt.sign(validPayload, mockJwtSecret, { algorithm: 'HS256' });
+
+      const victimAddress = '0x1111111111111111111111111111111111111111';
+      const req = {
+        originalUrl: '/api/v1/sweeper/trigger',
+        headers: {
+          authorization: `Bearer ${token}`,
+        },
+        body: {
+          userAddress: victimAddress,
+        },
+      } as unknown as Request;
+
+      const { res, statusSpy, jsonSpy } = createMockRes();
+      const next = vi.fn();
+      await requireWalletAuth(req, res, next);
+      expect(next).not.toHaveBeenCalled();
+      expect(statusSpy).toHaveBeenCalledWith(401);
+      expect(jsonSpy).toHaveBeenCalledWith(expect.objectContaining({
+        success: false,
+        error: expect.stringMatching(/does not match body\.userAddress/i),
+      }));
+    });
+
+    it('rejects sweeper trigger when JWT is expired regardless of session state', async () => {
       const expiredPayload = {
         aud: 'authenticated',
         role: 'authenticated',
@@ -812,34 +862,6 @@ describe('AuthService & WalletAuth Middleware Comprehensive Suite', () => {
         createdAt: new Date().toISOString(),
         updatedAt: new Date().toISOString(),
       });
-
-      const req = {
-        originalUrl: '/api/v1/sweeper/trigger',
-        headers: {
-          authorization: `Bearer ${expiredToken}`,
-        },
-        body: {
-          userAddress,
-        },
-      } as unknown as Request;
-
-      const auth = await authenticateRequest(req);
-      expect(auth.address?.toLowerCase()).toBe(userAddress.toLowerCase());
-      expect(auth.method).toBe('session');
-      expect(auth.error).toBeNull();
-    });
-
-    it('rejects sweeper trigger when JWT is expired and no active session delegation exists', async () => {
-      const expiredPayload = {
-        aud: 'authenticated',
-        role: 'authenticated',
-        sub: userAddress.toLowerCase(),
-        user_address: userAddress.toLowerCase(),
-        exp: Math.floor(Date.now() / 1000) - 60,
-      };
-      const expiredToken = jwt.sign(expiredPayload, mockJwtSecret, { algorithm: 'HS256' });
-
-      vi.spyOn(sessionService, 'getUserActiveSession').mockResolvedValueOnce(null);
 
       const req = {
         originalUrl: '/api/v1/sweeper/trigger',

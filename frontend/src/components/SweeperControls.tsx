@@ -58,8 +58,17 @@ export const SweeperControls: React.FC<SweeperControlsProps> = ({
   cloneBalance,
   onWithdrawClone,
 }) => {
+  // Read vs write address separation (FE-BUG-06):
+  // - displayAddress/activeAddress is read-only telemetry scope (operator fallback when disconnected).
+  // - walletAddress is the only address ever used for signing. It is null when disconnected,
+  //   so write paths can never submit a tx under the operator address via MetaMask.
+  const isWalletConnected = !!userAddress && userAddress.startsWith('0x');
+  const walletAddress = useMemo(
+    () => (isWalletConnected ? (userAddress as string).toLowerCase() : null),
+    [isWalletConnected, userAddress],
+  );
   const activeAddress = (userAddress ?? SOMNIA_ADDRESSES.operatorAccount).toLowerCase();
-  const isViewingSelf = !!userAddress;
+  const isViewingSelf = isWalletConnected;
 
   const [internalCloneAddress, setInternalCloneAddress] = useState<string | null>(null);
   const [internalCloneBalance, setInternalCloneBalance] = useState<string>('0.00');
@@ -170,6 +179,16 @@ export const SweeperControls: React.FC<SweeperControlsProps> = ({
 
   const [celebrationState, setCelebrationState] = useState<{ isOpen: boolean; amount: string; txHash?: string }>({ isOpen: false, amount: '' });
 
+  // Never surface another wallet's (or the operator's) claimables after disconnect.
+  // Stale claimables + operator fallback was the FE-BUG-06 sender-mismatch vector.
+  useEffect(() => {
+    if (!isWalletConnected) {
+      setClaimables([]);
+      setIsClaiming(false);
+      setIsSweeping(false);
+    }
+  }, [isWalletConnected]);
+
   const requestIdRef = useRef(0);
 
   const fetchSweeperData = useCallback(async () => {
@@ -268,11 +287,23 @@ export const SweeperControls: React.FC<SweeperControlsProps> = ({
   }, [activeAddress, fetchSweeperData, onRefreshPortfolio]);
 
   const handleManualSweep = async () => {
-    if (!activeAddress) return;
+    // Write gate: never sweep under the operator fallback. Require an explicit wallet.
+    if (!isWalletConnected || !walletAddress) {
+      setSweepError('Connect your wallet to run a personal settlement sweep.');
+      if (onConnectWallet) {
+        try {
+          await onConnectWallet();
+        } catch (err) {
+          console.warn('[SweeperControls] Connect wallet before sweep failed:', err);
+        }
+      }
+      return;
+    }
+    const sweepAddress = walletAddress;
     setIsSweeping(true);
     setSweepError(null);
     try {
-      const res = await apiClient.triggerSweep(activeAddress);
+      const res = await apiClient.triggerSweep(sweepAddress);
       if (res.success) {
         const claimedNum = parseFloat(res.totalClaimedAmount.replace(/[^0-9.]/g, '')) || 0;
         if (claimedNum > 0) {
@@ -290,7 +321,9 @@ export const SweeperControls: React.FC<SweeperControlsProps> = ({
       }
     } catch (err: any) {
       console.warn('[SweeperControls] Sweep trigger error:', err);
-      setSweepError(err.message || 'Settlement sweep failed. Please check wallet connection or session delegation.');
+      const parsed = parseWeb3Error(err, 'transaction');
+      if (parsed.isUserRejection) return;
+      setSweepError(parsed.message || 'Settlement sweep failed. Please check wallet connection or session delegation.');
     } finally {
       setIsSweeping(false);
     }
@@ -299,18 +332,57 @@ export const SweeperControls: React.FC<SweeperControlsProps> = ({
   const claimableTotal = claimables.reduce((sum, p) => sum + (p.claimableAmount || 0), 0);
 
   const handleClaimToWallet = async () => {
-    if (!activeAddress || !activeAddress.startsWith('0x') || claimables.length === 0) return;
+    if (claimables.length === 0) return;
+    // Write gate (FE-BUG-06): disconnected wallets must never reach
+    // web3Service.claimMarketWinnings under the operator fallback address.
+    // Prompt connect instead of submitting a mismatched MetaMask tx.
+    if (!isWalletConnected || !walletAddress) {
+      setSweepError('Connect your wallet to claim winnings to your wallet.');
+      if (onConnectWallet) {
+        try {
+          await onConnectWallet();
+        } catch (err) {
+          console.warn('[SweeperControls] Connect wallet before claim failed:', err);
+        }
+      }
+      return;
+    }
+    // Sender-mismatch preflight: the injected provider account must own the
+    // positions. Without this, MetaMask throws "sender mismatch" / 4001 as an
+    // unhandled RPC error on demo click.
+    try {
+      const authorized = await web3Service.getAuthorizedAccount().catch(() => null);
+      if (!authorized?.address) {
+        setSweepError('Wallet is not connected. Connect your wallet, then try claiming again.');
+        if (onConnectWallet) {
+          try {
+            await onConnectWallet();
+          } catch {}
+        }
+        return;
+      }
+      if (authorized.address.toLowerCase() !== walletAddress.toLowerCase()) {
+        setSweepError(
+          `Connected wallet (${authorized.address.slice(0, 6)}...${authorized.address.slice(-4)}) does not match this profile (${walletAddress.slice(0, 6)}...${walletAddress.slice(-4)}). Switch wallets, then try claiming again.`,
+        );
+        return;
+      }
+    } catch (preflightErr) {
+      console.warn('[SweeperControls] Claim preflight failed:', preflightErr);
+    }
+    const claimAddress = walletAddress as `0x${string}`;
     setIsClaiming(true);
     setSweepError(null);
     try {
       let claimed = 0;
       let lastHash: string | undefined;
+      let userCancelled = false;
       for (const pos of claimables) {
         if (!pos.marketIdHex || !pos.marketIdHex.startsWith('0x') || pos.winningOutcome === 'VOID') continue;
         if (!pos.rawAmount || BigInt(pos.rawAmount) <= 0n) continue;
         try {
           const { hash } = await web3Service.claimMarketWinnings({
-            userAddress: activeAddress as `0x${string}`,
+            userAddress: claimAddress,
             marketIdHex: pos.marketIdHex as `0x${string}`,
             outcomeIdx: pos.winningOutcome === 'NO' ? 1 : 0,
             amountRaw: BigInt(pos.rawAmount),
@@ -319,8 +391,18 @@ export const SweeperControls: React.FC<SweeperControlsProps> = ({
           lastHash = hash;
           claimed += pos.claimableAmount || 0;
         } catch (claimErr: any) {
-          console.warn(`[SweeperControls] Claim failed for ${pos.marketId}:`, claimErr?.message || claimErr);
-          if (String(claimErr?.message || '').toLowerCase().includes('reject')) break;
+          const parsed = parseWeb3Error(claimErr, 'transaction');
+          console.warn(`[SweeperControls] Claim failed for ${pos.marketId}:`, parsed.message);
+          if (parsed.isUserRejection) {
+            userCancelled = true;
+            break;
+          }
+          // Surface sender / connection problems immediately instead of
+          // looping into repeated MetaMask errors.
+          if (/connect|switch|sender|mismatch|authorized|no active wallet/i.test(parsed.message)) {
+            setSweepError(parsed.message);
+            return;
+          }
         }
       }
       if (claimed > 0) {
@@ -329,12 +411,17 @@ export const SweeperControls: React.FC<SweeperControlsProps> = ({
         setTotalClaimedAllTime((prev) => Number((prev + claimed).toFixed(2)));
         await fetchSweeperData();
         if (onRefreshPortfolio) onRefreshPortfolio();
+      } else if (userCancelled) {
+        // User rejected in wallet — not an error state, stay silent.
+        return;
       } else {
         setSweepError('No winnings could be claimed from your wallet. They may already be claimed.');
       }
     } catch (err: any) {
       console.warn('[SweeperControls] Wallet claim error:', err);
-      setSweepError(err.message || 'Wallet claim failed.');
+      const parsed = parseWeb3Error(err, 'transaction');
+      if (parsed.isUserRejection) return;
+      setSweepError(parsed.message || 'Wallet claim failed.');
     } finally {
       setIsClaiming(false);
     }
@@ -450,15 +537,26 @@ export const SweeperControls: React.FC<SweeperControlsProps> = ({
               <span className="text-emerald-300/80"> — {claimables.length} market{claimables.length === 1 ? '' : 's'}. Positions are owned by you; only your wallet can redeem them.</span>
             </div>
           </div>
-          <button
-            type="button"
-            onClick={handleClaimToWallet}
-            disabled={isClaiming}
-            className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg border text-xs font-bold transition-colors disabled:opacity-50 disabled:cursor-not-allowed bg-emerald-500 text-white border-emerald-600 hover:bg-emerald-400 flex-shrink-0"
-          >
-            {isClaiming ? <Spinner size="xs" variant="white" /> : <WalletIcon className="w-3.5 h-3.5" />}
-            <span>{isClaiming ? 'Claiming…' : `Claim ${claimableTotal.toFixed(2)} tUSDC`}</span>
-          </button>
+          {isWalletConnected ? (
+            <button
+              type="button"
+              onClick={handleClaimToWallet}
+              disabled={isClaiming}
+              className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg border text-xs font-bold transition-colors disabled:opacity-50 disabled:cursor-not-allowed bg-emerald-500 text-white border-emerald-600 hover:bg-emerald-400 flex-shrink-0"
+            >
+              {isClaiming ? <Spinner size="xs" variant="white" /> : <WalletIcon className="w-3.5 h-3.5" />}
+              <span>{isClaiming ? 'Claiming…' : `Claim ${claimableTotal.toFixed(2)} tUSDC`}</span>
+            </button>
+          ) : (
+            <button
+              type="button"
+              onClick={handleClaimToWallet}
+              className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg border text-xs font-bold transition-colors bg-primary text-primary-foreground border-border hover:bg-primary/90 flex-shrink-0"
+            >
+              <WalletIcon className="w-3.5 h-3.5" />
+              <span>Connect Wallet to Claim</span>
+            </button>
+          )}
         </div>
       )}
 
@@ -563,7 +661,7 @@ export const SweeperControls: React.FC<SweeperControlsProps> = ({
               <ShieldCheckIcon className="w-3 h-3 text-emerald-400" />
               <span>{effectiveCloneAddress ? 'Trading Wallet Payout' : 'Direct Wallet Payout'}</span>
             </Badge>
-            {userAddress ? (
+            {isWalletConnected ? (
               <button
                 type="button"
                 onClick={handleManualSweep}

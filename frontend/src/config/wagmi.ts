@@ -1,4 +1,5 @@
-import { getDefaultConfig, type Chain } from '@rainbow-me/rainbowkit';
+import { getDefaultConfig } from '@rainbow-me/rainbowkit';
+import type { Chain } from 'viem';
 import { fallback, http } from 'viem';
 import { QueryClient } from '@tanstack/react-query';
 
@@ -40,7 +41,7 @@ export const somniaShannonTestnet = {
   iconUrl: 'https://shannon-explorer.somnia.network/favicon.ico',
   iconBackground: '#00ffcc',
   testnet: true,
-} as const satisfies Chain;
+} as const satisfies Chain & { iconUrl?: string; iconBackground?: string };
 
 /**
  * WalletConnect Project ID from environment variable or standard fallback.

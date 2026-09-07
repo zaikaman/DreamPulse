@@ -119,7 +119,9 @@ const OverviewViewComponent: React.FC<OverviewViewProps> = ({
     return list;
   }, [agentThoughts]);
 
-  const { detailed: swarmDetailed, summary: swarmSummary, orders } = useAgentSwarm();
+  const { detailed: swarmDetailed, summary: swarmSummary, orders: userOrders } = useAgentSwarm(
+    wallet?.address || undefined,
+  );
   const { portfolio } = useUserPortfolio(wallet);
   const { isCopyTradeEnabled, toggleCopyTrade } = usePersonalSwarm(
     wallet?.address || undefined,
@@ -127,6 +129,27 @@ const OverviewViewComponent: React.FC<OverviewViewProps> = ({
   );
   const { agents: customAgents } = useCustomAgents(wallet?.address || undefined);
   const deployedCustomCount = useMemo(() => customAgents.filter((a) => a.isDeployed).length, [customAgents]);
+
+  // Quest #4 ("Copytrade or Place Trade") must reflect the connected trader's own
+  // fills across ALL sources (swarm, manual terminal, copy-trade). The portfolio
+  // summary is authoritative (backend counts every user order plus active
+  // positions, cached locally and refreshed in real time via telemetry);
+  // userOrders is a live fallback covering the window before portfolio refreshes.
+  // Guests always report 0 so swarm-wide fills never leak into personal quests.
+  const userTradeCount = useMemo(() => {
+    if (!wallet?.isConnected || !wallet?.address) return 0;
+    return Math.max(
+      portfolio?.ordersTodayCount ?? 0,
+      portfolio?.activePositionsCount ?? 0,
+      userOrders.length,
+    );
+  }, [
+    wallet?.isConnected,
+    wallet?.address,
+    portfolio?.ordersTodayCount,
+    portfolio?.activePositionsCount,
+    userOrders.length,
+  ]);
 
   const {
     quests,
@@ -137,7 +160,7 @@ const OverviewViewComponent: React.FC<OverviewViewProps> = ({
     isQuestBarDismissed,
     openOnboarding,
     dismissQuestBar,
-  } = useOnboarding({ wallet, activeSession, ordersCount: orders.length });
+  } = useOnboarding({ wallet, activeSession, ordersCount: userTradeCount });
 
   return (
     <div className="overview-container flex flex-col gap-2.5 flex-1 min-h-0 overflow-y-auto xl:overflow-hidden terminal-panel-adaptive pb-4">
@@ -187,7 +210,7 @@ const OverviewViewComponent: React.FC<OverviewViewProps> = ({
         latencyMs={latencyMs}
         swarmDetailed={swarmDetailed}
         swarmSummary={swarmSummary}
-        ordersCount={orders.length}
+        ordersCount={userOrders.length}
         wallet={wallet}
         activeSession={activeSession}
         portfolio={portfolio}

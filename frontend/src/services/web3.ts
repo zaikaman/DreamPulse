@@ -1447,6 +1447,19 @@ export class Web3Service {
     amountRaw: bigint;
     outcomeToken?: Address;
   }): Promise<{ hash: Hex }> {
+    // Defense-in-depth (FE-BUG-06): never submit a claim when no wallet is
+    // connected or when the connected provider account differs from the
+    // position owner. Without this, a disconnected UI fallback to the
+    // operator address surfaces as an unhandled MetaMask sender-mismatch RPC.
+    const authorized = await this.getAuthorizedAccount().catch(() => null);
+    if (!authorized?.address) {
+      throw new Error('No active wallet connected. Please connect your wallet via RainbowKit.');
+    }
+    if (authorized.address.toLowerCase() !== params.userAddress.toLowerCase()) {
+      throw new Error(
+        `Connected wallet (${authorized.address}) does not match claim address (${params.userAddress}). Please switch wallets in MetaMask and try again.`,
+      );
+    }
     if (params.outcomeToken) {
       await this.ensureModuleOutcomeOperator({
         userAddress: params.userAddress,

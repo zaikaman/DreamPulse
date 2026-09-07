@@ -1,4 +1,4 @@
-import { type Hex, type Address, parseAbi, getAddress, isAddress, encodeFunctionData } from 'viem';
+import { type Hex, type Address, parseAbi, getAddress, isAddress, encodeFunctionData, parseEventLogs } from 'viem';
 import { supabase, isPersistenceEnabled } from '../config/supabase.js';
 import { sessionService } from './session-service.js';
 import { telemetryWsGateway } from '../websocket/server.js';
@@ -452,10 +452,28 @@ export async function assertFunded(
  * Verifies on-chain transaction receipt for user-submitted direct trades.
  * Asserts valid format, successful on-chain execution, sender authenticity, and correct target contract.
  */
+export interface UserOrderOnChainVerificationParams {
+  marketId?: string;
+  outcome?: OutcomeType;
+  direction?: OrderDirection;
+  price?: number;
+  lotSize?: number;
+  rawQuantity?: bigint;
+  rawPriceOwn?: bigint;
+  rawPriceYes?: bigint;
+}
+
+/**
+ * Verifies on-chain transaction receipt for user-submitted direct trades.
+ * Asserts valid format, successful on-chain execution, sender authenticity,
+ * target contract matching market pool, and decodes OrderPlaced/OrderFilled events
+ * to assert semantic integrity (market, price, size, owner).
+ */
 export async function verifyUserOrderTxHashOnChain(
   txHash: string | undefined,
   userAddress: Address,
   market: Market | null | undefined,
+  orderParams?: UserOrderOnChainVerificationParams,
 ): Promise<{
   isValid: boolean;
   errorReason?: string;
@@ -538,9 +556,115 @@ export async function verifyUserOrderTxHashOnChain(
       }
     }
 
+    // Semantic Order Verification via Event Log Decoding:
+    // Verify that the transaction actually emitted OrderPlaced / OrderFilled events for the market pool
+    const parsedOrderLogs = parseEventLogs({
+      abi: orderBookEventsAbi,
+      logs: receipt.logs || [],
+      strict: false,
+    });
+
+    const expectedPools = new Set<string>();
+    if (market?.poolAddress) expectedPools.add(market.poolAddress.toLowerCase());
+    if (market?.id && isAddress(market.id)) expectedPools.add(market.id.toLowerCase());
+
+    const matchingPoolLogs = expectedPools.size > 0
+      ? parsedOrderLogs.filter((l: any) => l.address && expectedPools.has(l.address.toLowerCase()))
+      : parsedOrderLogs;
+
+    const orderPlacedEvents = matchingPoolLogs.filter((l: any) => l.eventName === 'OrderPlaced');
+    const orderFilledEvents = matchingPoolLogs.filter((l: any) => l.eventName === 'OrderFilled');
+
+    if (orderPlacedEvents.length === 0 && orderFilledEvents.length === 0) {
+      return {
+        isValid: false,
+        errorReason: `Transaction receipt does not contain OrderPlaced or OrderFilled events for market pool (${market?.poolAddress || market?.id || 'target'}). Arbitrary transfers or approvals cannot be accepted as orders.`,
+      };
+    }
+
+    let onchainOrderId: string | undefined;
+    let fillsQuantity: number | undefined;
+    let verifiedStatus: OrderStatus = 'PENDING';
+
+    if (orderPlacedEvents.length > 0) {
+      const placedLog: any = orderPlacedEvents[0];
+      const placedOrder = placedLog.args?.placedOrder;
+      if (placedLog.args?.orderId !== undefined) {
+        onchainOrderId = String(placedLog.args.orderId);
+      }
+
+      // Assert owner matches user (or user's trading clone)
+      if (placedOrder?.owner) {
+        const ownerLower = String(placedOrder.owner).toLowerCase();
+        const userClone = await getSessionAccount(userAddress).catch(() => null);
+        const isOwnerValid = ownerLower === normalizedUser || (userClone && ownerLower === userClone.toLowerCase());
+        if (!isOwnerValid) {
+          return {
+            isValid: false,
+            errorReason: `On-chain order owner (${placedOrder.owner}) does not match authenticated user (${userAddress}).`,
+          };
+        }
+      }
+
+      // Assert price matches quantizedPrice (scaled 1e6)
+      if (orderParams?.price !== undefined && placedOrder?.price !== undefined) {
+        const logPriceRaw = BigInt(placedOrder.price);
+        const expectedPriceYes = orderParams.outcome === 'YES'
+          ? BigInt(Math.round(orderParams.price * 1_000_000))
+          : BigInt(Math.round((1.0 - orderParams.price) * 1_000_000));
+        const expectedPriceOwn = BigInt(Math.round(orderParams.price * 1_000_000));
+
+        const diffYes = logPriceRaw > expectedPriceYes ? logPriceRaw - expectedPriceYes : expectedPriceYes - logPriceRaw;
+        const diffOwn = logPriceRaw > expectedPriceOwn ? logPriceRaw - expectedPriceOwn : expectedPriceOwn - logPriceRaw;
+
+        // Tolerance of 1000 micro-units (0.001 tick) for tick grid rounding
+        if (diffYes > 1000n && diffOwn > 1000n) {
+          return {
+            isValid: false,
+            errorReason: `On-chain order price (${Number(logPriceRaw) / 1e6}) does not match order parameter price (${orderParams.price}).`,
+          };
+        }
+      }
+
+      // Assert lotSize matches quantizedSize (scaled 1e6)
+      if (orderParams?.lotSize !== undefined && placedOrder?.fullQuantity !== undefined) {
+        const logQtyRaw = BigInt(placedOrder.fullQuantity);
+        const expectedQtyRaw = BigInt(Math.round(orderParams.lotSize * 1_000_000));
+        const diffQty = logQtyRaw > expectedQtyRaw ? logQtyRaw - expectedQtyRaw : expectedQtyRaw - logQtyRaw;
+
+        if (diffQty > 1000n) {
+          return {
+            isValid: false,
+            errorReason: `On-chain order size (${Number(logQtyRaw) / 1e6}) does not match order parameter lotSize (${orderParams.lotSize}).`,
+          };
+        }
+      }
+    }
+
+    if (orderFilledEvents.length > 0) {
+      const totalFilledRaw = orderFilledEvents.reduce(
+        (sum: bigint, f: any) => sum + BigInt(f.args?.quantityFilled ?? 0n),
+        0n,
+      );
+      fillsQuantity = Number(totalFilledRaw) / 1e6;
+      const expectedSize = orderParams?.lotSize ?? fillsQuantity;
+      if (fillsQuantity >= expectedSize && expectedSize > 0) {
+        verifiedStatus = 'FILLED';
+      } else if (fillsQuantity > 0) {
+        verifiedStatus = 'PARTIALLY_FILLED';
+      } else {
+        verifiedStatus = 'PENDING';
+      }
+    } else {
+      verifiedStatus = 'PENDING';
+      fillsQuantity = orderParams?.lotSize;
+    }
+
     return {
       isValid: true,
-      verifiedStatus: 'FILLED',
+      verifiedStatus,
+      fillsQuantity,
+      onchainOrderId,
     };
   } catch (err: any) {
     if (process.env.NODE_ENV === 'test') {
@@ -556,6 +680,7 @@ export async function verifyUserOrderTxHashOnChain(
 export class OrderService {
   private orders: OrderExecution[] = [];
   private orderMap = new Map<string, OrderExecution>();
+  private inFlightTxHashes = new Set<string>();
   private restingMakerQuotes = new Map<string, RestingMakerQuote>();
   // --- Bounded-cache config (increased to 50k to retain all historical DB rows) ---
   private static readonly MAX_CACHE_SIZE = 50000;
@@ -694,6 +819,7 @@ export class OrderService {
   public clearCache(): void {
     this.orders = [];
     this.orderMap.clear();
+    this.inFlightTxHashes.clear();
     this.restingMakerQuotes.clear();
     this.evictedSwarmAggregates = {
       voltPnl: 0,
@@ -1599,6 +1725,7 @@ export class OrderService {
     const {
       rawQuantity,
       rawPriceOwn,
+      rawPriceYes,
       quantizedSize,
       quantizedPrice,
       totalCost,
@@ -1610,108 +1737,160 @@ export class OrderService {
 
     // 1. If client already signed directly via MetaMask wallet
     if (params.txHash) {
-      const market = marketService.getMarketById(params.marketId);
-      const verification = await verifyUserOrderTxHashOnChain(params.txHash, params.userAddress, market);
-      if (!verification.isValid) {
-        throw new Error(verification.errorReason || 'Transaction hash could not be verified on Somnia Shannon Testnet');
+      const normalizedTx = params.txHash.toLowerCase();
+
+      // Check 1: In-flight execution lock (prevents concurrent race conditions)
+      if (this.inFlightTxHashes.has(normalizedTx)) {
+        throw new Error(`400 Replay detected: Transaction hash ${params.txHash} is currently being processed.`);
       }
 
-      const orderId = crypto.randomUUID();
-      const now = new Date().toISOString();
-      const verifiedStatus: OrderStatus = verification.verifiedStatus || 'FILLED';
-      const actualSize = verification.fillsQuantity && verification.fillsQuantity > 0 ? verification.fillsQuantity : quantizedSize;
-      const actualCost = Number((quantizedPrice * actualSize).toFixed(4));
+      // Check 2: In-memory cache replay check (query orderMap and orders)
+      const isReplayInOrders = this.orders.some(
+        (o) => o.txHash && o.txHash.toLowerCase() === normalizedTx,
+      );
+      const isReplayInOrderMap = Array.from(this.orderMap.values()).some(
+        (o) => o.txHash && o.txHash.toLowerCase() === normalizedTx,
+      );
+      if (isReplayInOrders || isReplayInOrderMap) {
+        throw new Error(`400 Replay detected: Transaction hash ${params.txHash} has already been submitted.`);
+      }
 
-      const orderExecution: OrderExecution = {
-        id: orderId,
-        onchainOrderId: verification.onchainOrderId,
-        userAddress: params.userAddress,
-        sessionId: '',
-        marketId: params.marketId,
-        agentType: 'Manual',
-        source: 'TERMINAL',
-        outcome,
-        direction,
-        orderType,
-        price: quantizedPrice,
-        lotSize: actualSize,
-        totalCost: actualCost,
-        status: verifiedStatus,
-        txHash: params.txHash,
-        pnl: 0,
-        isSettled: false,
-        createdAt: now,
-        filledAt: (verifiedStatus === 'FILLED' || verifiedStatus === 'PARTIALLY_FILLED') ? now : undefined,
-        marketSnapshot: market
-          ? {
-              symbol: market.symbol,
-              strikePrice: market.strikePrice,
-              closeTimestamp: market.closeTimestamp,
-              settlementPrice: market.settlementPrice,
-              winningOutcome: market.winningOutcome,
-              windowDuration: market.windowDuration,
-              recommendedOutcome: market.recommendedOutcome,
-            }
-          : undefined,
-      };
+      // Check 3: Database replay check
+      if (this.isPersistenceEnabled()) {
+        try {
+          const { data: existingTx, error: txQueryError } = await supabase
+            .from('orders')
+            .select('id')
+            .eq('tx_hash', params.txHash)
+            .limit(1);
 
-      this.insertIntoCache(orderExecution);
+          if (!txQueryError && existingTx && existingTx.length > 0) {
+            throw new Error(`400 Replay detected: Transaction hash ${params.txHash} has already been submitted.`);
+          }
+        } catch (dbErr: any) {
+          if (dbErr?.message?.includes('Replay detected')) {
+            throw dbErr;
+          }
+          console.warn('[OrderService] Supabase tx_hash check notice:', dbErr?.message || dbErr);
+        }
+      }
 
-      if (verifiedStatus === 'FILLED' || verifiedStatus === 'PARTIALLY_FILLED') {
-        telemetryWsGateway.broadcastOrderFilled({
+      this.inFlightTxHashes.add(normalizedTx);
+      try {
+        const market = marketService.getMarketById(params.marketId);
+        const verification = await verifyUserOrderTxHashOnChain(params.txHash, params.userAddress, market, {
+          marketId: params.marketId,
+          outcome,
+          direction,
+          price: quantizedPrice,
+          lotSize: quantizedSize,
+          rawQuantity,
+          rawPriceOwn,
+          rawPriceYes,
+        });
+        if (!verification.isValid) {
+          throw new Error(verification.errorReason || 'Transaction hash could not be verified on Somnia Shannon Testnet');
+        }
+
+        const orderId = crypto.randomUUID();
+        const now = new Date().toISOString();
+        const verifiedStatus: OrderStatus = verification.verifiedStatus || 'FILLED';
+        const actualSize = verification.fillsQuantity && verification.fillsQuantity > 0 ? verification.fillsQuantity : quantizedSize;
+        const actualCost = Number((quantizedPrice * actualSize).toFixed(4));
+
+        const orderExecution: OrderExecution = {
+          id: orderId,
+          onchainOrderId: verification.onchainOrderId,
           userAddress: params.userAddress,
-          orderId,
+          sessionId: '',
           marketId: params.marketId,
           agentType: 'Manual',
           source: 'TERMINAL',
           outcome,
           direction,
+          orderType,
           price: quantizedPrice,
           lotSize: actualSize,
+          totalCost: actualCost,
+          status: verifiedStatus,
           txHash: params.txHash,
-        });
-      }
+          pnl: 0,
+          isSettled: false,
+          createdAt: now,
+          filledAt: (verifiedStatus === 'FILLED' || verifiedStatus === 'PARTIALLY_FILLED') ? now : undefined,
+          marketSnapshot: market
+            ? {
+                symbol: market.symbol,
+                strikePrice: market.strikePrice,
+                closeTimestamp: market.closeTimestamp,
+                settlementPrice: market.settlementPrice,
+                winningOutcome: market.winningOutcome,
+                windowDuration: market.windowDuration,
+                recommendedOutcome: market.recommendedOutcome,
+              }
+            : undefined,
+        };
 
-      this.notifyStateChange();
+        this.insertIntoCache(orderExecution);
 
-      // Persist to Supabase asynchronously
-      if (this.isPersistenceEnabled()) {
-        try {
-          await marketService.ensureMarketPersisted(params.marketId, market?.symbol);
-          const insertRes = await supabase.from('orders').insert({
-            id: orderId,
-            user_address: params.userAddress,
-            session_id: null,
-            market_id: params.marketId,
-            agent_type: 'Manual',
+        if (verifiedStatus === 'FILLED' || verifiedStatus === 'PARTIALLY_FILLED') {
+          telemetryWsGateway.broadcastOrderFilled({
+            userAddress: params.userAddress,
+            orderId,
+            marketId: params.marketId,
+            agentType: 'Manual',
             source: 'TERMINAL',
             outcome,
             direction,
-            order_type: orderType,
             price: quantizedPrice,
-            lot_size: actualSize,
-            total_cost: actualCost,
-            status: verifiedStatus,
-            tx_hash: params.txHash,
-            pnl: 0,
-            is_settled: false,
-            created_at: now,
-            filled_at: (verifiedStatus === 'FILLED' || verifiedStatus === 'PARTIALLY_FILLED') ? now : null,
+            lotSize: actualSize,
+            txHash: params.txHash,
           });
-          if (insertRes.error) {
-            console.error('[OrderService] Supabase submitUserOrder (direct) insert notice:', insertRes.error.message);
-          }
-        } catch (err: any) {
-          console.error('[OrderService] Supabase submitUserOrder (direct) insert exception:', err?.message || err);
         }
+
+        this.notifyStateChange();
+
+        // Persist to Supabase asynchronously
+        if (this.isPersistenceEnabled()) {
+          try {
+            await marketService.ensureMarketPersisted(params.marketId, market?.symbol);
+            const insertRes = await supabase.from('orders').insert({
+              id: orderId,
+              user_address: params.userAddress,
+              session_id: null,
+              market_id: params.marketId,
+              agent_type: 'Manual',
+              source: 'TERMINAL',
+              outcome,
+              direction,
+              order_type: orderType,
+              price: quantizedPrice,
+              lot_size: actualSize,
+              total_cost: actualCost,
+              status: verifiedStatus,
+              tx_hash: params.txHash,
+              pnl: 0,
+              is_settled: false,
+              created_at: now,
+              filled_at: (verifiedStatus === 'FILLED' || verifiedStatus === 'PARTIALLY_FILLED') ? now : null,
+            });
+            if (insertRes.error) {
+              console.error('[OrderService] Supabase submitUserOrder (direct) insert notice:', insertRes.error.message);
+            }
+          } catch (err: any) {
+            console.error('[OrderService] Supabase submitUserOrder (direct) insert exception:', err?.message || err);
+          }
+        }
+
+        // Dispatch social copy-trades to active followers mirroring this forecaster
+        void import('./social-copy-service.js')
+          .then(({ socialCopyService }) => socialCopyService.executeSocialCopiesForOrder(orderExecution))
+          .catch((err) => console.warn('[OrderService] Social copy dispatch notice:', err?.message || err));
+
+        return orderExecution;
+      } finally {
+        this.inFlightTxHashes.delete(normalizedTx);
       }
-
-      // Dispatch social copy-trades to active followers mirroring this forecaster
-      void import('./social-copy-service.js')
-        .then(({ socialCopyService }) => socialCopyService.executeSocialCopiesForOrder(orderExecution))
-        .catch((err) => console.warn('[OrderService] Social copy dispatch notice:', err?.message || err));
-
-      return orderExecution;
     }
 
     // 2. Zero-gas session key execution
@@ -3065,10 +3244,15 @@ export class OrderService {
             const closeMs = Number(k.slice(k.lastIndexOf('-') + 1));
             const sym = k.slice(0, k.lastIndexOf('-'));
             try {
+              let timer: NodeJS.Timeout | undefined;
               const p = await Promise.race([
-                priceFeedService.getHistoricalPriceAt(sym, closeMs),
-                new Promise<null>((_, rej) => setTimeout(() => rej(new Error('hist timeout')), 1200)),
-              ]);
+                priceFeedService.getHistoricalPriceAt(sym, closeMs).catch(() => null),
+                new Promise<null>((resolve) => {
+                  timer = setTimeout(() => resolve(null), 1200);
+                }),
+              ]).finally(() => {
+                if (timer) clearTimeout(timer);
+              });
               histPriceCache.set(k, p as number | null);
             } catch {
               histPriceCache.set(k, null);
@@ -3096,10 +3280,15 @@ export class OrderService {
             return;
           }
           try {
+            let timer: NodeJS.Timeout | undefined;
             const onchain = await Promise.race([
               somniaExchange.client.getMarketOnchain(mId).catch(() => null),
-              new Promise<null>((resolve) => setTimeout(() => resolve(null), 1200)),
-            ]);
+              new Promise<null>((resolve) => {
+                timer = setTimeout(() => resolve(null), 1200);
+              }),
+            ]).finally(() => {
+              if (timer) clearTimeout(timer);
+            });
             if (onchain) {
               orderOnchainMarketCache.set(mId, { data: onchain, expiresAt: Date.now() + 15000 });
               onchainMarketCache.set(mId, onchain);

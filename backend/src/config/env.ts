@@ -76,9 +76,11 @@ const envSchema = z.object({
   // Security & Admin
   OPERATOR_ADMIN_SECRET: z.string().optional(),
   FRONTEND_ORIGIN: z.preprocess((val) => {
-    if (typeof val !== 'string') return '*';
+    if (typeof val !== 'string' || !val.trim() || val.trim() === '*') {
+      return 'https://dreampulse.vercel.app';
+    }
     return val.trim().replace(/^["']|["']$/g, '');
-  }, z.string().default('*')),
+  }, z.string().default('https://dreampulse.vercel.app')),
   SUPABASE_JWT_SECRET: z.string().optional(),
   SUPABASE_JWT_EXPIRY_SECONDS: z.coerce.number().default(86400),
 

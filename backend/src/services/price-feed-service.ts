@@ -217,8 +217,8 @@ export class PriceFeedService extends EventEmitter {
 
   private startRestFallback(): void {
     if (this.restFallbackInterval || !this.isRunning) return;
-    this.restFallbackInterval = setInterval(async () => {
-      await this.fetchRestSnapshot().catch(() => {});
+    this.restFallbackInterval = setInterval(() => {
+      void this.fetchRestSnapshot().catch(() => {});
     }, 3000);
   }
 

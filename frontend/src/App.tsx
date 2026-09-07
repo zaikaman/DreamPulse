@@ -19,24 +19,28 @@ import { useKeyboardShortcuts } from './hooks/useKeyboardShortcuts.js';
 import { soundEngine } from './services/audio.js';
 import { apiClient } from './services/api.js';
 import { telemetryClient, type OrderFillData, type SweepCompleteData } from './services/telemetry-client.js';
-import { Spinner } from './components/ui/Spinner.js';
+import { ViewErrorBoundary, ViewLoadingFallback } from './components/common/ErrorBoundary.js';
+import { lazyWithRetry } from './lib/lazy-with-retry.js';
 import { useOnboarding } from './hooks/useOnboarding.js';
 import { getViewForHash, navigateToView, getProfileAddressFromHash } from './lib/navigation.js';
 
 // Lazy load heavy modules to minimize initial bundle size and accelerate TTI
 // TradeTerminalView (~180kB with OrderBookDepth + chart) and AnalyticsView are the heaviest dashboard modules — lazy to avoid shipping 600kB gz on initial load.
-const TradeTerminalView = React.lazy(() => import('./components/dashboard/TradeTerminalView.js').then((m) => ({ default: m.TradeTerminalView })));
-const SwarmCockpitView = React.lazy(() => import('./components/dashboard/SwarmCockpitView.js').then((m) => ({ default: m.SwarmCockpitView })));
-const StrategyStudioView = React.lazy(() => import('./components/StrategyStudioView.js').then((m) => ({ default: m.StrategyStudioView })));
-const Backtester = React.lazy(() => import('./components/StrategyStudio.js').then((m) => ({ default: m.Backtester })));
-const SwarmArenaView = React.lazy(() => import('./components/arena/SwarmArenaView.js').then((m) => ({ default: m.SwarmArenaView })));
-const TraderProfileView = React.lazy(() => import('./components/arena/TraderProfileView.js').then((m) => ({ default: m.TraderProfileView })));
-const SweeperControls = React.lazy(() => import('./components/SweeperControls.js').then((m) => ({ default: m.SweeperControls })));
-const AnalyticsView = React.lazy(() => import('./components/dashboard/AnalyticsView.js').then((m) => ({ default: m.AnalyticsView })));
-const SessionDelegationModal = React.lazy(() => import('./components/SessionDelegationModal.js').then((m) => ({ default: m.SessionDelegationModal })));
-const OnboardingWizardModal = React.lazy(() => import('./components/onboarding/OnboardingWizardModal.js').then((m) => ({ default: m.OnboardingWizardModal })));
-const TradingWalletModal = React.lazy(() => import('./components/TradingWalletModal.js').then((m) => ({ default: m.TradingWalletModal })));
-const RiskManagementModal = React.lazy(() => import('./components/RiskManagementModal.js').then((m) => ({ default: m.RiskManagementModal })));
+// Each chunk is wrapped with lazyWithRetry (absorbs transient network blips) and a
+// per-view ViewErrorBoundary at the render site, so a failed chunk can never
+// unmount the whole console into a white screen.
+const TradeTerminalView = lazyWithRetry(() => import('./components/dashboard/TradeTerminalView.js').then((m) => ({ default: m.TradeTerminalView })));
+const SwarmCockpitView = lazyWithRetry(() => import('./components/dashboard/SwarmCockpitView.js').then((m) => ({ default: m.SwarmCockpitView })));
+const StrategyStudioView = lazyWithRetry(() => import('./components/StrategyStudioView.js').then((m) => ({ default: m.StrategyStudioView })));
+const Backtester = lazyWithRetry(() => import('./components/StrategyStudio.js').then((m) => ({ default: m.Backtester })));
+const SwarmArenaView = lazyWithRetry(() => import('./components/arena/SwarmArenaView.js').then((m) => ({ default: m.SwarmArenaView })));
+const TraderProfileView = lazyWithRetry(() => import('./components/arena/TraderProfileView.js').then((m) => ({ default: m.TraderProfileView })));
+const SweeperControls = lazyWithRetry(() => import('./components/SweeperControls.js').then((m) => ({ default: m.SweeperControls })));
+const AnalyticsView = lazyWithRetry(() => import('./components/dashboard/AnalyticsView.js').then((m) => ({ default: m.AnalyticsView })));
+const SessionDelegationModal = lazyWithRetry(() => import('./components/SessionDelegationModal.js').then((m) => ({ default: m.SessionDelegationModal })));
+const OnboardingWizardModal = lazyWithRetry(() => import('./components/onboarding/OnboardingWizardModal.js').then((m) => ({ default: m.OnboardingWizardModal })));
+const TradingWalletModal = lazyWithRetry(() => import('./components/TradingWalletModal.js').then((m) => ({ default: m.TradingWalletModal })));
+const RiskManagementModal = lazyWithRetry(() => import('./components/RiskManagementModal.js').then((m) => ({ default: m.RiskManagementModal })));
 
 export const App: React.FC = () => {
   const [activeNav, setActiveNav] = useState<DashboardViewType>('Landing');
@@ -334,7 +338,8 @@ export const App: React.FC = () => {
             isLoading={isMarketsLoading}
           />
         ) : activeNav === 'Trade Terminal' ? (
-          <React.Suspense fallback={<div className="glass-card" style={{ minHeight: '340px', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: '12px' }}><Spinner size="lg" /><span style={{ fontSize: '13px', color: 'var(--muted-foreground)' }}>Loading Trade Terminal...</span></div>}>
+          <ViewErrorBoundary viewName="Trade Terminal" resetKeys={[activeNav]} onNavigateHome={() => handleNavigateView('Overview')}>
+          <React.Suspense fallback={<ViewLoadingFallback label="Trade Terminal" />}>
             <TradeTerminalView
               markets={markets}
               selectedMarket={selectedMarket}
@@ -353,6 +358,7 @@ export const App: React.FC = () => {
               onConnectWallet={connectWallet}
             />
           </React.Suspense>
+          </ViewErrorBoundary>
         ) : activeNav === 'AI Swarm Feed' ? (
           <SwarmFeedView
             agentThoughts={agentThoughts}
@@ -363,7 +369,8 @@ export const App: React.FC = () => {
             userAddress={wallet.address || undefined}
           />
         ) : activeNav === 'Swarm Cockpit' ? (
-          <React.Suspense fallback={<div className="glass-card" style={{ minHeight: '340px', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: '12px' }}><Spinner size="lg" /><span style={{ fontSize: '13px', color: 'var(--muted-foreground)' }}>Loading Swarm Cockpit...</span></div>}>
+          <ViewErrorBoundary viewName="Swarm Cockpit" resetKeys={[activeNav]} onNavigateHome={() => handleNavigateView('Overview')}>
+          <React.Suspense fallback={<ViewLoadingFallback label="Swarm Cockpit" />}>
             <SwarmCockpitView
               wallet={wallet}
               activeSession={activeSession}
@@ -372,8 +379,10 @@ export const App: React.FC = () => {
               onOpenSessionModal={handleOpenSessionModal}
             />
           </React.Suspense>
+          </ViewErrorBoundary>
         ) : activeNav === 'Strategy Studio' ? (
-          <React.Suspense fallback={<div className="glass-card" style={{ minHeight: '340px', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: '12px' }}><Spinner size="lg" /><span style={{ fontSize: '13px', color: 'var(--muted-foreground)' }}>Loading Strategy Studio...</span></div>}>
+          <ViewErrorBoundary viewName="Strategy Studio" resetKeys={[activeNav]} onNavigateHome={() => handleNavigateView('Overview')}>
+          <React.Suspense fallback={<ViewLoadingFallback label="Strategy Studio" />}>
             <StrategyStudioView
               wallet={wallet}
               activeSession={activeSession}
@@ -393,8 +402,10 @@ export const App: React.FC = () => {
               }}
             />
           </React.Suspense>
+          </ViewErrorBoundary>
         ) : activeNav === 'Backtester' ? (
-          <React.Suspense fallback={<div className="glass-card" style={{ minHeight: '340px', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: '12px' }}><Spinner size="lg" /><span style={{ fontSize: '13px', color: 'var(--muted-foreground)' }}>Loading Backtester...</span></div>}>
+          <ViewErrorBoundary viewName="Backtester" resetKeys={[activeNav]} onNavigateHome={() => handleNavigateView('Overview')}>
+          <React.Suspense fallback={<ViewLoadingFallback label="Backtester" />}>
             <Backtester
               initialConfig={forkedStrategyConfig}
               wallet={wallet}
@@ -403,8 +414,10 @@ export const App: React.FC = () => {
               onConnectWallet={connectWallet}
             />
           </React.Suspense>
+          </ViewErrorBoundary>
         ) : activeNav === 'Swarm Arena' ? (
-          <React.Suspense fallback={<div className="glass-card" style={{ minHeight: '340px', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: '12px' }}><Spinner size="lg" /><span style={{ fontSize: '13px', color: 'var(--muted-foreground)' }}>Loading Swarm Arena & Leaderboard...</span></div>}>
+          <ViewErrorBoundary viewName="Swarm Arena" resetKeys={[activeNav]} onNavigateHome={() => handleNavigateView('Overview')}>
+          <React.Suspense fallback={<ViewLoadingFallback label="Swarm Arena" />}>
             <SwarmArenaView
               wallet={wallet}
               activeSession={activeSession}
@@ -439,8 +452,10 @@ export const App: React.FC = () => {
               }}
             />
           </React.Suspense>
+          </ViewErrorBoundary>
         ) : activeNav === 'Trader Profile' ? (
-          <React.Suspense fallback={<div className="glass-card" style={{ minHeight: '340px', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: '12px' }}><Spinner size="lg" /><span style={{ fontSize: '13px', color: 'var(--muted-foreground)' }}>Loading Forecaster Profile...</span></div>}>
+          <ViewErrorBoundary viewName="Forecaster Profile" resetKeys={[activeNav, selectedProfileAddress]} onNavigateHome={() => handleNavigateView('Overview')}>
+          <React.Suspense fallback={<ViewLoadingFallback label="Forecaster Profile" />}>
             <TraderProfileView
               wallet={wallet}
               activeSession={activeSession}
@@ -453,12 +468,16 @@ export const App: React.FC = () => {
               onOpenSessionModal={handleOpenSessionModal}
             />
           </React.Suspense>
+          </ViewErrorBoundary>
         ) : activeNav === 'Analytics' ? (
-          <React.Suspense fallback={<div className="glass-card" style={{ minHeight: '340px', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: '12px' }}><Spinner size="lg" /><span style={{ fontSize: '13px', color: 'var(--muted-foreground)' }}>Loading Analytics...</span></div>}>
+          <ViewErrorBoundary viewName="Analytics" resetKeys={[activeNav]} onNavigateHome={() => handleNavigateView('Overview')}>
+          <React.Suspense fallback={<ViewLoadingFallback label="Analytics" />}>
             <AnalyticsView wallet={wallet} onConnectWallet={connectWallet} />
           </React.Suspense>
+          </ViewErrorBoundary>
         ) : activeNav === 'Settlement' ? (
-          <React.Suspense fallback={<div className="glass-card" style={{ minHeight: '340px', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: '12px' }}><Spinner size="lg" /><span style={{ fontSize: '13px', color: 'var(--muted-foreground)' }}>Loading Settlement Sweeper...</span></div>}>
+          <ViewErrorBoundary viewName="Settlement Sweeper" resetKeys={[activeNav]} onNavigateHome={() => handleNavigateView('Overview')}>
+          <React.Suspense fallback={<ViewLoadingFallback label="Settlement Sweeper" />}>
             <SweeperControls
               userAddress={wallet.address || undefined}
               onConnectWallet={connectWallet}
@@ -467,6 +486,7 @@ export const App: React.FC = () => {
               onWithdrawClone={withdrawFromClone}
             />
           </React.Suspense>
+          </ViewErrorBoundary>
         ) : (
           <div className="glass-card p-8 rounded-xl text-center flex flex-col items-center justify-center">
             <CommandLineIcon className="w-9 h-9 text-[#00ffcc] mb-4" />
@@ -511,86 +531,103 @@ export const App: React.FC = () => {
       />
 
       {/* Non-Custodial Session Key Delegation Modal */}
-      <React.Suspense fallback={null}>
-        <SessionDelegationModal
-          isOpen={isSessionModalOpen}
-          initialRevokeMode={sessionModalInitialRevoke}
-          onClose={() => {
-            setIsSessionModalOpen(false);
-            setSessionModalInitialRevoke(false);
-          }}
-          wallet={wallet}
-          activeSession={activeSession}
-          cloneAddress={cloneAddress}
-          cloneBalance={cloneBalance}
-          onOpenTradingWallet={handleOpenTradingWallet}
-          onOpenRiskModal={handleOpenRiskModal}
-          isSigning={isSessionSigning}
-          isLoading={isSessionLoading}
-          isFauceting={isSessionFauceting}
-          isFixingAllowance={isFixingAllowance}
-          stepState={sessionStepState}
-          error={sessionError}
-          allowanceStatus={allowanceStatus}
-          onConnectWallet={connectWallet}
-          onDisconnectWallet={disconnectWallet}
-          onSwitchNetwork={switchNetwork}
-          onClaimFaucet={claimCollateralFaucet}
-          onCreateSession={createSession}
-          onRevokeSession={revokeSession}
-          onEnsureAllowances={ensureAllowances}
-          onRefreshAllowance={refreshAllowanceStatus}
-          onClearError={clearSessionError}
-        />
-      </React.Suspense>
+      {/* Mounted only while open: a chunk failure is scoped to this boundary, and reopening retries the import. */}
+      {isSessionModalOpen ? (
+        <ViewErrorBoundary viewName="Session Delegation" variant="minimal">
+          <React.Suspense fallback={null}>
+            <SessionDelegationModal
+              isOpen={isSessionModalOpen}
+              initialRevokeMode={sessionModalInitialRevoke}
+              onClose={() => {
+                setIsSessionModalOpen(false);
+                setSessionModalInitialRevoke(false);
+              }}
+              wallet={wallet}
+              activeSession={activeSession}
+              cloneAddress={cloneAddress}
+              cloneBalance={cloneBalance}
+              onOpenTradingWallet={handleOpenTradingWallet}
+              onOpenRiskModal={handleOpenRiskModal}
+              isSigning={isSessionSigning}
+              isLoading={isSessionLoading}
+              isFauceting={isSessionFauceting}
+              isFixingAllowance={isFixingAllowance}
+              stepState={sessionStepState}
+              error={sessionError}
+              allowanceStatus={allowanceStatus}
+              onConnectWallet={connectWallet}
+              onDisconnectWallet={disconnectWallet}
+              onSwitchNetwork={switchNetwork}
+              onClaimFaucet={claimCollateralFaucet}
+              onCreateSession={createSession}
+              onRevokeSession={revokeSession}
+              onEnsureAllowances={ensureAllowances}
+              onRefreshAllowance={refreshAllowanceStatus}
+              onClearError={clearSessionError}
+            />
+          </React.Suspense>
+        </ViewErrorBoundary>
+      ) : null}
 
       {/* Isolated Trading Account (Smart Clone) Deposit & Withdraw Modal */}
-      <React.Suspense fallback={null}>
-        <TradingWalletModal
-          isOpen={isTradingWalletModalOpen}
-          initialTab={tradingWalletTab}
-          onClose={() => setIsTradingWalletModalOpen(false)}
-          wallet={wallet}
-          cloneAddress={cloneAddress}
-          cloneBalance={cloneBalance}
-          onDeposit={depositToClone}
-          onWithdraw={withdrawFromClone}
-          onClaimFaucet={claimCollateralFaucet}
-          isFauceting={isSessionFauceting}
-        />
-      </React.Suspense>
+      {isTradingWalletModalOpen ? (
+        <ViewErrorBoundary viewName="Trading Wallet" variant="minimal">
+          <React.Suspense fallback={null}>
+            <TradingWalletModal
+              isOpen={isTradingWalletModalOpen}
+              initialTab={tradingWalletTab}
+              onClose={() => setIsTradingWalletModalOpen(false)}
+              wallet={wallet}
+              cloneAddress={cloneAddress}
+              cloneBalance={cloneBalance}
+              onDeposit={depositToClone}
+              onWithdraw={withdrawFromClone}
+              onClaimFaucet={claimCollateralFaucet}
+              isFauceting={isSessionFauceting}
+            />
+          </React.Suspense>
+        </ViewErrorBoundary>
+      ) : null}
 
       {/* Decoupled Risk Management & Ceilings Modal */}
-      <React.Suspense fallback={null}>
-        <RiskManagementModal
-          isOpen={isRiskModalOpen}
-          onClose={() => setIsRiskModalOpen(false)}
-          activeSession={activeSession}
-          onUpdateRisk={async ({ maxTradeSize, dailyVolumeCap }) => {
-            if (wallet.address) {
-              await apiClient.updateSessionRisk(wallet.address, { maxTradeSize, dailyVolumeCap });
-              await refreshAllowanceStatus(true);
-            }
-          }}
-        />
-      </React.Suspense>
+      {isRiskModalOpen ? (
+        <ViewErrorBoundary viewName="Risk Management" variant="minimal">
+          <React.Suspense fallback={null}>
+            <RiskManagementModal
+              isOpen={isRiskModalOpen}
+              onClose={() => setIsRiskModalOpen(false)}
+              activeSession={activeSession}
+              onUpdateRisk={async ({ maxTradeSize, dailyVolumeCap }) => {
+                if (wallet.address) {
+                  await apiClient.updateSessionRisk(wallet.address, { maxTradeSize, dailyVolumeCap });
+                  await refreshAllowanceStatus(true);
+                }
+              }}
+            />
+          </React.Suspense>
+        </ViewErrorBoundary>
+      ) : null}
 
       {/* Interactive First-Run Onboarding & Setup Wizard */}
-      <React.Suspense fallback={null}>
-        <OnboardingWizardModal
-          isOpen={isOnboardingOpen}
-          onClose={closeOnboarding}
-          wallet={wallet}
-          activeSession={activeSession}
-          isFauceting={isSessionFauceting}
-          onClaimFaucet={claimCollateralFaucet}
-          onConnectWallet={connectWallet}
-          onSwitchNetwork={switchNetwork}
-          onOpenSessionModal={handleOpenSessionModal}
-          onNavigateView={handleNavigateView}
-          onComplete={completeOnboarding}
-        />
-      </React.Suspense>
+      {isOnboardingOpen ? (
+        <ViewErrorBoundary viewName="Onboarding" variant="minimal">
+          <React.Suspense fallback={null}>
+            <OnboardingWizardModal
+              isOpen={isOnboardingOpen}
+              onClose={closeOnboarding}
+              wallet={wallet}
+              activeSession={activeSession}
+              isFauceting={isSessionFauceting}
+              onClaimFaucet={claimCollateralFaucet}
+              onConnectWallet={connectWallet}
+              onSwitchNetwork={switchNetwork}
+              onOpenSessionModal={handleOpenSessionModal}
+              onNavigateView={handleNavigateView}
+              onComplete={completeOnboarding}
+            />
+          </React.Suspense>
+        </ViewErrorBoundary>
+      ) : null}
     </>
   );
 };

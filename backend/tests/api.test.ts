@@ -207,6 +207,25 @@ describe('Express REST API Endpoints', () => {
     expect(swarmRes.body.data.some((o: any) => o.id === res.body.data.id)).toBe(false);
   });
 
+  it('POST /api/v1/orders/place rejects replayed txHash with 400 Replay detected', async () => {
+    const payload = {
+      userAddress: '0x70997970C51812dc3A010C7d01b50e0d17dc79C8',
+      marketId: 'test-market-id',
+      outcome: 'YES',
+      direction: 'BUY',
+      orderType: 'LIMIT',
+      price: 0.45,
+      lotSize: 20,
+      txHash: '0x1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef',
+    };
+
+    // Attempting to submit the exact same txHash again should immediately reject
+    const replayRes = await request(app).post('/api/v1/orders/place').send(payload);
+    expect(replayRes.status).toBe(400);
+    expect(replayRes.body.success).toBe(false);
+    expect(replayRes.body.error).toContain('Replay detected');
+  });
+
   it('POST /api/v1/orders/:id/cancel cancels a resting limit order and returns updated status', async () => {
     const payload = {
       userAddress: '0x70997970C51812dc3A010C7d01b50e0d17dc79C8',
@@ -216,7 +235,7 @@ describe('Express REST API Endpoints', () => {
       orderType: 'LIMIT',
       price: 0.35,
       lotSize: 10,
-      txHash: '0x1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef',
+      txHash: '0x2234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef',
     };
 
     const placeRes = await request(app).post('/api/v1/orders/place').send(payload);
@@ -382,14 +401,23 @@ describe('Express REST API Endpoints', () => {
       expect(res.headers['access-control-allow-credentials']).toBe('true');
     });
 
-    it('allows requests from Vercel deployments with credentials support', async () => {
+    it('allows requests from configured production origin with credentials support', async () => {
       const res = await request(app)
         .get('/api/health')
-        .set('Origin', 'https://dreampulse-demo.vercel.app');
+        .set('Origin', 'https://dreampulse.vercel.app');
 
       expect(res.status).toBe(200);
-      expect(res.headers['access-control-allow-origin']).toBe('https://dreampulse-demo.vercel.app');
+      expect(res.headers['access-control-allow-origin']).toBe('https://dreampulse.vercel.app');
       expect(res.headers['access-control-allow-credentials']).toBe('true');
+    });
+
+    it('rejects unauthorized arbitrary Vercel origins to prevent cross-origin data theft (SEC-06)', async () => {
+      const res = await request(app)
+        .get('/api/health')
+        .set('Origin', 'https://attacker-phish.vercel.app');
+
+      expect(res.status).toBe(403);
+      expect(res.body.error).toBe('Not allowed by CORS');
     });
 
     it('handles CORS preflight OPTIONS requests cleanly', async () => {
@@ -423,9 +451,7 @@ describe('Express REST API Endpoints', () => {
               if (
                 customAllowedOrigins.includes(normalizedOrigin) ||
                 hostname === 'localhost' ||
-                hostname === '127.0.0.1' ||
-                hostname === 'vercel.app' ||
-                hostname.endsWith('.vercel.app')
+                hostname === '127.0.0.1'
               ) {
                 return callback(null, true);
               }

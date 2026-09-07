@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { apiClient } from '../services/api.js';
 import type { AgentType, OrderExecution, SwarmStatusSummary } from '../types/index.js';
 import {
@@ -340,9 +340,20 @@ function teardownGlobalSubscription() {
 export const useAgentSwarm = (operatorAddress?: string): UseAgentSwarmReturn => {
   const [summary, setSummary] = useState<SwarmStatusSummary>(sharedSummary);
   const [detailed, setDetailed] = useState<Record<string, AgentDetail>>(sharedDetailed);
-  const [orders] = useState<OrderExecution[]>([]);
-  const [isLoading] = useState<boolean>(false);
+  const [orders, setOrders] = useState<OrderExecution[]>([]);
+  const [isLoading, setIsLoading] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
+
+  // Normalized operator scope: user-scoped orders when an address is provided,
+  // swarm-wide recent fills otherwise. Kept in a ref so the fetcher never goes stale.
+  const normalizedOperator = operatorAddress?.trim().toLowerCase() ?? null;
+  const operatorRef = useRef<string | null>(normalizedOperator);
+  operatorRef.current = normalizedOperator;
+
+  const ordersInFlightRef = useRef<boolean>(false);
+  const lastOrdersFetchAtRef = useRef<number>(0);
+  const ordersDebounceRef = useRef<number | null>(null);
+  const ordersGenRef = useRef<number>(0);
 
   // Subscribe to global shared updates with reference-counted telemetry listener
   useEffect(() => {
@@ -371,7 +382,103 @@ export const useAgentSwarm = (operatorAddress?: string): UseAgentSwarmReturn => 
     };
   }, []);
 
-  const fetchOrders = useCallback(async () => {}, []);
+  // Production-ready orders fetcher: user-scoped when operatorAddress is set
+  // (includes SWARM + TERMINAL + COPY_TRADE fills so onboarding Quest #4 sees
+  // any first trade), swarm-wide recent fills otherwise for fleet telemetry.
+  const fetchOrders = useCallback(async () => {
+    const target = operatorRef.current;
+    const now = Date.now();
+    if (ordersInFlightRef.current) return;
+    if (now - lastOrdersFetchAtRef.current < 1000) return;
+    lastOrdersFetchAtRef.current = now;
+    ordersInFlightRef.current = true;
+    const gen = ++ordersGenRef.current;
+    setIsLoading(true);
+
+    try {
+      const res = target
+        ? await apiClient.getOrders({ userAddress: target, limit: 100 })
+        : await apiClient.getOrders({ limit: 50 });
+      if (gen !== ordersGenRef.current) return;
+      if (res?.success && Array.isArray(res.data)) {
+        setOrders(res.data);
+        setError(null);
+      }
+    } catch (err: any) {
+      if (gen !== ordersGenRef.current) return;
+      // Preserve last-good orders; surface the error for consumers.
+      setError(err?.message || 'Failed to fetch orders');
+    } finally {
+      ordersInFlightRef.current = false;
+      if (gen === ordersGenRef.current) {
+        setIsLoading(false);
+      }
+    }
+  }, []);
+
+  // Orders lifecycle: initial fetch, visibility-aware polling, and real-time
+  // refresh on trade fills / sweeps / PnL updates. Orders are cleared on scope
+  // change so a guest swarm list can never leak into a user quest count.
+  useEffect(() => {
+    setOrders([]);
+    setError(null);
+    fetchOrders();
+
+    const intervalId = window.setInterval(() => {
+      if (!shouldPoll()) return;
+      fetchOrders();
+    }, STALE_TIMES.swarm);
+
+    const onVisible = () => {
+      if (document.visibilityState === 'visible') fetchOrders();
+    };
+    document.addEventListener('visibilitychange', onVisible);
+
+    const debouncedRefresh = (delay = 200) => {
+      if (ordersDebounceRef.current) window.clearTimeout(ordersDebounceRef.current);
+      ordersDebounceRef.current = window.setTimeout(() => {
+        ordersDebounceRef.current = null;
+        fetchOrders();
+      }, delay);
+    };
+
+    const unsubOrder = telemetryClient.on('order_filled', (payload: OrderFillData) => {
+      const target = operatorRef.current;
+      if (!target) {
+        debouncedRefresh();
+        return;
+      }
+      const payloadUser = (payload as { userAddress?: string })?.userAddress?.toLowerCase();
+      // Ignore fills belonging to other traders when user-scoped.
+      if (payloadUser && payloadUser !== target) return;
+      debouncedRefresh();
+    });
+    const unsubSweep = telemetryClient.on('sweep_completed', () => {
+      debouncedRefresh();
+    });
+    const unsubPnl = telemetryClient.on('pnl_update', () => {
+      debouncedRefresh();
+    });
+
+    return () => {
+      window.clearInterval(intervalId);
+      document.removeEventListener('visibilitychange', onVisible);
+      if (ordersDebounceRef.current) {
+        window.clearTimeout(ordersDebounceRef.current);
+        ordersDebounceRef.current = null;
+      }
+      ordersGenRef.current++;
+      try {
+        unsubOrder();
+      } catch {}
+      try {
+        unsubSweep();
+      } catch {}
+      try {
+        unsubPnl();
+      } catch {}
+    };
+  }, [normalizedOperator, fetchOrders]);
 
   const toggleAgent = useCallback(
     async (agentType: AgentType, enabled: boolean): Promise<boolean> => {

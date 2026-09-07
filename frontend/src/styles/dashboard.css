@@ -2975,7 +2975,8 @@ select.terminal-select option {
    ============================================================================== */
 .touch-scroll {
   -webkit-overflow-scrolling: touch;
-  overscroll-behavior: contain;
+  overscroll-behavior-x: contain;
+  overscroll-behavior-y: auto;
 }
 
 @supports (padding-bottom: env(safe-area-inset-bottom)) {

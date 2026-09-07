@@ -15,7 +15,10 @@ import { evaluateTradeConfluence } from '../../lib/confluence.js';
 import { EventContractChart } from './EventContractChart.js';
 import { TraderCockpitTicket, type LadderPrefillData } from './TraderCockpitTicket.js';
 import { RecentlySettledRounds } from './RecentlySettledRounds.js';
-const OrderBookDepth = React.lazy(() => import('../OrderBookDepth.js').then((m) => ({ default: m.OrderBookDepth })) );
+import { lazyWithRetry } from '../../lib/lazy-with-retry.js';
+// Retryable chunk import: a Wi-Fi blip while fetching this nested chunk is
+// absorbed here; anything worse is caught by the Trade Terminal view boundary.
+const OrderBookDepth = lazyWithRetry(() => import('../OrderBookDepth.js').then((m) => ({ default: m.OrderBookDepth })) );
 import { ActivePositionsDrawer } from './ActivePositionsDrawer.js';
 import { cn } from '../../lib/utils.js';
 

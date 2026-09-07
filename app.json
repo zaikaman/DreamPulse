@@ -26,8 +26,8 @@
       "value": "false"
     },
     "FRONTEND_ORIGIN": {
-      "description": "Allowed CORS frontend origin URL(s), comma-separated or * (e.g., https://dreampulse-ai.vercel.app)",
-      "value": "*",
+      "description": "Allowed CORS frontend origin URL(s), comma-separated (e.g., https://dreampulse.vercel.app)",
+      "value": "https://dreampulse.vercel.app",
       "required": false
     },
     "SUPABASE_URL": {
