@@ -5,6 +5,8 @@ import { TitanMMAgent } from '../src/agents/titan-mm.js';
 import { OrderService, orderService, quantizeOrder, assertFunded, toSteps } from '../src/services/order-service.js';
 import { MultiAgentSwarmRunner } from '../src/agents/swarm-runner.js';
 import { somniaExchange, operatorAccount } from '../src/config/somnia.js';
+import { sessionService } from '../src/services/session-service.js';
+import { userSwarmService } from '../src/services/user-swarm-service.js';
 import type { IAgentContext } from '../src/agents/base-agent.js';
 import type { Market, SessionGrant } from '../src/types/index.js';
 import type { Address, Hex } from 'viem';
@@ -703,6 +705,184 @@ describe('Phase 5 Swarm Strategy & Agent Unit Tests', () => {
       swarmRunner.stop();
       // second stop safe
       swarmRunner.stop();
+    });
+
+    it('BE-BUG-05: pure static evaluation and user position pre-indexing avoid ephemeral churn and event loop starvation', async () => {
+      const userAddr = '0x1111111111111111111111111111111111111111';
+      const sampleOrder: any = {
+        id: 'bug05-order-1',
+        marketId: baseMarket.id,
+        userAddress: userAddr,
+        agentType: 'Volt',
+        action: 'TAKER_BUY',
+        outcome: 'YES',
+        price: 0.5,
+        lotSize: 2.0,
+        totalCost: 1.0,
+        status: 'FILLED',
+        createdAt: new Date().toISOString(),
+        isSettled: false,
+      };
+
+      orderService.insertIntoCache(sampleOrder);
+
+      // Verify user order map fast-path lookup
+      const userOrders = orderService.getUserOrders(userAddr);
+      expect(userOrders.length).toBeGreaterThanOrEqual(1);
+      expect(userOrders[0].id).toBe('bug05-order-1');
+
+      const positionsMap = orderService.getUserPositionsMap();
+      expect(positionsMap.has(userAddr.toLowerCase())).toBe(true);
+      expect(orderService.getActivePositionCount('Volt', userAddr)).toBeGreaterThanOrEqual(1);
+      expect(orderService.hasActivePosition('Volt', baseMarket.id, userAddr)).toBe(true);
+
+      // Verify pure static decision evaluations without object churn
+      const context: IAgentContext = {
+        spotTicker: {
+          symbol: 'BTC/USD',
+          price: 97200.0,
+          change1m: 0.0072,
+          change5m: 0.0085,
+          timestamp: Date.now(),
+        },
+        market: {
+          ...baseMarket,
+          bestAskYes: 0.48,
+        },
+        depth: {
+          yesBids: [{ price: 0.47, quantity: 100, total: 47 }],
+          yesAsks: [{ price: 0.48, quantity: 100, total: 48 }],
+        },
+        activeSessions: [validSession],
+      };
+
+      const voltDecision = VoltSniperAgent.evaluateDecision(context, {
+        driftThreshold: 0.002,
+        minEdge: 0.03,
+        lotSize: 5.0,
+        maxTradeSize: 20.0,
+        maxDailyVolume: 200.0,
+        maxSlippage: 0.02,
+      });
+      expect(voltDecision.agentType).toBe('Volt');
+      expect(voltDecision.action).toBe('TAKER_BUY');
+
+      const oracleDecision = OracleArbAgent.evaluateDecision(context, {
+        minEdge: 0.035,
+        lotSize: 5.0,
+        maxTradeSize: 20.0,
+        maxDailyVolume: 200.0,
+        maxSlippage: 0.02,
+      });
+      expect(oracleDecision.agentType).toBe('Oracle');
+
+      const titanContext: IAgentContext = {
+        ...context,
+        spotTicker: {
+          ...context.spotTicker,
+          change1m: 0.0001, // Calm spot conditions for continuous MM quoting
+        },
+      };
+
+      const titanQuotes = TitanMMAgent.calculateReservationQuotes(
+        titanContext,
+        {
+          minEdge: 0.02,
+          maxTradeSize: 20.0,
+          maxDailyVolume: 200.0,
+          maxSlippage: 0.02,
+          targetSpread: 0.04,
+          inventoryAversion: 0.015,
+          lotSize: 2.0,
+        },
+        1.5,
+      );
+      expect(titanQuotes.netInventory).toBe(1.5);
+      expect(titanQuotes.snappedBid).toBeLessThan(titanQuotes.snappedAsk);
+
+      const titanDecision = TitanMMAgent.evaluateDecision(
+        titanContext,
+        {
+          minEdge: 0.02,
+          maxTradeSize: 20.0,
+          maxDailyVolume: 200.0,
+          maxSlippage: 0.02,
+          targetSpread: 0.04,
+          inventoryAversion: 0.015,
+          lotSize: 2.0,
+        },
+        1.5,
+      );
+      expect(titanDecision.agentType).toBe('Titan');
+      expect(titanDecision.action).toBe('LIMIT_QUOTE');
+    });
+
+    it('successfully runs evaluatePersonalSwarms cycle and executes trades without regressions', async () => {
+      const swarmRunner = new MultiAgentSwarmRunner();
+      const personalUser = '0x2222222222222222222222222222222222222222';
+
+      // 1. Configure user for PERSONAL swarm mode with Volt enabled
+      await userSwarmService.upsertConfig(personalUser, {
+        mode: 'PERSONAL',
+        copyTradeEnabled: true,
+        voltEnabled: true,
+        oracleEnabled: false,
+        titanEnabled: false,
+        voltConfig: {
+          driftThreshold: 0.002,
+          minEdge: 0.03,
+          lotSize: 5.0,
+          maxTradeSize: 20.0,
+        },
+      });
+
+      // 2. Mock active authorized session
+      const mockSession: any = {
+        id: 'test-personal-session-uuid',
+        userAddress: personalUser,
+        operatorAddress: operatorAccount.address,
+        permissions: ['placeOrderFor', 'cancelOrderFor'],
+        maxTradeSize: 25.0,
+        dailyVolumeCap: 250.0,
+        spentToday: 0.0,
+        expiresAt: new Date(Date.now() + 86400000).toISOString(),
+        isActive: true,
+        onChainAuthorized: true,
+      };
+      vi.spyOn(sessionService, 'getUserActiveSession').mockResolvedValue(mockSession);
+      vi.spyOn(sessionService, 'validateTradeAllowance').mockReturnValue({ allowed: true, remaining: 100 } as any);
+
+      // 3. Mock executeAgentDecision
+      const executeSpy = vi.spyOn(orderService, 'executeAgentDecision').mockResolvedValue({
+        id: 'personal-test-order-001',
+        txHash: '0x1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef',
+        price: 0.48,
+        lotSize: 5.0,
+      } as any);
+
+      const targetMarket: Market = {
+        ...baseMarket,
+        bestAskYes: 0.48,
+      };
+      const spotTickers = {
+        'BTC/USD': {
+          symbol: 'BTC/USD',
+          price: 97200.0,
+          change1m: 0.0072,
+          change5m: 0.0085,
+          timestamp: Date.now(),
+        },
+      };
+
+      // 4. Run evaluatePersonalSwarms directly
+      await (swarmRunner as any).evaluatePersonalSwarms([targetMarket], spotTickers);
+
+      // 5. Verify execution took place
+      expect(executeSpy).toHaveBeenCalled();
+      const calledDecision = executeSpy.mock.calls[0][0];
+      expect(calledDecision.agentType).toBe('Volt');
+      expect(calledDecision.action).toBe('TAKER_BUY');
+      expect(calledDecision.targetOutcome).toBe('YES');
     });
   });
 });

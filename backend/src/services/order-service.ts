@@ -681,6 +681,7 @@ export async function verifyUserOrderTxHashOnChain(
 export class OrderService {
   private orders: OrderExecution[] = [];
   private orderMap = new Map<string, OrderExecution>();
+  private userOrdersMap = new Map<string, OrderExecution[]>();
   private inFlightTxHashes = new Set<string>();
   private restingMakerQuotes = new Map<string, RestingMakerQuote>();
   // --- Bounded-cache config (increased to 50k to retain all historical DB rows) ---
@@ -799,6 +800,52 @@ export class OrderService {
     };
   }
 
+  private indexUserOrder(order: OrderExecution): void {
+    if (!order.userAddress) return;
+    const userKey = order.userAddress.toLowerCase();
+    let list = this.userOrdersMap.get(userKey);
+    if (!list) {
+      list = [];
+      this.userOrdersMap.set(userKey, list);
+    }
+    const idx = list.findIndex((o) => o.id === order.id);
+    if (idx >= 0) {
+      list[idx] = order;
+    } else {
+      list.unshift(order);
+    }
+  }
+
+  private deindexUserOrder(order: OrderExecution): void {
+    if (!order.userAddress) return;
+    const userKey = order.userAddress.toLowerCase();
+    const list = this.userOrdersMap.get(userKey);
+    if (list) {
+      const idx = list.findIndex((o) => o.id === order.id);
+      if (idx >= 0) {
+        list.splice(idx, 1);
+      }
+      if (list.length === 0) {
+        this.userOrdersMap.delete(userKey);
+      }
+    }
+  }
+
+  /**
+   * Fast lookup of cached orders for a specific user address in O(1) time.
+   */
+  public getUserOrders(userAddress?: string): OrderExecution[] {
+    if (!userAddress) return [];
+    return this.userOrdersMap.get(userAddress.toLowerCase()) || [];
+  }
+
+  /**
+   * Returns snapshot map of user address -> order executions for batch cycle evaluation.
+   */
+  public getUserPositionsMap(): Map<string, OrderExecution[]> {
+    return this.userOrdersMap;
+  }
+
   /**
    * Inserts into bounded cache, evicting oldest when cap is hit.
    * Preserves evicted trade metrics in baseline accumulators so all-time stats never drop.
@@ -808,14 +855,17 @@ export class OrderService {
     if (existingIdx >= 0) {
       this.orders[existingIdx] = order;
       this.orderMap.set(order.id, order);
+      this.indexUserOrder(order);
       return;
     }
     this.orderMap.set(order.id, order);
     this.orders.unshift(order);
+    this.indexUserOrder(order);
     if (this.orders.length > OrderService.MAX_CACHE_SIZE) {
       const evicted = this.orders.pop();
       if (evicted) {
         this.orderMap.delete(evicted.id);
+        this.deindexUserOrder(evicted);
         this.restingMakerQuotes.delete(evicted.id);
 
         const opAddr = (operatorAccount?.address || SOMNIA_ADDRESSES.operatorAccount).toLowerCase();
@@ -854,6 +904,7 @@ export class OrderService {
   public clearCache(): void {
     this.orders = [];
     this.orderMap.clear();
+    this.userOrdersMap.clear();
     this.inFlightTxHashes.clear();
     this.restingMakerQuotes.clear();
     this.evictedSwarmAggregates = {
@@ -1043,6 +1094,7 @@ export class OrderService {
       const order = this.rowToOrder(row);
       this.orderMap.set(order.id, order);
       this.orders.push(order);
+      this.indexUserOrder(order);
     }
 
     // Hydrate missing market snapshots from DB so old orders (without snapshot) can still settle to accurate PnL even if market evicted from memory
@@ -1112,6 +1164,7 @@ export class OrderService {
   private seedInitialOrders(): void {
     this.orders = [];
     this.orderMap.clear();
+    this.userOrdersMap.clear();
   }
 
   /**
@@ -2434,7 +2487,9 @@ export class OrderService {
     const result: OrderExecution[] = [];
     let matchIdx = 0;
 
-    const ordersList = this.orders;
+    const ordersList = criteria.normalizedUser
+      ? (this.userOrdersMap.get(criteria.normalizedUser) || [])
+      : this.orders;
     const len = ordersList.length;
     for (let i = 0; i < len; i++) {
       const o = ordersList[i];
@@ -2849,7 +2904,10 @@ export class OrderService {
    */
   public hasActivePosition(agentType?: AgentType, marketId?: string, userAddress?: string): boolean {
     const now = Date.now();
-    return this.orders.some((o) => {
+    const list = userAddress
+      ? (this.userOrdersMap.get(userAddress.toLowerCase()) || [])
+      : this.orders;
+    return list.some((o) => {
       if (agentType && o.agentType !== agentType) return false;
       if (userAddress && o.userAddress && o.userAddress.toLowerCase() !== userAddress.toLowerCase()) return false;
       if (marketId && o.marketId.toLowerCase() !== marketId.toLowerCase()) return false;
@@ -2876,7 +2934,10 @@ export class OrderService {
    */
   public getActivePositionCount(agentType?: AgentType, userAddress?: string): number {
     const now = Date.now();
-    return this.orders.filter((o) => {
+    const list = userAddress
+      ? (this.userOrdersMap.get(userAddress.toLowerCase()) || [])
+      : this.orders;
+    return list.filter((o) => {
       if (agentType && o.agentType !== agentType) return false;
       if (userAddress && o.userAddress && o.userAddress.toLowerCase() !== userAddress.toLowerCase()) return false;
       if (o.status === 'PENDING') {

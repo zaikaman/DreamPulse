@@ -44,9 +44,13 @@ export class TitanMMAgent extends BaseAgent {
 
   /**
    * Calculates two-sided reservation prices centered on theoretical fair value Φ(z)
-   * with super-linear inventory aversion and order book depth imbalance scaling.
+   * with super-linear inventory aversion and order book depth imbalance scaling using pure static evaluation.
    */
-  public calculateReservationQuotes(context: IAgentContext): {
+  public static calculateReservationQuotes(
+    context: IAgentContext,
+    partialConfig?: Partial<TitanConfig>,
+    netInventory: number = 0,
+  ): {
     snappedBid: number;
     snappedAsk: number;
     effectiveSpread: number;
@@ -54,6 +58,15 @@ export class TitanMMAgent extends BaseAgent {
     realizedVol: number;
     netInventory: number;
   } {
+    const config: TitanConfig = {
+      minEdge: partialConfig?.minEdge ?? 0.02,
+      maxTradeSize: partialConfig?.maxTradeSize ?? 20.0,
+      maxDailyVolume: partialConfig?.maxDailyVolume ?? 200.0,
+      maxSlippage: partialConfig?.maxSlippage ?? 0.02,
+      targetSpread: partialConfig?.targetSpread ?? 0.04,
+      inventoryAversion: partialConfig?.inventoryAversion ?? 0.015,
+      lotSize: partialConfig?.lotSize ?? 2.0,
+    };
     const { spotTicker, market, depth } = context;
     const closeTime = new Date(market.closeTimestamp).getTime();
     const now = Date.now();
@@ -67,7 +80,6 @@ export class TitanMMAgent extends BaseAgent {
       undefined,
       spotTicker.priceHistory,
     );
-    const netInventory = this.inventoryMap.get(market.id) || 0;
 
     // 1. Order book depth imbalance factor
     let depthImbalance = 0;
@@ -87,13 +99,13 @@ export class TitanMMAgent extends BaseAgent {
     const tailExpansion = tailDistance > 0.20 ? (tailDistance - 0.20) * 0.8 : 0;
 
     const spreadMultiplier = Math.max(0.7, 1.0 + 0.6 * volRatio + driftTerm + imbalanceTerm + tailExpansion);
-    const effectiveSpread = Math.max(0.025, Math.min(0.090, Number((this.titanConfig.targetSpread * spreadMultiplier).toFixed(4))));
+    const effectiveSpread = Math.max(0.025, Math.min(0.090, Number((config.targetSpread * spreadMultiplier).toFixed(4))));
     const halfSpread = effectiveSpread / 2.0;
 
     // 3. Super-Linear Inventory Skew: Gamma aversion scales non-linearly with position size
     const sign = netInventory >= 0 ? 1 : -1;
     const absInv = Math.abs(netInventory);
-    const inventorySkew = Number((sign * this.titanConfig.inventoryAversion * Math.pow(absInv, 1.25)).toFixed(4));
+    const inventorySkew = Number((sign * config.inventoryAversion * Math.pow(absInv, 1.25)).toFixed(4));
 
     // 4. Calculate reservation prices with asymmetric tail shading
     let rawBid = fair.fairValueYes - halfSpread - inventorySkew;
@@ -133,25 +145,38 @@ export class TitanMMAgent extends BaseAgent {
   }
 
   /**
-   * Evaluates order book state and quotes liquidity centered on theoretical fair value Φ(z) with inventory skew.
-   *
-   * Features:
-   * 1. Toxic Flow Circuit Breaker: Auto-pulls quotes when spot price velocity spikes (|1m drift| >= 0.22%).
-   * 2. Volatility & Imbalance-Adaptive Spread: Expands quoting spread during turbulent volatility regimes or depth imbalances.
-   * 3. Super-Linear Inventory Skew: Aggressively shades quotes as inventory builds up to avoid position traps.
-   * 4. Expiry De-Risking: Pulls quotes in final 30s; asymmetrically offloads heavy inventory when T < 90s.
+   * Calculates two-sided reservation prices on instance.
    */
-  public async evaluate(context: IAgentContext): Promise<IAgentDecision> {
-    if (!this.isEnabled) {
-      return {
-        agentType: 'Titan',
-        action: 'HOLD',
-        targetMarketId: context.market.id,
-        confidence: 0,
-        rationale: 'Titan Market Maker agent is currently disabled.',
-      };
-    }
+  public calculateReservationQuotes(context: IAgentContext, configOverride?: Partial<TitanConfig>, inventoryOverride?: number): {
+    snappedBid: number;
+    snappedAsk: number;
+    effectiveSpread: number;
+    fairValueYes: number;
+    realizedVol: number;
+    netInventory: number;
+  } {
+    const config = configOverride ? { ...this.titanConfig, ...configOverride } : this.titanConfig;
+    const inv = inventoryOverride !== undefined ? inventoryOverride : (this.inventoryMap.get(context.market.id) || 0);
+    return TitanMMAgent.calculateReservationQuotes(context, config, inv);
+  }
 
+  /**
+   * Evaluates order book state and quotes liquidity using pure static functional evaluation.
+   */
+  public static evaluateDecision(
+    context: IAgentContext,
+    partialConfig?: Partial<TitanConfig>,
+    netInventory: number = 0,
+  ): IAgentDecision {
+    const config: TitanConfig = {
+      minEdge: partialConfig?.minEdge ?? 0.02,
+      maxTradeSize: partialConfig?.maxTradeSize ?? 20.0,
+      maxDailyVolume: partialConfig?.maxDailyVolume ?? 200.0,
+      maxSlippage: partialConfig?.maxSlippage ?? 0.02,
+      targetSpread: partialConfig?.targetSpread ?? 0.04,
+      inventoryAversion: partialConfig?.inventoryAversion ?? 0.015,
+      lotSize: partialConfig?.lotSize ?? 2.0,
+    };
     const { spotTicker, market } = context;
     const closeTime = new Date(market.closeTimestamp).getTime();
     const now = Date.now();
@@ -169,8 +194,8 @@ export class TitanMMAgent extends BaseAgent {
     }
 
     // 2. Compute two-sided reservation quotes
-    const quotes = this.calculateReservationQuotes(context);
-    const { snappedBid, snappedAsk, effectiveSpread, fairValueYes, realizedVol, netInventory } = quotes;
+    const quotes = TitanMMAgent.calculateReservationQuotes(context, config, netInventory);
+    const { snappedBid, snappedAsk, effectiveSpread, fairValueYes, realizedVol } = quotes;
 
     // 3. Toxic Flow Protection: Auto-pull quotes during dynamic volatility-normalized spot velocity spikes (3.0 sigma of 1m move)
     const toxicDriftThreshold = calculateVolatilityNormalizedDriftThreshold(realizedVol, 3.0, 60, 0.0015, 0.0080);
@@ -184,7 +209,7 @@ export class TitanMMAgent extends BaseAgent {
       };
     }
 
-    const lotSize = quantizeLotSize(this.titanConfig.lotSize);
+    const lotSize = quantizeLotSize(config.lotSize);
     const confidence = 0.88;
 
     // 4. Asymmetric Two-Sided Quote Side Selection based on inventory & time-to-expiry
@@ -219,7 +244,7 @@ export class TitanMMAgent extends BaseAgent {
 
     const rationale = `[MM QUOTE] Providing liquidity around Φ(z) = ${(fairValueYes * 100).toFixed(1)}% (Spread: ${(effectiveSpread * 100).toFixed(1)}%, EWMA σ=${(realizedVol * 100).toFixed(1)}%). Quoting ${quoteSide}: ${quotePrice.toFixed(2)} (Bid: ${snappedBid.toFixed(2)} / Ask: ${snappedAsk.toFixed(2)}) with net inventory (${netInventory >= 0 ? '+' : ''}${netInventory.toFixed(1)} lots).`;
 
-    const decision: IAgentDecision = {
+    return {
       agentType: 'Titan',
       action: 'LIMIT_QUOTE',
       targetMarketId: market.id,
@@ -229,38 +254,60 @@ export class TitanMMAgent extends BaseAgent {
       confidence,
       rationale,
     };
+  }
 
-    // Throttle thoughts: only emit if price shifted >= 0.02 or at least 4s has elapsed
-    const lastTime = this.lastThoughtTimes.get(market.id) || 0;
-    const lastQuote = this.lastQuotes.get(market.id);
-    const priceShifted = !lastQuote || Math.abs(lastQuote.bid - snappedBid) >= 0.02 || Math.abs(lastQuote.ask - snappedAsk) >= 0.02;
-
-    if (priceShifted || now - lastTime >= 4000) {
-      this.lastThoughtTimes.set(market.id, now);
-      this.lastQuotes.set(market.id, { bid: snappedBid, ask: snappedAsk });
-
-      this.emitThought({
-        id: `thought-${crypto.randomUUID()}`,
+  /**
+   * Evaluates order book state and quotes liquidity centered on theoretical fair value Φ(z) with inventory skew.
+   */
+  public async evaluate(context: IAgentContext, configOverride?: Partial<TitanConfig>, inventoryOverride?: number): Promise<IAgentDecision> {
+    if (!this.isEnabled) {
+      return {
         agentType: 'Titan',
-        marketId: market.id,
-        triggerEvent: 'CONTINUOUS_MARKET_MAKING',
-        confidence,
-        actionTaken: quoteSide === 'YES' ? 'LIMIT_QUOTE_YES' : 'LIMIT_QUOTE_NO',
-        reasoningText: rationale,
-        metadata: {
-          spot: spotTicker.price,
-          strike: market.strikePrice,
-          fairValue: fairValueYes,
-          bid: snappedBid,
-          ask: snappedAsk,
-          effectiveSpread,
-          realizedVol,
-          netInventory,
-          quoteSide,
-          quotePrice,
-        },
-        createdAt: new Date().toISOString(),
-      });
+        action: 'HOLD',
+        targetMarketId: context.market.id,
+        confidence: 0,
+        rationale: 'Titan Market Maker agent is currently disabled.',
+      };
+    }
+
+    const config = configOverride ? { ...this.titanConfig, ...configOverride } : this.titanConfig;
+    const inv = inventoryOverride !== undefined ? inventoryOverride : (this.inventoryMap.get(context.market.id) || 0);
+    const decision = TitanMMAgent.evaluateDecision(context, config, inv);
+
+    if (decision.action !== 'HOLD' && !configOverride) {
+      const now = Date.now();
+      const lastTime = this.lastThoughtTimes.get(context.market.id) || 0;
+      const lastQuote = this.lastQuotes.get(context.market.id);
+      const quotes = TitanMMAgent.calculateReservationQuotes(context, config, inv);
+      const priceShifted = !lastQuote || Math.abs(lastQuote.bid - quotes.snappedBid) >= 0.02 || Math.abs(lastQuote.ask - quotes.snappedAsk) >= 0.02;
+
+      if (priceShifted || now - lastTime >= 4000) {
+        this.lastThoughtTimes.set(context.market.id, now);
+        this.lastQuotes.set(context.market.id, { bid: quotes.snappedBid, ask: quotes.snappedAsk });
+
+        this.emitThought({
+          id: `thought-${crypto.randomUUID()}`,
+          agentType: 'Titan',
+          marketId: context.market.id,
+          triggerEvent: 'CONTINUOUS_MARKET_MAKING',
+          confidence: decision.confidence,
+          actionTaken: decision.targetOutcome === 'YES' ? 'LIMIT_QUOTE_YES' : 'LIMIT_QUOTE_NO',
+          reasoningText: decision.rationale,
+          metadata: {
+            spot: context.spotTicker.price,
+            strike: context.market.strikePrice,
+            fairValue: quotes.fairValueYes,
+            bid: quotes.snappedBid,
+            ask: quotes.snappedAsk,
+            effectiveSpread: quotes.effectiveSpread,
+            realizedVol: quotes.realizedVol,
+            netInventory: quotes.netInventory,
+            quoteSide: decision.targetOutcome,
+            quotePrice: decision.price,
+          },
+          createdAt: new Date().toISOString(),
+        });
+      }
     }
 
     return decision;

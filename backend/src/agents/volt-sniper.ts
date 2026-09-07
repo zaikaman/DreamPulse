@@ -38,20 +38,17 @@ export class VoltSniperAgent extends BaseAgent {
   }
 
   /**
-   * Evaluates spot velocity vs order book quote latency.
-   * If spot price jumped or dumped faster than resting quotes adjusted, fires limit taker order with VWAP depth awareness.
+   * Evaluates spot velocity vs order book quote latency using pure static functional evaluation.
    */
-  public async evaluate(context: IAgentContext): Promise<IAgentDecision> {
-    if (!this.isEnabled) {
-      return {
-        agentType: 'Volt',
-        action: 'HOLD',
-        targetMarketId: context.market.id,
-        confidence: 0,
-        rationale: 'Volt Sniper agent is currently disabled.',
-      };
-    }
-
+  public static evaluateDecision(context: IAgentContext, partialConfig?: Partial<VoltConfig>): IAgentDecision {
+    const config: VoltConfig = {
+      minEdge: partialConfig?.minEdge ?? 0.03,
+      maxTradeSize: partialConfig?.maxTradeSize ?? 20.0,
+      maxDailyVolume: partialConfig?.maxDailyVolume ?? 200.0,
+      maxSlippage: partialConfig?.maxSlippage ?? 0.02,
+      driftThreshold: partialConfig?.driftThreshold ?? 0.002,
+      lotSize: partialConfig?.lotSize ?? 5.0,
+    };
     const { spotTicker, market, depth } = context;
     const closeTime = new Date(market.closeTimestamp).getTime();
     const now = Date.now();
@@ -85,8 +82,8 @@ export class VoltSniperAgent extends BaseAgent {
 
     // Dynamic volatility-normalized drift threshold (scaled to asset's EWMA 1m standard deviation)
     const volAdaptiveThreshold = calculateVolatilityNormalizedDriftThreshold(fair.volatilityUsed, 2.5, 60);
-    const baseDriftThreshold = this.voltConfig.driftThreshold !== 0.002
-      ? this.voltConfig.driftThreshold
+    const baseDriftThreshold = config.driftThreshold !== 0.002
+      ? config.driftThreshold
       : volAdaptiveThreshold;
 
     const drift = spotTicker.change1m; // 1-minute spot drift ratio
@@ -128,8 +125,8 @@ export class VoltSniperAgent extends BaseAgent {
 
       if (topAskYes > 0 && topAskYes <= 0.99 && fair.fairValueYes >= 0.45) {
         // Preliminary sizing estimate
-        const targetRiskUsd = Math.min(2.5, this.voltConfig.maxTradeSize > 0 ? this.voltConfig.maxTradeSize : 2.5);
-        const estimatedLots = Math.max(1, Math.min(this.voltConfig.lotSize, Math.floor(targetRiskUsd / topAskYes)));
+        const targetRiskUsd = Math.min(2.5, config.maxTradeSize > 0 ? config.maxTradeSize : 2.5);
+        const estimatedLots = Math.max(1, Math.min(config.lotSize, Math.floor(targetRiskUsd / topAskYes)));
         
         // Calculate depth VWAP across order book levels
         const vwapResult = calculateDepthVWAP(rawAsks, estimatedLots);
@@ -148,13 +145,13 @@ export class VoltSniperAgent extends BaseAgent {
         }
 
         // Slippage Guard
-        if (vwapResult.slippageVsTop > this.voltConfig.maxSlippage) {
+        if (vwapResult.slippageVsTop > config.maxSlippage) {
           return {
             agentType: 'Volt',
             action: 'HOLD',
             targetMarketId: market.id,
             confidence: 0.5,
-            rationale: `Order book depth slippage (${(vwapResult.slippageVsTop * 100).toFixed(2)}%) exceeds max allowed (${(this.voltConfig.maxSlippage * 100).toFixed(2)}%). Holding.`,
+            rationale: `Order book depth slippage (${(vwapResult.slippageVsTop * 100).toFixed(2)}%) exceeds max allowed (${(config.maxSlippage * 100).toFixed(2)}%). Holding.`,
           };
         }
 
@@ -163,11 +160,11 @@ export class VoltSniperAgent extends BaseAgent {
         const roiEdge = calculateRoiEdge(netEdge, snappedPrice);
 
         // Require both absolute probability edge and minimum 8.0% return-on-risk hurdle
-        if (netEdge >= this.voltConfig.minEdge && roiEdge >= minRoiHurdle) {
+        if (netEdge >= config.minEdge && roiEdge >= minRoiHurdle) {
           const lotSize = calculateEdgeProportionalLots(
-            this.voltConfig.lotSize,
+            config.lotSize,
             netEdge,
-            this.voltConfig.minEdge,
+            config.minEdge,
             targetRiskUsd,
             snappedPrice,
           );
@@ -175,7 +172,7 @@ export class VoltSniperAgent extends BaseAgent {
 
           const rationale = `[SPOT JUMP] ${market.symbol} surged +${(drift * 100).toFixed(2)}% (5m: ${(spotTicker.change5m * 100).toFixed(2)}%, σ=${(fair.volatilityUsed * 100).toFixed(1)}%). Depth VWAP YES ask at ${snappedPrice.toFixed(2)} is lagging fair value ${fair.fairValueYes.toFixed(2)} (Net Edge: +${(netEdge * 100).toFixed(1)}%, ROI/Risk: +${(roiEdge * 100).toFixed(1)}%). Firing limit taker buy (${lotSize} lots).`;
 
-          const decision: IAgentDecision = {
+          return {
             agentType: 'Volt',
             action: 'TAKER_BUY',
             targetMarketId: market.id,
@@ -185,31 +182,6 @@ export class VoltSniperAgent extends BaseAgent {
             confidence,
             rationale,
           };
-
-          this.emitThought({
-            id: `thought-${crypto.randomUUID()}`,
-            agentType: 'Volt',
-            marketId: market.id,
-            triggerEvent: 'SPOT_STALENESS_SNIPE',
-            confidence,
-            actionTaken: 'TAKER_BUY_YES',
-            reasoningText: rationale,
-            metadata: {
-              spot: spotTicker.price,
-              strike: market.strikePrice,
-              drift,
-              drift5m: spotTicker.change5m,
-              fairValue: fair.fairValueYes,
-              bestAsk: topAskYes,
-              vwapPrice: snappedPrice,
-              netEdge,
-              roiEdge,
-              slippage: vwapResult.slippageVsTop,
-            },
-            createdAt: new Date().toISOString(),
-          });
-
-          return decision;
         }
       }
     }
@@ -237,8 +209,8 @@ export class VoltSniperAgent extends BaseAgent {
 
       if (topAskNo > 0 && topAskNo <= 0.99 && fair.fairValueNo >= 0.45) {
         // Preliminary sizing estimate
-        const targetRiskUsd = Math.min(2.5, this.voltConfig.maxTradeSize > 0 ? this.voltConfig.maxTradeSize : 2.5);
-        const estimatedLots = Math.max(1, Math.min(this.voltConfig.lotSize, Math.floor(targetRiskUsd / topAskNo)));
+        const targetRiskUsd = Math.min(2.5, config.maxTradeSize > 0 ? config.maxTradeSize : 2.5);
+        const estimatedLots = Math.max(1, Math.min(config.lotSize, Math.floor(targetRiskUsd / topAskNo)));
 
         // Calculate depth VWAP across order book levels
         const vwapResult = calculateDepthVWAP(rawNoAsks, estimatedLots);
@@ -257,13 +229,13 @@ export class VoltSniperAgent extends BaseAgent {
         }
 
         // Slippage Guard
-        if (vwapResult.slippageVsTop > this.voltConfig.maxSlippage) {
+        if (vwapResult.slippageVsTop > config.maxSlippage) {
           return {
             agentType: 'Volt',
             action: 'HOLD',
             targetMarketId: market.id,
             confidence: 0.5,
-            rationale: `Order book depth slippage (${(vwapResult.slippageVsTop * 100).toFixed(2)}%) exceeds max allowed (${(this.voltConfig.maxSlippage * 100).toFixed(2)}%). Holding.`,
+            rationale: `Order book depth slippage (${(vwapResult.slippageVsTop * 100).toFixed(2)}%) exceeds max allowed (${(config.maxSlippage * 100).toFixed(2)}%). Holding.`,
           };
         }
 
@@ -272,11 +244,11 @@ export class VoltSniperAgent extends BaseAgent {
         const roiEdge = calculateRoiEdge(netEdge, snappedPrice);
 
         // Require both absolute probability edge and minimum 8.0% return-on-risk hurdle
-        if (netEdge >= this.voltConfig.minEdge && roiEdge >= minRoiHurdle) {
+        if (netEdge >= config.minEdge && roiEdge >= minRoiHurdle) {
           const lotSize = calculateEdgeProportionalLots(
-            this.voltConfig.lotSize,
+            config.lotSize,
             netEdge,
-            this.voltConfig.minEdge,
+            config.minEdge,
             targetRiskUsd,
             snappedPrice,
           );
@@ -284,7 +256,7 @@ export class VoltSniperAgent extends BaseAgent {
 
           const rationale = `[SPOT DUMP] ${market.symbol} dropped ${(drift * 100).toFixed(2)}% (5m: ${(spotTicker.change5m * 100).toFixed(2)}%, σ=${(fair.volatilityUsed * 100).toFixed(1)}%). Depth VWAP NO ask at ${snappedPrice.toFixed(2)} is lagging fair value ${fair.fairValueNo.toFixed(2)} (Net Edge: +${(netEdge * 100).toFixed(1)}%, ROI/Risk: +${(roiEdge * 100).toFixed(1)}%). Firing limit taker buy (${lotSize} lots).`;
 
-          const decision: IAgentDecision = {
+          return {
             agentType: 'Volt',
             action: 'TAKER_BUY',
             targetMarketId: market.id,
@@ -294,31 +266,6 @@ export class VoltSniperAgent extends BaseAgent {
             confidence,
             rationale,
           };
-
-          this.emitThought({
-            id: `thought-${crypto.randomUUID()}`,
-            agentType: 'Volt',
-            marketId: market.id,
-            triggerEvent: 'SPOT_STALENESS_SNIPE',
-            confidence,
-            actionTaken: 'TAKER_BUY_NO',
-            reasoningText: rationale,
-            metadata: {
-              spot: spotTicker.price,
-              strike: market.strikePrice,
-              drift,
-              drift5m: spotTicker.change5m,
-              fairValue: fair.fairValueNo,
-              bestAsk: topAskNo,
-              vwapPrice: snappedPrice,
-              netEdge,
-              roiEdge,
-              slippage: vwapResult.slippageVsTop,
-            },
-            createdAt: new Date().toISOString(),
-          });
-
-          return decision;
         }
       }
     }
@@ -328,8 +275,49 @@ export class VoltSniperAgent extends BaseAgent {
       action: 'HOLD',
       targetMarketId: market.id,
       confidence: 0.6,
-      rationale: `Spot drift detected (${(drift * 100).toFixed(2)}%), but order book has already adjusted or edge is below minimum threshold (${(this.voltConfig.minEdge * 100).toFixed(1)}%).`,
+      rationale: `Spot drift detected (${(drift * 100).toFixed(2)}%), but order book has already adjusted or edge is below minimum threshold (${(config.minEdge * 100).toFixed(1)}%).`,
     };
+  }
+
+  /**
+   * Evaluates spot velocity vs order book quote latency.
+   * If spot price jumped or dumped faster than resting quotes adjusted, fires limit taker order with VWAP depth awareness.
+   */
+  public async evaluate(context: IAgentContext, configOverride?: Partial<VoltConfig>): Promise<IAgentDecision> {
+    if (!this.isEnabled) {
+      return {
+        agentType: 'Volt',
+        action: 'HOLD',
+        targetMarketId: context.market.id,
+        confidence: 0,
+        rationale: 'Volt Sniper agent is currently disabled.',
+      };
+    }
+
+    const config = configOverride ? { ...this.voltConfig, ...configOverride } : this.voltConfig;
+    const decision = VoltSniperAgent.evaluateDecision(context, config);
+
+    if (decision.action !== 'HOLD' && !configOverride) {
+      this.emitThought({
+        id: `thought-${crypto.randomUUID()}`,
+        agentType: 'Volt',
+        marketId: context.market.id,
+        triggerEvent: 'SPOT_STALENESS_SNIPE',
+        confidence: decision.confidence,
+        actionTaken: decision.targetOutcome === 'YES' ? 'TAKER_BUY_YES' : 'TAKER_BUY_NO',
+        reasoningText: decision.rationale,
+        metadata: {
+          spot: context.spotTicker.price,
+          strike: context.market.strikePrice,
+          drift: context.spotTicker.change1m,
+          drift5m: context.spotTicker.change5m,
+          vwapPrice: decision.price,
+        },
+        createdAt: new Date().toISOString(),
+      });
+    }
+
+    return decision;
   }
 
   /**

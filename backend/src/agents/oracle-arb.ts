@@ -50,17 +50,17 @@ export class OracleArbAgent extends BaseAgent {
    * 6. Time-Decay Theta Calibration: Scales required edge dynamically in short horizons (<300s).
    * 7. Optimal Risk/Reward Envelope [0.25, 0.68] & ROI-on-Risk Hurdle (≥8.0% expected return on capital).
    */
-  public async evaluate(context: IAgentContext): Promise<IAgentDecision> {
-    if (!this.isEnabled) {
-      return {
-        agentType: 'Oracle',
-        action: 'HOLD',
-        targetMarketId: context.market.id,
-        confidence: 0,
-        rationale: 'Oracle Arbitrage agent is currently disabled.',
-      };
-    }
-
+  /**
+   * Evaluates mathematical pricing discrepancies using pure static functional evaluation.
+   */
+  public static evaluateDecision(context: IAgentContext, partialConfig?: Partial<OracleConfig>): IAgentDecision {
+    const config: OracleConfig = {
+      minEdge: partialConfig?.minEdge ?? 0.035,
+      maxTradeSize: partialConfig?.maxTradeSize ?? 20.0,
+      maxDailyVolume: partialConfig?.maxDailyVolume ?? 200.0,
+      maxSlippage: partialConfig?.maxSlippage ?? 0.02,
+      lotSize: partialConfig?.lotSize ?? 5.0,
+    };
     const { spotTicker, market, depth } = context;
     const closeTime = new Date(market.closeTimestamp).getTime();
     const now = Date.now();
@@ -103,7 +103,7 @@ export class OracleArbAgent extends BaseAgent {
     const timeDecayFactor = timeLeftSeconds < 300
       ? 1.0 + ((300 - timeLeftSeconds) / 300) * 0.40 // Up to +40% edge required in final 5m
       : 1.0;
-    const dynamicMinEdge = Number((this.oracleConfig.minEdge * timeDecayFactor).toFixed(4));
+    const dynamicMinEdge = Number((config.minEdge * timeDecayFactor).toFixed(4));
     const minRoiHurdle = 0.08; // Minimum 8.0% expected return on capital at risk
 
     // 2. High-frequency price action indicators & multi-timeframe directional trend evaluation
@@ -139,8 +139,8 @@ export class OracleArbAgent extends BaseAgent {
     const topAskYes = rawAsksYes[0]?.price ?? 0;
 
     if (topAskYes > 0 && topAskYes <= 0.99 && fair.fairValueYes >= 0.45) {
-      const targetRiskUsd = Math.min(2.5, this.oracleConfig.maxTradeSize > 0 ? this.oracleConfig.maxTradeSize : 2.5);
-      const estimatedLots = Math.max(1, Math.min(this.oracleConfig.lotSize, Math.floor(targetRiskUsd / topAskYes)));
+      const targetRiskUsd = Math.min(2.5, config.maxTradeSize > 0 ? config.maxTradeSize : 2.5);
+      const estimatedLots = Math.max(1, Math.min(config.lotSize, Math.floor(targetRiskUsd / topAskYes)));
       
       const vwapResult = calculateDepthVWAP(rawAsksYes, estimatedLots);
       const effectivePrice = vwapResult.vwapPrice > 0 ? vwapResult.vwapPrice : topAskYes;
@@ -157,7 +157,7 @@ export class OracleArbAgent extends BaseAgent {
         };
       }
 
-      if (vwapResult.slippageVsTop <= this.oracleConfig.maxSlippage) {
+      if (vwapResult.slippageVsTop <= config.maxSlippage) {
         // Layer 2: Directional Trend Gating: Do NOT buy YES if spot is actively in a bearish breakdown or plunging
         if (priceAction.trend === 'BEARISH_BREAKDOWN' || priceAction.trendScore < -0.35 || priceAction.isPlunging) {
           return {
@@ -193,7 +193,7 @@ export class OracleArbAgent extends BaseAgent {
         // Require both absolute probability edge and ROI-on-risk percentage hurdle
         if (netEdgeYes >= dynamicMinEdgeYes && roiEdgeYes >= minRoiHurdleYes) {
           const lotSize = calculateEdgeProportionalLots(
-            this.oracleConfig.lotSize,
+            config.lotSize,
             netEdgeYes,
             dynamicMinEdgeYes,
             targetRiskUsd,
@@ -203,7 +203,7 @@ export class OracleArbAgent extends BaseAgent {
 
           const rationale = `[VOL ARB] Mathematical mispricing (EWMA σ=${volPct}%${isCounterTrendYes ? ', ASYMMETRIC COLLAR' : ''}): Theoretical Φ(d2)=${(fair.fairValueYes * 100).toFixed(1)}% vs Depth VWAP ${(snappedPrice * 100).toFixed(1)}% (Net Edge: +${(netEdgeYes * 100).toFixed(1)}%, ROI/Risk: +${(roiEdgeYes * 100).toFixed(1)}%, Req: ${(dynamicMinEdgeYes * 100).toFixed(1)}%). Buying YES (${lotSize} lots).`;
 
-          const decision: IAgentDecision = {
+          return {
             agentType: 'Oracle',
             action: 'TAKER_BUY',
             targetMarketId: market.id,
@@ -213,35 +213,6 @@ export class OracleArbAgent extends BaseAgent {
             confidence,
             rationale,
           };
-
-          this.emitThought({
-            id: `thought-${crypto.randomUUID()}`,
-            agentType: 'Oracle',
-            marketId: market.id,
-            triggerEvent: 'VOLATILITY_SURFACE_DISCREPANCY',
-            confidence,
-            actionTaken: 'TAKER_BUY_YES',
-            reasoningText: rationale,
-            metadata: {
-              spot: spotTicker.price,
-              strike: market.strikePrice,
-              realizedVol: fair.volatilityUsed,
-              fairValue: fair.fairValueYes,
-              askPrice: topAskYes,
-              vwapPrice: snappedPrice,
-              netEdge: netEdgeYes,
-              roiEdge: roiEdgeYes,
-              requiredEdge: dynamicMinEdgeYes,
-              spotChange1m: spotTicker.change1m,
-              trend: priceAction.trend,
-              trendScore: priceAction.trendScore,
-              isCounterTrend: isCounterTrendYes,
-              slippage: vwapResult.slippageVsTop,
-            },
-            createdAt: new Date().toISOString(),
-          });
-
-          return decision;
         }
       }
     }
@@ -256,8 +227,8 @@ export class OracleArbAgent extends BaseAgent {
     const topAskNo = rawAsksNo[0]?.price ?? 0;
 
     if (topAskNo > 0 && topAskNo <= 0.99 && fair.fairValueNo >= 0.45) {
-      const targetRiskUsd = Math.min(2.5, this.oracleConfig.maxTradeSize > 0 ? this.oracleConfig.maxTradeSize : 2.5);
-      const estimatedLots = Math.max(1, Math.min(this.oracleConfig.lotSize, Math.floor(targetRiskUsd / topAskNo)));
+      const targetRiskUsd = Math.min(2.5, config.maxTradeSize > 0 ? config.maxTradeSize : 2.5);
+      const estimatedLots = Math.max(1, Math.min(config.lotSize, Math.floor(targetRiskUsd / topAskNo)));
 
       const vwapResult = calculateDepthVWAP(rawAsksNo, estimatedLots);
       const effectivePrice = vwapResult.vwapPrice > 0 ? vwapResult.vwapPrice : topAskNo;
@@ -274,7 +245,7 @@ export class OracleArbAgent extends BaseAgent {
         };
       }
 
-      if (vwapResult.slippageVsTop <= this.oracleConfig.maxSlippage) {
+      if (vwapResult.slippageVsTop <= config.maxSlippage) {
         // Layer 2: Directional Trend Gating: Do NOT buy NO if spot is actively in a bullish expansion or surging
         if (priceAction.trend === 'BULLISH_EXPANSION' || priceAction.trendScore > 0.35 || priceAction.isSurging) {
           return {
@@ -310,7 +281,7 @@ export class OracleArbAgent extends BaseAgent {
         // Require both absolute probability edge and ROI-on-risk percentage hurdle
         if (netEdgeNo >= dynamicMinEdgeNo && roiEdgeNo >= minRoiHurdleNo) {
           const lotSize = calculateEdgeProportionalLots(
-            this.oracleConfig.lotSize,
+            config.lotSize,
             netEdgeNo,
             dynamicMinEdgeNo,
             targetRiskUsd,
@@ -320,7 +291,7 @@ export class OracleArbAgent extends BaseAgent {
 
           const rationale = `[VOL ARB] Mathematical mispricing (EWMA σ=${volPct}%${isCounterTrendNo ? ', ASYMMETRIC COLLAR' : ''}): Theoretical NO Φ(d2)=${(fair.fairValueNo * 100).toFixed(1)}% vs Depth VWAP ${(snappedPrice * 100).toFixed(1)}% (Net Edge: +${(netEdgeNo * 100).toFixed(1)}%, ROI/Risk: +${(roiEdgeNo * 100).toFixed(1)}%, Req: ${(dynamicMinEdgeNo * 100).toFixed(1)}%). Buying NO (${lotSize} lots).`;
 
-          const decision: IAgentDecision = {
+          return {
             agentType: 'Oracle',
             action: 'TAKER_BUY',
             targetMarketId: market.id,
@@ -330,35 +301,6 @@ export class OracleArbAgent extends BaseAgent {
             confidence,
             rationale,
           };
-
-          this.emitThought({
-            id: `thought-${crypto.randomUUID()}`,
-            agentType: 'Oracle',
-            marketId: market.id,
-            triggerEvent: 'VOLATILITY_SURFACE_DISCREPANCY',
-            confidence,
-            actionTaken: 'TAKER_BUY_NO',
-            reasoningText: rationale,
-            metadata: {
-              spot: spotTicker.price,
-              strike: market.strikePrice,
-              realizedVol: fair.volatilityUsed,
-              fairValue: fair.fairValueNo,
-              askPrice: topAskNo,
-              vwapPrice: snappedPrice,
-              netEdge: netEdgeNo,
-              roiEdge: roiEdgeNo,
-              requiredEdge: dynamicMinEdgeNo,
-              spotChange1m: spotTicker.change1m,
-              trend: priceAction.trend,
-              trendScore: priceAction.trendScore,
-              isCounterTrend: isCounterTrendNo,
-              slippage: vwapResult.slippageVsTop,
-            },
-            createdAt: new Date().toISOString(),
-          });
-
-          return decision;
         }
       }
     }
@@ -370,6 +312,46 @@ export class OracleArbAgent extends BaseAgent {
       confidence: 0.55,
       rationale: `Market is efficiently priced under EWMA σ=${volPct}%. Theoretical mid edge (${(Math.abs(midDiscrepancy) * 100).toFixed(1)}%) or post-spread ask margin is below dynamic threshold (${(dynamicMinEdge * 100).toFixed(1)}%).`,
     };
+  }
+
+  /**
+   * Evaluates mathematical pricing discrepancies between CLOB order book prices and
+   * dynamic EWMA realized-volatility Black-Scholes Φ(d2) fair values.
+   */
+  public async evaluate(context: IAgentContext, configOverride?: Partial<OracleConfig>): Promise<IAgentDecision> {
+    if (!this.isEnabled) {
+      return {
+        agentType: 'Oracle',
+        action: 'HOLD',
+        targetMarketId: context.market.id,
+        confidence: 0,
+        rationale: 'Oracle Arbitrage agent is currently disabled.',
+      };
+    }
+
+    const config = configOverride ? { ...this.oracleConfig, ...configOverride } : this.oracleConfig;
+    const decision = OracleArbAgent.evaluateDecision(context, config);
+
+    if (decision.action !== 'HOLD' && !configOverride) {
+      this.emitThought({
+        id: `thought-${crypto.randomUUID()}`,
+        agentType: 'Oracle',
+        marketId: context.market.id,
+        triggerEvent: 'VOLATILITY_SURFACE_DISCREPANCY',
+        confidence: decision.confidence,
+        actionTaken: decision.targetOutcome === 'YES' ? 'TAKER_BUY_YES' : 'TAKER_BUY_NO',
+        reasoningText: decision.rationale,
+        metadata: {
+          spot: context.spotTicker.price,
+          strike: context.market.strikePrice,
+          fairValue: decision.price,
+          vwapPrice: decision.price,
+        },
+        createdAt: new Date().toISOString(),
+      });
+    }
+
+    return decision;
   }
 
   /**

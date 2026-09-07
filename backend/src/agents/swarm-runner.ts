@@ -570,8 +570,12 @@ export class MultiAgentSwarmRunner {
     // Bound concurrency: max 30 personal users per cycle to preserve 100ms loop SLA
     const slice = personalConfigs.slice(0, 30);
 
+    // Pre-index user positions into a Map<string, OrderExecution[]> for fast O(1) cycle lookups
+    const userPositions = orderService.getUserPositionsMap();
+
     for (const personal of slice) {
       const userAddr = personal.userAddress;
+      const userAddrLower = userAddr.toLowerCase();
       // Must have active delegated session
       let session: SessionRecord | null = null;
       try {
@@ -602,6 +606,51 @@ export class MultiAgentSwarmRunner {
         accountAddress: session.accountAddress,
       };
 
+      // Precompute active positions and counts for this user once per cycle (O(1) lookups during market loop)
+      const userOrders = userPositions.get(userAddrLower) || [];
+      const now = Date.now();
+
+      const userActiveOrders = userOrders.filter((o) => {
+        if (o.status === 'PENDING') {
+          return now - new Date(o.createdAt).getTime() <= 90_000;
+        }
+        if ((o.status !== 'FILLED' && o.status !== 'PARTIALLY_FILLED') || o.isSettled) {
+          return false;
+        }
+        const m = marketService.getMarketById(o.marketId);
+        if (!m || m.status === 'Finalized') return false;
+        const closeMs = m.closeTimestamp ? new Date(m.closeTimestamp).getTime() : Number.MAX_SAFE_INTEGER;
+        const resolveMs = m.resolutionTimestamp ? new Date(m.resolutionTimestamp).getTime() : closeMs;
+        return now < Math.min(closeMs, resolveMs);
+      });
+
+      // Global per-user active position limit (3 concurrent)
+      if (userActiveOrders.length >= 3) continue;
+
+      let voltActiveCount = 0;
+      let oracleActiveCount = 0;
+      let titanActiveCount = 0;
+      for (const o of userActiveOrders) {
+        if (o.agentType === 'Volt') voltActiveCount++;
+        else if (o.agentType === 'Oracle') oracleActiveCount++;
+        else if (o.agentType === 'Titan') titanActiveCount++;
+      }
+
+      // Pre-index market positions & Titan inventory for this user
+      const userActiveMarketIds = new Set<string>();
+      const titanInventoryByMarket = new Map<string, number>();
+      for (const o of userOrders) {
+        const isFilledUnsettled = (o.status === 'FILLED' || o.status === 'PARTIALLY_FILLED') && !o.isSettled;
+        if (isFilledUnsettled || o.status === 'PENDING') {
+          userActiveMarketIds.add(o.marketId.toLowerCase());
+        }
+        if (isFilledUnsettled) {
+          const mId = o.marketId.toLowerCase();
+          const delta = o.outcome === 'YES' ? o.lotSize : -o.lotSize;
+          titanInventoryByMarket.set(mId, (titanInventoryByMarket.get(mId) || 0) + delta);
+        }
+      }
+
       // Per-user per-agent enabled checks
       const agentsToEval: Array<{ type: AgentType; enabled: boolean }> = [
         { type: 'Volt', enabled: personal.voltEnabled },
@@ -610,55 +659,22 @@ export class MultiAgentSwarmRunner {
       ];
 
       for (const market of openMarkets) {
+        const mIdLower = market.id.toLowerCase();
         // Per-user single-market guard: one active position per market across entire personal portfolio
-        const hasPositionOnMarket = orderService.getOrders({ userAddress: userAddr }).some((o) => (o.status === 'FILLED' || o.status === 'PARTIALLY_FILLED') && o.marketId.toLowerCase() === market.id.toLowerCase() && !o.isSettled) ||
-          orderService.getOrders({ userAddress: userAddr, status: 'PENDING' }).some((o) => o.marketId.toLowerCase() === market.id.toLowerCase());
-        // Use lighter check: if any unsettled fill exists for this user+market, skip
-        if (hasPositionOnMarket) {
-          // verify market not finalized
+        if (userActiveMarketIds.has(mIdLower)) {
           const m = marketService.getMarketById(market.id);
           if (m && m.status !== 'Finalized') continue;
         }
-        // Global per-user active position limit (3 concurrent)
-        if (orderService.getActivePositionCount(undefined, userAddr) >= 3) break;
 
         for (const { type, enabled } of agentsToEval) {
           if (!enabled) continue;
-          // Per-agent active position limit
-          if (orderService.getActivePositionCount(type, userAddr) >= 1) continue;
+          // Per-agent active position limit (max 1 concurrent)
+          const agentActive = type === 'Volt' ? voltActiveCount : type === 'Oracle' ? oracleActiveCount : titanActiveCount;
+          if (agentActive >= 1) continue;
 
-          const key = `${userAddr.toLowerCase()}:${type}`;
-          const now = Date.now();
+          const key = `${userAddrLower}:${type}`;
           const lastTrade = this.personalLastTradeTimes.get(key) || 0;
           if (now - lastTrade < 60000) continue;
-
-          // Prepare ephemeral agent with personal config
-          let agentInstance: VoltSniperAgent | OracleArbAgent | TitanMMAgent | null = null;
-          if (type === 'Volt') {
-            agentInstance = new VoltSniperAgent({
-              driftThreshold: personal.voltConfig.driftThreshold,
-              minEdge: personal.voltConfig.minEdge,
-              lotSize: personal.voltConfig.lotSize,
-              maxTradeSize: personal.voltConfig.maxTradeSize ?? 20,
-            });
-          } else if (type === 'Oracle') {
-            agentInstance = new OracleArbAgent({
-              minEdge: personal.oracleConfig.minEdge,
-              lotSize: personal.oracleConfig.lotSize,
-              maxTradeSize: personal.oracleConfig.maxTradeSize,
-            });
-          } else if (type === 'Titan') {
-            agentInstance = new TitanMMAgent({
-              targetSpread: personal.titanConfig.targetSpread,
-              inventoryAversion: personal.titanConfig.inventoryAversion,
-              lotSize: personal.titanConfig.lotSize,
-            });
-            // Personal inventory: aggregate user's own unsettled fills on this market
-            const userSwarmOrders = orderService.getOrders({ marketId: market.id, userAddress: userAddr }).filter((o) => (o.status === 'FILLED' || o.status === 'PARTIALLY_FILLED') && !o.isSettled);
-            const netDelta = userSwarmOrders.reduce((acc, o) => acc + (o.outcome === 'YES' ? o.lotSize : -o.lotSize), 0);
-            (agentInstance as TitanMMAgent).setInventory(market.id, netDelta);
-          }
-          if (!agentInstance) continue;
 
           const spot = spotTickers[market.symbol] || { symbol: market.symbol, price: market.strikePrice, change1m: 0, change5m: 0, timestamp: Date.now() };
           const rawDepth = marketService.getMarketDepth(market.id) || {
@@ -679,8 +695,28 @@ export class MultiAgentSwarmRunner {
           const context: IAgentContext = { spotTicker: spot, market, depth, activeSessions: [] };
           let decision: IAgentDecision;
           try {
-            decision = await agentInstance.evaluate(context);
-          } catch (e) {
+            if (type === 'Volt') {
+              decision = VoltSniperAgent.evaluateDecision(context, {
+                driftThreshold: personal.voltConfig.driftThreshold,
+                minEdge: personal.voltConfig.minEdge,
+                lotSize: personal.voltConfig.lotSize,
+                maxTradeSize: personal.voltConfig.maxTradeSize ?? 20,
+              });
+            } else if (type === 'Oracle') {
+              decision = OracleArbAgent.evaluateDecision(context, {
+                minEdge: personal.oracleConfig.minEdge,
+                lotSize: personal.oracleConfig.lotSize,
+                maxTradeSize: personal.oracleConfig.maxTradeSize,
+              });
+            } else {
+              const netDelta = titanInventoryByMarket.get(mIdLower) || 0;
+              decision = TitanMMAgent.evaluateDecision(context, {
+                targetSpread: personal.titanConfig.targetSpread,
+                inventoryAversion: personal.titanConfig.inventoryAversion,
+                lotSize: personal.titanConfig.lotSize,
+              }, netDelta);
+            }
+          } catch {
             continue;
           }
           if (!decision || decision.action === 'HOLD' || decision.action === 'CANCEL_QUOTE' || decision.confidence < 0.88) continue;
@@ -743,6 +779,9 @@ export class MultiAgentSwarmRunner {
     // Bound concurrency: evaluate up to 20 custom agents per cycle
     const candidateAgents = deployedAgents.slice(0, 20);
 
+    // Pre-index user positions for fast O(1) single-market guard lookups
+    const userPositions = orderService.getUserPositionsMap();
+
     for (const agent of candidateAgents) {
       const userAddr = agent.userAddress;
       if (!userAddr || userAddr === '0x0000000000000000000000000000000000000000') continue;
@@ -802,13 +841,21 @@ export class MultiAgentSwarmRunner {
         accountAddress: session.accountAddress,
       };
 
+      // Pre-index active market positions for this custom agent user
+      const userOrders = userPositions.get(userAddr.toLowerCase()) || [];
+      const userActiveMarketIds = new Set<string>();
+      for (const o of userOrders) {
+        if (
+          ((o.status === 'FILLED' || o.status === 'PARTIALLY_FILLED') && !o.isSettled) ||
+          o.status === 'PENDING'
+        ) {
+          userActiveMarketIds.add(o.marketId.toLowerCase());
+        }
+      }
+
       for (const market of matchingMarkets) {
         // Per-user single-market position guard: avoid duplicate open positions on same market
-        const hasPosition = orderService.getOrders({ userAddress: userAddr })
-          .some((o) => (o.status === 'FILLED' || o.status === 'PARTIALLY_FILLED') && o.marketId.toLowerCase() === market.id.toLowerCase() && !o.isSettled) ||
-          orderService.getOrders({ userAddress: userAddr, status: 'PENDING' })
-          .some((o) => o.marketId.toLowerCase() === market.id.toLowerCase());
-        if (hasPosition) continue;
+        if (userActiveMarketIds.has(market.id.toLowerCase())) continue;
 
         // Per-agent rate limiting & cooldown:
         const now = Date.now();
