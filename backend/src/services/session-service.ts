@@ -135,10 +135,40 @@ export class SessionService {
               const userKey = row.user_address.toLowerCase();
 
               const existing = this.sessions.get(row.id);
+              // SEC-02 defense-in-depth: CDC rows are untrusted input for
+              // security-critical fields. RLS now denies all authenticated DML
+              // (service_role/backend-only writes), but this handler stays
+              // fail-closed so a future policy regression cannot escalate:
+              //  - risk caps (max_trade_size/daily_volume_cap) are NEVER synced
+              //    from CDC (only updateSessionRisk/recordTradeSpend mutate them);
+              //  - spent_today may only ratchet UP via CDC (backend's own spend
+              //    writes); decreases are ignored (tamper/reset attempt);
+              //  - on_chain_authorized may only flip true->false via CDC
+              //    (revocation); false->true requires on-chain re-verification;
+              //  - is_active may only flip true->false via CDC (revocation).
               if (existing) {
-                existing.isActive = isActive;
-                existing.spentToday = Number(row.spent_today || 0);
-                existing.onChainAuthorized = row.on_chain_authorized === true;
+                if (typeof row.user_address === 'string' && row.user_address.toLowerCase() !== existing.userAddress.toLowerCase()) {
+                  console.warn(`[SessionService] Ignoring CDC for session ${row.id}: user_address mismatch`);
+                  return;
+                }
+                if (existing.isActive && !isActive) {
+                  existing.isActive = false;
+                }
+                const incomingSpent = Number(row.spent_today || 0);
+                if (Number.isFinite(incomingSpent) && incomingSpent > existing.spentToday) {
+                  existing.spentToday = incomingSpent;
+                } else if (Number.isFinite(incomingSpent) && incomingSpent < existing.spentToday) {
+                  console.warn(`[SessionService] Ignoring CDC spent_today decrease for session ${row.id} (${existing.spentToday} -> ${incomingSpent})`);
+                }
+                if (existing.onChainAuthorized && row.on_chain_authorized !== true) {
+                  existing.onChainAuthorized = false;
+                } else if (!existing.onChainAuthorized && row.on_chain_authorized === true) {
+                  // Fail-closed: schedule async on-chain re-verification instead
+                  // of trusting the DB flag. refreshOnChainAuthorizations probes
+                  // the clone/registry policy and only then flips the flag.
+                  console.warn(`[SessionService] Ignoring CDC on_chain_authorized escalation for session ${row.id} — awaiting on-chain re-verification`);
+                  void this.refreshOnChainAuthorizations().catch(() => {});
+                }
                 existing.sessionKeyAddress = row.session_key_address
                   ? (getAddress(row.session_key_address) as Address)
                   : undefined;
@@ -156,9 +186,13 @@ export class SessionService {
                   ? userSwarmService.isCopyTradeEnabled(row.user_address)
                   : (row.copy_trade_enabled === true);
                 existing.updatedAt = row.updated_at || new Date().toISOString();
-                if (!isActive && this.userToActiveSessionId.get(userKey) === row.id) {
+                // SEC-02: drive the active-session index from the in-memory
+                // fail-closed flag (existing.isActive), never from the raw CDC
+                // row — a tampered is_active=true row must not resurrect a
+                // revoked/expired session.
+                if (!existing.isActive && this.userToActiveSessionId.get(userKey) === row.id) {
                   this.userToActiveSessionId.delete(userKey);
-                } else if (isActive) {
+                } else if (existing.isActive) {
                   this.userToActiveSessionId.set(userKey, row.id);
                 }
               }

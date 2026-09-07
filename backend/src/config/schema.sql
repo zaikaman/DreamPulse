@@ -156,17 +156,14 @@ DROP POLICY IF EXISTS "custom_swarms_owner_update" ON public.custom_swarms;
 DROP POLICY IF EXISTS "custom_swarms_owner_delete" ON public.custom_swarms;
 DROP POLICY IF EXISTS "custom_swarms_service_role" ON public.custom_swarms;
 
--- Arena discovery: public SELECT for leaderboard/social clone; DML is owner JWT + service_role only
+-- SEC-02: Arena discovery: public SELECT for leaderboard/social clone; ALL DML is
+-- service_role only (backend /api/v1/*). Authenticated clients MUST NOT hold
+-- INSERT/UPDATE/DELETE: custom_agents carries backend-computed pnl/win_rate/
+-- trades_count and direct UPDATE fabricates agent performance without capital.
 CREATE POLICY "Custom Agents public read" ON public.custom_agents FOR SELECT TO anon, authenticated USING (true);
-CREATE POLICY "custom_agents_owner_insert" ON public.custom_agents FOR INSERT TO authenticated WITH CHECK (lower(auth.jwt() ->> 'user_address') = lower(user_address));
-CREATE POLICY "custom_agents_owner_update" ON public.custom_agents FOR UPDATE TO authenticated USING (lower(auth.jwt() ->> 'user_address') = lower(user_address)) WITH CHECK (lower(auth.jwt() ->> 'user_address') = lower(user_address));
-CREATE POLICY "custom_agents_owner_delete" ON public.custom_agents FOR DELETE TO authenticated USING (lower(auth.jwt() ->> 'user_address') = lower(user_address));
 CREATE POLICY "custom_agents_service_role" ON public.custom_agents FOR ALL TO service_role USING (true) WITH CHECK (true);
 
 CREATE POLICY "Custom Swarms public read" ON public.custom_swarms FOR SELECT TO anon, authenticated USING (true);
-CREATE POLICY "custom_swarms_owner_insert" ON public.custom_swarms FOR INSERT TO authenticated WITH CHECK (lower(auth.jwt() ->> 'user_address') = lower(user_address));
-CREATE POLICY "custom_swarms_owner_update" ON public.custom_swarms FOR UPDATE TO authenticated USING (lower(auth.jwt() ->> 'user_address') = lower(user_address)) WITH CHECK (lower(auth.jwt() ->> 'user_address') = lower(user_address));
-CREATE POLICY "custom_swarms_owner_delete" ON public.custom_swarms FOR DELETE TO authenticated USING (lower(auth.jwt() ->> 'user_address') = lower(user_address));
 CREATE POLICY "custom_swarms_service_role" ON public.custom_swarms FOR ALL TO service_role USING (true) WITH CHECK (true);
 
 -- ------------------------------------------------------------------------------
@@ -300,12 +297,12 @@ CREATE INDEX IF NOT EXISTS idx_backtests_user ON public.backtests(user_address, 
 --   • Direct Supabase reads for private tables require an authenticated JWT
 --     with claim `user_address` (lowercase hex, 0x...). Mint after SIWE/EIP-712
 --     verification: { "role": "authenticated", "user_address": "0xabc..." }.
---     Until that flow is wired, anon has NO access to private tables and
---     must use the backend REST API. See migration 012 for production deploy.
+--     Authenticated gets SELECT-own ONLY (realtime reads + polling fallback).
+--     See SEC-02: NO authenticated INSERT/UPDATE/DELETE on ANY table.
 --   • Public tables (markets, agent_logs, system_state) keep anon SELECT;
 --     DML is service_role only.
 --   • Arena discovery tables (custom_agents/custom_swarms) keep public SELECT;
---     DML is owner-JWT + service_role only.
+--     DML is service_role only (backend computes pnl/win_rate/trades_count).
 -- ------------------------------------------------------------------------------
 ALTER TABLE public.markets ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.sessions ENABLE ROW LEVEL SECURITY;
@@ -365,39 +362,30 @@ CREATE POLICY "Markets service_role all" ON public.markets FOR ALL TO service_ro
 CREATE POLICY "Agent Logs public read" ON public.agent_logs FOR SELECT TO anon, authenticated USING (true);
 CREATE POLICY "Agent Logs service_role all" ON public.agent_logs FOR ALL TO service_role USING (true) WITH CHECK (true);
 
--- Sessions: owner JWT + service_role only (anon blocked)
+-- SEC-02: Private tables — authenticated gets SELECT-own only; ALL DML is
+-- service_role only (backend /api/v1/* via SUPABASE_SERVICE_ROLE_KEY).
+-- Authenticated INSERT/UPDATE/DELETE was a privilege-escalation vector:
+-- direct PostgREST writes could flip sessions.on_chain_authorized, raise
+-- daily_volume_cap, forge orders (status/pnl) or delete losing trades.
+-- Anon has zero policies (default deny).
+-- Sessions: owner SELECT + service_role DML only (anon blocked)
 CREATE POLICY "sessions_owner_select" ON public.sessions FOR SELECT TO authenticated USING (lower(auth.jwt() ->> 'user_address') = lower(user_address));
-CREATE POLICY "sessions_owner_insert" ON public.sessions FOR INSERT TO authenticated WITH CHECK (lower(auth.jwt() ->> 'user_address') = lower(user_address));
-CREATE POLICY "sessions_owner_update" ON public.sessions FOR UPDATE TO authenticated USING (lower(auth.jwt() ->> 'user_address') = lower(user_address)) WITH CHECK (lower(auth.jwt() ->> 'user_address') = lower(user_address));
-CREATE POLICY "sessions_owner_delete" ON public.sessions FOR DELETE TO authenticated USING (lower(auth.jwt() ->> 'user_address') = lower(user_address));
 CREATE POLICY "sessions_service_role" ON public.sessions FOR ALL TO service_role USING (true) WITH CHECK (true);
 
--- Agent Strategies: owner JWT + service_role only
+-- Agent Strategies: owner SELECT + service_role DML only
 CREATE POLICY "strategies_owner_select" ON public.agent_strategies FOR SELECT TO authenticated USING (lower(auth.jwt() ->> 'user_address') = lower(user_address));
-CREATE POLICY "strategies_owner_insert" ON public.agent_strategies FOR INSERT TO authenticated WITH CHECK (lower(auth.jwt() ->> 'user_address') = lower(user_address));
-CREATE POLICY "strategies_owner_update" ON public.agent_strategies FOR UPDATE TO authenticated USING (lower(auth.jwt() ->> 'user_address') = lower(user_address)) WITH CHECK (lower(auth.jwt() ->> 'user_address') = lower(user_address));
-CREATE POLICY "strategies_owner_delete" ON public.agent_strategies FOR DELETE TO authenticated USING (lower(auth.jwt() ->> 'user_address') = lower(user_address));
 CREATE POLICY "strategies_service_role" ON public.agent_strategies FOR ALL TO service_role USING (true) WITH CHECK (true);
 
--- Orders: owner JWT + service_role only
+-- Orders: owner SELECT + service_role DML only (backend settles pnl/status)
 CREATE POLICY "orders_owner_select" ON public.orders FOR SELECT TO authenticated USING (lower(auth.jwt() ->> 'user_address') = lower(user_address));
-CREATE POLICY "orders_owner_insert" ON public.orders FOR INSERT TO authenticated WITH CHECK (lower(auth.jwt() ->> 'user_address') = lower(user_address));
-CREATE POLICY "orders_owner_update" ON public.orders FOR UPDATE TO authenticated USING (lower(auth.jwt() ->> 'user_address') = lower(user_address)) WITH CHECK (lower(auth.jwt() ->> 'user_address') = lower(user_address));
-CREATE POLICY "orders_owner_delete" ON public.orders FOR DELETE TO authenticated USING (lower(auth.jwt() ->> 'user_address') = lower(user_address));
 CREATE POLICY "orders_service_role" ON public.orders FOR ALL TO service_role USING (true) WITH CHECK (true);
 
--- Sweeps: owner JWT (read) + service_role (backend inserts claims)
+-- Sweeps: owner SELECT + service_role DML only (backend inserts claims)
 CREATE POLICY "sweeps_owner_select" ON public.sweeps FOR SELECT TO authenticated USING (lower(auth.jwt() ->> 'user_address') = lower(user_address));
-CREATE POLICY "sweeps_owner_insert" ON public.sweeps FOR INSERT TO authenticated WITH CHECK (lower(auth.jwt() ->> 'user_address') = lower(user_address));
-CREATE POLICY "sweeps_owner_update" ON public.sweeps FOR UPDATE TO authenticated USING (lower(auth.jwt() ->> 'user_address') = lower(user_address)) WITH CHECK (lower(auth.jwt() ->> 'user_address') = lower(user_address));
-CREATE POLICY "sweeps_owner_delete" ON public.sweeps FOR DELETE TO authenticated USING (lower(auth.jwt() ->> 'user_address') = lower(user_address));
 CREATE POLICY "sweeps_service_role" ON public.sweeps FOR ALL TO service_role USING (true) WITH CHECK (true);
 
--- Backtests: owner JWT + service_role only
+-- Backtests: owner SELECT + service_role DML only
 CREATE POLICY "backtests_owner_select" ON public.backtests FOR SELECT TO authenticated USING (lower(auth.jwt() ->> 'user_address') = lower(user_address));
-CREATE POLICY "backtests_owner_insert" ON public.backtests FOR INSERT TO authenticated WITH CHECK (lower(auth.jwt() ->> 'user_address') = lower(user_address));
-CREATE POLICY "backtests_owner_update" ON public.backtests FOR UPDATE TO authenticated USING (lower(auth.jwt() ->> 'user_address') = lower(user_address)) WITH CHECK (lower(auth.jwt() ->> 'user_address') = lower(user_address));
-CREATE POLICY "backtests_owner_delete" ON public.backtests FOR DELETE TO authenticated USING (lower(auth.jwt() ->> 'user_address') = lower(user_address));
 CREATE POLICY "backtests_service_role" ON public.backtests FOR ALL TO service_role USING (true) WITH CHECK (true);
 
 -- ------------------------------------------------------------------------------
@@ -459,11 +447,9 @@ DROP POLICY IF EXISTS "swarm_configs_owner_update" ON public.user_swarm_configs;
 DROP POLICY IF EXISTS "swarm_configs_owner_delete" ON public.user_swarm_configs;
 DROP POLICY IF EXISTS "swarm_configs_service_role" ON public.user_swarm_configs;
 DROP POLICY IF EXISTS "UserSwarm public read fallback" ON public.user_swarm_configs;
--- Private per-wallet: owner JWT + service_role only (anon blocked)
+-- SEC-02: Private per-wallet: owner SELECT + service_role DML only (anon blocked).
+-- Swarm/agent toggles go through backend validation via /api/v1/swarm/*.
 CREATE POLICY "swarm_configs_owner_select" ON public.user_swarm_configs FOR SELECT TO authenticated USING (lower(auth.jwt() ->> 'user_address') = lower(user_address));
-CREATE POLICY "swarm_configs_owner_insert" ON public.user_swarm_configs FOR INSERT TO authenticated WITH CHECK (lower(auth.jwt() ->> 'user_address') = lower(user_address));
-CREATE POLICY "swarm_configs_owner_update" ON public.user_swarm_configs FOR UPDATE TO authenticated USING (lower(auth.jwt() ->> 'user_address') = lower(user_address)) WITH CHECK (lower(auth.jwt() ->> 'user_address') = lower(user_address));
-CREATE POLICY "swarm_configs_owner_delete" ON public.user_swarm_configs FOR DELETE TO authenticated USING (lower(auth.jwt() ->> 'user_address') = lower(user_address));
 CREATE POLICY "swarm_configs_service_role" ON public.user_swarm_configs FOR ALL TO service_role USING (true) WITH CHECK (true);
 
 -- ------------------------------------------------------------------------------
@@ -530,22 +516,12 @@ DROP POLICY IF EXISTS "social_copy_owner_update" ON public.social_copy_trades;
 DROP POLICY IF EXISTS "social_copy_owner_delete" ON public.social_copy_trades;
 DROP POLICY IF EXISTS "social_copy_service_role" ON public.social_copy_trades;
 
+-- SEC-02: copy relationships carry backend-managed spend caps/counters
+-- (spent_today, total_copied_volume); direct client writes could reset caps.
+-- Owner SELECT + service_role DML only; mutations via /api/v1/copy/*.
 CREATE POLICY "social_copy_owner_select" ON public.social_copy_trades
     FOR SELECT TO authenticated
     USING (lower(auth.jwt() ->> 'user_address') = lower(copier_address) OR lower(auth.jwt() ->> 'user_address') = lower(target_address));
-
-CREATE POLICY "social_copy_owner_insert" ON public.social_copy_trades
-    FOR INSERT TO authenticated
-    WITH CHECK (lower(auth.jwt() ->> 'user_address') = lower(copier_address));
-
-CREATE POLICY "social_copy_owner_update" ON public.social_copy_trades
-    FOR UPDATE TO authenticated
-    USING (lower(auth.jwt() ->> 'user_address') = lower(copier_address))
-    WITH CHECK (lower(auth.jwt() ->> 'user_address') = lower(copier_address));
-
-CREATE POLICY "social_copy_owner_delete" ON public.social_copy_trades
-    FOR DELETE TO authenticated
-    USING (lower(auth.jwt() ->> 'user_address') = lower(copier_address));
 
 CREATE POLICY "social_copy_service_role" ON public.social_copy_trades
     FOR ALL TO service_role
