@@ -146,18 +146,35 @@ export function createSessionWalletClient(sessionPrivateKey: Hex): WalletClient 
   });
 }
 
+export const DEFAULT_OPERATOR_TX_TIMEOUT_MS = 15000;
+
 let txQueue = Promise.resolve();
 
 /**
- * Serializes on-chain write operations and handles nonce desynchronization with automatic retry.
+ * Serializes on-chain write operations and handles nonce desynchronization with automatic retry and strict RPC timeouts.
  */
-export async function executeOperatorTx<T>(operation: () => Promise<T>, maxRetries = 3): Promise<T> {
+export async function executeOperatorTx<T>(
+  operation: () => Promise<T>,
+  maxRetries = 3,
+  timeoutMs = DEFAULT_OPERATOR_TX_TIMEOUT_MS,
+): Promise<T> {
   const execute = async () => {
     let attempts = 0;
     while (attempts < maxRetries) {
       attempts++;
+      let timer: NodeJS.Timeout | undefined;
       try {
-        return await operation();
+        const timeoutPromise = new Promise<never>((_, reject) => {
+          timer = setTimeout(() => {
+            const durationDesc = timeoutMs % 1000 === 0 ? `${timeoutMs / 1000}s` : `${timeoutMs}ms`;
+            reject(new Error(`Somnia RPC operation timed out after ${durationDesc}`));
+          }, timeoutMs);
+          if (typeof timer.unref === 'function') {
+            timer.unref();
+          }
+        });
+
+        return await Promise.race([operation(), timeoutPromise]);
       } catch (err: any) {
         const msg: string = err?.message || String(err);
         const isNonceError =
@@ -179,7 +196,22 @@ export async function executeOperatorTx<T>(operation: () => Promise<T>, maxRetri
           await new Promise((r) => setTimeout(r, 400 * attempts));
           continue;
         }
+
+        if (msg.includes('timed out')) {
+          console.warn(
+            `[SomniaConfig] Operator transaction timed out after ${timeoutMs}ms. Resetting nonce manager to ensure clean state.`,
+          );
+          nonceManager.reset({
+            address: operatorAccount.address,
+            chainId: somniaShannonTestnet.id,
+          });
+        }
+
         throw err;
+      } finally {
+        if (timer) {
+          clearTimeout(timer);
+        }
       }
     }
     throw new Error('Transaction execution failed after retries');

@@ -18,6 +18,7 @@ import {
   hasOperatorGas,
   invalidateOperatorGasCache,
   executeOperatorTx,
+  DEFAULT_OPERATOR_TX_TIMEOUT_MS,
   executeOperatorWriteContract,
 } from '../src/config/somnia.js';
 import {
@@ -186,6 +187,29 @@ describe('Config, Cookies, Blockchain & System Bootstrap Suite', () => {
           throw new Error('replacement transaction underpriced');
         }, 2)
       ).rejects.toThrow('replacement transaction underpriced');
+    });
+
+    it('enforces RPC operation timeout and prevents txQueue deadlock on stalled calls', async () => {
+      expect(DEFAULT_OPERATOR_TX_TIMEOUT_MS).toBe(15000);
+
+      // 1. Queue a stalled transaction with short timeout (50ms)
+      const stalledPromise = executeOperatorTx(
+        () => new Promise((resolve) => setTimeout(() => resolve('stalled-result'), 250)),
+        1,
+        50
+      );
+
+      // 2. Queue a subsequent transaction immediately behind it
+      const subsequentPromise = executeOperatorTx(async () => {
+        return 'subsequent-success';
+      });
+
+      // 3. Stalled operation should reject with timeout error
+      await expect(stalledPromise).rejects.toThrow('Somnia RPC operation timed out after 50ms');
+
+      // 4. Queue must NOT deadlock; subsequent transaction executes and succeeds
+      const result = await subsequentPromise;
+      expect(result).toBe('subsequent-success');
     });
   });
 
