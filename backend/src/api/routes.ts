@@ -1484,14 +1484,24 @@ apiRouter.post('/backtest/run', optionalWalletAuth, async (req: Request, res: Re
   }
 });
 
-apiRouter.get('/backtest/history', optionalWalletAuth, (req: Request, res: Response) => {
-  const { userAddress } = req.query;
-  const history = backtestService.getBacktestHistory(typeof userAddress === 'string' ? userAddress : undefined);
-  res.json({
-    success: true,
-    count: history.length,
-    data: history,
-  });
+apiRouter.get('/backtest/history', optionalWalletAuth, async (req: Request, res: Response) => {
+  try {
+    const rawUserAddress = typeof req.query.userAddress === 'string' && req.query.userAddress.trim()
+      ? req.query.userAddress.trim()
+      : ((req as any).walletAddress as string | undefined);
+    const limit = req.query.limit !== undefined ? parseInt(req.query.limit as string, 10) : undefined;
+    const history = await backtestService.getBacktestHistory(
+      rawUserAddress,
+      Number.isFinite(limit) && (limit as number) > 0 ? limit : undefined
+    );
+    res.json({
+      success: true,
+      count: history.length,
+      data: history,
+    });
+  } catch (err: any) {
+    res.status(500).json({ success: false, error: err.message || 'Failed to fetch backtest history' });
+  }
 });
 
 // ------------------------------------------------------------------------------

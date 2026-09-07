@@ -124,6 +124,47 @@ export class BacktestService {
   }
 
   /**
+   * Maps a database row from public.backtests to DetailedBacktestResult
+   */
+  private mapRowToDetailedBacktestResult(row: any): DetailedBacktestResult {
+    const winRate = Number(row.win_rate ?? 0);
+    const totalTrades = Number(row.total_trades ?? 0);
+    const totalWins = Math.round((winRate / 100) * totalTrades);
+    const totalLosses = Math.max(0, totalTrades - totalWins);
+
+    return {
+      id: row.id,
+      userAddress: row.user_address,
+      agentType: row.agent_type as AgentType,
+      symbol: row.symbol,
+      startDate: row.start_date,
+      endDate: row.end_date,
+      initialCapital: Number(row.initial_capital ?? 0),
+      strategyConfig: row.strategy_config || {},
+      totalTrades,
+      winRate,
+      netPnl: Number(row.net_pnl ?? 0),
+      maxDrawdown: Number(row.max_drawdown ?? 0),
+      sharpeRatio: Number(row.sharpe_ratio ?? 2.5),
+      sortinoRatio: Number(row.sortino_ratio ?? 3.1),
+      profitFactor: Number(row.profit_factor ?? 1.85),
+      expectancy: Number(row.expectancy ?? 1.2),
+      payoffRatio: Number(row.payoff_ratio ?? 1.6),
+      avgWin: Number(row.avg_win ?? 3.5),
+      avgLoss: Number(row.avg_loss ?? 2.2),
+      totalWins,
+      totalLosses,
+      totalFeesPaid: Number(row.total_fees ?? 4.5),
+      timeframe: row.timeframe || '5m',
+      period: row.period || '3d',
+      createdAt: row.created_at,
+      equityCurve: row.equity_curve || [],
+      underwaterCurve: row.underwater_curve || [],
+      trades: row.trades || [],
+    };
+  }
+
+  /**
    * Loads previous backtests from Supabase on startup.
    */
   private async initializeFromDb(): Promise<void> {
@@ -131,7 +172,7 @@ export class BacktestService {
       .from('backtests')
       .select('*')
       .order('created_at', { ascending: false })
-      .limit(20);
+      .limit(50);
 
     this.history = [];
     if (error || !data || data.length === 0) {
@@ -139,38 +180,7 @@ export class BacktestService {
     }
 
     for (const row of data) {
-      const result: DetailedBacktestResult = {
-        id: row.id,
-        userAddress: row.user_address,
-        agentType: row.agent_type as AgentType,
-        symbol: row.symbol,
-        startDate: row.start_date,
-        endDate: row.end_date,
-        initialCapital: Number(row.initial_capital),
-        strategyConfig: row.strategy_config || {},
-        totalTrades: row.total_trades,
-        winRate: Number(row.win_rate),
-        netPnl: Number(row.net_pnl),
-        maxDrawdown: Number(row.max_drawdown),
-        sharpeRatio: Number(row.sharpe_ratio || 2.5),
-        sortinoRatio: Number(row.sortino_ratio || 3.1),
-        profitFactor: Number(row.profit_factor || 1.85),
-        expectancy: Number(row.expectancy || 1.2),
-        payoffRatio: Number(row.payoff_ratio || 1.6),
-        avgWin: Number(row.avg_win || 3.5),
-        avgLoss: Number(row.avg_loss || 2.2),
-        totalWins: Math.round((Number(row.win_rate) / 100) * row.total_trades),
-        totalLosses: row.total_trades - Math.round((Number(row.win_rate) / 100) * row.total_trades),
-        totalFeesPaid: Number(row.total_fees || 4.5),
-        timeframe: row.timeframe || '5m',
-        period: row.period || '3d',
-        createdAt: row.created_at,
-        equityCurve: [],
-        underwaterCurve: [],
-        trades: [],
-      };
-
-      this.history.push(result);
+      this.history.push(this.mapRowToDetailedBacktestResult(row));
     }
   }
 
@@ -1028,7 +1038,7 @@ export class BacktestService {
         try {
           await supabase.from('backtests').insert({
             id: backtestId,
-            user_address: userAddr,
+            user_address: userAddr.toLowerCase(),
             agent_type: result.agentType,
             symbol: result.symbol,
             start_date: result.startDate,
@@ -1053,16 +1063,86 @@ export class BacktestService {
 
   /**
    * Retrieves historical backtest runs.
+   * If a userAddress is specified, queries both in-memory cache and Supabase to prevent
+   * historical data loss when the global cache is truncated or rotated.
    */
-  public getBacktestHistory(userAddress?: string): DetailedBacktestResult[] {
+  public async getBacktestHistory(userAddress?: string, limit?: number): Promise<DetailedBacktestResult[]> {
     if (!userAddress) {
-      return [...this.history];
+      if (this.history.length === 0 && isPersistenceEnabled()) {
+        try {
+          const { data, error } = await supabase
+            .from('backtests')
+            .select('*')
+            .order('created_at', { ascending: false })
+            .limit(typeof limit === 'number' && limit > 0 ? limit : 50);
+
+          if (!error && data && data.length > 0) {
+            return data.map((row) => this.mapRowToDetailedBacktestResult(row));
+          }
+        } catch (err) {
+          console.warn('[BacktestService] Failed to query global backtests from Supabase:', err);
+        }
+      }
+      const results = [...this.history];
+      return typeof limit === 'number' && limit > 0 ? results.slice(0, limit) : results;
     }
+
     if (!isAddress(userAddress)) {
       return [];
     }
-    const normalized = getAddress(userAddress).toLowerCase();
-    return this.history.filter((b) => b.userAddress && b.userAddress.toLowerCase() === normalized);
+
+    const normalized = userAddress.toLowerCase();
+    const checksummed = getAddress(userAddress);
+
+    // 1. In-memory cache lookup
+    const memRecords = this.history.filter(
+      (b) => b.userAddress && b.userAddress.toLowerCase() === normalized
+    );
+
+    // 2. Direct Supabase query to prevent cache eviction data loss
+    let dbRecords: DetailedBacktestResult[] = [];
+    if (isPersistenceEnabled()) {
+      try {
+        let query = supabase
+          .from('backtests')
+          .select('*')
+          .or(`user_address.eq.${normalized},user_address.eq.${checksummed}`)
+          .order('created_at', { ascending: false });
+
+        if (typeof limit === 'number' && limit > 0) {
+          query = query.limit(limit);
+        } else {
+          query = query.limit(100);
+        }
+
+        const { data, error } = await query;
+        if (!error && data && data.length > 0) {
+          dbRecords = data.map((row) => this.mapRowToDetailedBacktestResult(row));
+        }
+      } catch (err) {
+        console.warn('[BacktestService] Failed to query user backtest history from Supabase:', err);
+      }
+    }
+
+    // 3. Deduplicate and merge: prefer in-memory versions because they contain full
+    // simulated trade logs, equity curves, and underwater curves.
+    const resultMap = new Map<string, DetailedBacktestResult>();
+    for (const item of memRecords) {
+      resultMap.set(item.id, item);
+    }
+    for (const item of dbRecords) {
+      if (!resultMap.has(item.id)) {
+        resultMap.set(item.id, item);
+      }
+    }
+
+    const merged = Array.from(resultMap.values()).sort((a, b) => {
+      const tA = a.createdAt ? new Date(a.createdAt).getTime() : 0;
+      const tB = b.createdAt ? new Date(b.createdAt).getTime() : 0;
+      return tB - tA;
+    });
+
+    return typeof limit === 'number' && limit > 0 ? merged.slice(0, limit) : merged;
   }
 }
 

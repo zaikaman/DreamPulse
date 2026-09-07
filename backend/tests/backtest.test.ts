@@ -1,5 +1,6 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
 import { BacktestService } from '../src/services/backtest-service.js';
+import * as supabaseModule from '../src/config/supabase.js';
 
 describe('Phase 7 Strategy Studio & Historical Backtest Tests', () => {
   it('fetches historical candlestick series for backtesting', async () => {
@@ -69,7 +70,7 @@ describe('Phase 7 Strategy Studio & Historical Backtest Tests', () => {
     expect(result.winRate).toBeLessThanOrEqual(100);
     expect(result.trades.length).toBe(result.totalTrades);
 
-    const history = backtestService.getBacktestHistory(userAddress);
+    const history = await backtestService.getBacktestHistory(userAddress);
     expect(history.length).toBeGreaterThan(0);
   });
 
@@ -276,6 +277,193 @@ describe('Phase 7 Strategy Studio & Historical Backtest Tests', () => {
     expect(result.maxDrawdown).toBeLessThanOrEqual(100.0);
     for (const uw of result.underwaterCurve) {
       expect(uw.drawdownPct).toBeLessThanOrEqual(100.0);
+    }
+  });
+
+  it('returns empty array when querying backtest history with an invalid address', async () => {
+    const backtestService = new BacktestService();
+    const history = await backtestService.getBacktestHistory('invalid-ethereum-address');
+    expect(history).toEqual([]);
+  });
+
+  it('queries Supabase and recovers user backtest history after in-memory cache eviction (BE-BUG-07)', async () => {
+    const backtestService = new BacktestService();
+    const userAddress = '0x90F79bf6EB2c4f870365E785982E1f101E93b906';
+
+    // Simulate cache eviction: in-memory history has 0 records for userAddress
+    (backtestService as any).history = [];
+
+    // Mock persistence enabled and mock Supabase response
+    const persistenceSpy = vi.spyOn(supabaseModule, 'isPersistenceEnabled').mockReturnValue(true);
+    const mockDbRow = {
+      id: 'db-evicted-backtest-1',
+      user_address: userAddress.toLowerCase(),
+      agent_type: 'Volt',
+      symbol: 'BTC/USD',
+      start_date: '2026-03-01T00:00:00.000Z',
+      end_date: '2026-03-04T00:00:00.000Z',
+      initial_capital: '1000.00',
+      strategy_config: { driftThreshold: 0.002, lotSize: 5.0 },
+      total_trades: 15,
+      win_rate: '60.00',
+      net_pnl: '120.50',
+      max_drawdown: '4.20',
+      sharpe_ratio: '2.15',
+      created_at: '2026-03-04T10:00:00.000Z',
+    };
+
+    const fromSpy = vi.spyOn(supabaseModule.supabase, 'from').mockImplementation((table: string) => {
+      if (table === 'backtests') {
+        return {
+          select: vi.fn().mockReturnValue({
+            or: vi.fn().mockReturnValue({
+              order: vi.fn().mockReturnValue({
+                limit: vi.fn().mockResolvedValue({
+                  data: [mockDbRow],
+                  error: null,
+                }),
+              }),
+            }),
+          }),
+        } as any;
+      }
+      return (supabaseModule.supabase as any).from(table);
+    });
+
+    try {
+      const history = await backtestService.getBacktestHistory(userAddress);
+      expect(history.length).toBe(1);
+      expect(history[0]?.id).toBe('db-evicted-backtest-1');
+      expect(history[0]?.userAddress).toBe(userAddress.toLowerCase());
+      expect(history[0]?.agentType).toBe('Volt');
+      expect(history[0]?.initialCapital).toBe(1000.0);
+      expect(history[0]?.winRate).toBe(60.0);
+      expect(history[0]?.netPnl).toBe(120.5);
+      expect(history[0]?.totalTrades).toBe(15);
+      expect(history[0]?.maxDrawdown).toBe(4.2);
+    } finally {
+      persistenceSpy.mockRestore();
+      fromSpy.mockRestore();
+    }
+  });
+
+  it('deduplicates between in-memory cache and Supabase while preserving rich simulated trades', async () => {
+    const backtestService = new BacktestService();
+    const userAddress = '0x90F79bf6EB2c4f870365E785982E1f101E93b906';
+    const sharedId = 'shared-backtest-id';
+
+    // In-memory version has trades and equity curve
+    const inMemoryResult = {
+      id: sharedId,
+      userAddress,
+      agentType: 'Volt' as const,
+      symbol: 'BTC/USD',
+      startDate: '2026-03-01T00:00:00.000Z',
+      endDate: '2026-03-04T00:00:00.000Z',
+      initialCapital: 1000,
+      strategyConfig: {},
+      totalTrades: 1,
+      winRate: 100,
+      netPnl: 50,
+      maxDrawdown: 1,
+      sharpeRatio: 2.0,
+      sortinoRatio: 2.5,
+      profitFactor: 2.0,
+      expectancy: 1.0,
+      payoffRatio: 1.5,
+      avgWin: 50,
+      avgLoss: 0,
+      totalWins: 1,
+      totalLosses: 0,
+      totalFeesPaid: 2,
+      timeframe: '5m',
+      period: '3d',
+      createdAt: '2026-03-04T12:00:00.000Z',
+      equityCurve: [{ timestamp: '2026-03-04T12:00:00.000Z', equity: 1050, pnl: 50 }],
+      underwaterCurve: [{ timestamp: '2026-03-04T12:00:00.000Z', drawdownPct: 0 }],
+      trades: [
+        {
+          id: 'trade-1',
+          timestamp: '2026-03-04T12:00:00.000Z',
+          action: 'BUY',
+          outcome: 'YES' as const,
+          price: 0.45,
+          lots: 5,
+          grossPnl: 52,
+          fee: 2,
+          pnl: 50,
+          cumulativePnl: 50,
+        },
+      ],
+    };
+    (backtestService as any).history = [inMemoryResult];
+
+    // DB returns the same ID without trades plus an older evicted backtest
+    const persistenceSpy = vi.spyOn(supabaseModule, 'isPersistenceEnabled').mockReturnValue(true);
+    const fromSpy = vi.spyOn(supabaseModule.supabase, 'from').mockImplementation((table: string) => {
+      if (table === 'backtests') {
+        return {
+          select: vi.fn().mockReturnValue({
+            or: vi.fn().mockReturnValue({
+              order: vi.fn().mockReturnValue({
+                limit: vi.fn().mockResolvedValue({
+                  data: [
+                    {
+                      id: sharedId,
+                      user_address: userAddress.toLowerCase(),
+                      agent_type: 'Volt',
+                      symbol: 'BTC/USD',
+                      start_date: '2026-03-01T00:00:00.000Z',
+                      end_date: '2026-03-04T00:00:00.000Z',
+                      initial_capital: '1000.00',
+                      strategy_config: {},
+                      total_trades: 1,
+                      win_rate: '100.00',
+                      net_pnl: '50.00',
+                      max_drawdown: '1.00',
+                      sharpe_ratio: '2.00',
+                      created_at: '2026-03-04T12:00:00.000Z',
+                    },
+                    {
+                      id: 'older-db-id',
+                      user_address: userAddress.toLowerCase(),
+                      agent_type: 'Oracle',
+                      symbol: 'ETH/USD',
+                      start_date: '2026-02-20T00:00:00.000Z',
+                      end_date: '2026-02-23T00:00:00.000Z',
+                      initial_capital: '2000.00',
+                      strategy_config: {},
+                      total_trades: 10,
+                      win_rate: '50.00',
+                      net_pnl: '80.00',
+                      max_drawdown: '5.00',
+                      sharpe_ratio: '1.80',
+                      created_at: '2026-02-23T12:00:00.000Z',
+                    },
+                  ],
+                  error: null,
+                }),
+              }),
+            }),
+          }),
+        } as any;
+      }
+      return (supabaseModule.supabase as any).from(table);
+    });
+
+    try {
+      const history = await backtestService.getBacktestHistory(userAddress);
+      expect(history.length).toBe(2);
+      // The shared record must retain its rich in-memory trades
+      const shared = history.find((h) => h.id === sharedId);
+      expect(shared).toBeDefined();
+      expect(shared?.trades.length).toBe(1);
+      expect(shared?.trades[0]?.id).toBe('trade-1');
+      // The older DB record is successfully included
+      expect(history.some((h) => h.id === 'older-db-id')).toBe(true);
+    } finally {
+      persistenceSpy.mockRestore();
+      fromSpy.mockRestore();
     }
   });
 });

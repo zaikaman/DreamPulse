@@ -294,6 +294,7 @@ CREATE INDEX IF NOT EXISTS idx_agent_strategies_session_id ON public.agent_strat
 -- PERF-02: agent_strategies RLS evaluates lower(user_address) per row — back it.
 CREATE INDEX IF NOT EXISTS idx_agent_strategies_user_lower ON public.agent_strategies(lower(user_address));
 CREATE INDEX IF NOT EXISTS idx_backtests_user ON public.backtests(user_address, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_backtests_user_lower ON public.backtests(lower(user_address), created_at DESC);
 
 -- ------------------------------------------------------------------------------
 -- Row Level Security (RLS) Policies — HARDENED
