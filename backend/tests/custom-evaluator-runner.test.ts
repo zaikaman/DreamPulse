@@ -123,6 +123,62 @@ describe('SwarmRunner, CustomAgentEvaluator & Agent System Suite', () => {
       const detailedStopped = runner.getDetailedSwarmState();
       expect(detailedStopped.isRunning).toBe(false);
     });
+
+    it('prunes stale state across all five in-memory tracking maps to prevent heap exhaustion', () => {
+      const runnerAny = runner as any;
+      const now = Date.now();
+
+      // Populate 550 entries into each of the 5 maps
+      // Some stale (> ttl), some fresh
+      for (let i = 0; i < 550; i++) {
+        const isStaleShort = i < 100; // Older than 600,000ms (10m)
+        const isStaleLong = i < 100; // Older than 3,600,000ms (1h)
+
+        runnerAny.lastOpportunityKeys.set(`opp-${i}`, isStaleShort ? now - 700000 : now);
+        runnerAny.personalLastOpportunityKeys.set(`personal-opp-${i}`, isStaleShort ? now - 700000 : now);
+        runnerAny.customAgentLastOppKeys.set(`custom-opp-${i}`, isStaleShort ? now - 700000 : now);
+        runnerAny.personalLastTradeTimes.set(`personal-trade-${i}`, isStaleLong ? now - 4000000 : now);
+        runnerAny.customAgentLastTradeTimes.set(`custom-trade-${i}`, isStaleLong ? now - 4000000 : now);
+      }
+
+      expect(runnerAny.lastOpportunityKeys.size).toBe(550);
+      expect(runnerAny.personalLastOpportunityKeys.size).toBe(550);
+      expect(runnerAny.customAgentLastOppKeys.size).toBe(550);
+      expect(runnerAny.personalLastTradeTimes.size).toBe(550);
+      expect(runnerAny.customAgentLastTradeTimes.size).toBe(550);
+
+      // Invoke pruning
+      runnerAny.pruneStaleState();
+
+      // 100 stale entries should be pruned from each map, leaving 450 (<= 500)
+      expect(runnerAny.lastOpportunityKeys.size).toBeLessThanOrEqual(500);
+      expect(runnerAny.personalLastOpportunityKeys.size).toBeLessThanOrEqual(500);
+      expect(runnerAny.customAgentLastOppKeys.size).toBeLessThanOrEqual(500);
+      expect(runnerAny.personalLastTradeTimes.size).toBeLessThanOrEqual(500);
+      expect(runnerAny.customAgentLastTradeTimes.size).toBeLessThanOrEqual(500);
+
+      // Verify specific stale keys were evicted
+      expect(runnerAny.lastOpportunityKeys.has('opp-0')).toBe(false);
+      expect(runnerAny.personalLastOpportunityKeys.has('personal-opp-0')).toBe(false);
+      expect(runnerAny.customAgentLastOppKeys.has('custom-opp-0')).toBe(false);
+      expect(runnerAny.personalLastTradeTimes.has('personal-trade-0')).toBe(false);
+      expect(runnerAny.customAgentLastTradeTimes.has('custom-trade-0')).toBe(false);
+
+      // Verify fresh keys remain
+      expect(runnerAny.lastOpportunityKeys.has('opp-549')).toBe(true);
+      expect(runnerAny.personalLastOpportunityKeys.has('personal-opp-549')).toBe(true);
+      expect(runnerAny.customAgentLastOppKeys.has('custom-opp-549')).toBe(true);
+      expect(runnerAny.personalLastTradeTimes.has('personal-trade-549')).toBe(true);
+      expect(runnerAny.customAgentLastTradeTimes.has('custom-trade-549')).toBe(true);
+
+      // Also test capacity bound when all 550 entries are fresh (< ttl)
+      for (let i = 0; i < 550; i++) {
+        runnerAny.lastOpportunityKeys.set(`burst-${i}`, now);
+      }
+      expect(runnerAny.lastOpportunityKeys.size).toBeGreaterThan(500);
+      runnerAny.pruneStaleState();
+      expect(runnerAny.lastOpportunityKeys.size).toBeLessThanOrEqual(500);
+    });
   });
 
   describe('Technical Indicators & CustomAgentEvaluator', () => {

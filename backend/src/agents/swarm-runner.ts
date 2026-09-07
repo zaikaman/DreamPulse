@@ -168,14 +168,29 @@ export class MultiAgentSwarmRunner {
   }
 
   private pruneStaleState(): void {
-    if (this.lastOpportunityKeys.size > 500) {
-      const now = Date.now();
-      for (const [key, timestamp] of this.lastOpportunityKeys.entries()) {
-        if (now - timestamp > 600000) {
-          this.lastOpportunityKeys.delete(key);
+    const now = Date.now();
+    const pruneMap = (map: Map<string, number>, max: number, ttl: number) => {
+      if (map.size > max) {
+        for (const [key, timestamp] of map.entries()) {
+          if (now - timestamp > ttl) {
+            map.delete(key);
+          }
+        }
+        // Safety guardrail: if still exceeding max capacity after TTL eviction, prune oldest entries (FIFO)
+        if (map.size > max) {
+          for (const key of map.keys()) {
+            map.delete(key);
+            if (map.size <= max) break;
+          }
         }
       }
-    }
+    };
+
+    pruneMap(this.lastOpportunityKeys, 500, 600000);
+    pruneMap(this.personalLastOpportunityKeys, 500, 600000);
+    pruneMap(this.customAgentLastOppKeys, 500, 600000);
+    pruneMap(this.personalLastTradeTimes, 500, 3600000);
+    pruneMap(this.customAgentLastTradeTimes, 500, 3600000);
   }
 
   /**
