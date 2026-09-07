@@ -570,14 +570,21 @@ export class AnalyticsService {
         if (lower === operatorLower) operatorOrders.push(o);
       }
 
-      // If persistence enabled, query DB scoped specifically to userAddress / operatorAddress (indexed) instead of scanning all 5000+ orders
+      // If persistence enabled, query DB scoped specifically to userAddress / operatorAddress (indexed)
+      // to ensure historical orders are included even when the in-memory cache is capped or truncated
       if (typeof (orderService as any).isPersistenceEnabled === 'function' && (orderService as any).isPersistenceEnabled()) {
         const dbTasks: Promise<void>[] = [];
-        if (normalizedUser && userOrders.length === 0) {
+        if (normalizedUser) {
           dbTasks.push(
             (async () => {
               try {
-                const dbUser = await (orderService as any).getOrdersAsync({ userAddress: normalizedUser });
+                let dbUser: OrderExecution[] = [];
+                if (typeof (orderService as any).fetchOrdersFromDb === 'function') {
+                  const res = await (orderService as any).fetchOrdersFromDb({ userAddress: normalizedUser });
+                  dbUser = res.orders || [];
+                } else if (typeof (orderService as any).getOrdersAsync === 'function') {
+                  dbUser = await (orderService as any).getOrdersAsync({ userAddress: normalizedUser });
+                }
                 if (Array.isArray(dbUser) && dbUser.length > 0) {
                   const seen = new Set(userOrders.map((o) => o.id));
                   for (const o of dbUser) {
@@ -587,15 +594,23 @@ export class AnalyticsService {
                     }
                   }
                 }
-              } catch {}
+              } catch (err: any) {
+                console.warn('[AnalyticsService] Failed to fetch historical user orders from DB:', err?.message || err);
+              }
             })()
           );
         }
-        if (operatorOrders.length === 0) {
+        if (operatorLower) {
           dbTasks.push(
             (async () => {
               try {
-                const dbOp = await (orderService as any).getOrdersAsync({ userAddress: operatorLower });
+                let dbOp: OrderExecution[] = [];
+                if (typeof (orderService as any).fetchOrdersFromDb === 'function') {
+                  const res = await (orderService as any).fetchOrdersFromDb({ userAddress: operatorLower });
+                  dbOp = res.orders || [];
+                } else if (typeof (orderService as any).getOrdersAsync === 'function') {
+                  dbOp = await (orderService as any).getOrdersAsync({ userAddress: operatorLower });
+                }
                 if (Array.isArray(dbOp) && dbOp.length > 0) {
                   const seen = new Set(operatorOrders.map((o) => o.id));
                   for (const o of dbOp) {
@@ -605,7 +620,9 @@ export class AnalyticsService {
                     }
                   }
                 }
-              } catch {}
+              } catch (err: any) {
+                console.warn('[AnalyticsService] Failed to fetch historical operator orders from DB:', err?.message || err);
+              }
             })()
           );
         }

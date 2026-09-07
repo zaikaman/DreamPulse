@@ -975,5 +975,104 @@ describe('OrderService Comprehensive Suite', () => {
       service.cancelOrderFor('non-existent-order-id', userAddress),
     ).rejects.toThrow('not found');
   });
+
+  describe('BE-BUG-06: Daily Spend Aggregate & Cache Truncation Protection', () => {
+    it('accurately aggregates daily spend across non-cancelled, non-failed orders and ignores cancelled/failed', async () => {
+      const testUser = '0x1111111111111111111111111111111111111111';
+      const now = Date.now();
+
+      // Order 1: Filled order (price: 0.5, lotSize: 10, cost: 5)
+      service.insertIntoCache({
+        id: 'daily-order-1',
+        userAddress: testUser,
+        marketId: 'market-1',
+        agentType: 'Manual',
+        source: 'TERMINAL',
+        outcome: 'YES',
+        direction: 'BUY',
+        orderType: 'LIMIT',
+        price: 0.5,
+        lotSize: 10,
+        totalCost: 5,
+        status: 'FILLED',
+        createdAt: new Date(now - 1000).toISOString(),
+      });
+
+      // Order 2: Partially filled order (price: 0.4, lotSize: 20, cost: 8)
+      service.insertIntoCache({
+        id: 'daily-order-2',
+        userAddress: testUser,
+        marketId: 'market-1',
+        agentType: 'Manual',
+        source: 'TERMINAL',
+        outcome: 'NO',
+        direction: 'BUY',
+        orderType: 'LIMIT',
+        price: 0.4,
+        lotSize: 20,
+        totalCost: 8,
+        status: 'PARTIALLY_FILLED',
+        createdAt: new Date(now - 2000).toISOString(),
+      });
+
+      // Order 3: Cancelled order (should NOT count towards daily spend)
+      service.insertIntoCache({
+        id: 'daily-order-3',
+        userAddress: testUser,
+        marketId: 'market-1',
+        agentType: 'Manual',
+        source: 'TERMINAL',
+        outcome: 'YES',
+        direction: 'BUY',
+        orderType: 'LIMIT',
+        price: 0.6,
+        lotSize: 50,
+        totalCost: 30,
+        status: 'CANCELLED',
+        createdAt: new Date(now - 3000).toISOString(),
+      });
+
+      // Order 4: Failed order (should NOT count towards daily spend)
+      service.insertIntoCache({
+        id: 'daily-order-4',
+        userAddress: testUser,
+        marketId: 'market-1',
+        agentType: 'Manual',
+        source: 'TERMINAL',
+        outcome: 'NO',
+        direction: 'BUY',
+        orderType: 'LIMIT',
+        price: 0.5,
+        lotSize: 40,
+        totalCost: 20,
+        status: 'FAILED' as any,
+        createdAt: new Date(now - 4000).toISOString(),
+      });
+
+      // Order 5: Older than cutoff (e.g. yesterday - should NOT count)
+      service.insertIntoCache({
+        id: 'daily-order-5',
+        userAddress: testUser,
+        marketId: 'market-1',
+        agentType: 'Manual',
+        source: 'TERMINAL',
+        outcome: 'YES',
+        direction: 'BUY',
+        orderType: 'LIMIT',
+        price: 0.5,
+        lotSize: 100,
+        totalCost: 50,
+        status: 'FILLED',
+        createdAt: new Date(now - 25 * 3600 * 1000).toISOString(),
+      });
+
+      const stats = await service.getDailySpendStats(testUser, now - 24 * 3600 * 1000);
+      expect(stats.totalSpend).toBe(13); // 5 + 8
+      expect(stats.ordersCount).toBe(2);
+
+      const scalarSpend = await service.getDailySpendAggregate(testUser, now - 24 * 3600 * 1000);
+      expect(scalarSpend).toBe(13);
+    });
+  });
 });
 

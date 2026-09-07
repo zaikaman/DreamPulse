@@ -324,5 +324,36 @@ describe('AnalyticsService & AnomalyService Comprehensive Suite', () => {
       expect(res.summary.sharpeApprox).toBe(expectedSharpe365);
       expect(res.summary.sharpeApprox).toBeGreaterThan(tradFiSharpe252);
     });
+
+    it('BE-BUG-06: fetches DB historical orders even when user already has in-memory orders', async () => {
+      const targetUser = '0x3333333333333333333333333333333333333333';
+      const memOrder: OrderExecution = {
+        ...mockOrders[0],
+        id: 'mem-order-1',
+        userAddress: targetUser,
+        pnl: 10,
+        createdAt: new Date().toISOString(),
+      };
+      const dbOrder: OrderExecution = {
+        ...mockOrders[0],
+        id: 'db-historical-order-2',
+        userAddress: targetUser,
+        pnl: 25,
+        createdAt: new Date(Date.now() - 3600000).toISOString(),
+      };
+
+      vi.spyOn(orderService, 'getOrders').mockReturnValue([memOrder]);
+      vi.spyOn(orderService as any, 'isPersistenceEnabled').mockReturnValue(true);
+      vi.spyOn(orderService as any, 'fetchOrdersFromDb').mockResolvedValue({
+        orders: [dbOrder],
+        total: 1,
+      });
+
+      const res = await analyticsService.getAnalytics(targetUser, '7d', 'ALL', true);
+      // Both in-memory and DB orders must be included in comprehensive stats
+      expect(res.summary.totalTrades).toBe(2);
+      expect(res.summary.totalPnl).toBe(35);
+      expect(res.ledger.length).toBeGreaterThan(0);
+    });
   });
 });

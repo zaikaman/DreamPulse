@@ -2582,15 +2582,13 @@ export class OrderService {
    */
   public async getOrdersAsync(params?: QueryOrdersParams): Promise<OrderExecution[]> {
     const mem = this.getOrders(params);
-    // If cache is not at cap, in-memory is authoritative (all rows fit)
-    if (this.orders.length < OrderService.MAX_CACHE_SIZE || !this.isPersistenceEnabled()) {
+    // If persistence is not enabled, in-memory is all we have
+    if (!this.isPersistenceEnabled()) {
       return mem;
     }
-    // Cache is capped — there may be evicted history. Fetch from DB and merge deduplicated.
-    // Optimization: if mem already satisfies a bounded limit with offset, skip DB unless mem appears truncated
+    // Optimization: if caller specified a bounded limit and memory already satisfies it, skip DB
     const needsTotal = params?.limit === undefined;
-    if (!needsTotal && mem.length < (params?.limit ?? 50)) {
-      // Small page that fits in cache; assume cache covers recent pages 1-2. For deeper offsets, query DB.
+    if (!needsTotal && mem.length >= (params?.limit ?? 50)) {
       const offset = params?.offset ?? 0;
       if (offset + (params?.limit ?? 0) <= this.orders.length) return mem;
     }
@@ -3798,6 +3796,90 @@ export class OrderService {
 
   public async getTotalRealizedPnlAsync(agentType?: AgentType, userAddress?: string): Promise<number> {
     return this.getTotalRealizedPnl(agentType, userAddress);
+  }
+
+  /**
+   * Calculates the authoritative aggregate daily spend and order count for a user address.
+   * Merges in-memory orders and Supabase orders created since the reset cutoff timestamp,
+   * excluding CANCELLED and FAILED orders:
+   * SELECT COALESCE(SUM(lot_size * price), 0) FROM public.orders WHERE user_address = $1 AND created_at >= $2 AND status NOT IN ('CANCELLED', 'FAILED');
+   */
+  public async getDailySpendStats(
+    userAddress: string,
+    since?: number | string | Date
+  ): Promise<{ totalSpend: number; ordersCount: number }> {
+    if (!userAddress) return { totalSpend: 0, ordersCount: 0 };
+    const cleanUser = userAddress.toLowerCase();
+    const checksumAddr = isAddress(userAddress) ? getAddress(userAddress) : userAddress;
+
+    const sinceMs = typeof since === 'number'
+      ? since
+      : since
+        ? new Date(since).getTime()
+        : Date.now() - 24 * 3600 * 1000;
+    const sinceIso = new Date(sinceMs).toISOString();
+
+    const seenIds = new Set<string>();
+    let totalSpend = 0;
+
+    // 1. Gather recent orders from in-memory cache
+    const memOrders = this.getOrders({ userAddress });
+    for (const o of memOrders) {
+      const oTime = new Date(o.createdAt).getTime();
+      if (oTime >= sinceMs && o.status !== 'CANCELLED' && (o.status as string) !== 'FAILED') {
+        seenIds.add(o.id);
+        const cost = (o.totalCost !== undefined && o.totalCost !== null && !isNaN(o.totalCost))
+          ? o.totalCost
+          : (Number(o.lotSize || 0) * Number(o.price || 0));
+        totalSpend += (isNaN(cost) ? 0 : cost);
+      }
+    }
+
+    // 2. Query Supabase for complete daily spend aggregate including any rows evicted from in-memory ring buffer
+    if (this.isPersistenceEnabled()) {
+      try {
+        const { data, error } = await supabase
+          .from('orders')
+          .select('id, lot_size, price, total_cost, status, created_at, user_address, tx_hash')
+          .or(`user_address.eq.${checksumAddr},user_address.ilike.${cleanUser}`)
+          .gte('created_at', sinceIso)
+          .neq('status', 'CANCELLED')
+          .neq('status', 'FAILED');
+
+        if (!error && Array.isArray(data)) {
+          for (const row of data) {
+            if (row.tx_hash === '0x1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef') continue;
+            if (!seenIds.has(row.id)) {
+              seenIds.add(row.id);
+              const cost = (row.total_cost !== null && row.total_cost !== undefined && !isNaN(Number(row.total_cost)))
+                ? Number(row.total_cost)
+                : (Number(row.lot_size || 0) * Number(row.price || 0));
+              totalSpend += (isNaN(cost) ? 0 : cost);
+            }
+          }
+        } else if (error) {
+          console.warn('[OrderService] getDailySpendStats Supabase query error:', error.message);
+        }
+      } catch (err: any) {
+        console.warn('[OrderService] getDailySpendStats DB lookup failed:', err?.message || err);
+      }
+    }
+
+    return {
+      totalSpend: Number(totalSpend.toFixed(4)),
+      ordersCount: seenIds.size,
+    };
+  }
+
+  /**
+   * Authoritative daily spend aggregate scalar helper.
+   */
+  public async getDailySpendAggregate(
+    userAddress: string,
+    since?: number | string | Date
+  ): Promise<number> {
+    const stats = await this.getDailySpendStats(userAddress, since);
+    return stats.totalSpend;
   }
 }
 

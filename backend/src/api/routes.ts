@@ -477,16 +477,14 @@ apiRouter.get('/sessions/:userAddress', optionalWalletAuth, async (req: Request,
 
     const activeSession = await sessionService.getUserActiveSession(userAddress);
     if (activeSession) {
-      const userOrders = orderService.getOrders({ userAddress }).filter((o) => o.sessionId === activeSession.id);
-      if (userOrders.length > 0) {
-        const realSpend = userOrders
-          .filter((o) => o.status === 'FILLED' || o.status === 'PARTIALLY_FILLED' || o.status === 'PENDING')
-          .reduce((sum, o) => sum + (o.totalCost || 0), 0);
+      // Authoritative daily spend aggregate from Supabase + cache:
+      // SELECT COALESCE(SUM(lot_size * price), 0) FROM public.orders WHERE user_address = $1 AND created_at >= $2 AND status NOT IN ('CANCELLED', 'FAILED');
+      const resetTimestamp = activeSession.lastSpendResetTimestamp || (Date.now() - 24 * 3600 * 1000);
+      const realSpend = await orderService.getDailySpendAggregate(userAddress, resetTimestamp);
 
-        if (activeSession.spentToday > realSpend) {
-          activeSession.spentToday = Number(realSpend.toFixed(4));
-          sessionService.updateSessionSpend(activeSession.id, activeSession.spentToday);
-        }
+      if (Math.abs(activeSession.spentToday - realSpend) > 0.0001) {
+        activeSession.spentToday = realSpend;
+        sessionService.updateSessionSpend(activeSession.id, activeSession.spentToday);
       }
     }
 
@@ -1255,20 +1253,22 @@ apiRouter.get('/portfolio/summary', optionalWalletAuth, async (req: Request, res
     const effectiveAddress = targetAddress || operatorAccount.address;
     const isOperator = targetAddress ? targetAddress.toLowerCase() === opAddress : true;
     const sweeperSummary = await settlementService.getSweeperSummary(effectiveAddress).catch(() => null);
-    const userOrders = orderService.getOrders({ userAddress: effectiveAddress });
     const session = targetAddress ? await sessionService.getUserActiveSession(targetAddress).catch(() => null) : null;
+    let ordersTodayCount = 0;
     if (session) {
-      const sessionOrders = userOrders.filter((o) => o.sessionId === session.id);
-      if (sessionOrders.length > 0) {
-        const realSpend = sessionOrders
-          .filter((o) => o.status === 'FILLED' || o.status === 'PARTIALLY_FILLED' || o.status === 'PENDING')
-          .reduce((sum, o) => sum + (o.totalCost || 0), 0);
+      // Authoritative daily spend aggregate from Supabase + cache:
+      // SELECT COALESCE(SUM(lot_size * price), 0) FROM public.orders WHERE user_address = $1 AND created_at >= $2 AND status NOT IN ('CANCELLED', 'FAILED');
+      const resetTimestamp = session.lastSpendResetTimestamp || (Date.now() - 24 * 3600 * 1000);
+      const spendStats = await orderService.getDailySpendStats(effectiveAddress, resetTimestamp);
+      ordersTodayCount = spendStats.ordersCount;
 
-        if (session.spentToday > realSpend) {
-          session.spentToday = Number(realSpend.toFixed(4));
-          sessionService.updateSessionSpend(session.id, session.spentToday);
-        }
+      if (Math.abs(session.spentToday - spendStats.totalSpend) > 0.0001) {
+        session.spentToday = spendStats.totalSpend;
+        sessionService.updateSessionSpend(session.id, session.spentToday);
       }
+    } else {
+      const spendStats = await orderService.getDailySpendStats(effectiveAddress);
+      ordersTodayCount = spendStats.ordersCount;
     }
 
     // Realized PnL is authoritative: sum of per-trade (payout - cost) for every expired market, handling BUY/SELL and VOID correctly via historically accurate settlement price
@@ -1290,7 +1290,7 @@ apiRouter.get('/portfolio/summary', optionalWalletAuth, async (req: Request, res
         totalClaimedAllTime: totalClaimed,
         totalPnl,
         activePositionsCount,
-        ordersTodayCount: userOrders.length,
+        ordersTodayCount,
         volumeToday: session?.spentToday || 0,
         dailyVolumeCap: session?.dailyVolumeCap || 100,
         maxTradeSize: session?.maxTradeSize || 10,

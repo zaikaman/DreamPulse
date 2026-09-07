@@ -4,6 +4,7 @@ import { app } from '../src/index.js';
 import { settlementService } from '../src/services/settlement-service.js';
 import { marketService } from '../src/services/market-service.js';
 import { orderService } from '../src/services/order-service.js';
+import { sessionService } from '../src/services/session-service.js';
 import { somniaExchange, publicClient } from '../src/config/somnia.js';
 import type { Market } from '../src/types/index.js';
 
@@ -316,6 +317,31 @@ describe('Express REST API Endpoints', () => {
     expect(res.status).toBe(200);
     expect(res.body.success).toBe(true);
     expect(res.body.data).toHaveProperty('realizedPnl');
+  });
+
+  it('BE-BUG-06: GET /api/v1/portfolio/summary and /sessions/:userAddress preserve spentToday and query daily spend aggregate', async () => {
+    const testUser = '0x999999cf1046e68e36E1aA2E0E07105eDDD1f08E';
+    const session = await sessionService.registerSession({
+      userAddress: testUser,
+      operatorAddress: '0x327e766EB317e5A3FA6dB30c0A5b9735Ad1aEdae',
+      maxTradeSize: 50,
+      dailyVolumeCap: 500,
+    });
+    session.spentToday = 50;
+
+    // Simulate DB having 5 orders with total cost of 50 even if in-memory cache evicted them
+    vi.spyOn(orderService, 'getDailySpendStats').mockResolvedValue({ totalSpend: 50, ordersCount: 5 });
+    vi.spyOn(orderService, 'getDailySpendAggregate').mockResolvedValue(50);
+
+    const res = await request(app).get(`/api/v1/portfolio/summary?userAddress=${testUser}`);
+    expect(res.status).toBe(200);
+    expect(res.body.data.volumeToday).toBe(50);
+    expect(res.body.data.ordersTodayCount).toBe(5);
+    expect(session.spentToday).toBe(50);
+
+    const sessRes = await request(app).get(`/api/v1/sessions/${testUser}`);
+    expect(sessRes.status).toBe(200);
+    expect(sessRes.body.activeSession.spentToday).toBe(50);
   });
 
   it('GET /api/v1/markets/pools/future and /api/v1/markets/:id/depth', async () => {

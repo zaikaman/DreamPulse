@@ -1067,6 +1067,9 @@ export class SessionService {
     if (!session) return false;
 
     session.spentToday = Number(Math.max(0, amount).toFixed(4));
+    if (session.spentToday === 0) {
+      session.lastSpendResetTimestamp = Date.now();
+    }
     session.updatedAt = new Date().toISOString();
 
     if (isSessionPersistenceEnabled()) {
