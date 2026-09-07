@@ -257,6 +257,7 @@ export interface RiskRule {
   takeProfitTargetPct?: number;
   trailingStopPct?: number;
   expiryBufferSec?: number;
+  circuitBreakerResetAt?: number | string;
 }
 
 export interface CustomAgentRules {
@@ -284,6 +285,10 @@ export interface CustomAgentDefinition {
   pnl?: number;
   winRate?: number;
   tradesCount?: number;
+  circuitBreakerHalted?: boolean;
+  circuitBreakerRemainingSec?: number;
+  activeLossStreak?: number;
+  circuitBreakerReason?: string;
   createdAt: string;
   updatedAt?: string;
 }

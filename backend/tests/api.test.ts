@@ -676,6 +676,13 @@ describe('Express REST API Endpoints', () => {
     });
     expect(allowRes.status).toBe(200);
 
+    // POST /agents/custom/:id/reset-circuit-breaker
+    const resetBreakerRes = await request(app).post(`/api/v1/agents/custom/${agentId}/reset-circuit-breaker`).send({
+      userAddress: testUser,
+    });
+    expect(resetBreakerRes.status).toBe(200);
+    expect(resetBreakerRes.body.success).toBe(true);
+
     // POST /agents/generate (Strategy Studio LLM synthesis)
     const genRes = await request(app).post('/api/v1/agents/generate').send({
       prompt: 'High-frequency momentum sniper on ETH breakouts',

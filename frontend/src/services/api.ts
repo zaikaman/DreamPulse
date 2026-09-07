@@ -618,6 +618,14 @@ export const apiClient = {
     });
   },
 
+  async resetCustomAgentCircuitBreaker(id: string, userAddress: string): Promise<{ success: boolean; data: CustomAgentDefinition }> {
+    customAgentsCache.clear();
+    return fetchJson(`/agents/custom/${encodeURIComponent(id)}/reset-circuit-breaker`, {
+      method: 'POST',
+      body: JSON.stringify({ userAddress }),
+    });
+  },
+
   async generateAgentFromPrompt(prompt: string): Promise<{ success: boolean; data: Partial<CustomAgentDefinition> }> {
     return fetchJson('/agents/generate', {
       method: 'POST',

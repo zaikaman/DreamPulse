@@ -43,6 +43,7 @@ export interface UseCustomAgentsReturn {
   deployAgent: (id: string, allowance?: number) => Promise<boolean>;
   pauseAgent: (id: string) => Promise<boolean>;
   setAgentAllowance: (id: string, allowance: number) => Promise<boolean>;
+  resetCircuitBreaker: (id: string) => Promise<boolean>;
   generateFromPrompt: (prompt: string) => Promise<Partial<CustomAgentDefinition> | null>;
   createSwarm: (payload: {
     name: string;
@@ -498,6 +499,29 @@ export const useCustomAgents = (userAddress?: string): UseCustomAgentsReturn => 
     [userAddress]
   );
 
+  const resetCircuitBreaker = useCallback(
+    async (id: string): Promise<boolean> => {
+      if (!userAddress || userAddress === '0x0000000000000000000000000000000000000001') {
+        setError('Wallet not connected.');
+        return false;
+      }
+      try {
+        const res = await apiClient.resetCustomAgentCircuitBreaker(id, userAddress);
+        if (res?.success && res.data) {
+          setAgents((prev) =>
+            prev.map((a) => (a.id === id ? res.data : a))
+          );
+          return true;
+        }
+        return false;
+      } catch (err: any) {
+        setError(err.message || 'Failed to reset circuit breaker');
+        return false;
+      }
+    },
+    [userAddress]
+  );
+
   return {
     agents,
     swarms,
@@ -513,6 +537,7 @@ export const useCustomAgents = (userAddress?: string): UseCustomAgentsReturn => 
     deployAgent,
     pauseAgent,
     setAgentAllowance,
+    resetCircuitBreaker,
     generateFromPrompt,
     createSwarm,
     deleteSwarm,

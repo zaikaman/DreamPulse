@@ -1,6 +1,7 @@
 import crypto from 'crypto';
 import { supabase, isPersistenceEnabled } from '../config/supabase.js';
 import { generateStrategyWithGemini } from '../llm/client.js';
+import { customAgentEvaluator } from '../agents/custom-agent-evaluator.js';
 import type {
   CustomAgentDefinition,
   CustomSwarmDefinition,
@@ -406,6 +407,14 @@ export class CustomAgentService {
     };
   }
 
+  public attachCircuitBreakerMetadata(agent: CustomAgentDefinition): void {
+    const status = customAgentEvaluator.getCircuitBreakerStatus(agent.id);
+    agent.circuitBreakerHalted = status.isHalted;
+    agent.circuitBreakerRemainingSec = status.remainingSec;
+    agent.activeLossStreak = status.activeLossStreak;
+    agent.circuitBreakerReason = status.reason;
+  }
+
   /**
    * Retrieves all agents: Starter templates + user-specific created/deployed agents.
    * Ensures pristine templates are preserved and not polluted across wallets.
@@ -453,6 +462,11 @@ export class CustomAgentService {
         result.push(JSON.parse(JSON.stringify(t)));
         seenIds.add(t.id);
       }
+    }
+
+    // Enrich with live circuit breaker status
+    for (const agent of result) {
+      this.attachCircuitBreakerMetadata(agent);
     }
 
     return result;
@@ -641,6 +655,7 @@ export class CustomAgentService {
             updatedAt: data.updated_at,
           };
           this.inMemoryAgents.set(id, mapped);
+          this.attachCircuitBreakerMetadata(mapped);
           return mapped;
         }
       } catch {
@@ -649,10 +664,18 @@ export class CustomAgentService {
     }
 
     const inMem = this.inMemoryAgents.get(id);
-    if (inMem) return { ...inMem };
+    if (inMem) {
+      const copy = { ...inMem };
+      this.attachCircuitBreakerMetadata(copy);
+      return copy;
+    }
 
     const tpl = STARTER_TEMPLATES.find((t) => t.id === id);
-    if (tpl) return { ...tpl };
+    if (tpl) {
+      const copy = { ...tpl };
+      this.attachCircuitBreakerMetadata(copy);
+      return copy;
+    }
 
     return null;
   }
@@ -839,9 +862,19 @@ export class CustomAgentService {
         (a) => a.userAddress.toLowerCase() === cleanUser && a.name === existing.name && a.id !== id
       );
       if (alreadyCloned) {
+        const nowIso = new Date().toISOString();
+        const updatedRules: CustomAgentRules = {
+          ...alreadyCloned.rules,
+          risk: {
+            ...alreadyCloned.rules.risk,
+            circuitBreakerResetAt: nowIso,
+          },
+        };
+        customAgentEvaluator.resetCircuitBreaker(alreadyCloned.id);
         return this.updateCustomAgent(alreadyCloned.id, {
           isDeployed: true,
           isActive: true,
+          rules: updatedRules,
           ...(allowance !== undefined ? { allocatedAllowance: Math.max(0, allowance) } : {}),
         }, cleanUser);
       }
@@ -864,15 +897,62 @@ export class CustomAgentService {
       });
     }
 
+    const nowIso = new Date().toISOString();
+    const updatedRules: CustomAgentRules = {
+      ...existing.rules,
+      risk: {
+        ...existing.rules.risk,
+        circuitBreakerResetAt: nowIso,
+      },
+    };
+    customAgentEvaluator.resetCircuitBreaker(id);
+
     const updates: Partial<CustomAgentDefinition> = {
       isDeployed: true,
       isActive: true,
+      rules: updatedRules,
       ...(existing.userAddress === '0x0000000000000000000000000000000000000000' && userAddress
         ? { userAddress: cleanUser }
         : {}),
       ...(allowance !== undefined ? { allocatedAllowance: Math.max(0, allowance) } : {}),
     };
     return this.updateCustomAgent(id, updates, cleanUser);
+  }
+
+  public async resetCircuitBreaker(
+    id: string,
+    userAddress: string
+  ): Promise<CustomAgentDefinition | null> {
+    const cleanUser = userAddress.toLowerCase();
+    const existing = await this.getCustomAgentById(id);
+    if (!existing) return null;
+    if (
+      existing.userAddress.toLowerCase() !== cleanUser &&
+      existing.userAddress !== '0x0000000000000000000000000000000000000000'
+    ) {
+      throw new Error('Forbidden: agent does not belong to authenticated wallet');
+    }
+
+    const nowIso = new Date().toISOString();
+    const updatedRules: CustomAgentRules = {
+      ...existing.rules,
+      risk: {
+        ...existing.rules.risk,
+        circuitBreakerResetAt: nowIso,
+      },
+    };
+
+    customAgentEvaluator.resetCircuitBreaker(id);
+
+    return this.updateCustomAgent(
+      id,
+      {
+        rules: updatedRules,
+        isActive: true,
+        isDeployed: true,
+      },
+      cleanUser
+    );
   }
 
   public async recordTradeFill(agentId: string, tradeCost: number): Promise<void> {

@@ -282,30 +282,66 @@ export function calculateSeriesWilliamsR(candles: HistoricalCandle[], period = 1
   return ((highestHigh - currentClose) / diff) * -100;
 }
 
-export function calculateConsecutiveStreak(
-  orders: Array<{ isSettled?: boolean; pnl?: number; settledAt?: string; createdAt?: string }>
-): number {
+export interface StreakDetails {
+  streak: number;
+  lastLossTimestamp?: number;
+  lastSettledTimestamp?: number;
+}
+
+export function calculateStreakDetails(
+  orders: Array<{ isSettled?: boolean; pnl?: number; settledAt?: string; createdAt?: string }>,
+  sinceTimestamp?: number
+): StreakDetails {
   const settled = orders
-    .filter((o) => o.isSettled)
+    .filter((o) => {
+      if (!o.isSettled) return false;
+      if (sinceTimestamp !== undefined && sinceTimestamp > 0) {
+        const orderTime = new Date(o.settledAt || o.createdAt || 0).getTime();
+        if (orderTime < sinceTimestamp) return false;
+      }
+      return true;
+    })
     .sort((a, b) => new Date(a.settledAt || a.createdAt || 0).getTime() - new Date(b.settledAt || b.createdAt || 0).getTime());
 
   let currentStreak = 0;
+  let lastLossTimestamp: number | undefined;
+  let lastSettledTimestamp: number | undefined;
+
   for (const o of settled) {
     const pnl = o.pnl ?? 0;
+    const orderTime = new Date(o.settledAt || o.createdAt || 0).getTime();
+    lastSettledTimestamp = orderTime;
     if (Math.abs(pnl) < 0.01) continue;
     if (pnl > 0) {
       currentStreak = currentStreak >= 0 ? currentStreak + 1 : 1;
     } else if (pnl < 0) {
       currentStreak = currentStreak <= 0 ? currentStreak - 1 : -1;
+      lastLossTimestamp = orderTime;
     }
   }
-  return currentStreak;
+
+  return { streak: currentStreak, lastLossTimestamp, lastSettledTimestamp };
+}
+
+export function calculateConsecutiveStreak(
+  orders: Array<{ isSettled?: boolean; pnl?: number; settledAt?: string; createdAt?: string }>,
+  sinceTimestamp?: number
+): number {
+  return calculateStreakDetails(orders, sinceTimestamp).streak;
+}
+
+export interface AgentCircuitBreakerStatus {
+  isHalted: boolean;
+  remainingSec: number;
+  activeLossStreak: number;
+  reason?: string;
 }
 
 export class CustomAgentEvaluator {
   private candleCache = new Map<string, { candles: HistoricalCandle[]; fetchedAt: number }>();
   private lastTradeTimes = new Map<string, number>(); // key: agentId
   private activeLossStreaks = new Map<string, number>(); // key: agentId -> count of active consecutive losses
+  private circuitBreakerStates = new Map<string, AgentCircuitBreakerStatus>(); // key: agentId
 
   public getLastTradeTime(agentId: string): number {
     return this.lastTradeTimes.get(agentId) || 0;
@@ -321,6 +357,27 @@ export class CustomAgentEvaluator {
 
   public setActiveLossStreak(agentId: string, streak: number): void {
     this.activeLossStreaks.set(agentId, Math.max(0, streak));
+  }
+
+  public getCircuitBreakerStatus(agentId: string): AgentCircuitBreakerStatus {
+    return this.circuitBreakerStates.get(agentId) || {
+      isHalted: false,
+      remainingSec: 0,
+      activeLossStreak: this.getActiveLossStreak(agentId),
+    };
+  }
+
+  public setCircuitBreakerState(agentId: string, status: AgentCircuitBreakerStatus): void {
+    this.circuitBreakerStates.set(agentId, status);
+  }
+
+  public clearCircuitBreakerState(agentId: string): void {
+    this.circuitBreakerStates.delete(agentId);
+  }
+
+  public resetCircuitBreaker(agentId: string): void {
+    this.setActiveLossStreak(agentId, 0);
+    this.clearCircuitBreakerState(agentId);
   }
 
   /**
@@ -481,16 +538,25 @@ export class CustomAgentEvaluator {
       }
     }
 
-    // Consecutive Loss Circuit Breaker
+    // Consecutive Loss Circuit Breaker with Loss Cooldown & Rolling Session Cutoff
     const maxConsecutiveLosses = agent.rules?.risk?.maxConsecutiveLosses;
     let currentStreak = 0;
+    let lastLossTime: number | undefined;
+
     if (
       (maxConsecutiveLosses !== undefined && maxConsecutiveLosses > 0) ||
       (agent.rules?.risk?.martingaleMultiplier && agent.rules.risk.martingaleMultiplier > 1.0)
     ) {
+      // Respect explicit user circuit breaker reset timestamp & 24h rolling session cutoff
+      const resetAt = agent.rules?.risk?.circuitBreakerResetAt
+        ? new Date(agent.rules.risk.circuitBreakerResetAt).getTime()
+        : 0;
+      const rolling24hCutoff = now - 24 * 3600 * 1000;
+      const effectiveSince = Math.max(resetAt, rolling24hCutoff);
+
       let recentOrders: OrderExecution[] = [];
       try {
-        recentOrders = await orderService.getOrdersForCustomAgent(agent.id, agent.userAddress);
+        recentOrders = await orderService.getOrdersForCustomAgent(agent.id, agent.userAddress, effectiveSince);
       } catch {
         recentOrders = [];
       }
@@ -499,23 +565,50 @@ export class CustomAgentEvaluator {
         if (o.sessionId) return o.sessionId === agent.id;
         return true;
       });
-      currentStreak = calculateConsecutiveStreak(agentOrders);
+
+      const streakDetails = calculateStreakDetails(agentOrders, effectiveSince);
+      currentStreak = streakDetails.streak;
+      lastLossTime = streakDetails.lastLossTimestamp;
+
       // Track active loss streak in runtime state
       const activeLosses = currentStreak < 0 ? Math.abs(currentStreak) : 0;
       this.setActiveLossStreak(agent.id, activeLosses);
     }
 
     if (maxConsecutiveLosses !== undefined && maxConsecutiveLosses > 0 && currentStreak <= -maxConsecutiveLosses) {
-      return {
-        agentType: 'CUSTOM',
-        action: 'HOLD',
-        targetMarketId: market.id,
-        confidence: 0.5,
-        rationale: `Consecutive loss limit reached (streak: ${Math.abs(currentStreak)} >= ${maxConsecutiveLosses}). Halting to protect capital.`,
-      };
+      // Dynamic Loss Cooldown: Check if the cooldown period has elapsed since the last settled loss
+      const lossCooldownMins = agent.rules?.risk?.cooldownMinutes || 4;
+      const lossCooldownMs = lossCooldownMins * 60000;
+      const elapsedSinceLoss = now - (lastLossTime || now);
+
+      if (elapsedSinceLoss < lossCooldownMs) {
+        const remainingSec = Math.max(1, Math.ceil((lossCooldownMs - elapsedSinceLoss) / 1000));
+        const reason = `Consecutive loss limit reached (streak: ${Math.abs(currentStreak)} >= ${maxConsecutiveLosses}). In loss cooldown (${remainingSec}s remaining of ${lossCooldownMins}m). Halting to protect capital.`;
+        this.setCircuitBreakerState(agent.id, {
+          isHalted: true,
+          remainingSec,
+          activeLossStreak: Math.abs(currentStreak),
+          reason,
+        });
+
+        return {
+          agentType: 'CUSTOM',
+          action: 'HOLD',
+          targetMarketId: market.id,
+          confidence: 0.5,
+          rationale: reason,
+        };
+      } else {
+        // Loss cooldown duration has elapsed! Auto-recover and reset the active loss streak
+        this.setActiveLossStreak(agent.id, 0);
+        this.clearCircuitBreakerState(agent.id);
+        currentStreak = 0;
+      }
+    } else {
+      this.clearCircuitBreakerState(agent.id);
     }
 
-    // 4. Cooldown Risk Rule
+    // 4. Per-Trade Pacing Cooldown Rule
     const cooldownMins = agent.rules?.risk?.cooldownMinutes || 3;
     const lastTrade = this.getLastTradeTime(agent.id);
     if (now - lastTrade < cooldownMins * 60000) {
@@ -525,7 +618,7 @@ export class CustomAgentEvaluator {
         action: 'HOLD',
         targetMarketId: market.id,
         confidence: 0.5,
-        rationale: `Agent "${agent.name}" in cooldown (${waitSec}s remaining).`,
+        rationale: `Agent "${agent.name}" in trade pacing cooldown (${waitSec}s remaining).`,
       };
     }
 

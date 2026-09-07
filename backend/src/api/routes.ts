@@ -1683,6 +1683,26 @@ apiRouter.post('/agents/custom/:id/allowance', requireWalletAuth, async (req: Re
   }
 });
 
+apiRouter.post('/agents/custom/:id/reset-circuit-breaker', requireWalletAuth, async (req: Request, res: Response) => {
+  try {
+    const { userAddress } = req.body;
+    const isDummy =
+      !userAddress ||
+      userAddress === '0x0000000000000000000000000000000000000001' ||
+      userAddress === '0x0000000000000000000000000000000000000000';
+    if (isDummy) {
+      return res.status(400).json({ success: false, error: 'Valid user wallet address is required. Please connect your Web3 wallet.' });
+    }
+    const updated = await customAgentService.resetCircuitBreaker(req.params.id, userAddress);
+    if (!updated) {
+      return res.status(404).json({ success: false, error: 'Custom agent not found' });
+    }
+    res.json({ success: true, data: updated });
+  } catch (err: any) {
+    res.status(500).json({ success: false, error: err.message || 'Failed to reset circuit breaker' });
+  }
+});
+
 apiRouter.post('/agents/generate', async (req: Request, res: Response) => {
   try {
     const { prompt } = req.body;

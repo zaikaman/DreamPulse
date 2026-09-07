@@ -2054,7 +2054,9 @@ export const StrategyStudioView: React.FC<StrategyStudioViewProps> = ({
                     />
                   </div>
                   <div>
-                    <label className="text-[10px] font-mono text-muted-foreground block mb-1">Loss Cooldown (Mins)</label>
+                    <label className="text-[10px] font-mono text-muted-foreground block mb-1" title="Minutes to pause autonomous trading after hitting max consecutive losses before auto-resuming">
+                      Loss Cooldown (Mins)
+                    </label>
                     <input
                       type="number"
                       min={1}
@@ -2692,17 +2694,31 @@ export const StrategyStudioView: React.FC<StrategyStudioViewProps> = ({
                         </div>
                         <div className="flex items-center gap-1.5 flex-shrink-0">
                           {agent.isDeployed ? (
-                            <button
-                              type="button"
-                              onClick={() => {
-                                window.location.hash = '#cockpit';
-                              }}
-                              className="px-2 py-0.5 rounded-full text-[9px] font-mono font-bold bg-emerald-500/15 hover:bg-emerald-500/25 border border-emerald-500/40 text-emerald-400 flex items-center gap-1 cursor-pointer transition-colors"
-                              title="View in Fleet Command Cockpit"
-                            >
-                              <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
-                              <span>DEPLOYED IN FLEET</span>
-                            </button>
+                            agent.circuitBreakerHalted ? (
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  window.location.hash = '#cockpit';
+                                }}
+                                className="px-2 py-0.5 rounded-full text-[9px] font-mono font-bold bg-amber-500/15 hover:bg-amber-500/25 border border-amber-500/40 text-amber-400 flex items-center gap-1 cursor-pointer transition-colors"
+                                title={agent.circuitBreakerReason || "In loss cooldown circuit breaker. Click to view in Fleet Command Cockpit"}
+                              >
+                                <span className="w-1.5 h-1.5 rounded-full bg-amber-400 animate-pulse" />
+                                <span>COOLDOWN ({Math.max(1, Math.ceil((agent.circuitBreakerRemainingSec || 0) / 60))}m)</span>
+                              </button>
+                            ) : (
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  window.location.hash = '#cockpit';
+                                }}
+                                className="px-2 py-0.5 rounded-full text-[9px] font-mono font-bold bg-emerald-500/15 hover:bg-emerald-500/25 border border-emerald-500/40 text-emerald-400 flex items-center gap-1 cursor-pointer transition-colors"
+                                title="View in Fleet Command Cockpit"
+                              >
+                                <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+                                <span>DEPLOYED IN FLEET</span>
+                              </button>
+                            )
                           ) : (
                             <span className={cn(
                               "px-2 py-0.5 rounded-full text-[9px] font-mono font-semibold flex items-center gap-1",

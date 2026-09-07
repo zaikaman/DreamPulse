@@ -834,6 +834,23 @@ export class MultiAgentSwarmRunner {
         }
 
         if (!decision || decision.action === 'HOLD' || decision.action === 'CANCEL_QUOTE' || decision.confidence < 0.85) {
+          if (decision && decision.action === 'HOLD' && (decision.rationale?.includes('cooldown') || decision.rationale?.includes('loss limit'))) {
+            const lastThought = this.customAgentLastOppKeys.get(`cb:${agent.id}`) || 0;
+            if (now - lastThought > 30000) {
+              this.customAgentLastOppKeys.set(`cb:${agent.id}`, now);
+              telemetryWsGateway.broadcastDebugThought({
+                id: `custom-cb-${agent.id}-${now}`,
+                agent: 'CUSTOM',
+                marketId: market.id,
+                confidence: decision.confidence || 0.5,
+                action: 'HOLD',
+                thought: `[CUSTOM AGENT ${agent.name}] ${decision.rationale}`,
+                triggerEvent: 'CIRCUIT_BREAKER_GUARD',
+                isExecution: false,
+                timestamp: now,
+              });
+            }
+          }
           continue;
         }
 

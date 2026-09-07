@@ -75,6 +75,7 @@ export const PersonalSwarmCockpit: React.FC<PersonalSwarmCockpitProps> = ({
     deployAgent,
     pauseAgent,
     setAgentAllowance,
+    resetCircuitBreaker,
   } = useCustomAgents(userAddress);
 
 
@@ -172,6 +173,15 @@ export const PersonalSwarmCockpit: React.FC<PersonalSwarmCockpitProps> = ({
     try {
       await setAgentAllowance(agentId, tempAllowanceVal);
       setEditingAllowanceId(null);
+    } finally {
+      setCustomActionLoadingId(null);
+    }
+  };
+
+  const handleResetCircuitBreaker = async (agentId: string) => {
+    setCustomActionLoadingId(agentId);
+    try {
+      await resetCircuitBreaker(agentId);
     } finally {
       setCustomActionLoadingId(null);
     }
@@ -1087,13 +1097,24 @@ export const PersonalSwarmCockpit: React.FC<PersonalSwarmCockpitProps> = ({
                               {agent.name}
                             </span>
                             {agent.isDeployed ? (
-                              <Badge
-                                variant="outline"
-                                className="text-[9px] font-mono px-1.5 py-0 font-bold border border-emerald-500/30 text-emerald-400 bg-emerald-500/10 flex items-center gap-1"
-                              >
-                                <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
-                                <span>DEPLOYED</span>
-                              </Badge>
+                              agent.circuitBreakerHalted ? (
+                                <Badge
+                                  variant="outline"
+                                  className="text-[9px] font-mono px-1.5 py-0 font-bold border border-amber-500/40 text-amber-400 bg-amber-500/10 flex items-center gap-1"
+                                  title={agent.circuitBreakerReason || 'In loss cooldown circuit breaker'}
+                                >
+                                  <span className="w-1.5 h-1.5 rounded-full bg-amber-400 animate-pulse" />
+                                  <span>COOLDOWN ({Math.max(1, Math.ceil((agent.circuitBreakerRemainingSec || 0) / 60))}m)</span>
+                                </Badge>
+                              ) : (
+                                <Badge
+                                  variant="outline"
+                                  className="text-[9px] font-mono px-1.5 py-0 font-bold border border-emerald-500/30 text-emerald-400 bg-emerald-500/10 flex items-center gap-1"
+                                >
+                                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+                                  <span>DEPLOYED</span>
+                                </Badge>
+                              )
                             ) : (
                               <Badge
                                 variant="outline"
@@ -1112,29 +1133,62 @@ export const PersonalSwarmCockpit: React.FC<PersonalSwarmCockpitProps> = ({
                         </div>
                       </div>
 
-                      {/* 1-Click Deploy / Pause Button */}
-                      <button
-                        type="button"
-                        onClick={() => handleToggleCustomDeploy(agent)}
-                        disabled={customActionLoadingId === agent.id}
-                        className={cn(
-                          'inline-flex items-center gap-1 px-2.5 py-1 rounded-full border text-[11px] font-bold transition-all flex-shrink-0 cursor-pointer disabled:opacity-50 shadow-xs',
-                          agent.isDeployed
-                            ? 'bg-amber-500/15 hover:bg-amber-500/25 border-amber-500/40 text-amber-400'
-                            : 'bg-emerald-500/15 hover:bg-emerald-500/25 border-emerald-500/40 text-emerald-400'
+                      {/* 1-Click Deploy / Pause / Reset Actions */}
+                      <div className="flex items-center gap-1.5 flex-shrink-0">
+                        {agent.circuitBreakerHalted && (
+                          <button
+                            type="button"
+                            onClick={() => handleResetCircuitBreaker(agent.id)}
+                            disabled={customActionLoadingId === agent.id}
+                            className="inline-flex items-center gap-1 px-2 py-1 rounded-full border text-[10px] font-bold transition-all flex-shrink-0 cursor-pointer disabled:opacity-50 shadow-xs bg-amber-500/15 hover:bg-amber-500/25 border-amber-500/40 text-amber-300"
+                            title="Reset consecutive loss circuit breaker and resume trading"
+                          >
+                            {customActionLoadingId === agent.id ? (
+                              <Spinner size="xs" />
+                            ) : (
+                              <ArrowPathIcon className="w-3 h-3" />
+                            )}
+                            <span>RESET</span>
+                          </button>
                         )}
-                        title={agent.isDeployed ? 'Pause this agent' : 'Deploy agent to active fleet'}
-                      >
-                        {customActionLoadingId === agent.id ? (
-                          <Spinner size="xs" />
-                        ) : agent.isDeployed ? (
-                          <PauseIcon className="w-3 h-3" />
-                        ) : (
-                          <RocketLaunchIcon className="w-3 h-3" />
-                        )}
-                        <span>{agent.isDeployed ? 'PAUSE' : 'DEPLOY'}</span>
-                      </button>
+                        <button
+                          type="button"
+                          onClick={() => handleToggleCustomDeploy(agent)}
+                          disabled={customActionLoadingId === agent.id}
+                          className={cn(
+                            'inline-flex items-center gap-1 px-2.5 py-1 rounded-full border text-[11px] font-bold transition-all flex-shrink-0 cursor-pointer disabled:opacity-50 shadow-xs',
+                            agent.isDeployed
+                              ? 'bg-amber-500/15 hover:bg-amber-500/25 border-amber-500/40 text-amber-400'
+                              : 'bg-emerald-500/15 hover:bg-emerald-500/25 border-emerald-500/40 text-emerald-400'
+                          )}
+                          title={agent.isDeployed ? 'Pause this agent' : 'Deploy agent to active fleet'}
+                        >
+                          {customActionLoadingId === agent.id ? (
+                            <Spinner size="xs" />
+                          ) : agent.isDeployed ? (
+                            <PauseIcon className="w-3 h-3" />
+                          ) : (
+                            <RocketLaunchIcon className="w-3 h-3" />
+                          )}
+                          <span>{agent.isDeployed ? 'PAUSE' : 'DEPLOY'}</span>
+                        </button>
+                      </div>
                     </div>
+
+                    {/* Circuit Breaker Cooldown Notice */}
+                    {agent.circuitBreakerHalted && (
+                      <div className="p-2 rounded-lg bg-amber-500/10 border border-amber-500/25 flex items-start gap-2 text-amber-300 text-[11px] font-mono leading-tight">
+                        <ExclamationTriangleIcon className="w-3.5 h-3.5 flex-shrink-0 text-amber-400 mt-0.5" />
+                        <div className="flex-1 min-w-0">
+                          <span className="font-semibold text-amber-200">Circuit Breaker Active: </span>
+                          <span>{agent.circuitBreakerReason || 'Consecutive loss limit reached. In loss cooldown.'}</span>
+                        </div>
+                      </div>
+                    )}
+
+                    <p className="text-[11px] text-muted-foreground leading-relaxed line-clamp-2 m-0">
+                      {agent.description || 'Custom autonomous AST trading agent'}
+                    </p>
 
                     {/* Custom Agent Realized PnL & Performance KPI Grid */}
                     <div className="grid grid-cols-2 gap-2">

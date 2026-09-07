@@ -478,14 +478,37 @@ describe('SwarmRunner, CustomAgentEvaluator & Agent System Suite', () => {
 
       const decision = await evaluator.evaluate(streakAgent, context, mockSession);
       expect(decision.action).toBe('HOLD');
-      expect(decision.rationale).toBe(
-        'Consecutive loss limit reached (streak: 3 >= 3). Halting to protect capital.'
-      );
+      expect(decision.rationale).toContain('Consecutive loss limit reached (streak: 3 >= 3)');
+      expect(decision.rationale).toContain('In loss cooldown');
 
       // If there are only 2 losses and max is 3, circuit breaker should not trip
       vi.spyOn(orderService, 'getOrdersForCustomAgent').mockResolvedValue(losingOrders.slice(0, 2) as any);
       const decision2 = await evaluator.evaluate(streakAgent, context, mockSession);
       expect(decision2.rationale).not.toContain('Consecutive loss limit reached');
+
+      // Auto-recovery: If the last loss occurred longer ago than cooldownMinutes, it auto-resumes trading
+      const expiredLosingOrders = losingOrders.map((o) => ({
+        ...o,
+        settledAt: new Date(Date.now() - 500000).toISOString(), // 500s ago (> 3m cooldown)
+      }));
+      vi.spyOn(orderService, 'getOrdersForCustomAgent').mockResolvedValue(expiredLosingOrders as any);
+      const decisionRecovered = await evaluator.evaluate(streakAgent, context, mockSession);
+      expect(decisionRecovered.rationale).not.toContain('Consecutive loss limit reached');
+
+      // Reset Circuit Breaker: circuitBreakerResetAt ignores losses that occurred prior to reset
+      const resetAgent: CustomAgentDefinition = {
+        ...streakAgent,
+        rules: {
+          ...streakAgent.rules,
+          risk: {
+            ...streakAgent.rules.risk,
+            circuitBreakerResetAt: new Date(Date.now() - 10000).toISOString(), // Reset 10s ago
+          },
+        },
+      };
+      vi.spyOn(orderService, 'getOrdersForCustomAgent').mockResolvedValue(losingOrders as any);
+      const decisionReset = await evaluator.evaluate(resetAgent, context, mockSession);
+      expect(decisionReset.rationale).not.toContain('Consecutive loss limit reached');
     });
 
     it('does not apply Martingale multiplier on Trade #1 (0 losses) and scales lotSize only on active loss streak', async () => {
