@@ -167,6 +167,32 @@ describe('WebSocket Telemetry Server & Market Emitter Suite', () => {
     expect(sweepMsg).toBeDefined();
     expect(sweepMsg.claimedAmount).toBe('20.000000');
 
+    // Test unsubscription stops subsequent user events from being delivered
+    ws.send(
+      JSON.stringify({
+        action: 'unsubscribe',
+        channel: 'user_portfolio',
+        params: { userAddress: targetUser },
+      }),
+    );
+
+    await new Promise((r) => setTimeout(r, 50));
+    received.length = 0;
+
+    wsServer.broadcastOrderFilled({
+      userAddress: targetUser,
+      orderId: 'ord-456',
+      marketId: 'm-1',
+      outcome: 'NO',
+      direction: 'BUY',
+      price: 0.55,
+      lotSize: 10,
+    });
+
+    await new Promise((r) => setTimeout(r, 50));
+    const leakedOrder = received.find((m) => m.event === 'order_filled');
+    expect(leakedOrder).toBeUndefined();
+
     ws.close();
   });
 

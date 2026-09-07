@@ -3,6 +3,11 @@ import {
   Square3Stack3DIcon,
   QueueListIcon,
   ViewfinderCircleIcon,
+  ChartBarSquareIcon,
+  BoltIcon,
+  SparklesIcon,
+  ArrowTrendingUpIcon,
+  ArrowTrendingDownIcon,
 } from '@heroicons/react/24/outline';
 
 export interface SkeletonProps extends React.HTMLAttributes<HTMLDivElement> {
@@ -632,3 +637,184 @@ export const StrategyStudioSkeleton: React.FC<StrategyStudioSkeletonProps> = ({
     </div>
   );
 };
+
+/**
+ * Visual Settlement Event Contract Chart Skeleton (DreamDEX Pro style)
+ */
+export const EventContractChartSkeleton: React.FC = () => {
+  return (
+    <div className="terminal-panel rounded-xl border border-border/40 bg-background/80 backdrop-blur-md p-4 flex flex-col h-full overflow-hidden select-none">
+      {/* Top Header Bar */}
+      <div className="flex items-center justify-between gap-3 pb-3 border-b border-border/40 flex-wrap flex-shrink-0">
+        <div className="flex items-center gap-2.5">
+          <div className="w-7 h-7 rounded-lg bg-primary/10 border border-primary/20 flex items-center justify-center text-primary">
+            <ChartBarSquareIcon className="w-4 h-4" />
+          </div>
+          <div className="flex flex-col gap-1">
+            <div className="flex items-center gap-2">
+              <Skeleton variant="text" width={110} height={14} />
+              <Skeleton variant="badge" width={52} height={18} />
+            </div>
+            <Skeleton variant="text" width={160} height={10} />
+          </div>
+        </div>
+
+        <div className="flex items-center gap-2">
+          {/* Time range pill buttons skeleton */}
+          <div className="flex items-center gap-1 p-0.5 rounded-lg bg-secondary/40 border border-border/30">
+            {['RTC', '15m', '1h', 'ALL'].map((r) => (
+              <div key={r} className="px-2 py-1 rounded text-[10px] font-mono text-muted-foreground/50">
+                {r}
+              </div>
+            ))}
+          </div>
+          <Skeleton variant="rectangular" width={90} height={26} borderRadius={6} />
+        </div>
+      </div>
+
+      {/* Middle Interactive Canvas Skeleton */}
+      <div className="flex-1 min-h-[260px] relative my-3 rounded-lg border border-border/20 bg-secondary/5 overflow-hidden flex flex-col items-center justify-center">
+        {/* Subtle grid lines */}
+        <svg className="w-full h-full absolute inset-0 opacity-15" preserveAspectRatio="none">
+          <line x1="0" y1="25%" x2="100%" y2="25%" stroke="currentColor" strokeDasharray="4 4" />
+          <line x1="0" y1="50%" x2="100%" y2="50%" stroke="currentColor" strokeDasharray="4 4" />
+          <line x1="0" y1="75%" x2="100%" y2="75%" stroke="currentColor" strokeDasharray="4 4" />
+          <line x1="33%" y1="0" x2="33%" y2="100%" stroke="currentColor" strokeDasharray="4 4" />
+          <line x1="66%" y1="0" x2="66%" y2="100%" stroke="currentColor" strokeDasharray="4 4" />
+        </svg>
+
+        {/* Shimmer wave simulation path */}
+        <svg className="w-full h-24 absolute opacity-20 text-brand-cyan" viewBox="0 0 600 100" preserveAspectRatio="none">
+          <path
+            d="M0,50 Q100,20 200,60 T400,40 T600,50"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="2"
+            strokeDasharray="6 3"
+          />
+        </svg>
+
+        <div className="flex flex-col items-center gap-2.5 z-10 p-4 text-center">
+          <div className="w-9 h-9 rounded-xl bg-brand-cyan/10 border border-brand-cyan/30 flex items-center justify-center text-brand-cyan shadow-sm">
+            <Spinner size="sm" style={{ color: '#00e5ff' }} />
+          </div>
+          <div className="flex flex-col items-center gap-1">
+            <span className="text-xs font-mono font-semibold text-foreground/80">Connecting to Market Stream</span>
+            <span className="text-[10px] font-mono text-muted-foreground">Streaming real-time Somnia CLOB telemetry & implied probability...</span>
+          </div>
+        </div>
+      </div>
+
+      {/* Probability Bar Skeleton */}
+      <div className="flex flex-col gap-1.5 pt-2 border-t border-border/30 flex-shrink-0">
+        <div className="flex justify-between items-center text-[11px] font-mono">
+          <div className="flex items-center gap-1.5">
+            <span className="w-2 h-2 rounded-full bg-brand-cyan/50 animate-pulse" />
+            <Skeleton variant="text" width={60} height={11} />
+          </div>
+          <Skeleton variant="badge" width={75} height={16} />
+          <div className="flex items-center gap-1.5">
+            <Skeleton variant="text" width={60} height={11} />
+            <span className="w-2 h-2 rounded-full bg-rose-500/50 animate-pulse" />
+          </div>
+        </div>
+        <Skeleton variant="rectangular" width="100%" height={6} borderRadius={3} />
+      </div>
+    </div>
+  );
+};
+
+/**
+ * Trader Cockpit Order Ticket Skeleton (DreamDEX Pro style)
+ */
+export const TraderCockpitTicketSkeleton: React.FC = () => {
+  return (
+    <div className="p-4 flex flex-col h-full overflow-y-auto lg:overflow-hidden select-none gap-3.5 bg-background/80 backdrop-blur-md">
+      {/* Ticket Header & Expiry Tabs */}
+      <div className="flex items-center justify-between pb-3 border-b border-border/40 flex-shrink-0">
+        <div className="flex items-center gap-2">
+          <BoltIcon className="w-4 h-4 text-primary" />
+          <span className="text-xs font-bold font-mono text-foreground uppercase tracking-wider">Order Ticket</span>
+        </div>
+        <div className="flex items-center gap-1">
+          {['1m', '5m', '15m'].map((d) => (
+            <div key={d} className="px-2 py-0.5 rounded bg-secondary/50 border border-border/30 text-[10px] font-mono text-muted-foreground/60">
+              {d}
+            </div>
+          ))}
+        </div>
+      </div>
+
+      {/* Outcome Selection Buttons Skeleton (YES / NO) */}
+      <div className="grid grid-cols-2 gap-2 flex-shrink-0">
+        <div className="p-3 rounded-xl border border-emerald-500/20 bg-emerald-500/5 flex flex-col gap-1.5">
+          <div className="flex items-center justify-between">
+            <span className="text-xs font-bold font-mono text-emerald-400">UP / YES</span>
+            <ArrowTrendingUpIcon className="w-4 h-4 text-emerald-400" />
+          </div>
+          <Skeleton variant="text" width="60%" height={16} />
+          <Skeleton variant="text" width="40%" height={10} />
+        </div>
+
+        <div className="p-3 rounded-xl border border-rose-500/20 bg-rose-500/5 flex flex-col gap-1.5">
+          <div className="flex items-center justify-between">
+            <span className="text-xs font-bold font-mono text-rose-400">DOWN / NO</span>
+            <ArrowTrendingDownIcon className="w-4 h-4 text-rose-400" />
+          </div>
+          <Skeleton variant="text" width="60%" height={16} />
+          <Skeleton variant="text" width="40%" height={10} />
+        </div>
+      </div>
+
+      {/* Price & Size Inputs */}
+      <div className="flex flex-col gap-2.5 flex-1 justify-center">
+        <div className="flex flex-col gap-1">
+          <div className="flex justify-between items-center">
+            <Skeleton variant="text" width={70} height={11} />
+            <Skeleton variant="text" width={50} height={11} />
+          </div>
+          <Skeleton variant="rectangular" width="100%" height={38} borderRadius={8} />
+        </div>
+
+        <div className="flex flex-col gap-1">
+          <div className="flex justify-between items-center">
+            <Skeleton variant="text" width={80} height={11} />
+            <Skeleton variant="text" width={90} height={11} />
+          </div>
+          <Skeleton variant="rectangular" width="100%" height={38} borderRadius={8} />
+        </div>
+
+        {/* Percentage Chips */}
+        <div className="grid grid-cols-4 gap-1.5">
+          {['25%', '50%', '75%', 'MAX'].map((p) => (
+            <div key={p} className="py-1 rounded bg-secondary/30 border border-border/30 text-center text-[10px] font-mono text-muted-foreground/50">
+              {p}
+            </div>
+          ))}
+        </div>
+
+        {/* Payout Metric Card */}
+        <div className="p-2.5 rounded-lg border border-border/30 bg-secondary/20 flex flex-col gap-1.5 mt-1">
+          <div className="flex justify-between items-center">
+            <Skeleton variant="text" width={90} height={11} />
+            <Skeleton variant="text" width={60} height={11} />
+          </div>
+          <div className="flex justify-between items-center">
+            <Skeleton variant="text" width={80} height={11} />
+            <Skeleton variant="text" width={50} height={11} />
+          </div>
+        </div>
+      </div>
+
+      {/* Submit Order Action Button Skeleton */}
+      <div className="flex-shrink-0 pt-2 border-t border-border/30 flex flex-col gap-2">
+        <Skeleton variant="rectangular" width="100%" height={42} borderRadius={10} />
+        <div className="flex items-center justify-center gap-1.5">
+          <SparklesIcon className="w-3.5 h-3.5 text-muted-foreground/60" />
+          <Skeleton variant="text" width={140} height={10} />
+        </div>
+      </div>
+    </div>
+  );
+};
+

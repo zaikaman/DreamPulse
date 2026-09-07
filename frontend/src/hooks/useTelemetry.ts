@@ -38,11 +38,23 @@ export function useTelemetry(userAddress?: string) {
   const pendingDepthRef = useRef<Map<string, DepthUpdateData>>(new Map());
   const depthRafRef = useRef<number | null>(null);
 
-  // Sync user address with multiplexed client
+  // Sync user address with multiplexed client & clean up on disconnect / unmount
   useEffect(() => {
     if (userAddress) {
       telemetryClient.setUserAddress(userAddress);
+    } else {
+      telemetryClient.setUserAddress(null);
+      setRecentOrders([]);
+      setLastSweep(null);
+      setLastPnlUpdate(null);
     }
+
+    return () => {
+      telemetryClient.setUserAddress(null);
+      setRecentOrders([]);
+      setLastSweep(null);
+      setLastPnlUpdate(null);
+    };
   }, [userAddress]);
 
   const toggleDebugThoughts = useCallback((enable?: boolean) => {

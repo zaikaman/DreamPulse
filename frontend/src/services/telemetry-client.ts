@@ -424,6 +424,9 @@ class TelemetryClient {
           break;
 
         case 'order_filled':
+          // Guard: suppress stale account events if disconnected or address mismatch
+          if (!this.userAddress) break;
+          if (payload.userAddress && payload.userAddress.toLowerCase() !== this.userAddress) break;
           const orderFill: OrderFillData = {
             userAddress: payload.userAddress,
             orderId: payload.orderId,
@@ -440,6 +443,8 @@ class TelemetryClient {
           break;
 
         case 'order_cancelled':
+          if (!this.userAddress) break;
+          if (payload.userAddress && payload.userAddress.toLowerCase() !== this.userAddress) break;
           const orderCancelled: OrderCancelledData = {
             userAddress: payload.userAddress,
             orderId: payload.orderId,
@@ -451,6 +456,8 @@ class TelemetryClient {
           break;
 
         case 'sweep_completed':
+          if (!this.userAddress) break;
+          if (payload.userAddress && payload.userAddress.toLowerCase() !== this.userAddress) break;
           const sweep: SweepCompleteData = {
             userAddress: payload.userAddress,
             marketId: payload.marketId,
@@ -462,6 +469,7 @@ class TelemetryClient {
           break;
 
         case 'pnl_update':
+          if (!this.userAddress) break;
           const pnlData: PnlUpdateData = {
             updatedOrders: payload.updatedOrders || [],
             timestamp: payload.timestamp || now,
@@ -522,16 +530,29 @@ class TelemetryClient {
   public setUserAddress(address?: string | null): void {
     const formatted = address ? address.toLowerCase() : null;
     if (this.userAddress === formatted) return;
+    const prevAddress = this.userAddress;
     this.userAddress = formatted;
 
-    if (this.ws && this.ws.readyState === WebSocket.OPEN && formatted) {
-      this.ws.send(
-        JSON.stringify({
-          action: 'subscribe',
-          channel: 'user_portfolio',
-          params: { userAddress: formatted },
-        }),
-      );
+    if (this.ws && this.ws.readyState === WebSocket.OPEN) {
+      if (prevAddress) {
+        this.ws.send(
+          JSON.stringify({
+            action: 'unsubscribe',
+            channel: 'user_portfolio',
+            params: { userAddress: prevAddress },
+          }),
+        );
+      }
+
+      if (formatted) {
+        this.ws.send(
+          JSON.stringify({
+            action: 'subscribe',
+            channel: 'user_portfolio',
+            params: { userAddress: formatted },
+          }),
+        );
+      }
     }
   }
 

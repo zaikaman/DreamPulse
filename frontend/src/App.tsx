@@ -50,17 +50,6 @@ export const App: React.FC = () => {
 
   // Live data hooks
   const { markets, selectedMarket, selectedMarketId, setSelectedMarketId, loading: isMarketsLoading, refreshMarkets } = useMarkets();
-  const {
-    isConnected,
-    latencyMs,
-    liveTicks,
-    depthMap,
-    agentThoughts,
-    debugThoughts,
-    isDebugEnabled,
-    toggleDebugThoughts,
-  } = useTelemetry();
-
   // Session delegation and Web3 wallet hooks
   const {
     wallet,
@@ -86,6 +75,17 @@ export const App: React.FC = () => {
     refreshAllowanceStatus,
     clearError: clearSessionError,
   } = useSessionKey();
+
+  const {
+    isConnected,
+    latencyMs,
+    liveTicks,
+    depthMap,
+    agentThoughts,
+    debugThoughts,
+    isDebugEnabled,
+    toggleDebugThoughts,
+  } = useTelemetry(wallet.address || undefined);
 
   const {
     isOnboardingOpen,

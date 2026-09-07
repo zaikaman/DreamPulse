@@ -484,6 +484,7 @@ export function useSessionKey(): UseSessionKeyReturn {
     // Clear httpOnly JWT/session cookies (fire-and-forget; best-effort)
     void apiClient.logout().catch(() => {});
     void clearSupabaseAuthForLogout().catch(() => {});
+    telemetryClient.setUserAddress(null);
     lastValidatedWalletRef.current = null;
     setWallet({
       isConnected: false,

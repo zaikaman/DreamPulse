@@ -21,6 +21,7 @@ import { lazyWithRetry } from '../../lib/lazy-with-retry.js';
 const OrderBookDepth = lazyWithRetry(() => import('../OrderBookDepth.js').then((m) => ({ default: m.OrderBookDepth })) );
 import { ActivePositionsDrawer } from './ActivePositionsDrawer.js';
 import { cn } from '../../lib/utils.js';
+import { EventContractChartSkeleton, TraderCockpitTicketSkeleton, Skeleton } from '../ui/Skeleton.js';
 
 interface TradeTerminalViewProps {
   markets: Market[];
@@ -148,7 +149,7 @@ export const TradeTerminalView: React.FC<TradeTerminalViewProps> = ({
   return (
     <div className="flex flex-col w-full min-h-0 flex-1 overflow-y-auto xl:overflow-hidden terminal-panel-adaptive gap-2 select-none pb-4 lg:pb-0">
       {/* Top Pro DEX Navigation Bar */}
-      {market && (
+      {market ? (
         <div className="terminal-panel !overflow-visible relative z-30 p-2 px-3 flex items-center justify-between flex-wrap gap-2 flex-shrink-0 bg-background/70 border border-border/40 backdrop-blur-md rounded-xl">
           {/* Left Side: Asset Selector + Price + 24h Delta */}
           <div className="flex items-center gap-3">
@@ -335,6 +336,16 @@ export const TradeTerminalView: React.FC<TradeTerminalViewProps> = ({
             </button>
           </div>
         </div>
+      ) : (
+        <div className="terminal-panel !overflow-visible relative z-30 p-2 px-3 flex items-center justify-between flex-wrap gap-2 flex-shrink-0 bg-background/70 border border-border/40 backdrop-blur-md rounded-xl">
+          <div className="flex items-center gap-3">
+            <Skeleton variant="rectangular" width={110} height={28} borderRadius={8} />
+            <Skeleton variant="text" width={80} height={18} />
+          </div>
+          <div className="flex items-center gap-3">
+            <Skeleton variant="rectangular" width={140} height={28} borderRadius={8} />
+          </div>
+        </div>
       )}
 
       {/* Designated "Round Ended — Resolving On-Chain Outcome..." state banner */}
@@ -381,7 +392,7 @@ export const TradeTerminalView: React.FC<TradeTerminalViewProps> = ({
         </div>
       )}
 
-      {!market ? (
+      {!market && markets.length > 0 && !isLoading ? (
         <div className="flex-1 flex flex-col items-center justify-center p-8 text-center rounded-xl border border-border/40 bg-background/60 backdrop-blur-md gap-4 min-h-[400px]">
           <div className="w-12 h-12 rounded-2xl bg-brand-cyan/10 border border-brand-cyan/30 flex items-center justify-center text-brand-cyan shadow-sm">
             <SparklesIcon className="w-6 h-6" />
@@ -451,7 +462,9 @@ export const TradeTerminalView: React.FC<TradeTerminalViewProps> = ({
                   agentThoughts={agentThoughts}
                   onExpire={onRefreshMarkets}
                 />
-              ) : null}
+              ) : (
+                <EventContractChartSkeleton />
+              )}
             </div>
 
             {/* "Recently Settled - 15m" Horizontal Carousel Strip (Exactly like DreamDEX) */}
@@ -468,7 +481,7 @@ export const TradeTerminalView: React.FC<TradeTerminalViewProps> = ({
 
           {/* Right Column (4 cols = ~33%): DreamDEX Pro Order Ticket + AI Copilot */}
           <div className="lg:col-span-4 lg:h-full min-h-0 flex flex-col overflow-y-auto lg:overflow-hidden terminal-panel-adaptive rounded-xl border border-border/40 bg-background/80 backdrop-blur-md">
-            {market && (
+            {market ? (
               <TraderCockpitTicket
                 market={market}
                 liveTick={tick}
@@ -491,6 +504,8 @@ export const TradeTerminalView: React.FC<TradeTerminalViewProps> = ({
                   if (match) onSelectMarket(match.id);
                 }}
               />
+            ) : (
+              <TraderCockpitTicketSkeleton />
             )}
           </div>
         </div>

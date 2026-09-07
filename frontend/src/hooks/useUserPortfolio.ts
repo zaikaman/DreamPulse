@@ -92,7 +92,10 @@ export function useUserPortfolio(wallet?: WalletState): UseUserPortfolioReturn {
   }, [fetchPortfolio]);
 
   useEffect(() => {
-    if (!address) return;
+    if (!address) {
+      telemetryClient.setUserAddress(null);
+      return;
+    }
 
     // Initial fetch on mount / address change
     if (shouldPoll()) {

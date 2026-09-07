@@ -502,7 +502,11 @@ export class TelemetryWebSocketServer {
       if (message.channel) {
         sub.channels.delete(message.channel);
       }
-      // Allow clearing filters via params? keep simple: only channel unsubscribe
+      if (message.params?.userAddress) {
+        sub.userAddresses.delete(message.params.userAddress.toLowerCase());
+      } else if (message.channel === 'user_portfolio') {
+        sub.userAddresses.clear();
+      }
       this.sendToClient(ws, {
         event: 'unsubscribed',
         channel: message.channel,
