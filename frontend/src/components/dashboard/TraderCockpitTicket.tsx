@@ -41,6 +41,9 @@ interface TraderCockpitTicketProps {
   prefillData?: LadderPrefillData | null;
   wallet: WalletState;
   activeSession: SessionGrant | null;
+  cloneAddress?: string | null;
+  cloneBalance?: string;
+  onOpenTradingWallet?: (tab?: 'deposit' | 'withdraw') => void;
   agentThoughts?: AgentThoughtLog[];
   onOpenSessionModal?: () => void;
   onConnectWallet?: () => void;
@@ -71,6 +74,9 @@ export const TraderCockpitTicket: React.FC<TraderCockpitTicketProps> = ({
   prefillData,
   wallet,
   activeSession,
+  cloneAddress,
+  cloneBalance,
+  onOpenTradingWallet,
   agentThoughts = [],
   onOpenSessionModal,
   onConnectWallet,
@@ -203,11 +209,23 @@ export const TraderCockpitTicket: React.FC<TraderCockpitTicketProps> = ({
     }
   }, [outcome, defaultUpPrice, defaultDownPrice, isManualPrice, price, market.id]);
 
-  // Available collateral balance
-  const userBalance = useMemo(() => {
+  // Available trading collateral balance from isolated Smart Account Clone wallet
+  const tradingBalance = useMemo(() => {
+    if (typeof cloneBalance === 'string') {
+      const parsed = parseFloat(cloneBalance);
+      return isNaN(parsed) ? 0 : parsed;
+    }
+    const parsed = parseFloat(wallet.balanceCollateral);
+    return isNaN(parsed) ? 0 : parsed;
+  }, [cloneBalance, wallet.balanceCollateral]);
+
+  // Connected EOA wallet collateral balance
+  const walletCollateralBalance = useMemo(() => {
     const parsed = parseFloat(wallet.balanceCollateral);
     return isNaN(parsed) ? 0 : parsed;
   }, [wallet.balanceCollateral]);
+
+  const userBalance = tradingBalance;
 
   // Numeric amount parsed from user string input
   const numericAmount = useMemo(() => {
@@ -330,6 +348,13 @@ export const TraderCockpitTicket: React.FC<TraderCockpitTicketProps> = ({
 
     if (!calculations || calculations.lotSize <= 0 || price === null || price <= 0) {
       setExecutionError('No liquidity available in orderbook. Select a price from the ladder to place a limit order.');
+      return;
+    }
+
+    if (activeSession && activeSession.isActive && calculations.totalCost > tradingBalance) {
+      setExecutionError(
+        `Insufficient Smart Account balance ($${tradingBalance.toFixed(2)} available, $${calculations.totalCost.toFixed(2)} required). Please deposit funds into your Trading Account.`
+      );
       return;
     }
 
@@ -555,16 +580,16 @@ export const TraderCockpitTicket: React.FC<TraderCockpitTicketProps> = ({
           <div className="flex items-center gap-1">
             <span className="text-[10px]">
               {sizingMode === 'COLLATERAL'
-                ? `Max: $${userBalance.toFixed(2)}`
-                : `Max: ${Math.floor(userBalance / (calculations?.validPrice || 0.5))} sh`}
+                ? `Max: $${tradingBalance.toFixed(2)}`
+                : `Max: ${Math.floor(tradingBalance / (calculations?.validPrice || 0.5))} sh`}
             </span>
             <button
               type="button"
               onClick={() => {
                 if (sizingMode === 'COLLATERAL') {
-                  setAmountInput(userBalance > 0 ? userBalance.toFixed(2) : '10');
+                  setAmountInput(tradingBalance > 0 ? tradingBalance.toFixed(2) : '0');
                 } else {
-                  const maxSh = Math.max(1, Math.floor(userBalance / (calculations?.validPrice || 0.5)));
+                  const maxSh = Math.max(0, Math.floor(tradingBalance / (calculations?.validPrice || 0.5)));
                   setAmountInput(maxSh.toString());
                 }
               }}
@@ -977,25 +1002,48 @@ export const TraderCockpitTicket: React.FC<TraderCockpitTicketProps> = ({
       {/* 6. Account Balance Section */}
       <div className="p-2.5 rounded-xl bg-secondary/10 border border-border/20 text-[11px] space-y-1 mb-3 flex-shrink-0">
         <div className="flex items-center justify-between font-bold text-foreground">
-          <span>Account</span>
-          {Number(wallet.balanceCollateral) < 10 && (
+          <div className="flex items-center gap-1 min-w-0">
+            <span>Smart Trading Account</span>
+            {cloneAddress && (
+              <span className="text-[9px] font-mono text-muted-foreground font-normal truncate" title={`Smart Account Clone: ${cloneAddress}`}>
+                ({cloneAddress.slice(0, 6)}...{cloneAddress.slice(-4)})
+              </span>
+            )}
+          </div>
+          {onOpenTradingWallet && (
             <button
               type="button"
-              disabled={isFauceting}
-              onClick={handleClaimFaucet}
-              className="text-[9px] text-brand-cyan hover:underline font-normal cursor-pointer"
+              onClick={() => onOpenTradingWallet('deposit')}
+              className="text-[10px] text-brand-cyan hover:underline font-semibold cursor-pointer shrink-0"
+              title="Deposit funds into your isolated Smart Account"
             >
-              {isFauceting ? 'Claiming...' : '+ Get TestUSDC'}
+              + Deposit Funds
             </button>
           )}
         </div>
         <div className="flex items-center justify-between text-muted-foreground">
-          <span>tUSDC</span>
-          <span className="font-bold text-foreground">{userBalance.toFixed(2)}</span>
+          <span>Smart Account (tUSDC)</span>
+          <span className="font-bold text-foreground tabular-num">${tradingBalance.toFixed(2)}</span>
         </div>
         <div className="flex items-center justify-between text-muted-foreground">
-          <span>STT</span>
-          <span>{wallet.balanceSTT || '0.000'}</span>
+          <div className="flex items-center gap-1.5">
+            <span>User Wallet (tUSDC)</span>
+            {walletCollateralBalance < 10 && (
+              <button
+                type="button"
+                disabled={isFauceting}
+                onClick={handleClaimFaucet}
+                className="text-[9px] text-brand-cyan hover:underline font-normal cursor-pointer"
+              >
+                {isFauceting ? 'Claiming...' : '+ Get TestUSDC'}
+              </button>
+            )}
+          </div>
+          <span className="tabular-num">${walletCollateralBalance.toFixed(2)}</span>
+        </div>
+        <div className="flex items-center justify-between text-muted-foreground">
+          <span>Native Gas (STT)</span>
+          <span className="tabular-num">{wallet.balanceSTT || '0.000'}</span>
         </div>
         <div className="flex items-center justify-between text-muted-foreground pt-1 border-t border-border/20 text-[10px]">
           <span>Execution Path</span>
@@ -1026,6 +1074,26 @@ export const TraderCockpitTicket: React.FC<TraderCockpitTicketProps> = ({
         <div className="p-2.5 mb-3 rounded-lg bg-[#ff3366]/10 border border-[#ff3366]/30 text-[#ff3366] text-xs flex items-start gap-2">
           <ExclamationTriangleIcon className="w-4 h-4 flex-shrink-0 mt-0.5" />
           <span className="leading-snug">{executionError}</span>
+        </div>
+      )}
+
+      {/* Unfunded Smart Account Deposit Helper Banner */}
+      {wallet.isConnected && activeSession?.isActive && calculations && calculations.totalCost > tradingBalance && (
+        <div className="p-2.5 mb-3 rounded-lg bg-brand-cyan/10 border border-brand-cyan/30 text-[11px] flex items-center justify-between gap-2">
+          <span className="text-brand-cyan leading-tight">
+            {tradingBalance === 0
+              ? 'Smart Account has $0.00. Deposit tUSDC to execute gasless trades.'
+              : `Need $${(calculations.totalCost - tradingBalance).toFixed(2)} more in Smart Account for this order.`}
+          </span>
+          {onOpenTradingWallet && (
+            <button
+              type="button"
+              onClick={() => onOpenTradingWallet('deposit')}
+              className="px-2.5 py-1 rounded-md bg-brand-cyan text-background font-bold text-[10px] uppercase tracking-wide hover:brightness-110 shrink-0 cursor-pointer"
+            >
+              Deposit
+            </button>
+          )}
         </div>
       )}
 

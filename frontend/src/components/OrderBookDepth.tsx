@@ -26,6 +26,9 @@ interface OrderBookDepthProps {
   isLoading?: boolean;
   wallet?: WalletState;
   activeSession?: SessionGrant | null;
+  cloneAddress?: string | null;
+  cloneBalance?: string;
+  onOpenTradingWallet?: (tab?: 'deposit' | 'withdraw') => void;
   agentThoughts?: AgentThoughtLog[];
   onOpenSessionModal?: () => void;
   onConnectWallet?: () => void;
@@ -41,6 +44,9 @@ export const OrderBookDepth: React.FC<OrderBookDepthProps> = ({
   isLoading = false,
   wallet,
   activeSession = null,
+  cloneAddress,
+  cloneBalance,
+  onOpenTradingWallet,
   agentThoughts = [],
   onOpenSessionModal,
   onConnectWallet,
@@ -496,6 +502,9 @@ export const OrderBookDepth: React.FC<OrderBookDepthProps> = ({
               prefillData={prefillData}
               wallet={activeWallet}
               activeSession={activeSession}
+              cloneAddress={cloneAddress}
+              cloneBalance={cloneBalance}
+              onOpenTradingWallet={onOpenTradingWallet}
               agentThoughts={agentThoughts}
               onOpenSessionModal={onOpenSessionModal}
               onConnectWallet={onConnectWallet}

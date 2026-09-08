@@ -37,6 +37,9 @@ interface TradeTerminalViewProps {
   isLoading?: boolean;
   wallet: WalletState;
   activeSession?: SessionGrant | null;
+  cloneAddress?: string | null;
+  cloneBalance?: string;
+  onOpenTradingWallet?: (tab?: 'deposit' | 'withdraw') => void;
   agentThoughts?: AgentThoughtLog[];
   onOpenSessionModal?: () => void;
   onConnectWallet?: () => void;
@@ -63,6 +66,9 @@ export const TradeTerminalView: React.FC<TradeTerminalViewProps> = ({
   isLoading = false,
   wallet,
   activeSession,
+  cloneAddress,
+  cloneBalance,
+  onOpenTradingWallet,
   agentThoughts,
   onOpenSessionModal,
   onConnectWallet,
@@ -449,6 +455,9 @@ export const TradeTerminalView: React.FC<TradeTerminalViewProps> = ({
                       isLoading={isLoading}
                       wallet={wallet}
                       activeSession={activeSession}
+                      cloneAddress={cloneAddress}
+                      cloneBalance={cloneBalance}
+                      onOpenTradingWallet={onOpenTradingWallet}
                       agentThoughts={agentThoughts}
                       onOpenSessionModal={onOpenSessionModal}
                       onConnectWallet={onConnectWallet}
@@ -492,6 +501,9 @@ export const TradeTerminalView: React.FC<TradeTerminalViewProps> = ({
                 prefillData={prefillData}
                 wallet={wallet}
                 activeSession={activeSession ?? null}
+                cloneAddress={cloneAddress}
+                cloneBalance={cloneBalance}
+                onOpenTradingWallet={onOpenTradingWallet}
                 agentThoughts={agentThoughts}
                 onOpenSessionModal={onOpenSessionModal}
                 onConnectWallet={onConnectWallet}

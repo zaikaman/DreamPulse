@@ -361,6 +361,9 @@ export const App: React.FC = () => {
               isLoading={isMarketsLoading}
               wallet={wallet}
               activeSession={activeSession}
+              cloneBalance={cloneBalance}
+              cloneAddress={cloneAddress}
+              onOpenTradingWallet={handleOpenTradingWallet}
               agentThoughts={agentThoughts}
               onOpenSessionModal={handleOpenSessionModal}
               onConnectWallet={connectWallet}

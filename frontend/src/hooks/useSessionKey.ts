@@ -421,7 +421,12 @@ export function useSessionKey(): UseSessionKeyReturn {
             prev && prev.id === grant.id ? { ...grant, sessionKeyPrivateKey: prev.sessionKeyPrivateKey } : grant,
           );
           if (s.accountAddress && isAddress(s.accountAddress)) {
-            setCloneAddress(getAddress(s.accountAddress) as Address);
+            const resolved = getAddress(s.accountAddress) as Address;
+            setCloneAddress(resolved);
+            web3Service.getCloneBalance({ cloneAddress: resolved }).then((bal) => {
+              const balHuman = Number(bal) / 1e6;
+              setCloneBalance((Math.floor(balHuman * 100) / 100).toFixed(2));
+            }).catch(() => {});
           }
           return;
         }
