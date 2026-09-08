@@ -19,6 +19,14 @@ export default defineConfig({
       reporter: ['text', 'json', 'html'],
       include: ['src/**/*.ts'],
       exclude: ['node_modules/', 'dist/', 'tests/', 'src/types/**', 'src/scripts/**', 'vitest.config.ts'],
+      // Global regression floor (calibrated 2026-09-08; raise, never lower).
+      // Per-file money-path floors live in scripts/check-money-coverage.mjs.
+      thresholds: {
+        lines: 60,
+        branches: 58,
+        functions: 88,
+        statements: 60,
+      },
     },
     testTimeout: 35000,
   },

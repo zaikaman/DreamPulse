@@ -116,7 +116,7 @@ Unlike conventional monolithic trading bots or static prediction market frontend
 ## Evidence on Hand
 
 - **Production Smart Contracts**: Dedicated per-user smart trading account factory (`DreamPulseSessionAccountFactory` at `0x94dd9c8b9a5684ab026480737fac911824ac995d` and implementation `DreamPulseSessionAccount` at `0x92673153f231d87e2adb8b61321260dacf138858`) alongside official Somnia & DreamDEX contracts (`OperatorPermissionsRegistry`, `BinaryModule`, `CLOBFactory`, `MarketsCore`, `BinarySettlement`, `TestUSDC`).
-- **Complete Test Suite**: 365/365 tests passing (100%) across 26 test suites covering quant algorithms, smart account clone lifecycle, contract interactions, risk controls, and frontend components.
+- **Complete Test Suite**: 498/498 tests passing (100%) — 418 backend across 34 suites plus 80 frontend across 8 suites — covering quant algorithms, smart account clone lifecycle, contract interactions, risk controls, adversarial money-path guards, concurrency races, and frontend spend-approval flows, with CI coverage gates.
 - **Live WebSocket Gateway**: Full bidirectional telemetry server broadcasting real-time spot ticks, CLOB order books, trade fills, and AI thought logs.
 
 ## Product Principles

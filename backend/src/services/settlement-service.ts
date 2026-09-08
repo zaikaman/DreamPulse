@@ -255,6 +255,12 @@ export class SettlementService {
    * Records a sweep in memory, indexes it, and persists to Supabase.
    */
   public recordSweep(sweep: SettlementSweep, persist: boolean = true): void {
+    // IDEMPOTENCY GUARD: sweep records are immutable and every legitimate
+    // caller mints a fresh id. A re-recorded id is a retry/replay and must
+    // never double-count CONFIRMED totals that anti-double-claim checks rely on.
+    if (this.sweepsMap.has(sweep.id)) {
+      return;
+    }
     this.sweepsMap.set(sweep.id, sweep);
     this.sweeps.unshift(sweep);
     if (this.sweeps.length > 50000) {

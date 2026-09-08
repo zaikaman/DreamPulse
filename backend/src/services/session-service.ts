@@ -32,7 +32,9 @@ export async function verifyTxHashOnChain(
   txHash: string | undefined,
   expectedUser: Address,
 ): Promise<boolean> {
-  if (!txHash || typeof txHash !== 'string' || !txHash.startsWith('0x') || txHash.length !== 66) {
+  // Strict 32-byte hex gate (mirrors order-service): malformed proofs are
+  // rejected before any RPC call so junk input can never trigger chain reads.
+  if (!txHash || typeof txHash !== 'string' || !/^0x[0-9a-fA-F]{64}$/.test(txHash)) {
     return false;
   }
   try {
@@ -55,6 +57,17 @@ export async function verifyTxHashOnChain(
 
 export const UNLIMITED_AMOUNT = 1_000_000_000;
 
+/**
+ * Gate-time hold on daily cap headroom. Created atomically with the allowance
+ * check (no awaits in between), consumed with the actual fill cost once the
+ * trade executes. Stale entries self-heal via TTL — see RESERVATION_TTL_MS.
+ */
+export interface SpendReservation {
+  id: string;
+  amount: number;
+  createdAt: number;
+}
+
 export interface SessionRecord {
   id: string;
   userAddress: Address;
@@ -64,6 +77,8 @@ export interface SessionRecord {
   dailyVolumeCap: number;
   spentToday: number;
   lastSpendResetTimestamp: number;
+  /** In-memory gate-time spend holds. Never persisted; TTL-pruned on read. */
+  pendingReservations?: SpendReservation[];
   expiresAt: string;
   isActive: boolean;
   signature?: Hex;
@@ -1087,9 +1102,12 @@ export class SessionService {
       }
     }
 
-    // Daily volume cap guardrail (bypassed if dailyVolumeCap is unlimited)
-    if (session.dailyVolumeCap < UNLIMITED_AMOUNT && session.spentToday + tradeCost > session.dailyVolumeCap) {
-      const remaining = Math.max(0, session.dailyVolumeCap - session.spentToday);
+    // Daily volume cap guardrail (bypassed if dailyVolumeCap is unlimited).
+    // Live gate-time reservations count against headroom so concurrent
+    // executions cannot each pass this check and jointly overspend (TOCTOU).
+    const reserved = this.liveReservationTotal(session, now);
+    if (session.dailyVolumeCap < UNLIMITED_AMOUNT && session.spentToday + reserved + tradeCost > session.dailyVolumeCap) {
+      const remaining = Math.max(0, session.dailyVolumeCap - session.spentToday - reserved);
       return {
         allowed: false,
         reason: `Trade cost (${tradeCost.toFixed(2)} tUSDC) exceeds remaining daily volume cap of ${remaining.toFixed(2)} tUSDC (Spent: ${session.spentToday.toFixed(2)} / Cap: ${session.dailyVolumeCap.toFixed(2)} tUSDC)`,
@@ -1097,6 +1115,81 @@ export class SessionService {
     }
 
     return { allowed: true };
+  }
+
+  /**
+   * Fail-closed self-heal bound for un-consumed reservations. A reservation
+   * whose execution died (revert, crash, timeout) temporarily narrows cap
+   * headroom instead of leaking it forever; worst case it self-clears here.
+   * TTL comfortably exceeds worst-case on-chain placement latency.
+   */
+  private static readonly RESERVATION_TTL_MS = 15 * 60 * 1000;
+
+  private liveReservationTotal(session: SessionRecord, now: number): number {
+    const list = session.pendingReservations;
+    if (!list || list.length === 0) return 0;
+    const live = list.filter((r) => now - r.createdAt <= SessionService.RESERVATION_TTL_MS);
+    if (live.length !== list.length) session.pendingReservations = live;
+    return live.reduce((sum, r) => sum + r.amount, 0);
+  }
+
+  /**
+   * Atomically validates AND holds cap headroom. The check and the hold run
+   * synchronously with no awaits between them, so two concurrent callers
+   * cannot both pass and jointly overspend — the second sees the first's
+   * reservation. Prefer over validate-then-record across any await boundary.
+   */
+  public reserveTradeSpend(
+    sessionId: string,
+    tradeCost: number
+  ): { allowed: boolean; reason?: string; reservationId?: string } {
+    const check = this.validateTradeAllowance(sessionId, tradeCost);
+    if (!check.allowed) return check;
+    const session = this.sessions.get(sessionId);
+    // Validation may be externally stubbed while the row is absent (unit
+    // tests); with no row there is nothing to hold, so pass through.
+    if (!session) return check;
+    const reservation: SpendReservation = {
+      id: crypto.randomUUID(),
+      amount: tradeCost,
+      createdAt: Date.now(),
+    };
+    session.pendingReservations = [...(session.pendingReservations ?? []), reservation];
+    session.updatedAt = new Date().toISOString();
+    return { allowed: true, reservationId: reservation.id };
+  }
+
+  /**
+   * Explicitly releases a held reservation (e.g. caller aborted pre-execution).
+   * Failure paths that skip this still self-heal via TTL — fail-closed.
+   */
+  public releaseReservation(sessionId: string, reservationId: string): boolean {
+    const session = this.sessions.get(sessionId);
+    if (!session?.pendingReservations) return false;
+    const before = session.pendingReservations.length;
+    session.pendingReservations = session.pendingReservations.filter((r) => r.id !== reservationId);
+    return session.pendingReservations.length !== before;
+  }
+
+  /**
+   * Consumes a reservation with the ACTUAL fill cost once execution settles.
+   * Books stay truthful even when fills differ from estimates: the delta
+   * (positive or negative) lands in spentToday. Falls back to a plain record
+   * when no reservation exists (e.g. externally stubbed validation).
+   */
+  public consumeReservation(
+    sessionId: string,
+    reservationId: string | undefined,
+    actualCost: number,
+  ): boolean {
+    const session = this.sessions.get(sessionId);
+    if (!session) return false;
+    if (reservationId && session.pendingReservations) {
+      session.pendingReservations = session.pendingReservations.filter((r) => r.id !== reservationId);
+    }
+    session.spentToday = Number(Math.max(0, session.spentToday + actualCost).toFixed(4));
+    session.updatedAt = new Date().toISOString();
+    return true;
   }
 
   /**

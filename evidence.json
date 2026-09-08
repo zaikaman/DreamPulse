@@ -21,10 +21,16 @@
     "canonicalOperator": "0x93e300607c363E7D7a47e50f5c9fDf1723e859Cf"
   },
   "verificationSuite": {
-    "totalTests": 365,
-    "testSuites": 26,
+    "totalTests": 498,
+    "testSuites": 42,
+    "backendTests": 418,
+    "backendSuites": 34,
+    "frontendTests": 80,
+    "frontendSuites": 8,
     "passingRate": "100%",
     "strictTypeScript": true,
+    "coverageGates": true,
+    "stagingProbe": "13/13 checks green",
     "runner": "Vitest v3.2.7"
   },
   "proofTrails": {

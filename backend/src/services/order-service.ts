@@ -1230,13 +1230,18 @@ export class OrderService {
       } : {}),
     };
 
+    // Atomic gate-time hold: validate + reserve run synchronously so concurrent
+    // executions for the same session cannot jointly overspend the daily cap.
+    // Un-consumed holds self-heal via TTL — no release needed on reject paths.
+    let spendReservationId: string | undefined;
     if (adoptRegisteredSession) {
-      const riskAllowance = sessionService.validateTradeAllowance(effectiveSession.id, totalCost);
+      const riskAllowance = sessionService.reserveTradeSpend(effectiveSession.id, totalCost);
       if (!riskAllowance.allowed) {
         this.lastExecutionFailureReason = `Session risk limit reached: ${riskAllowance.reason}`;
         console.warn(`[OrderService] Trade rejected: ${riskAllowance.reason}`);
         return null;
       }
+      spendReservationId = riskAllowance.reservationId;
     } else {
       if (!effectiveSession.isActive) {
         this.lastExecutionFailureReason = 'Session is inactive. Please re-authorize your session.';
@@ -1706,9 +1711,15 @@ export class OrderService {
         : undefined,
     };
 
-    // Record spend against session now that order has executed (use actual filled cost)
+    // Settle the gate-time hold with the actual filled cost (partial fills free
+    // headroom, oversized fills land truthfully). Falls back to a plain record
+    // when the gate was externally stubbed and minted no reservation.
     if (adoptRegisteredSession && registeredSession) {
-      await sessionService.recordTradeSpend(effectiveSession.id, actualTotalCost);
+      if (spendReservationId) {
+        sessionService.consumeReservation(effectiveSession.id, spendReservationId, actualTotalCost);
+      } else {
+        await sessionService.recordTradeSpend(effectiveSession.id, actualTotalCost);
+      }
     } else {
       effectiveSession.spentToday = Number((effectiveSession.spentToday + actualTotalCost).toFixed(4));
     }
@@ -1857,6 +1868,12 @@ export class OrderService {
         throw new Error(`400 Replay detected: Transaction hash ${params.txHash} has already been submitted.`);
       }
 
+      // Reserve the in-flight slot SYNCHRONOUSLY before any await below.
+      // The DB replay check awaits I/O; without an upfront reservation two
+      // concurrent submits interleave past checks 1-2 and double-execute.
+      // Released in the finally block on every exit path.
+      this.inFlightTxHashes.add(normalizedTx);
+
       // Check 3: Database replay check
       if (this.isPersistenceEnabled()) {
         try {
@@ -1877,7 +1894,6 @@ export class OrderService {
         }
       }
 
-      this.inFlightTxHashes.add(normalizedTx);
       try {
         const market = marketService.getMarketById(params.marketId);
         const verification = await verifyUserOrderTxHashOnChain(params.txHash, params.userAddress, market, {

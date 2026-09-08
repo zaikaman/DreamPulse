@@ -57,6 +57,14 @@ jobs:
       - name: Run Backend Test Suite with V8 Coverage
         run: npm run test:coverage --workspace=dreampulse-backend
 
+      - name: Enforce Money-Path Coverage Gates
+        # NOTE: global thresholds in backend/vitest.config.ts are already
+        # enforced by the coverage run above (non-zero exit on breach).
+        run: npm run coverage:gate --workspace=dreampulse-backend
+
+      - name: Run Frontend Test Suite
+        run: npm run test --workspace=dreampulse-frontend
+
       - name: Upload Coverage Artifact
         uses: actions/upload-artifact@v4
         if: always()
@@ -100,3 +108,24 @@ jobs:
           name: frontend-dist
           path: frontend/dist/
           retention-days: 7
+
+  staging-readiness:
+    name: Testnet Readiness Probe (read-only, external RPC)
+    runs-on: ubuntu-latest
+    # Independent job: reports chain wiring health without blocking builds,
+    # since it depends on external Somnia RPC availability.
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run Staging Dry-Run Probe
+        run: npm run staging:dry-run --workspace=dreampulse-backend

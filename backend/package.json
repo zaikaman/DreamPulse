@@ -15,7 +15,9 @@
     "start": "node dist/index.js",
     "test": "vitest run",
     "test:coverage": "vitest run --coverage",
-    "test:watch": "vitest"
+    "coverage:gate": "node scripts/check-money-coverage.mjs",
+    "test:watch": "vitest",
+    "staging:dry-run": "tsx scripts/staging-dry-run.ts"
   },
   "dependencies": {
     "@somnia-chain/markets-sdk": "^0.29.0",
