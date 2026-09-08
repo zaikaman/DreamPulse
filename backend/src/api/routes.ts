@@ -19,6 +19,7 @@ import { aiGenerationRateLimiter } from '../middleware/rate-limiter.js';
 import { telemetryWsGateway } from '../websocket/server.js';
 import { supabase, isPersistenceEnabled } from '../config/supabase.js';
 import { getSessionAccount, getCloneAllowance, getCloneBalance, CLONE_ZERO_ADDRESS } from '../config/permissions-abi.js';
+import { timingSafeEqual } from 'node:crypto';
 
 export const apiRouter = Router();
 
@@ -824,19 +825,51 @@ apiRouter.get('/agents/detailed', async (_req: Request, res: Response) => {
   res.json(payload);
 });
 
+function getOperatorAdminSecret(): string | null {
+  const raw = process.env.OPERATOR_ADMIN_SECRET;
+  if (typeof raw !== 'string') return null;
+  const trimmed = raw.trim();
+  return trimmed.length > 0 ? trimmed : null;
+}
+
+function timingSafeSecretCompare(provided: string, expected: string): boolean {
+  const a = Buffer.from(provided, 'utf8');
+  const b = Buffer.from(expected, 'utf8');
+  if (a.length !== b.length) return false;
+  return timingSafeEqual(a, b);
+}
+
+// SEC-10 (fail-closed): global swarm policy mutations must never be
+// authorized by client-claimed addresses. When OPERATOR_ADMIN_SECRET is
+// configured, the caller must present it (x-operator-auth header preferred;
+// `Authorization: Bearer <secret>` honored for backwards compatibility).
+// When the secret is unset, only the cryptographically authenticated
+// operator wallet (req.walletAddress, verified upstream by requireWalletAuth
+// via JWT / EIP-712 / SIWE) is accepted. Missing auth or a non-operator
+// wallet is denied — there is no `!userAddress` bypass.
 function isOperatorAuthorized(req: Request): boolean {
-  const operatorSecret = process.env.OPERATOR_ADMIN_SECRET;
-  const authHeader = req.headers['x-operator-auth'] || req.headers['authorization'];
+  const operatorSecret = getOperatorAdminSecret();
 
   if (operatorSecret) {
-    return authHeader === `Bearer ${operatorSecret}` || authHeader === operatorSecret;
+    const rawHeader =
+      (req.headers['x-operator-auth'] as string | undefined) ??
+      (req.headers['authorization'] as string | undefined) ??
+      '';
+    if (typeof rawHeader !== 'string' || rawHeader.length === 0) return false;
+    const presented = rawHeader.startsWith('Bearer ')
+      ? rawHeader.slice('Bearer '.length).trim()
+      : rawHeader.trim();
+    if (!presented) return false;
+    return timingSafeSecretCompare(presented, operatorSecret);
   }
 
-  // In development / test environment without OPERATOR_ADMIN_SECRET configured:
-  const headerOp = (req.headers['x-operator-address'] as string) || (req.headers['x-operator-auth-address'] as string);
-  const userAddress = req.body?.operatorAddress || req.body?.userAddress || headerOp;
-
-  return !userAddress || (typeof userAddress === 'string' && userAddress.toLowerCase() === operatorAccount.address.toLowerCase());
+  const caller = req.walletAddress;
+  if (typeof caller !== 'string' || caller.length === 0) return false;
+  try {
+    return caller.toLowerCase() === operatorAccount.address.toLowerCase();
+  } catch {
+    return false;
+  }
 }
 
 apiRouter.post('/agents/toggle', requireWalletAuth, (req: Request, res: Response) => {

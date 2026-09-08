@@ -74,7 +74,16 @@ const envSchema = z.object({
   }, z.boolean()).default(false),
 
   // Security & Admin
-  OPERATOR_ADMIN_SECRET: z.string().optional(),
+  // SEC-10: shared secret gating global swarm policy mutations
+  // (POST /agents/toggle, POST /agents/config). Optional so local/test
+  // environments can rely on the fail-closed operator-wallet fallback in
+  // isOperatorAuthorized(); when set it must be non-trivial (timing-safe
+  // compared server-side). Empty/whitespace values are treated as unset.
+  OPERATOR_ADMIN_SECRET: z.preprocess((val) => {
+    if (typeof val !== 'string') return undefined;
+    const trimmed = val.trim().replace(/^["']|["']$/g, '').trim();
+    return trimmed.length > 0 ? trimmed : undefined;
+  }, z.string().min(16, 'OPERATOR_ADMIN_SECRET must be at least 16 characters when set').optional()),
   FRONTEND_ORIGIN: z.preprocess((val) => {
     if (typeof val !== 'string' || !val.trim() || val.trim() === '*') {
       return 'https://dreampulse.vercel.app';

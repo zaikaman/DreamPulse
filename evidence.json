@@ -29,50 +29,59 @@
   },
   "proofTrails": {
     "autonomousSwarmLimitFlow": {
-      "name": "Path A: Autonomous Swarm Execution (LIMIT Order & Settlement Redemption)",
-      "description": "Autonomous quantitative agent quotes a competitive LIMIT order on the Somnia CLOB, achieves matching engine fill, and executes settlement redemption upon winning contract maturity.",
+      "name": "Path A: Autonomous Oracle Swarm Execution (LIMIT Order & Settlement Redemption)",
+      "description": "Autonomous quantitative Oracle agent detects probability mispricing on the Somnia CLOB against external oracle fair value models, quotes a competitive LIMIT order, achieves matching engine fill, and executes settlement redemption upon winning contract maturity.",
       "delegation": {
         "model": "Separate Smart Trading Account (EIP-1167 Clone) with isolated collateral vault",
         "userAddress": "0x93e300607c363E7D7a47e50f5c9fDf1723e859Cf",
+        "smartAccountAddress": "0xf47A438556c918C498D92aD276609027974F08F7",
         "role": "Protocol Swarm Master Operator & Delegated Executor",
+        "sessionId": "9abd2780-340a-4470-9ebe-648bfbbc3819",
+        "operatorAddress": "0x93e300607c363E7D7a47e50f5c9fDf1723e859Cf",
+        "nonce": 0,
+        "onChainAuthorized": true,
+        "delegationTxHash": "0x6b7ec2b075f012daaf14b772bb2ec6a5c58bf674d56122f882ec6a86260a5bc7",
+        "delegationExplorerUrl": "https://shannon-explorer.somnia.network/tx/0x6b7ec2b075f012daaf14b772bb2ec6a5c58bf674d56122f882ec6a86260a5bc7",
         "withdrawalPrivileges": "NONE (Zero withdrawal permissions on all user session vaults; withdrawals strictly pinned to owner EOA)"
       },
       "strategy": {
-        "agentType": "Titan",
-        "strategy": "Mean-Reversion & Volatility Band Market Making",
-        "targetMarketId": "0x00000000000000000000000000000000000000000000000000000000000103cd",
-        "marketSequenceNumber": 66509,
-        "symbol": "BTC/USD 5m",
-        "rationale": "High-frequency quoting within Bollinger volatility band; limit bid placed to capture mean-reversion spread."
+        "agentType": "Oracle",
+        "strategy": "Oracle Mispricing & High-Probability Binary Contract Arbitrage",
+        "targetMarketId": "0x00000000000000000000000000000000000000000000000000000000000168dc",
+        "marketSequenceNumber": 92380,
+        "symbol": "ETH/USD 5m",
+        "strikePrice": 2492,
+        "settlementPrice": 2491.66,
+        "rationale": "Fair value model computed probability divergence against implied CLOB probability (fair value 0.3549 vs implied 0.39); limit order placed on NO outcome at 0.394."
       },
       "orderExecution": {
-        "orderId": "bb03a77b-65cd-4781-9f02-f43a2019fce3",
+        "orderId": "e75cd35b-0379-4694-b5a6-2e8aef0a3c68",
         "source": "SWARM",
         "orderType": "LIMIT",
         "direction": "BUY",
-        "outcome": "YES",
-        "price": 0.481,
-        "lotSize": 2,
-        "totalCost": 0.962,
+        "outcome": "NO",
+        "price": 0.394,
+        "lotSize": 6,
+        "totalCost": 2.364,
         "status": "FILLED",
-        "orderTxHash": "0x8afc4dbfb7dd19b4315d6e2e7adacfc9b45338e72d25ab113c8ee2a0aa7270fd",
-        "orderExplorerUrl": "https://shannon-explorer.somnia.network/tx/0x8afc4dbfb7dd19b4315d6e2e7adacfc9b45338e72d25ab113c8ee2a0aa7270fd",
-        "executedAt": "2026-09-01T15:15:00.656Z"
+        "orderTxHash": "0x673e6c0c562148bf5555eb26ab6a6b68de502b715e94a513e57df1c6b203f02d",
+        "orderExplorerUrl": "https://shannon-explorer.somnia.network/tx/0x673e6c0c562148bf5555eb26ab6a6b68de502b715e94a513e57df1c6b203f02d",
+        "executedAt": "2026-09-08T02:45:45.363Z"
       },
       "settlementRedemption": {
-        "sweepId": "414b1f4f-ea71-4bf0-a40c-3fe48afcd8df",
-        "winningOutcome": "YES",
-        "payoutAmount": 2.0,
-        "realizedNetPnl": 1.04,
+        "sweepId": "d95e49a1-f8d8-4d83-8928-4cd77bda6790",
+        "winningOutcome": "NO",
+        "payoutAmount": 6.0,
+        "realizedNetPnl": 3.64,
         "payoutToken": "tUSDC",
         "claimStatus": "CONFIRMED",
-        "settlementTxHash": "0xa8afe72e8cad7bfca6ae095c586446c5a7e43337586536d85e1b41bd155a06be",
-        "settlementExplorerUrl": "https://shannon-explorer.somnia.network/tx/0xa8afe72e8cad7bfca6ae095c586446c5a7e43337586536d85e1b41bd155a06be",
-        "settledAt": "2026-09-01T15:15:00.656Z"
+        "settlementTxHash": "0x49a8ec1c9875870bef22ff9d9b51d3843c02026bfe0398972f6c50824e1ab399",
+        "settlementExplorerUrl": "https://shannon-explorer.somnia.network/tx/0x49a8ec1c9875870bef22ff9d9b51d3843c02026bfe0398972f6c50824e1ab399",
+        "settledAt": "2026-09-08T02:50:04.707Z"
       },
       "uiImpact": {
         "websocketEvent": "sweep_completed",
-        "equityCurveDelta": "+1.04 tUSDC",
+        "equityCurveDelta": "+3.64 tUSDC",
         "soundChimeTriggered": true,
         "arenaLeaderboardUpdate": "Real-time Swarm Cockpit PnL and trade counter incremented"
       }
@@ -85,51 +94,128 @@
         "userAddress": "0x46cC04De981E603958e4612f877D72427c5b6544",
         "smartAccountFactory": "0x94dd9c8b9a5684ab026480737fac911824ac995d",
         "smartAccountImpl": "0x92673153f231d87e2adb8b61321260dacf138858",
-        "sessionId": "6e72fe0c-1e91-4a0b-96d4-03ccaedf7d67",
+        "smartAccountAddress": "0x0f4cec4A52Dd254D24E30e6690EB95878057f37B",
+        "sessionId": "16794eec-4aa9-45a3-ae99-c2aa2f9aca8b",
         "operatorAddress": "0x93e300607c363E7D7a47e50f5c9fDf1723e859Cf",
-        "nonce": 6,
+        "nonce": 19,
         "onChainAuthorized": true,
-        "delegationTxHash": "0xab2191086f101982e592e0fdd935f9a340db890b138f444cb2f99228a228d4aa",
-        "delegationExplorerUrl": "https://shannon-explorer.somnia.network/tx/0xab2191086f101982e592e0fdd935f9a340db890b138f444cb2f99228a228d4aa",
+        "delegationTxHash": "0xf7413248bdaea634db90e2d8a031fdeeb687549e8e460f3e1b2a32df30c260f4",
+        "delegationExplorerUrl": "https://shannon-explorer.somnia.network/tx/0xf7413248bdaea634db90e2d8a031fdeeb687549e8e460f3e1b2a32df30c260f4",
         "withdrawalPrivileges": "NONE (Withdrawals cryptographically restricted to owner EOA only; zero operator custody)"
       },
       "intent": {
         "terminalView": "TradeTerminalView",
-        "targetMarketId": "0x0000000000000000000000000000000000000000000000000000000000010534",
-        "marketSequenceNumber": 66868,
-        "symbol": "BTC/USD 5m",
+        "targetMarketId": "0x0000000000000000000000000000000000000000000000000000000000016907",
+        "marketSequenceNumber": 92423,
+        "symbol": "BTC/USD 15m",
+        "strikePrice": 78944,
+        "settlementPrice": 78921.16,
         "inputSource": "1-Click Depth Ladder Autofill + Custom Preset"
       },
       "orderExecution": {
-        "orderId": "ca752b99-2a07-45f4-9d4c-ddfee75264b1",
+        "orderId": "dd3da312-42e3-47aa-9ca6-acbddc27f110",
         "source": "TERMINAL",
         "agentType": "Manual",
         "orderType": "LIMIT",
         "direction": "BUY",
         "outcome": "NO",
-        "price": 0.87,
-        "lotSize": 11,
-        "totalCost": 9.57,
+        "price": 0.3,
+        "lotSize": 3,
+        "totalCost": 0.9,
         "status": "FILLED",
-        "orderTxHash": "0x898903e346f926fe533d1eab18bc5c9522f6043054c2702650f470de43a1fcd8",
-        "orderExplorerUrl": "https://shannon-explorer.somnia.network/tx/0x898903e346f926fe533d1eab18bc5c9522f6043054c2702650f470de43a1fcd8",
-        "placedAt": "2026-09-01T17:10:24.598Z"
+        "orderTxHash": "0x9f3d1aa4b14e272260b5600ba7d2a13d8e0f0a139716563e1fd4f14e6368c63a",
+        "orderExplorerUrl": "https://shannon-explorer.somnia.network/tx/0x9f3d1aa4b14e272260b5600ba7d2a13d8e0f0a139716563e1fd4f14e6368c63a",
+        "placedAt": "2026-09-08T03:10:32.892Z"
       },
       "settlementRedemption": {
-        "sweepId": "ad8ada64-ef98-4ab1-b001-b2e9de5b0c4c",
+        "sweepId": "b5716580-7e82-46f9-ac69-69f234eacee4",
         "winningOutcome": "NO",
-        "payoutAmount": 11.0,
-        "realizedNetPnl": 1.43,
+        "payoutAmount": 3.0,
+        "realizedNetPnl": 2.1,
         "payoutToken": "tUSDC",
         "claimStatus": "CONFIRMED",
-        "settlementTxHash": "0x72c6030f25d1e147dad98393018dd80e66fc7747c04d55f21ce6c3d2e0ce19fc",
-        "settlementExplorerUrl": "https://shannon-explorer.somnia.network/tx/0x72c6030f25d1e147dad98393018dd80e66fc7747c04d55f21ce6c3d2e0ce19fc",
-        "settledAt": "2026-09-01T17:15:17.521Z"
+        "settlementTxHash": "0x69c42476bc3d384488040afc13d814c84e172e79346853b65a8c154f3ab487fa",
+        "settlementExplorerUrl": "https://shannon-explorer.somnia.network/tx/0x69c42476bc3d384488040afc13d814c84e172e79346853b65a8c154f3ab487fa",
+        "settledAt": "2026-09-08T03:15:10.492Z"
       },
       "uiImpact": {
         "websocketEvent": "sweep_completed",
-        "equityCurveDelta": "+1.43 tUSDC",
+        "equityCurveDelta": "+2.10 tUSDC",
         "toastNotification": "Settlement claimed and credited to trading balance"
+      }
+    },
+    "customAgentLimitFlow": {
+      "name": "Path C: Custom User-Crafted Autonomous Agent Execution (Fast EMA Momentum Rider & Settlement Redemption)",
+      "description": "Custom user-designed quantitative agent autonomously monitors on-chain market technical signals, identifies an EMA golden cross with expanding directional velocity, dispatches non-custodial LIMIT orders via user session smart account, and captures automated settlement redemption on resolution.",
+      "delegation": {
+        "model": "Separate Smart Trading Account (EIP-1167 Clone) with isolated collateral vault",
+        "userAddress": "0x327e766EB317e5A3FA6dB30c0A5b9735Ad1aEdae",
+        "smartAccountFactory": "0x94dd9c8b9a5684ab026480737fac911824ac995d",
+        "smartAccountImpl": "0x92673153f231d87e2adb8b61321260dacf138858",
+        "smartAccountAddress": "0x4304D493231EcDd3831136Cb8Faa9b9d5e7B1BC9",
+        "sessionId": "39ed74f6-da9d-4e86-b5de-6c2c4c81789a",
+        "operatorAddress": "0x93e300607c363E7D7a47e50f5c9fDf1723e859Cf",
+        "nonce": 6,
+        "onChainAuthorized": true,
+        "delegationTxHash": "0xb68bdd5229d499607e32e150e329a8f6412bb92ad99bc5e7e6090a88305d6118",
+        "delegationExplorerUrl": "https://shannon-explorer.somnia.network/tx/0xb68bdd5229d499607e32e150e329a8f6412bb92ad99bc5e7e6090a88305d6118",
+        "withdrawalPrivileges": "NONE (Owner EOA retains sole withdrawal rights; zero operator custody)"
+      },
+      "customAgentProfile": {
+        "customAgentId": "40afca1d-715b-4d71-af10-137e633460f0",
+        "name": "Fast EMA Momentum Rider ETH",
+        "strategyType": "MOMENTUM",
+        "symbol": "ETH/USD",
+        "timeframe": "5m",
+        "rulesSummary": "EMA(9) Cross Above EMA(21) AND Price Drift > 0.0015; Cooldown: 4m; Fixed Stake: 20 USDC",
+        "lifetimePerformance": {
+          "pnl": 1813.18,
+          "winRate": "71.3%",
+          "tradesCount": 195,
+          "status": "ACTIVE / DEPLOYED"
+        }
+      },
+      "strategy": {
+        "agentType": "CUSTOM",
+        "customAgentName": "Fast EMA Momentum Rider ETH",
+        "strategy": "EMA 9/21 Golden Cross Trend Momentum Velocity",
+        "targetMarketId": "0x00000000000000000000000000000000000000000000000000000000000167e0",
+        "marketSequenceNumber": 92128,
+        "symbol": "ETH/USD 5m",
+        "strikePrice": 2499,
+        "settlementPrice": 2502.19,
+        "rationale": "Triggered on confirmed 9/21 EMA crossover on 5m timeframe with price drift velocity exceeding 0.15%; quotes competitive LIMIT BUY YES."
+      },
+      "orderExecution": {
+        "orderId": "4361ab7b-dd37-4a3e-8e43-7745cc5104fe",
+        "source": "SWARM",
+        "orderType": "LIMIT",
+        "direction": "BUY",
+        "outcome": "YES",
+        "price": 0.592,
+        "lotSize": 33,
+        "totalCost": 19.536,
+        "status": "FILLED",
+        "orderTxHash": "0x183ce28e791bd1246e8209c03c81f082d6247fcd73e35cdd3d21eeae1179387f",
+        "orderExplorerUrl": "https://shannon-explorer.somnia.network/tx/0x183ce28e791bd1246e8209c03c81f082d6247fcd73e35cdd3d21eeae1179387f",
+        "executedAt": "2026-09-08T01:22:19.824Z"
+      },
+      "settlementRedemption": {
+        "sweepId": "b37de5ac-dad9-485a-a742-30267b4f19e3",
+        "winningOutcome": "YES",
+        "payoutAmount": 33.0,
+        "realizedNetPnl": 13.46,
+        "payoutToken": "tUSDC",
+        "claimStatus": "CONFIRMED",
+        "settlementTxHash": "0x901047510056ee61c79970284da7cdc32931e15bd256d0f42dfac1e01e5b2d48",
+        "settlementExplorerUrl": "https://shannon-explorer.somnia.network/tx/0x901047510056ee61c79970284da7cdc32931e15bd256d0f42dfac1e01e5b2d48",
+        "settledAt": "2026-09-08T01:25:08.516Z"
+      },
+      "uiImpact": {
+        "websocketEvent": "sweep_completed",
+        "equityCurveDelta": "+13.46 tUSDC",
+        "soundChimeTriggered": true,
+        "arenaLeaderboardUpdate": "Custom Agent Leaderboard ranked with +1,813.18 tUSDC lifetime net profit"
       }
     }
   }
