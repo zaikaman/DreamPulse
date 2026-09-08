@@ -1,5 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import {
+  DEFAULT_MAX_TRADE_SIZE,
+  DEFAULT_DAILY_VOLUME_CAP,
   MAX_ALLOWED_TRADE_SIZE,
   MAX_ALLOWED_DAILY_CAP,
   MAX_SESSION_DURATION_DAYS,
@@ -15,6 +17,8 @@ import {
 
 describe('Contract Risk Cap Constants', () => {
   it('defines the open-ended risk cap constants correctly', () => {
+    expect(DEFAULT_MAX_TRADE_SIZE).toBe(500);
+    expect(DEFAULT_DAILY_VOLUME_CAP).toBe(5000);
     expect(MAX_ALLOWED_TRADE_SIZE).toBe(1_000_000);
     expect(MAX_ALLOWED_DAILY_CAP).toBe(10_000_000);
     expect(MAX_SESSION_DURATION_DAYS).toBe(365);

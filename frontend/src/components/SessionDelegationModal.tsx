@@ -27,8 +27,8 @@ import { SOMNIA_ADDRESSES } from '../services/web3.js';
 import { Spinner } from './ui/Spinner.js';
 import { parseWeb3Error } from '../lib/errorUtils.js';
 import {
-  MAX_ALLOWED_TRADE_SIZE,
-  MAX_ALLOWED_DAILY_CAP,
+  DEFAULT_MAX_TRADE_SIZE,
+  DEFAULT_DAILY_VOLUME_CAP,
   MAX_SESSION_DURATION_HOURS,
   formatCapAmount,
   formatSessionTimeRemaining,
@@ -120,8 +120,8 @@ export const SessionDelegationModal: React.FC<SessionDelegationModalProps> = ({
     onClearError();
     try {
       await onCreateSession({
-        maxTradeSize: MAX_ALLOWED_TRADE_SIZE,
-        dailyVolumeCap: MAX_ALLOWED_DAILY_CAP,
+        maxTradeSize: DEFAULT_MAX_TRADE_SIZE,
+        dailyVolumeCap: DEFAULT_DAILY_VOLUME_CAP,
         durationHours: MAX_SESSION_DURATION_HOURS,
         depositAmount: undefined,
         copyTradeEnabled: enableCopyTrading,

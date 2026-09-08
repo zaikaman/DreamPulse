@@ -1,3 +1,5 @@
+export const DEFAULT_MAX_TRADE_SIZE = 500; // $500 tUSDC default per trade
+export const DEFAULT_DAILY_VOLUME_CAP = 5000; // $5,000 tUSDC default per rolling 24h
 export const MAX_ALLOWED_TRADE_SIZE = 1_000_000; // $1,000,000 tUSDC (Matches open-ended contract ceiling)
 export const MAX_ALLOWED_DAILY_CAP = 10_000_000; // $10,000,000 tUSDC per rolling 24h
 export const MAX_SESSION_DURATION_DAYS = 365; // 365 Days default UI ceiling (contract supports up to 100 years)

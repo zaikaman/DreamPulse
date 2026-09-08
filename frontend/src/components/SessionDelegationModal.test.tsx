@@ -4,8 +4,8 @@ import { SessionDelegationModal } from './SessionDelegationModal.js';
 import type { SessionGrant } from '../types/index.js';
 import type { WalletState } from '../hooks/useSessionKey.js';
 import {
-  MAX_ALLOWED_TRADE_SIZE,
-  MAX_ALLOWED_DAILY_CAP,
+  DEFAULT_MAX_TRADE_SIZE,
+  DEFAULT_DAILY_VOLUME_CAP,
   MAX_SESSION_DURATION_HOURS,
 } from '../lib/sessionUtils.js';
 
@@ -106,8 +106,8 @@ describe('SessionDelegationModal (spend-approval surface)', () => {
 
     await waitFor(() => expect(props.onCreateSession).toHaveBeenCalledTimes(1));
     expect(props.onCreateSession).toHaveBeenCalledWith({
-      maxTradeSize: MAX_ALLOWED_TRADE_SIZE,
-      dailyVolumeCap: MAX_ALLOWED_DAILY_CAP,
+      maxTradeSize: DEFAULT_MAX_TRADE_SIZE,
+      dailyVolumeCap: DEFAULT_DAILY_VOLUME_CAP,
       durationHours: MAX_SESSION_DURATION_HOURS,
       depositAmount: undefined,
       copyTradeEnabled: false,

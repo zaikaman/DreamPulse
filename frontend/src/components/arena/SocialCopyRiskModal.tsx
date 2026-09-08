@@ -11,6 +11,8 @@ import { Spinner } from '../ui/Spinner.js';
 import { Button } from '../ui/button.js';
 import { cn } from '../../lib/utils.js';
 import {
+  DEFAULT_MAX_TRADE_SIZE,
+  DEFAULT_DAILY_VOLUME_CAP,
   MAX_ALLOWED_TRADE_SIZE,
   MAX_ALLOWED_DAILY_CAP,
 } from '../../lib/sessionUtils.js';
@@ -57,8 +59,8 @@ export const SocialCopyRiskModal: React.FC<SocialCopyRiskModalProps> = ({
   hasActiveSession = false,
   onOpenSessionModal,
 }) => {
-  const [maxTradeSize, setMaxTradeSize] = useState<number>(25);
-  const [dailyVolumeCap, setDailyVolumeCap] = useState<number>(250);
+  const [maxTradeSize, setMaxTradeSize] = useState<number>(DEFAULT_MAX_TRADE_SIZE);
+  const [dailyVolumeCap, setDailyVolumeCap] = useState<number>(DEFAULT_DAILY_VOLUME_CAP);
   const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
@@ -67,11 +69,11 @@ export const SocialCopyRiskModal: React.FC<SocialCopyRiskModalProps> = ({
     if (isOpen && trader) {
       setErrorMsg(null);
       if (existingConfig) {
-        setMaxTradeSize(Math.min(MAX_ALLOWED_TRADE_SIZE, existingConfig.maxTradeSize ?? 25));
-        setDailyVolumeCap(Math.min(MAX_ALLOWED_DAILY_CAP, existingConfig.dailyVolumeCap ?? 250));
+        setMaxTradeSize(Math.min(MAX_ALLOWED_TRADE_SIZE, existingConfig.maxTradeSize ?? DEFAULT_MAX_TRADE_SIZE));
+        setDailyVolumeCap(Math.min(MAX_ALLOWED_DAILY_CAP, existingConfig.dailyVolumeCap ?? DEFAULT_DAILY_VOLUME_CAP));
       } else {
-        setMaxTradeSize(25);
-        setDailyVolumeCap(250);
+        setMaxTradeSize(DEFAULT_MAX_TRADE_SIZE);
+        setDailyVolumeCap(DEFAULT_DAILY_VOLUME_CAP);
       }
     }
   }, [isOpen, trader, existingConfig]);

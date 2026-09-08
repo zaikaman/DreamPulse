@@ -11,6 +11,8 @@ import { Button } from './ui/button.js';
 import { Spinner } from './ui/Spinner.js';
 import type { SessionGrant } from '../types/index.js';
 import {
+  DEFAULT_MAX_TRADE_SIZE,
+  DEFAULT_DAILY_VOLUME_CAP,
   MAX_ALLOWED_TRADE_SIZE,
   MAX_ALLOWED_DAILY_CAP,
 } from '../lib/sessionUtils.js';
@@ -32,10 +34,10 @@ export const RiskManagementModal: React.FC<RiskManagementModalProps> = ({
   onUpdateRisk,
 }) => {
   const [maxTradeSize, setMaxTradeSize] = useState<number>(() =>
-    Math.min(MAX_ALLOWED_TRADE_SIZE, Math.max(1, activeSession?.maxTradeSize || 500))
+    Math.min(MAX_ALLOWED_TRADE_SIZE, Math.max(1, activeSession?.maxTradeSize || DEFAULT_MAX_TRADE_SIZE))
   );
   const [dailyVolumeCap, setDailyVolumeCap] = useState<number>(() =>
-    Math.min(MAX_ALLOWED_DAILY_CAP, Math.max(activeSession?.maxTradeSize || 500, activeSession?.dailyVolumeCap || 5000))
+    Math.min(MAX_ALLOWED_DAILY_CAP, Math.max(activeSession?.maxTradeSize || DEFAULT_MAX_TRADE_SIZE, activeSession?.dailyVolumeCap || DEFAULT_DAILY_VOLUME_CAP))
   );
   const [validationError, setValidationError] = useState<string | null>(null);
   const [isSaving, setIsSaving] = useState<boolean>(false);

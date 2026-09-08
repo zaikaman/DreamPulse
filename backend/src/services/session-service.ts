@@ -55,6 +55,8 @@ export async function verifyTxHashOnChain(
   }
 }
 
+export const DEFAULT_MAX_TRADE_SIZE = 500; // 500 tUSDC default per trade
+export const DEFAULT_DAILY_VOLUME_CAP = 5000; // 5,000 tUSDC default per rolling 24h
 export const MAX_ALLOWED_TRADE_SIZE = 1_000_000_000; // Open-ended ceiling (matches contract MAX_ALLOWED_TRADE_SIZE)
 export const MAX_ALLOWED_DAILY_CAP = 1_000_000_000; // Open-ended ceiling (matches contract MAX_ALLOWED_DAILY_CAP)
 export const MAX_SESSION_DURATION_SEC = 36500 * 24 * 3600; // 100 years in seconds (matches contract MAX_SESSION_DURATION)
@@ -422,8 +424,8 @@ export class SessionService {
     }
     const normalizedOperator = getAddress(rawOperator) as Address;
 
-    const maxTradeSize = Number(params.maxTradeSize);
-    const dailyVolumeCap = Number(params.dailyVolumeCap);
+    const maxTradeSize = params.maxTradeSize !== undefined ? Number(params.maxTradeSize) : DEFAULT_MAX_TRADE_SIZE;
+    const dailyVolumeCap = params.dailyVolumeCap !== undefined ? Number(params.dailyVolumeCap) : DEFAULT_DAILY_VOLUME_CAP;
     if (isNaN(maxTradeSize) || maxTradeSize <= 0) {
       throw new Error(`Invalid maxTradeSize: must be positive number`);
     }
