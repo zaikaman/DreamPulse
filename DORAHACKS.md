@@ -8,6 +8,7 @@ DreamPulse is an institutional-grade cyber-financial trading ecosystem for Dream
 - **Auditable live cockpit:** [Swarm Cockpit](https://dreampulse-ai.vercel.app/#cockpit)
 - **Live raw ledger (.txt):** [dreampulse-backend-2aa35c1a9af1.herokuapp.com/transactions.txt](https://dreampulse-backend-2aa35c1a9af1.herokuapp.com/transactions.txt)
 - **Demo video:** [2 minutes 55 seconds on YouTube](https://www.youtube.com/watch?v=Ld62mpVEb0U)
+- **SDK developer feedback report:** [`FEEDBACK.md`](https://github.com/zaikaman/DreamPulse/blob/main/FEEDBACK.md)
 - **Machine-readable evidence:** [`evidence.json`](https://github.com/zaikaman/DreamPulse/blob/main/evidence.json)
 - **Repository:** [github.com/zaikaman/DreamPulse](https://github.com/zaikaman/DreamPulse)
 - **Somnia Shannon explorer:** [shannon-explorer.somnia.network](https://shannon-explorer.somnia.network)
@@ -149,17 +150,6 @@ To provide seamless, machine-readable, and zero-friction verification for hackat
   - **Live Aggregates Header:** Real-time summary displaying total executions, total traded volume, overall win rate, net realized profits, and individual agent execution breakdowns across Volt, Oracle, Titan, and Sweeper.
   - **Sub-5ms Fast-Path Latency:** Built with non-blocking background settlement sync and sub-second in-memory caching to eliminate RPC bottlenecks and stream plain text instantly.
   - **Comprehensive Pagination:** Direct order traversal via query parameters (`?page=1&limit=50`, `?page=2`, etc.) with retro-terminal alignment, order IDs, sides, token directions (YES/NO), prices, stakes, status, and direct Somnia Shannon block explorer transaction links.
-
-## SDK Developer Feedback
-
-Building DreamPulse against the Somnia Markets SDK surfaced several useful observations:
-
-- Somnia’s fast finality and RPC performance support high-frequency on-chain loops.
-- The deterministic CLOB and viem interoperability make order execution straightforward.
-- Rolling markets create a multi-pool approval burden and risk to primary wallets; DreamPulse solves this with a dedicated EIP-1167 Smart Trading Account clone per user, executing trades as itself with ephemeral session keys and strictly owner-pinned withdrawals.
-- Non-matching IOC orders require careful depth checks and quantized crossing prices.
-- Concurrent agents require serialized nonce management, reset handling, and exponential backoff.
-- Newly created markets can appear in the indexer several seconds after on-chain activation, so DreamPulse cross-checks indexer data against direct contract reads.
 
 ## API and Telemetry
 

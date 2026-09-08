@@ -31,6 +31,7 @@
 * **DreamPulse Smart Account V2 (Implementation, current)**: [`0xbb61bcec697edd6e6aed54a7d7d9a85fd5a899b7`](https://shannon-explorer.somnia.network/address/0xbb61bcec697edd6e6aed54a7d7d9a85fd5a899b7)
 * **Somnia `OperatorPermissionsRegistry` (Native Protocol)**: [`0x15C7e8CE38F021c5b45d098AaD788f63090bF20A`](https://shannon-explorer.somnia.network/address/0x15C7e8CE38F021c5b45d098AaD788f63090bF20A)
 * **Machine-Readable Evidence Artifact**: [`evidence.json`](./evidence.json) *(Full audit trail, on-chain tx hashes, and JSON schemas)*
+* **SDK & Protocol Developer Feedback Report**: [`FEEDBACK.md`](./FEEDBACK.md) *(In-depth technical feedback, SDK friction points, edge-case analysis, and recommendations for DreamDEX & Somnia teams)*
 * **Automated Verification Suite**: `npm run verify` *(507/507 Tests Passing — 422 backend + 85 frontend, 0 Typecheck Errors, CI coverage gates + testnet staging probe green)*
 
 ---
@@ -53,14 +54,13 @@
 15. [Minimalist Onboarding & First-Run Activation Flow](#minimalist-onboarding--first-run-activation-flow)
 16. [Smart Contracts & Protocol Addresses](#smart-contracts--protocol-addresses)
 17. [Hackathon Judging Criteria Alignment](#hackathon-judging-criteria-alignment)
-18. [Developer Feedback Report (Somnia & DreamDEX SDK)](#developer-feedback-report-somnia--dreamdex-sdk)
-19. [System Architecture & Execution Workflows](#system-architecture--execution-workflows)
-20. [API & WebSocket Telemetry Protocol](#api--websocket-telemetry-protocol)
-21. [Local Installation & Development Guide](#local-installation--development-guide)
-22. [Verification & Test Suite (507 Passing: 422 Backend + 85 Frontend)](#verification--test-suite-507-passing-422-backend--85-frontend)
-23. [2–3 Minute Demo Video Walkthrough](#23-minute-demo-video-walkthrough)
-24. [Future Roadmap Beyond Hackathon](#future-roadmap-beyond-hackathon)
-25. [License & Acknowledgements](#license--acknowledgements)
+18. [System Architecture & Execution Workflows](#system-architecture--execution-workflows)
+19. [API & WebSocket Telemetry Protocol](#api--websocket-telemetry-protocol)
+20. [Local Installation & Development Guide](#local-installation--development-guide)
+21. [Verification & Test Suite (507 Passing: 422 Backend + 85 Frontend)](#verification--test-suite-507-passing-422-backend--85-frontend)
+22. [2–3 Minute Demo Video Walkthrough](#23-minute-demo-video-walkthrough)
+23. [Future Roadmap Beyond Hackathon](#future-roadmap-beyond-hackathon)
+24. [License & Acknowledgements](#license--acknowledgements)
 
 ---
 
@@ -588,37 +588,6 @@ DreamPulse integrates directly with the official, audited protocol infrastructur
 | **Technical Implementation (25%)** | • Deep integration with `@somnia-chain/markets-sdk` across orders, depth ladders, cancellations, and settlement redemptions.<br />• **Battle-Tested On-Chain Performance**: Autonomous multi-agent pipeline executing with a sub-100ms loop and 1ms average evaluation latency on Somnia Shannon.<br />• 507/507 unit and integration tests passing (422 backend across 35 suites + 85 frontend across 9 suites) with strict TypeScript compilation (0 errors), CI-enforced money-path coverage gates, and a read-only testnet staging probe.<br />• Deployed dedicated per-user EIP-1167 Smart Trading Account clones (`DreamPulseSessionAccountFactory`) with on-chain risk policies and owner-pinned withdrawals, fully isolating trading collateral from primary wallets.<br />• Dynamic `NonceManager` handling sub-second on-chain concurrency and automated revert circuit breakers. |
 | **User Experience & Design (20%)** | • High-aesthetic, minimalist institutional quant terminal inspired by modern hedge fund platforms (obsidian glassmorphism, GPU-accelerated Three.js Silk shader, and Radix UI primitives).<br />• **Interactive CLOB Trade Terminal**: 1-click depth ladder auto-fill, Limit & Market (IOC) order placement, collateral presets, live win payout calculations, and inline AI Alpha Copilot.<br />• Global Command Palette (`⌘K / Ctrl+K`) for sub-second keyboard-driven market navigation and execution.<br />• Zero-friction onboarding via 1-click non-custodial session delegation with strict single-trade caps and daily volume guardrails.<br />• Real-time WebSocket telemetry ($<50\text{ms}$ updates), live Black-Scholes Edge Radar, and procedural Web Audio acoustic feedback. |
 | **Business & Ecosystem Impact (20%)** | • **Continuous On-Chain Liquidity & Execution**: Swarm provides active two-sided liquidity and autonomous execution directly on Somnia DreamDEX markets (auditable at [`/#cockpit`](https://dreampulse-ai.vercel.app/#cockpit)).<br />• Directly solves the primary existential crisis of Event Contracts: stale quotes, wide spreads, and idle capital.<br />• Generates continuous, organic trading volume and liquidity on Somnia, showcasing its 400k+ TPS capacity.<br />• The `Sweeper` daemon guarantees that winning collateral is perpetually recycled back into active trading rather than remaining stranded.<br />• Democratizes strategy creation with no-code agent building, social leaderboards, and 1-click strategy cloning. |
-| **Presentation & Demo (15%)** | • Complete technical documentation, interactive architecture flowcharts, mathematical explanations, and full API references.<br />• Clear 2–3 minute video presentation script demonstrating end-to-end user onboarding, trade terminal, strategy studio, swarm execution, live thoughts, and on-chain settlements. |
-
----
-
-## Developer Feedback Report (Somnia & DreamDEX SDK)
-
-*As requested in the official Hackathon Guidelines, the DreamPulse engineering team compiled this comprehensive developer feedback report based on building against `@somnia-chain/markets-sdk` (v0.29.0) and DreamDEX documentation on Somnia Shannon Testnet.*
-
-### What Works Exceptionally Well
-1. **High-Performance RPC & Finality**: Somnia's block times and sub-second confirmation enable real high-frequency on-chain trading loops that are impossible on standard Ethereum Layer 2s.
-2. **Deterministic CLOB Matching Engine**: Order execution against resting limit orders is deterministic, fast, and gas-efficient.
-3. **Clean viem/ethers Interoperability**: The `@somnia-chain/markets-sdk` integrates cleanly with standard `viem` `PublicClient` and `WalletClient` primitives.
-
-### Critical Friction Points & Edge Cases Encountered
-1. **Multi-Pool Approval Scalability & Primary Wallet Security**:
-   * *Problem*: DreamDEX creates unique pool contract addresses for every rolling prediction window (e.g. BTC-5m, ETH-15m). In conventional architectures, this creates severe approval fatigue and risks exposing main wallet funds across dozens of pools.
-   * *How DreamPulse Solved It*: We engineered a dedicated per-user Smart Trading Account clone (`DreamPulseSessionAccountFactory`). The clone executes trades as itself, approves target pools just-in-time for exact order amounts, and immediately zeroes residual allowances, eliminating multi-pool approval friction while fully isolating the user's primary wallet.
-   * *Recommendation for DreamDEX*: Implement a protocol-level Global Collateral Router allowance so contracts can pull collateral through a single gateway for all binary pools created by `MarketCreatorFactory`.
-
-2. **Silent Rejections on Non-Matching IOC Orders**:
-   * *Problem*: When an `IOC` taker order was submitted at a price where book depth was insufficient, some calls returned `success: false` or reverted with `ImmediateOrCancelNoFill` without emitting an indexed log event, making error categorization non-trivial.
-   * *How DreamPulse Solved It*: Added pre-flight order book depth checking (`assertFunded` & `sanitizeDepthForSelfTrade`) and submitted taker orders with `ORDER_TYPE.LIMIT` at quantized crossing ticks to guarantee match-or-rest behavior without reverts.
-
-3. **Nonce Desynchronization in Concurrent Swarm Execution**:
-   * *Problem*: Under high-frequency evaluations across multiple parallel agents, rapid-fire transactions triggered `nonce too low` or `replacement transaction underpriced` errors from the RPC node.
-   * *How DreamPulse Solved It*: Implemented a serialized transaction queue (`executeOperatorTx`) wrapped with Viem's `nonceManager` with automated nonce resets and exponential backoff.
-
-4. **Indexer Sync Latency on Newly Deployed Rolling Markets**:
-   * *Problem*: When a new 5-minute market is listed on-chain, the GraphQL indexer sometimes experienced a 5–15 second lag before reflecting `MarketStatus.Trading`, causing premature reverts if orders were submitted immediately.
-   * *How DreamPulse Solved It*: Built a dual-fallback polling service (`marketService.pollOnChainMarkets`) that cross-validates indexer responses directly against on-chain contract state via `publicClient.readContract`.
-
 ---
 
 ## System Architecture & Execution Workflows
