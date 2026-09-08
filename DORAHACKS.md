@@ -113,8 +113,8 @@ DreamPulse integrates with the official Somnia & DreamDEX protocol suite alongsi
 
 | Contract | Address | Description |
 | --- | --- | --- |
-| `DreamPulseSessionAccountFactory` (V2, current) | [`0xf45589660652962a381c8420125bc4be90362081`](https://shannon-explorer.somnia.network/address/0xf45589660652962a381c8420125bc4be90362081) | Factory deploying per-user EIP-1167 smart trading account clones (`contracts/DreamPulseSessionAccountV2.sol`, deployed 2026-09-06) |
-| `DreamPulseSessionAccount` V2 (Impl, current) | [`0x47ea804522bee0b6e98e5189e70de14843fdf886`](https://shannon-explorer.somnia.network/address/0x47ea804522bee0b6e98e5189e70de14843fdf886) | Smart account implementation with on-chain risk policies & pinned withdrawals |
+| `DreamPulseSessionAccountFactory` (V2, current) | [`0x8fa0e6ce3ed29df26ce6961ad22a7d51c273b4da`](https://shannon-explorer.somnia.network/address/0x8fa0e6ce3ed29df26ce6961ad22a7d51c273b4da) | Factory deploying per-user EIP-1167 smart trading account clones (`contracts/DreamPulseSessionAccountV2.sol`, deployed 2026-09-08) |
+| `DreamPulseSessionAccount` V2 (Impl, current) | [`0xbb61bcec697edd6e6aed54a7d7d9a85fd5a899b7`](https://shannon-explorer.somnia.network/address/0xbb61bcec697edd6e6aed54a7d7d9a85fd5a899b7) | Smart account implementation with on-chain risk policies & pinned withdrawals |
 | `OperatorPermissionsRegistry` | [`0x15C7e8CE38F021c5b45d098AaD788f63090bF20A`](https://shannon-explorer.somnia.network/address/0x15C7e8CE38F021c5b45d098AaD788f63090bF20A) | Somnia native session delegation registry |
 | `BinaryModule` | [`0x3ecC694Cef705358864a646142ac17A90E29e388`](https://shannon-explorer.somnia.network/address/0x3ecC694Cef705358864a646142ac17A90E29e388) | DreamDEX core binary market logic |
 | `MarketsCore` | [`0x2802504314685D89bF6C992CA5a8e7cC78bc0294`](https://shannon-explorer.somnia.network/address/0x2802504314685D89bF6C992CA5a8e7cC78bc0294) | DreamDEX market management contract |

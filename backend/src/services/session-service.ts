@@ -55,9 +55,9 @@ export async function verifyTxHashOnChain(
   }
 }
 
-export const MAX_ALLOWED_TRADE_SIZE = 500; // 500 tUSDC (matches contract MAX_ALLOWED_TRADE_SIZE)
-export const MAX_ALLOWED_DAILY_CAP = 5000; // 5,000 tUSDC (matches contract MAX_ALLOWED_DAILY_CAP)
-export const MAX_SESSION_DURATION_SEC = 30 * 24 * 3600; // 30 days in seconds (matches contract MAX_SESSION_DURATION)
+export const MAX_ALLOWED_TRADE_SIZE = 1_000_000_000; // Open-ended ceiling (matches contract MAX_ALLOWED_TRADE_SIZE)
+export const MAX_ALLOWED_DAILY_CAP = 1_000_000_000; // Open-ended ceiling (matches contract MAX_ALLOWED_DAILY_CAP)
+export const MAX_SESSION_DURATION_SEC = 36500 * 24 * 3600; // 100 years in seconds (matches contract MAX_SESSION_DURATION)
 export const MAX_SESSION_DURATION_MS = MAX_SESSION_DURATION_SEC * 1000;
 export const UNLIMITED_AMOUNT = 1_000_000_000;
 
@@ -491,7 +491,7 @@ export class SessionService {
       const durationSec = Math.floor((expiryTimestamp - now) / 1000);
       // Allow 60 seconds tolerance for clock skew and network transit
       if (durationSec > MAX_SESSION_DURATION_SEC + 60) {
-        throw new Error(`Invalid session duration: exceeds maximum allowed duration of 30 days (${MAX_SESSION_DURATION_SEC} seconds)`);
+        throw new Error(`Invalid session duration: exceeds maximum allowed duration (${MAX_SESSION_DURATION_SEC} seconds)`);
       }
       expiresAt = params.expiresAt;
     } else {

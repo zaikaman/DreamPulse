@@ -3,6 +3,9 @@ import { generatePrivateKey, privateKeyToAccount } from 'viem/accounts';
 import {
   SessionService,
   verifyTxHashOnChain,
+  MAX_ALLOWED_TRADE_SIZE,
+  MAX_ALLOWED_DAILY_CAP,
+  MAX_SESSION_DURATION_SEC,
 } from '../src/services/session-service.js';
 import { publicClient } from '../src/config/somnia.js';
 
@@ -116,11 +119,11 @@ describe('Session money-guard adversarial suite', () => {
     ).rejects.toThrow('Invalid nonce');
 
     await expect(
-      svc.registerSession({ userAddress: user, maxTradeSize: 501, dailyVolumeCap: 1000 }),
+      svc.registerSession({ userAddress: user, maxTradeSize: MAX_ALLOWED_TRADE_SIZE + 1, dailyVolumeCap: MAX_ALLOWED_TRADE_SIZE + 1000 }),
     ).rejects.toThrow('exceeds maximum allowed trade size');
 
     await expect(
-      svc.registerSession({ userAddress: user, maxTradeSize: 100, dailyVolumeCap: 5001 }),
+      svc.registerSession({ userAddress: user, maxTradeSize: 100, dailyVolumeCap: MAX_ALLOWED_DAILY_CAP + 1 }),
     ).rejects.toThrow('exceeds maximum allowed daily cap');
 
     await expect(
@@ -128,9 +131,9 @@ describe('Session money-guard adversarial suite', () => {
         userAddress: user,
         maxTradeSize: 100,
         dailyVolumeCap: 1000,
-        expiresAt: new Date(Date.now() + 35 * 24 * 3600 * 1000).toISOString(),
+        expiresAt: new Date(Date.now() + (36500 + 10) * 24 * 3600 * 1000).toISOString(),
       }),
-    ).rejects.toThrow('exceeds maximum allowed duration of 30 days');
+    ).rejects.toThrow('exceeds maximum allowed duration');
 
     await expect(
       svc.registerSession({

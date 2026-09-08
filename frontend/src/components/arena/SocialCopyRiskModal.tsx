@@ -10,6 +10,10 @@ import type { ArenaTraderEntry, SocialCopyConfig } from '../../types/index.js';
 import { Spinner } from '../ui/Spinner.js';
 import { Button } from '../ui/button.js';
 import { cn } from '../../lib/utils.js';
+import {
+  MAX_ALLOWED_TRADE_SIZE,
+  MAX_ALLOWED_DAILY_CAP,
+} from '../../lib/sessionUtils.js';
 
 export interface SocialCopyRiskModalProps {
   isOpen: boolean;
@@ -38,8 +42,8 @@ export interface SocialCopyRiskModalProps {
   onOpenSessionModal?: () => void;
 }
 
-const MAX_TRADE_PRESETS = [5, 10, 25, 50];
-const DAILY_CAP_PRESETS = [50, 100, 250, 500];
+const MAX_TRADE_PRESETS = [25, 100, 500, 2500, 10000, 50000];
+const DAILY_CAP_PRESETS = [250, 1000, 5000, 25000, 100000, 500000];
 
 export const SocialCopyRiskModal: React.FC<SocialCopyRiskModalProps> = ({
   isOpen,
@@ -63,8 +67,8 @@ export const SocialCopyRiskModal: React.FC<SocialCopyRiskModalProps> = ({
     if (isOpen && trader) {
       setErrorMsg(null);
       if (existingConfig) {
-        setMaxTradeSize(Math.min(50, existingConfig.maxTradeSize ?? 25));
-        setDailyVolumeCap(Math.min(500, existingConfig.dailyVolumeCap ?? 250));
+        setMaxTradeSize(Math.min(MAX_ALLOWED_TRADE_SIZE, existingConfig.maxTradeSize ?? 25));
+        setDailyVolumeCap(Math.min(MAX_ALLOWED_DAILY_CAP, existingConfig.dailyVolumeCap ?? 250));
       } else {
         setMaxTradeSize(25);
         setDailyVolumeCap(250);
@@ -82,12 +86,12 @@ export const SocialCopyRiskModal: React.FC<SocialCopyRiskModalProps> = ({
 
   // Handle Submit
   const handleSubmit = async () => {
-    if (maxTradeSize <= 0 || maxTradeSize > 50) {
-      setErrorMsg('Max trade size must be between 1 and 50 tUSDC');
+    if (maxTradeSize <= 0 || maxTradeSize > MAX_ALLOWED_TRADE_SIZE) {
+      setErrorMsg(`Max trade size must be between 1 and ${MAX_ALLOWED_TRADE_SIZE.toLocaleString()} tUSDC`);
       return;
     }
-    if (dailyVolumeCap <= 0 || dailyVolumeCap > 500) {
-      setErrorMsg('Daily volume cap must be between 1 and 500 tUSDC');
+    if (dailyVolumeCap <= 0 || dailyVolumeCap > MAX_ALLOWED_DAILY_CAP) {
+      setErrorMsg(`Daily volume cap must be between 1 and ${MAX_ALLOWED_DAILY_CAP.toLocaleString()} tUSDC`);
       return;
     }
     if (maxTradeSize > dailyVolumeCap) {
@@ -213,7 +217,14 @@ export const SocialCopyRiskModal: React.FC<SocialCopyRiskModalProps> = ({
                 </p>
               </div>
               <div className="flex items-center gap-1 bg-secondary/30 border border-border/50 px-2 py-0.5 rounded font-mono text-xs">
-                <span className="font-semibold text-foreground">{maxTradeSize}</span>
+                <input
+                  type="number"
+                  min={1}
+                  max={MAX_ALLOWED_TRADE_SIZE}
+                  value={maxTradeSize}
+                  onChange={(e) => setMaxTradeSize(Math.max(0, Number(e.target.value)))}
+                  className="w-20 bg-transparent text-right font-semibold text-foreground focus:outline-none"
+                />
                 <span className="text-[10px] text-muted-foreground">tUSDC</span>
               </div>
             </div>
@@ -222,8 +233,8 @@ export const SocialCopyRiskModal: React.FC<SocialCopyRiskModalProps> = ({
             <input
               type="range"
               min={1}
-              max={50}
-              step={1}
+              max={Math.max(50000, maxTradeSize)}
+              step={maxTradeSize >= 1000 ? 250 : 5}
               value={maxTradeSize}
               onChange={(e) => setMaxTradeSize(Number(e.target.value))}
               className="w-full h-1 bg-secondary/80 rounded appearance-none cursor-pointer accent-primary"
@@ -243,7 +254,7 @@ export const SocialCopyRiskModal: React.FC<SocialCopyRiskModalProps> = ({
                       : "bg-secondary/20 text-muted-foreground border-border/40 hover:text-foreground hover:bg-secondary/40"
                   )}
                 >
-                  ${val}
+                  ${val >= 1000 ? `${val / 1000}k` : val}
                 </button>
               ))}
             </div>
@@ -251,7 +262,7 @@ export const SocialCopyRiskModal: React.FC<SocialCopyRiskModalProps> = ({
             <div className="text-[10px] text-muted-foreground font-mono flex items-center gap-1">
               <InformationCircleIcon className="w-3 h-3 text-muted-foreground/70 flex-shrink-0" />
               <span>
-                At ~0.50 tUSDC/contract, ${maxTradeSize} tUSDC buys up to ~{estimatedTypicalLots} lots.
+                At ~0.50 tUSDC/contract, ${maxTradeSize.toLocaleString()} tUSDC buys up to ~{estimatedTypicalLots} lots.
               </span>
             </div>
           </div>
@@ -268,7 +279,14 @@ export const SocialCopyRiskModal: React.FC<SocialCopyRiskModalProps> = ({
                 </p>
               </div>
               <div className="flex items-center gap-1 bg-secondary/30 border border-border/50 px-2 py-0.5 rounded font-mono text-xs">
-                <span className="font-semibold text-foreground">{dailyVolumeCap}</span>
+                <input
+                  type="number"
+                  min={10}
+                  max={MAX_ALLOWED_DAILY_CAP}
+                  value={dailyVolumeCap}
+                  onChange={(e) => setDailyVolumeCap(Math.max(0, Number(e.target.value)))}
+                  className="w-24 bg-transparent text-right font-semibold text-foreground focus:outline-none"
+                />
                 <span className="text-[10px] text-muted-foreground">tUSDC</span>
               </div>
             </div>
@@ -277,8 +295,8 @@ export const SocialCopyRiskModal: React.FC<SocialCopyRiskModalProps> = ({
             <input
               type="range"
               min={10}
-              max={500}
-              step={10}
+              max={Math.max(500000, dailyVolumeCap)}
+              step={dailyVolumeCap >= 10000 ? 5000 : 100}
               value={dailyVolumeCap}
               onChange={(e) => setDailyVolumeCap(Number(e.target.value))}
               className="w-full h-1 bg-secondary/80 rounded appearance-none cursor-pointer accent-primary"

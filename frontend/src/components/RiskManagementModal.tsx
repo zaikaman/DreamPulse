@@ -32,10 +32,10 @@ export const RiskManagementModal: React.FC<RiskManagementModalProps> = ({
   onUpdateRisk,
 }) => {
   const [maxTradeSize, setMaxTradeSize] = useState<number>(() =>
-    Math.min(MAX_ALLOWED_TRADE_SIZE, Math.max(1, activeSession?.maxTradeSize || MAX_ALLOWED_TRADE_SIZE))
+    Math.min(MAX_ALLOWED_TRADE_SIZE, Math.max(1, activeSession?.maxTradeSize || 500))
   );
   const [dailyVolumeCap, setDailyVolumeCap] = useState<number>(() =>
-    Math.min(MAX_ALLOWED_DAILY_CAP, Math.max(maxTradeSize, activeSession?.dailyVolumeCap || MAX_ALLOWED_DAILY_CAP))
+    Math.min(MAX_ALLOWED_DAILY_CAP, Math.max(activeSession?.maxTradeSize || 500, activeSession?.dailyVolumeCap || 5000))
   );
   const [validationError, setValidationError] = useState<string | null>(null);
   const [isSaving, setIsSaving] = useState<boolean>(false);
@@ -50,16 +50,20 @@ export const RiskManagementModal: React.FC<RiskManagementModalProps> = ({
     const trade = Number(maxTradeSize);
     const daily = Number(dailyVolumeCap);
 
-    if (isNaN(trade) || trade <= 0 || trade > MAX_ALLOWED_TRADE_SIZE) {
-      setValidationError(`Single trade limit must be between 1 and ${MAX_ALLOWED_TRADE_SIZE} tUSDC (contract ceiling).`);
+    if (isNaN(trade) || trade <= 0) {
+      setValidationError('Single trade limit must be greater than 0.');
+      return;
+    }
+    if (trade > MAX_ALLOWED_TRADE_SIZE) {
+      setValidationError(`Single trade limit cannot exceed ${MAX_ALLOWED_TRADE_SIZE.toLocaleString()} tUSDC.`);
       return;
     }
     if (isNaN(daily) || daily < trade) {
-      setValidationError(`Daily volume cap must be at least equal to single trade limit ($${trade} tUSDC).`);
+      setValidationError(`Daily volume cap must be at least equal to single trade limit ($${trade.toLocaleString()} tUSDC).`);
       return;
     }
     if (daily > MAX_ALLOWED_DAILY_CAP) {
-      setValidationError(`Daily volume cap cannot exceed ${MAX_ALLOWED_DAILY_CAP} tUSDC (contract ceiling).`);
+      setValidationError(`Daily volume cap cannot exceed ${MAX_ALLOWED_DAILY_CAP.toLocaleString()} tUSDC.`);
       return;
     }
 
@@ -126,20 +130,26 @@ export const RiskManagementModal: React.FC<RiskManagementModalProps> = ({
               <label className="text-xs font-medium text-foreground">
                 Max Single Trade Limit
               </label>
-              <button
-                type="button"
-                onClick={() => {
-                  setMaxTradeSize(MAX_ALLOWED_TRADE_SIZE);
-                  setValidationError(null);
-                }}
-                className={`text-[11px] font-mono transition-colors cursor-pointer ${
-                  maxTradeSize === MAX_ALLOWED_TRADE_SIZE
-                    ? 'text-[#00ffcc] font-semibold'
-                    : 'text-muted-foreground hover:text-foreground'
-                }`}
-              >
-                [Max Cap: ${MAX_ALLOWED_TRADE_SIZE}]
-              </button>
+              <div className="flex items-center gap-1.5">
+                {[500, 5000, 50000].map((preset) => (
+                  <button
+                    key={preset}
+                    type="button"
+                    onClick={() => {
+                      setMaxTradeSize(preset);
+                      if (dailyVolumeCap < preset) setDailyVolumeCap(preset * 5);
+                      setValidationError(null);
+                    }}
+                    className={`text-[10px] font-mono px-1.5 py-0.5 rounded transition-colors cursor-pointer ${
+                      maxTradeSize === preset
+                        ? 'bg-primary/20 text-primary font-semibold'
+                        : 'text-muted-foreground hover:text-foreground bg-muted/40'
+                    }`}
+                  >
+                    ${preset >= 1000 ? `${preset / 1000}k` : preset}
+                  </button>
+                ))}
+              </div>
             </div>
             <div className="relative">
               <input
@@ -159,7 +169,7 @@ export const RiskManagementModal: React.FC<RiskManagementModalProps> = ({
               </span>
             </div>
             <p className="text-[10.5px] text-muted-foreground font-mono mt-1">
-              On-chain absolute ceiling: ${MAX_ALLOWED_TRADE_SIZE} tUSDC per trade
+              Enforced on-chain: maximum size allowed for any single order
             </p>
           </div>
 
@@ -169,20 +179,25 @@ export const RiskManagementModal: React.FC<RiskManagementModalProps> = ({
               <label className="text-xs font-medium text-foreground">
                 Daily Volume Ceiling (Rolling 24h)
               </label>
-              <button
-                type="button"
-                onClick={() => {
-                  setDailyVolumeCap(MAX_ALLOWED_DAILY_CAP);
-                  setValidationError(null);
-                }}
-                className={`text-[11px] font-mono transition-colors cursor-pointer ${
-                  dailyVolumeCap === MAX_ALLOWED_DAILY_CAP
-                    ? 'text-[#00ffcc] font-semibold'
-                    : 'text-muted-foreground hover:text-foreground'
-                }`}
-              >
-                [Max Cap: ${MAX_ALLOWED_DAILY_CAP}]
-              </button>
+              <div className="flex items-center gap-1.5">
+                {[5000, 50000, 500000].map((preset) => (
+                  <button
+                    key={preset}
+                    type="button"
+                    onClick={() => {
+                      setDailyVolumeCap(preset);
+                      setValidationError(null);
+                    }}
+                    className={`text-[10px] font-mono px-1.5 py-0.5 rounded transition-colors cursor-pointer ${
+                      dailyVolumeCap === preset
+                        ? 'bg-primary/20 text-primary font-semibold'
+                        : 'text-muted-foreground hover:text-foreground bg-muted/40'
+                    }`}
+                  >
+                    ${preset >= 1000 ? `${preset / 1000}k` : preset}
+                  </button>
+                ))}
+              </div>
             </div>
             <div className="relative">
               <input
@@ -202,7 +217,7 @@ export const RiskManagementModal: React.FC<RiskManagementModalProps> = ({
               </span>
             </div>
             <p className="text-[10.5px] text-muted-foreground font-mono mt-1">
-              On-chain absolute ceiling: ${MAX_ALLOWED_DAILY_CAP.toLocaleString()} tUSDC per 24 hours
+              Enforced on-chain: maximum cumulative order spend per rolling 24 hours
             </p>
           </div>
 
@@ -210,7 +225,7 @@ export const RiskManagementModal: React.FC<RiskManagementModalProps> = ({
           <div className="flex items-start gap-2 p-3 rounded-xl bg-muted/20 border border-border/30 text-xs text-muted-foreground">
             <InformationCircleIcon className="w-4 h-4 text-primary flex-shrink-0 mt-0.5" />
             <span>
-              Risk ceilings restrict autonomous agent execution on-chain. Trades exceeding ${MAX_ALLOWED_TRADE_SIZE} tUSDC or a daily volume of ${MAX_ALLOWED_DAILY_CAP.toLocaleString()} tUSDC are blocked at the smart contract level.
+              Risk ceilings restrict autonomous agent execution on-chain. Trades exceeding your configured limits are blocked directly by your smart contract clone.
             </span>
           </div>
 

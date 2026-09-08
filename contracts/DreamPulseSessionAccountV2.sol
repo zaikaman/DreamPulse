@@ -96,9 +96,9 @@ contract DreamPulseSessionAccount {
     // sessionKey => SessionPolicy
     mapping(address => SessionPolicy) public sessionPolicies;
 
-    uint256 public constant MAX_ALLOWED_TRADE_SIZE = 500 * 1e6;
-    uint256 public constant MAX_ALLOWED_DAILY_CAP = 5000 * 1e6;
-    uint256 public constant MAX_SESSION_DURATION = 30 days;
+    uint256 public constant MAX_ALLOWED_TRADE_SIZE = type(uint256).max;
+    uint256 public constant MAX_ALLOWED_DAILY_CAP = type(uint256).max;
+    uint256 public constant MAX_SESSION_DURATION = 36500 days; // 100 years (~open-ended)
 
     // Minimum withdrawal amount: 1 tUSDC (6 decimals)
     uint256 public constant MIN_WITHDRAWAL_AMOUNT = 1 * 1e6;
@@ -329,20 +329,24 @@ contract DreamPulseSessionAccount {
 
         if (!policy.isActive) revert SessionNotActive();
         if (block.timestamp > policy.expiresAt) revert SessionExpired();
-        if (tradeCost > policy.maxTradeSize) revert ExceedsMaxTradeSize(tradeCost, policy.maxTradeSize);
+        if (policy.maxTradeSize < type(uint256).max && tradeCost > policy.maxTradeSize) {
+            revert ExceedsMaxTradeSize(tradeCost, policy.maxTradeSize);
+        }
 
         if (callData.length < 4) revert SelectorNotAllowed(bytes4(0));
         bytes4 selector = bytes4(callData[:4]);
         if (!isSelectorAllowed(selector)) revert SelectorNotAllowed(selector);
 
-        if (block.timestamp >= policy.lastSpendReset + 1 days) {
-            policy.spentToday = 0;
-            policy.lastSpendReset = block.timestamp;
+        if (policy.dailyVolumeCap < type(uint256).max) {
+            if (block.timestamp >= policy.lastSpendReset + 1 days) {
+                policy.spentToday = 0;
+                policy.lastSpendReset = block.timestamp;
+            }
+            if (policy.spentToday + tradeCost > policy.dailyVolumeCap) {
+                revert ExceedsDailyVolumeCap(policy.spentToday + tradeCost, policy.dailyVolumeCap);
+            }
+            policy.spentToday += tradeCost;
         }
-        if (policy.spentToday + tradeCost > policy.dailyVolumeCap) {
-            revert ExceedsDailyVolumeCap(policy.spentToday + tradeCost, policy.dailyVolumeCap);
-        }
-        policy.spentToday += tradeCost;
 
         // SEC-03: validate the pool BEFORE pulling funds or granting the
         // per-trade approval. Caps are enforced first so existing

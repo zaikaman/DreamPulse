@@ -14,12 +14,12 @@ import {
 } from './sessionUtils.js';
 
 describe('Contract Risk Cap Constants', () => {
-  it('defines the strict contract ceilings correctly', () => {
-    expect(MAX_ALLOWED_TRADE_SIZE).toBe(500);
-    expect(MAX_ALLOWED_DAILY_CAP).toBe(5000);
-    expect(MAX_SESSION_DURATION_DAYS).toBe(30);
-    expect(MAX_SESSION_DURATION_HOURS).toBe(720);
-    expect(MAX_SESSION_DURATION_SEC).toBe(30 * 24 * 3600);
+  it('defines the open-ended risk cap constants correctly', () => {
+    expect(MAX_ALLOWED_TRADE_SIZE).toBe(1_000_000);
+    expect(MAX_ALLOWED_DAILY_CAP).toBe(10_000_000);
+    expect(MAX_SESSION_DURATION_DAYS).toBe(365);
+    expect(MAX_SESSION_DURATION_HOURS).toBe(365 * 24);
+    expect(MAX_SESSION_DURATION_SEC).toBe(365 * 24 * 3600);
   });
 });
 

@@ -1,8 +1,8 @@
-export const MAX_ALLOWED_TRADE_SIZE = 500; // $500 tUSDC (Absolute contract ceiling: MAX_ALLOWED_TRADE_SIZE)
-export const MAX_ALLOWED_DAILY_CAP = 5000; // $5,000 tUSDC per rolling 24h (Absolute contract ceiling: MAX_ALLOWED_DAILY_CAP)
-export const MAX_SESSION_DURATION_DAYS = 30; // 30 Days (Absolute contract ceiling: MAX_SESSION_DURATION)
-export const MAX_SESSION_DURATION_HOURS = 30 * 24; // 720 Hours
-export const MAX_SESSION_DURATION_SEC = 30 * 24 * 3600; // 2,592,000 Seconds
+export const MAX_ALLOWED_TRADE_SIZE = 1_000_000; // $1,000,000 tUSDC (Matches open-ended contract ceiling)
+export const MAX_ALLOWED_DAILY_CAP = 10_000_000; // $10,000,000 tUSDC per rolling 24h
+export const MAX_SESSION_DURATION_DAYS = 365; // 365 Days default UI ceiling (contract supports up to 100 years)
+export const MAX_SESSION_DURATION_HOURS = 365 * 24; // 8,760 Hours
+export const MAX_SESSION_DURATION_SEC = 365 * 24 * 3600;
 export const MAX_SESSION_DURATION_MS = MAX_SESSION_DURATION_SEC * 1000;
 
 export const UNLIMITED_AMOUNT = 1_000_000_000; // Legacy fallback amount

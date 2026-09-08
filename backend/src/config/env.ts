@@ -121,10 +121,10 @@ const envSchema = z.object({
   SOMNIA_TEST_USDC: z.string().default('0x70a86D8842FB63C4Ad2b7cdddF530eBf1BB25d8E'),
   // DreamPulse session contracts (updated on redeploy — see deploy scripts).
   SOMNIA_SESSION_ACCOUNT: z.string().default('0xa85ec9a6A0845eeb642E1DCE12780E9b4cFD37F8'),
-  SOMNIA_SESSION_ACCOUNT_IMPL: z.string().default('0x6177d1E24C838789c1367fC9B66Bcf689C6ff60F'),
-  SOMNIA_SESSION_ACCOUNT_FACTORY: z.string().default('0xA0C2eaAe0438bCB6DD0FA2Cc2317BEDB8Ff25e94'),
-  // Pre-SEC-03 factory, kept for migration grace-period checks only.
-  SOMNIA_SESSION_ACCOUNT_FACTORY_LEGACY: z.string().default('0xf45589660652962a381c8420125bc4be90362081'),
+  SOMNIA_SESSION_ACCOUNT_IMPL: z.string().default('0xbb61bcec697edd6e6aed54a7d7d9a85fd5a899b7'),
+  SOMNIA_SESSION_ACCOUNT_FACTORY: z.string().default('0x8fa0e6ce3ed29df26ce6961ad22a7d51c273b4da'),
+  // Previous factory, kept for migration grace-period checks only.
+  SOMNIA_SESSION_ACCOUNT_FACTORY_LEGACY: z.string().default('0xA0C2eaAe0438bCB6DD0FA2Cc2317BEDB8Ff25e94'),
 });
 
 export const env = envSchema.parse({

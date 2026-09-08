@@ -77,8 +77,8 @@ export const SOMNIA_ADDRESSES = {
   operatorPermissionsRegistry: '0x15C7e8CE38F021c5b45d098AaD788f63090bF20A' as Address,
   operatorAccount: '0x93e300607c363E7D7a47e50f5c9fDf1723e859Cf' as Address,
   sessionAccount: '0xa85ec9a6A0845eeb642E1DCE12780E9b4cFD37F8' as Address,
-  sessionAccountImpl: '0x6177d1E24C838789c1367fC9B66Bcf689C6ff60F' as Address,
-  sessionAccountFactory: '0xA0C2eaAe0438bCB6DD0FA2Cc2317BEDB8Ff25e94' as Address,
+  sessionAccountImpl: '0xbb61bcec697edd6e6aed54a7d7d9a85fd5a899b7' as Address,
+  sessionAccountFactory: '0x8fa0e6ce3ed29df26ce6961ad22a7d51c273b4da' as Address,
   testUsdc: '0x70a86D8842FB63C4Ad2b7cdddF530eBf1BB25d8E' as Address,
   binaryModule: '0x3ecC694Cef705358864a646142ac17A90E29e388' as Address,
   marketsCore: '0x2802504314685D89bF6C992CA5a8e7cC78bc0294' as Address,
@@ -1656,7 +1656,7 @@ export class Web3Service {
       throw new Error(`Daily volume cap must be between maxTradeSize and ${MAX_ALLOWED_DAILY_CAP} tUSDC (contract ceiling)`);
     }
     if (params.durationHours <= 0 || params.durationHours > MAX_SESSION_DURATION_HOURS) {
-      throw new Error(`Session duration cannot exceed ${MAX_SESSION_DURATION_HOURS} hours / 30 days (contract ceiling)`);
+      throw new Error(`Session duration cannot exceed ${MAX_SESSION_DURATION_HOURS} hours (contract ceiling)`);
     }
 
     const wallet = await this.getWalletClient(params.userAddress);
@@ -1899,7 +1899,7 @@ export class Web3Service {
       throw new Error(`Daily volume cap must be between maxTradeSize and ${MAX_ALLOWED_DAILY_CAP} tUSDC (contract ceiling)`);
     }
     if (params.durationHours <= 0 || params.durationHours > MAX_SESSION_DURATION_HOURS) {
-      throw new Error(`Session duration cannot exceed ${MAX_SESSION_DURATION_HOURS} hours / 30 days (contract ceiling)`);
+      throw new Error(`Session duration cannot exceed ${MAX_SESSION_DURATION_HOURS} hours (contract ceiling)`);
     }
 
     // SEC-03 migration: pin registry/module on pre-registry clones first.
