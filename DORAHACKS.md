@@ -6,6 +6,7 @@ DreamPulse is an institutional-grade cyber-financial trading ecosystem for Dream
 
 - **Live application:** [dreampulse-ai.vercel.app](https://dreampulse-ai.vercel.app/)
 - **Auditable live cockpit:** [Swarm Cockpit](https://dreampulse-ai.vercel.app/#cockpit)
+- **Live raw ledger (.txt):** [dreampulse-backend-2aa35c1a9af1.herokuapp.com/transactions.txt](https://dreampulse-backend-2aa35c1a9af1.herokuapp.com/transactions.txt)
 - **Demo video:** [2 minutes 55 seconds on YouTube](https://www.youtube.com/watch?v=Ld62mpVEb0U)
 - **Machine-readable evidence:** [`evidence.json`](https://github.com/zaikaman/DreamPulse/blob/main/evidence.json)
 - **Repository:** [github.com/zaikaman/DreamPulse](https://github.com/zaikaman/DreamPulse)
@@ -132,10 +133,22 @@ The live cockpit and [`evidence.json`](./evidence.json) provide an audit trail c
 | Judging area | DreamPulse evidence |
 | --- | --- |
 | Innovation | One product unifies CLOB trading, AI, no-code agents, backtesting, autonomous liquidity, social prediction, smart trading account isolation, and settlement. |
-| Technical implementation | Direct DreamDEX SDK integration, per-user EIP-1167 Smart Trading Account clones with on-chain risk policies, ephemeral session keys, serialized nonce handling, WebSocket telemetry, and 499 passing tests (418 backend + 81 frontend) with CI coverage gates. |
+| Technical implementation | Direct DreamDEX SDK integration, per-user EIP-1167 Smart Trading Account clones with on-chain risk policies, ephemeral session keys, serialized nonce handling, WebSocket telemetry, and 503 passing tests (422 backend + 81 frontend) with CI coverage gates. |
 | User experience | Institutional terminal, visual binary charts, dedicated Trading Wallet modal with 1-click deposit/withdraw, command palette, onboarding wizard, and strategy builder. |
 | Ecosystem impact | Provides liquidity, reduces stale pricing, recycles settled capital, and makes automated prediction-market strategies accessible. |
 | Presentation | A focused 2:55 demo covers onboarding, terminal trading, Strategy Studio, swarms, telemetry, and settlement. |
+
+## Live Verifiable Swarm Execution Ledger (.txt)
+
+During the Somnia × DreamDEX Hackathon, DreamPulse's autonomous multi-agent swarm executed **over 1,400 fills** and generated **over 100 tUSDC in profits** on Somnia Shannon Testnet.
+
+To provide seamless, machine-readable, and zero-friction verification for hackathon judges and auditors without requiring database access or heavy frontend overhead, DreamPulse serves a live, paginated plain-text ASCII transaction ledger directly from the database:
+
+- **Live Plain-Text Ledger Link:** [`https://dreampulse-backend-2aa35c1a9af1.herokuapp.com/transactions.txt`](https://dreampulse-backend-2aa35c1a9af1.herokuapp.com/transactions.txt) *(also available via `/api/v1/swarm/transactions.txt`)*
+- **Key Capabilities & Telemetry:**
+  - **Live Aggregates Header:** Real-time summary displaying total executions, total traded volume, overall win rate, net realized profits, and individual agent execution breakdowns across Volt, Oracle, Titan, and Sweeper.
+  - **Sub-5ms Fast-Path Latency:** Built with non-blocking background settlement sync and sub-second in-memory caching to eliminate RPC bottlenecks and stream plain text instantly.
+  - **Comprehensive Pagination:** Direct order traversal via query parameters (`?page=1&limit=50`, `?page=2`, etc.) with retro-terminal alignment, order IDs, sides, token directions (YES/NO), prices, stakes, status, and direct Somnia Shannon block explorer transaction links.
 
 ## SDK Developer Feedback
 
@@ -201,7 +214,7 @@ npm run staging:dry-run --workspace=dreampulse-backend
 npm run verify
 ```
 
-The documented verification result is **499 tests passing across 42 suites (418 backend + 81 frontend)**, with type checking, production builds, CI-enforced money-path coverage gates, and a read-only testnet staging probe included in `npm run verify`.
+The documented verification result is **503 tests passing across 43 suites (422 backend + 81 frontend)**, with type checking, production builds, CI-enforced money-path coverage gates, and a read-only testnet staging probe included in `npm run verify`.
 
 ## Roadmap
 

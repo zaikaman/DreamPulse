@@ -4,6 +4,7 @@ import cors from 'cors';
 import { env } from './config/env.js';
 import { requestLogger, errorHandler } from './api/middleware.js';
 import { apiRouter } from './api/routes.js';
+import { ledgerExportService } from './services/ledger-export-service.js';
 import { telemetryWsGateway } from './websocket/server.js';
 import {
   installProcessSafetyHandlers,
@@ -112,6 +113,38 @@ app.get('/api/health', (_req, res) => {
       isShuttingDown: safetyMetrics.isShuttingDown,
     },
   });
+});
+
+// Raw text transaction ledger (.txt) for DreamPulse autonomous swarm (operator account)
+app.get(['/transactions.txt', '/swarm/transactions.txt'], async (req, res) => {
+  try {
+    const page = req.query.page ? parseInt(req.query.page as string, 10) : 1;
+    const limit = req.query.limit || req.query.pageSize
+      ? parseInt((req.query.limit || req.query.pageSize) as string, 10)
+      : 50;
+    const agent = typeof req.query.agent === 'string' ? req.query.agent : undefined;
+    const status = typeof req.query.status === 'string' ? req.query.status : undefined;
+    const marketId = typeof req.query.marketId === 'string' ? req.query.marketId : undefined;
+
+    const fullUrl = `${req.protocol}://${req.get('host')}${req.path}`;
+    const txtOutput = await ledgerExportService.generateSwarmTxtLedger({
+      page,
+      pageSize: limit,
+      agent,
+      status,
+      marketId,
+      baseUrl: fullUrl,
+    });
+
+    res.setHeader('Content-Type', 'text/plain; charset=utf-8');
+    res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
+    res.setHeader('Pragma', 'no-cache');
+    res.setHeader('Expires', '0');
+    return res.status(200).send(txtOutput);
+  } catch (err: any) {
+    res.setHeader('Content-Type', 'text/plain; charset=utf-8');
+    return res.status(500).send(`ERROR GENERATING SWARM LEDGER: ${err?.message || err}`);
+  }
 });
 
 // Mount API v1 Routes

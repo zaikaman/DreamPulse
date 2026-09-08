@@ -23,7 +23,7 @@ import type {
 } from '../types/index.js';
 
 const rawApiUrl = ((import.meta as any).env?.VITE_BACKEND_HTTP_URL || '').trim();
-const API_BASE_URL = rawApiUrl
+export const API_BASE_URL = rawApiUrl
   ? rawApiUrl.replace(/\/+$/, '').endsWith('/api/v1')
     ? rawApiUrl.replace(/\/+$/, '')
     : `${rawApiUrl.replace(/\/+$/, '')}/api/v1`
@@ -731,6 +731,17 @@ export const apiClient = {
 
   async getArenaStats(): Promise<{ success: boolean; data: ArenaGlobalStats }> {
     return fetchJson('/arena/stats');
+  },
+
+  getSwarmTransactionsTxtUrl(params?: { page?: number; limit?: number; agent?: string; status?: string }): string {
+    const base = `${API_BASE_URL}/swarm/transactions.txt`;
+    const searchParams = new URLSearchParams();
+    if (params?.page) searchParams.set('page', String(params.page));
+    if (params?.limit) searchParams.set('limit', String(params.limit));
+    if (params?.agent && params.agent !== 'ALL') searchParams.set('agent', params.agent);
+    if (params?.status && params.status !== 'ALL') searchParams.set('status', params.status);
+    const qs = searchParams.toString();
+    return qs ? `${base}?${qs}` : base;
   },
 };
 

@@ -15,6 +15,7 @@ import {
   WalletIcon,
   ArrowPathIcon,
   DocumentCheckIcon,
+  DocumentTextIcon,
   XMarkIcon,
   SparklesIcon,
 } from '@heroicons/react/24/outline';
@@ -483,6 +484,33 @@ export const OrderHistoryTable: React.FC<OrderHistoryTableProps> = ({
               </span>
             )}
           </div>
+          <a
+            id="btn-export-raw-txt"
+            href={apiClient.getSwarmTransactionsTxtUrl({ page: currentPage, limit: pageSize, agent: selectedAgent !== 'ALL' ? selectedAgent : undefined })}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="btn-secondary"
+            style={{
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: '6px',
+              fontSize: '11px',
+              padding: '4px 10px',
+              borderRadius: '6px',
+              color: 'var(--brand-cyan)',
+              border: '1px solid rgba(0, 240, 255, 0.25)',
+              background: 'rgba(0, 240, 255, 0.05)',
+              textDecoration: 'none',
+              fontFamily: 'var(--font-mono)',
+              fontWeight: 600,
+              transition: 'all 0.15s ease',
+            }}
+            title="Open pure static text (.txt) live database ledger of operator swarm transactions"
+          >
+            <DocumentTextIcon className="w-3.5 h-3.5" style={{ color: 'var(--brand-cyan)' }} />
+            <span>Raw Ledger (.txt)</span>
+            <ArrowTopRightOnSquareIcon className="w-3 h-3" style={{ opacity: 0.6 }} />
+          </a>
         </div>
       </div>
 

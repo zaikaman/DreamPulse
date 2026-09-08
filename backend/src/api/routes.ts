@@ -20,6 +20,7 @@ import { telemetryWsGateway } from '../websocket/server.js';
 import { supabase, isPersistenceEnabled } from '../config/supabase.js';
 import { getSessionAccount, getCloneAllowance, getCloneBalance, CLONE_ZERO_ADDRESS } from '../config/permissions-abi.js';
 import { timingSafeEqual } from 'node:crypto';
+import { ledgerExportService } from '../services/ledger-export-service.js';
 
 export const apiRouter = Router();
 
@@ -1201,6 +1202,43 @@ apiRouter.get('/orders', optionalWalletAuth, async (req: Request, res: Response)
     totalPages: result.totalPages,
     data: result.orders,
   });
+});
+
+/**
+ * Raw text transaction ledger (.txt) for DreamPulse autonomous swarm (operator account).
+ * Fetches live from database with pagination and global aggregate metrics.
+ */
+apiRouter.get(['/swarm/transactions.txt', '/transactions.txt', '/orders/swarm.txt'], async (req: Request, res: Response) => {
+  try {
+    const page = req.query.page ? parseInt(req.query.page as string, 10) : 1;
+    const limit = req.query.limit || req.query.pageSize
+      ? parseInt((req.query.limit || req.query.pageSize) as string, 10)
+      : 50;
+    const agent = typeof req.query.agent === 'string' ? req.query.agent : undefined;
+    const status = typeof req.query.status === 'string' ? req.query.status : undefined;
+    const marketId = typeof req.query.marketId === 'string' ? req.query.marketId : undefined;
+
+    const fullUrl = `${req.protocol}://${req.get('host')}${req.baseUrl}${req.path}`;
+
+    const txtOutput = await ledgerExportService.generateSwarmTxtLedger({
+      page,
+      pageSize: limit,
+      agent,
+      status,
+      marketId,
+      baseUrl: fullUrl,
+    });
+
+    res.setHeader('Content-Type', 'text/plain; charset=utf-8');
+    res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
+    res.setHeader('Pragma', 'no-cache');
+    res.setHeader('Expires', '0');
+    return res.status(200).send(txtOutput);
+  } catch (err: any) {
+    console.error('[Routes] Error generating swarm txt ledger:', err);
+    res.setHeader('Content-Type', 'text/plain; charset=utf-8');
+    return res.status(500).send(`ERROR GENERATING SWARM LEDGER: ${err?.message || err}`);
+  }
 });
 
 apiRouter.get('/orders/:id', async (req: Request, res: Response) => {

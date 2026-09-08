@@ -770,6 +770,27 @@ describe('Express REST API Endpoints', () => {
     const followingRes = await request(app).get(`/api/v1/arena/copytrade/following?userAddress=${testUser}`);
     expect(followingRes.status).toBe(200);
   });
+
+  it('GET /api/v1/swarm/transactions.txt returns formatted ASCII raw text ledger with pagination and summary', async () => {
+    const res = await request(app).get('/api/v1/swarm/transactions.txt?page=1&limit=25');
+    expect(res.status).toBe(200);
+    expect(res.headers['content-type']).toContain('text/plain');
+    expect(res.text).toContain('DREAMDEX AUTONOMOUS SWARM LEDGER');
+    expect(res.text).toContain('OPERATOR ACCOUNT');
+    expect(res.text).toContain('GLOBAL SWARM PERFORMANCE SUMMARY');
+    expect(res.text).toContain('Total Transactions:');
+    expect(res.text).toContain('Total Volume Traded:');
+    expect(res.text).toContain('Net Realized PnL:');
+    expect(res.text).toContain('PAGINATION METRICS:');
+    expect(res.text).toContain('Page 1 of');
+    expect(res.text).toContain('TX HASH');
+
+    // Test root-level route as well
+    const rootRes = await request(app).get('/transactions.txt?limit=10');
+    expect(rootRes.status).toBe(200);
+    expect(rootRes.headers['content-type']).toContain('text/plain');
+    expect(rootRes.text).toContain('DREAMDEX AUTONOMOUS SWARM LEDGER');
+  });
 });
 
 

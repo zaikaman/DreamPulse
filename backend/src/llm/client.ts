@@ -31,6 +31,8 @@ function getGroqClient(apiKey: string): OpenAI {
     client = new OpenAI({
       baseURL: env.GROQ_BASE_URL,
       apiKey: apiKey,
+      timeout: 5000,
+      maxRetries: 1,
     });
     groqClients.set(apiKey, client);
   }
@@ -101,6 +103,8 @@ function getGeminiClient(): OpenAI {
     geminiFallbackClient = new OpenAI({
       baseURL: env.GEMINI_BASE_URL,
       apiKey: env.GEMINI_API_KEY || '',
+      timeout: 5000,
+      maxRetries: 1,
     });
   }
   return geminiFallbackClient;
