@@ -3,7 +3,11 @@ import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import { SessionDelegationModal } from './SessionDelegationModal.js';
 import type { SessionGrant } from '../types/index.js';
 import type { WalletState } from '../hooks/useSessionKey.js';
-import { UNLIMITED_AMOUNT, UNLIMITED_HOURS } from '../lib/sessionUtils.js';
+import {
+  MAX_ALLOWED_TRADE_SIZE,
+  MAX_ALLOWED_DAILY_CAP,
+  MAX_SESSION_DURATION_HOURS,
+} from '../lib/sessionUtils.js';
 
 vi.mock('../services/web3.js', () => ({
   SOMNIA_ADDRESSES: {
@@ -94,7 +98,7 @@ describe('SessionDelegationModal (spend-approval surface)', () => {
     expect(screen.queryByRole('button', { name: /activate smart trading account/i })).toBeNull();
   });
 
-  it('submits unbounded delegation defaults on 1-click activation', async () => {
+  it('submits on-chain capped delegation defaults on 1-click activation', async () => {
     const props = baseProps();
     render(<SessionDelegationModal {...props} />);
 
@@ -102,9 +106,9 @@ describe('SessionDelegationModal (spend-approval surface)', () => {
 
     await waitFor(() => expect(props.onCreateSession).toHaveBeenCalledTimes(1));
     expect(props.onCreateSession).toHaveBeenCalledWith({
-      maxTradeSize: UNLIMITED_AMOUNT,
-      dailyVolumeCap: UNLIMITED_AMOUNT,
-      durationHours: UNLIMITED_HOURS,
+      maxTradeSize: MAX_ALLOWED_TRADE_SIZE,
+      dailyVolumeCap: MAX_ALLOWED_DAILY_CAP,
+      durationHours: MAX_SESSION_DURATION_HOURS,
       depositAmount: undefined,
       copyTradeEnabled: false,
     });

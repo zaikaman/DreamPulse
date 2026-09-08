@@ -11,6 +11,11 @@ import { supabase, subscribeToPrivateTable } from '../services/supabase.js';
 import { ensureSupabaseAuthForWallet, restoreSupabaseAuthIfCached, clearSupabaseAuthForLogout } from '../services/supabase-auth.js';
 import type { RealtimeChannel } from '@supabase/supabase-js';
 import { shouldPoll, STALE_TIMES } from '../lib/polling.js';
+import {
+  MAX_ALLOWED_TRADE_SIZE,
+  MAX_ALLOWED_DAILY_CAP,
+  MAX_SESSION_DURATION_HOURS,
+} from '../lib/sessionUtils.js';
 
 
 export interface WalletState {
@@ -578,12 +583,12 @@ export function useSessionKey(): UseSessionKeyReturn {
         setStepState('authorizing_onchain');
         const ephemeralKey = web3Service.generateEphemeralSessionKey();
 
-        const clampedMaxTrade = Math.min(Math.max(1, params.maxTradeSize), 50);
+        const clampedMaxTrade = Math.min(Math.max(1, params.maxTradeSize), MAX_ALLOWED_TRADE_SIZE);
         const clampedDailyCap = Math.min(
           Math.max(params.dailyVolumeCap, clampedMaxTrade),
-          500,
+          MAX_ALLOWED_DAILY_CAP,
         );
-        const clampedDurationHours = Math.min(Math.max(1, params.durationHours), 720);
+        const clampedDurationHours = Math.min(Math.max(1, params.durationHours), MAX_SESSION_DURATION_HOURS);
         if (
           clampedMaxTrade !== params.maxTradeSize ||
           clampedDailyCap !== params.dailyVolumeCap ||

@@ -8,7 +8,12 @@ import {
   validateZeroCustodyInvariants,
   OPERATOR_SELECTORS,
 } from '../src/config/permissions-abi.js';
-import { SessionService } from '../src/services/session-service.js';
+import {
+  SessionService,
+  MAX_ALLOWED_TRADE_SIZE,
+  MAX_ALLOWED_DAILY_CAP,
+  MAX_SESSION_DURATION_SEC,
+} from '../src/services/session-service.js';
 import { SOMNIA_ADDRESSES, operatorAccount as liveOperator } from '../src/config/somnia.js';
 
 describe('Task T037 & T040: Non-Custodial Session Permissions & EIP-712 Signatures', () => {
@@ -385,40 +390,96 @@ describe('Task T038 & T040: Session Management Service & Risk Guardrails', () =>
     expect(copyTargets.some((s) => s.userAddress.toLowerCase() === copilotOnlyUser.address.toLowerCase())).toBe(false);
   });
 
-  it('supports unlimited and high-cap session delegation (unlimited time, maxTradeSize, dailyVolumeCap)', async () => {
+  it('enforces on-chain risk caps ($500 maxTradeSize, $5,000 dailyVolumeCap, 30-day max duration)', async () => {
     const user = privateKeyToAccount(generatePrivateKey());
-    const UNLIMITED_VAL = 1_000_000_000;
-    const perpetualExpiry = new Date(Date.now() + 100 * 365 * 24 * 3600 * 1000).toISOString();
+    const valid30DayExpiry = new Date(Date.now() + 30 * 24 * 3600 * 1000).toISOString();
+    const excessiveExpiry = new Date(Date.now() + 35 * 24 * 3600 * 1000).toISOString();
 
+    // 1. Rejects maxTradeSize exceeding MAX_ALLOWED_TRADE_SIZE ($500)
+    await expect(
+      sessionService.registerSession({
+        userAddress: user.address,
+        operatorAddress: liveOperator.address,
+        maxTradeSize: 501,
+        dailyVolumeCap: 1000,
+        expiresAt: valid30DayExpiry,
+      }),
+    ).rejects.toThrow(`exceeds maximum allowed trade size of ${MAX_ALLOWED_TRADE_SIZE} tUSDC`);
+
+    // 2. Rejects dailyVolumeCap exceeding MAX_ALLOWED_DAILY_CAP ($5,000)
+    await expect(
+      sessionService.registerSession({
+        userAddress: user.address,
+        operatorAddress: liveOperator.address,
+        maxTradeSize: 100,
+        dailyVolumeCap: 5001,
+        expiresAt: valid30DayExpiry,
+      }),
+    ).rejects.toThrow(`exceeds maximum allowed daily cap of ${MAX_ALLOWED_DAILY_CAP} tUSDC`);
+
+    // 3. Rejects duration exceeding 30 days
+    await expect(
+      sessionService.registerSession({
+        userAddress: user.address,
+        operatorAddress: liveOperator.address,
+        maxTradeSize: 500,
+        dailyVolumeCap: 5000,
+        expiresAt: excessiveExpiry,
+      }),
+    ).rejects.toThrow('exceeds maximum allowed duration of 30 days');
+
+    // 4. Successfully registers session at the maximum boundary limits ($500, $5,000, 30 days)
     const session = await sessionService.registerSession({
       userAddress: user.address,
       operatorAddress: liveOperator.address,
-      maxTradeSize: UNLIMITED_VAL,
-      dailyVolumeCap: UNLIMITED_VAL,
-      expiresAt: perpetualExpiry,
+      maxTradeSize: MAX_ALLOWED_TRADE_SIZE,
+      dailyVolumeCap: MAX_ALLOWED_DAILY_CAP,
+      expiresAt: valid30DayExpiry,
       onChainAuthorized: true,
       copyTradeEnabled: true,
     });
 
     expect(session.isActive).toBe(true);
-    expect(session.maxTradeSize).toBe(UNLIMITED_VAL);
-    expect(session.dailyVolumeCap).toBe(UNLIMITED_VAL);
-    expect(session.expiresAt).toBe(perpetualExpiry);
+    expect(session.maxTradeSize).toBe(500);
+    expect(session.dailyVolumeCap).toBe(5000);
 
-    // Any large trade is permitted under unlimited bounds
-    const check1 = sessionService.validateTradeAllowance(session.id, 50_000);
-    expect(check1.allowed).toBe(true);
+    // 5. Validates trade allowance against single trade limit ($500)
+    const validTrade = sessionService.validateTradeAllowance(session.id, 500);
+    expect(validTrade.allowed).toBe(true);
 
-    const check2 = sessionService.validateTradeAllowance(session.id, 500_000);
-    expect(check2.allowed).toBe(true);
+    const oversizedTrade = sessionService.validateTradeAllowance(session.id, 500.01);
+    expect(oversizedTrade.allowed).toBe(false);
+    expect(oversizedTrade.reason).toMatch(/exceeds maximum trade size limit of 500\.00 tUSDC/);
 
-    // Record huge spend
-    await sessionService.recordTradeSpend(session.id, 500_000);
-    expect(session.spentToday).toBe(500_000);
+    // 6. Record spend towards daily volume cap ($5,000)
+    await sessionService.recordTradeSpend(session.id, 4700);
+    expect(session.spentToday).toBe(4700);
 
-    // Subsequent huge trade is still allowed under unlimited daily volume
-    const check3 = sessionService.validateTradeAllowance(session.id, 250_000);
-    expect(check3.allowed).toBe(true);
+    // Trade of $300 fits within remaining budget of $300 ($5,000 - $4,700)
+    const finalAllowedTrade = sessionService.validateTradeAllowance(session.id, 300);
+    expect(finalAllowedTrade.allowed).toBe(true);
+
+    // Trade of $400 is <= maxTradeSize ($500) but exceeds remaining daily cap ($300)
+    const exceedingDailyTrade = sessionService.validateTradeAllowance(session.id, 400);
+    expect(exceedingDailyTrade.allowed).toBe(false);
+    expect(exceedingDailyTrade.reason).toMatch(/exceeds remaining daily volume cap/);
+
+    // 7. Test updateSessionRisk enforcement
+    await expect(
+      sessionService.updateSessionRisk(user.address, 501, 1000)
+    ).rejects.toThrow(`exceeds maximum allowed trade size of ${MAX_ALLOWED_TRADE_SIZE} tUSDC`);
+
+    await expect(
+      sessionService.updateSessionRisk(user.address, 100, 5001)
+    ).rejects.toThrow(`exceeds maximum allowed daily cap of ${MAX_ALLOWED_DAILY_CAP} tUSDC`);
+
+    await expect(
+      sessionService.updateSessionRisk(user.address, 300, 200)
+    ).rejects.toThrow('must be >= maxTradeSize');
+
+    const updated = await sessionService.updateSessionRisk(user.address, 250, 2500);
+    expect(updated?.maxTradeSize).toBe(250);
+    expect(updated?.dailyVolumeCap).toBe(2500);
   });
 
   it('rejects fake/unverified onChainTxHash without valid on-chain authorization', async () => {

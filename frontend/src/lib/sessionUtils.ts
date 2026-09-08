@@ -1,5 +1,12 @@
-export const UNLIMITED_AMOUNT = 1_000_000_000; // 1 Billion tUSDC (No Cap)
-export const UNLIMITED_HOURS = 876_000; // 100 Years (876,000 Hours) - Perpetual
+export const MAX_ALLOWED_TRADE_SIZE = 500; // $500 tUSDC (Absolute contract ceiling: MAX_ALLOWED_TRADE_SIZE)
+export const MAX_ALLOWED_DAILY_CAP = 5000; // $5,000 tUSDC per rolling 24h (Absolute contract ceiling: MAX_ALLOWED_DAILY_CAP)
+export const MAX_SESSION_DURATION_DAYS = 30; // 30 Days (Absolute contract ceiling: MAX_SESSION_DURATION)
+export const MAX_SESSION_DURATION_HOURS = 30 * 24; // 720 Hours
+export const MAX_SESSION_DURATION_SEC = 30 * 24 * 3600; // 2,592,000 Seconds
+export const MAX_SESSION_DURATION_MS = MAX_SESSION_DURATION_SEC * 1000;
+
+export const UNLIMITED_AMOUNT = 1_000_000_000; // Legacy fallback amount
+export const UNLIMITED_HOURS = 876_000; // Legacy fallback hours
 
 /**
  * Checks if an amount represents unlimited / no cap.

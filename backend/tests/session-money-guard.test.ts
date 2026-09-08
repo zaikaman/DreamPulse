@@ -116,6 +116,23 @@ describe('Session money-guard adversarial suite', () => {
     ).rejects.toThrow('Invalid nonce');
 
     await expect(
+      svc.registerSession({ userAddress: user, maxTradeSize: 501, dailyVolumeCap: 1000 }),
+    ).rejects.toThrow('exceeds maximum allowed trade size');
+
+    await expect(
+      svc.registerSession({ userAddress: user, maxTradeSize: 100, dailyVolumeCap: 5001 }),
+    ).rejects.toThrow('exceeds maximum allowed daily cap');
+
+    await expect(
+      svc.registerSession({
+        userAddress: user,
+        maxTradeSize: 100,
+        dailyVolumeCap: 1000,
+        expiresAt: new Date(Date.now() + 35 * 24 * 3600 * 1000).toISOString(),
+      }),
+    ).rejects.toThrow('exceeds maximum allowed duration of 30 days');
+
+    await expect(
       svc.registerSession({
         userAddress: user,
         maxTradeSize: 10,

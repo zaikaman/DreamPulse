@@ -5,11 +5,15 @@ import {
   AdjustmentsHorizontalIcon,
   InformationCircleIcon,
   CheckIcon,
+  ExclamationTriangleIcon,
 } from '@heroicons/react/24/outline';
 import { Button } from './ui/button.js';
 import { Spinner } from './ui/Spinner.js';
 import type { SessionGrant } from '../types/index.js';
-import { UNLIMITED_AMOUNT } from '../lib/sessionUtils.js';
+import {
+  MAX_ALLOWED_TRADE_SIZE,
+  MAX_ALLOWED_DAILY_CAP,
+} from '../lib/sessionUtils.js';
 
 interface RiskManagementModalProps {
   isOpen: boolean;
@@ -27,10 +31,13 @@ export const RiskManagementModal: React.FC<RiskManagementModalProps> = ({
   activeSession,
   onUpdateRisk,
 }) => {
-  const [maxTradeSize, setMaxTradeSize] = useState<number>(() => activeSession?.maxTradeSize || 500);
-  const [dailyVolumeCap, setDailyVolumeCap] = useState<number>(() => activeSession?.dailyVolumeCap || 5000);
-  const [isUnlimitedTrade, setIsUnlimitedTrade] = useState<boolean>(() => (activeSession?.maxTradeSize || 0) >= UNLIMITED_AMOUNT);
-  const [isUnlimitedDaily, setIsUnlimitedDaily] = useState<boolean>(() => (activeSession?.dailyVolumeCap || 0) >= UNLIMITED_AMOUNT);
+  const [maxTradeSize, setMaxTradeSize] = useState<number>(() =>
+    Math.min(MAX_ALLOWED_TRADE_SIZE, Math.max(1, activeSession?.maxTradeSize || MAX_ALLOWED_TRADE_SIZE))
+  );
+  const [dailyVolumeCap, setDailyVolumeCap] = useState<number>(() =>
+    Math.min(MAX_ALLOWED_DAILY_CAP, Math.max(maxTradeSize, activeSession?.dailyVolumeCap || MAX_ALLOWED_DAILY_CAP))
+  );
+  const [validationError, setValidationError] = useState<string | null>(null);
   const [isSaving, setIsSaving] = useState<boolean>(false);
   const [success, setSuccess] = useState<boolean>(false);
 
@@ -38,13 +45,31 @@ export const RiskManagementModal: React.FC<RiskManagementModalProps> = ({
 
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
+    setValidationError(null);
+
+    const trade = Number(maxTradeSize);
+    const daily = Number(dailyVolumeCap);
+
+    if (isNaN(trade) || trade <= 0 || trade > MAX_ALLOWED_TRADE_SIZE) {
+      setValidationError(`Single trade limit must be between 1 and ${MAX_ALLOWED_TRADE_SIZE} tUSDC (contract ceiling).`);
+      return;
+    }
+    if (isNaN(daily) || daily < trade) {
+      setValidationError(`Daily volume cap must be at least equal to single trade limit ($${trade} tUSDC).`);
+      return;
+    }
+    if (daily > MAX_ALLOWED_DAILY_CAP) {
+      setValidationError(`Daily volume cap cannot exceed ${MAX_ALLOWED_DAILY_CAP} tUSDC (contract ceiling).`);
+      return;
+    }
+
     setIsSaving(true);
     setSuccess(false);
     try {
       if (onUpdateRisk) {
         await onUpdateRisk({
-          maxTradeSize: isUnlimitedTrade ? UNLIMITED_AMOUNT : maxTradeSize,
-          dailyVolumeCap: isUnlimitedDaily ? UNLIMITED_AMOUNT : dailyVolumeCap,
+          maxTradeSize: trade,
+          dailyVolumeCap: daily,
         });
       }
       setSuccess(true);
@@ -52,8 +77,8 @@ export const RiskManagementModal: React.FC<RiskManagementModalProps> = ({
         setSuccess(false);
         onClose();
       }, 1000);
-    } catch {
-      // handled in hook/caller
+    } catch (err: any) {
+      setValidationError(err?.message || 'Failed to update risk parameters');
     } finally {
       setIsSaving(false);
     }
@@ -86,6 +111,14 @@ export const RiskManagementModal: React.FC<RiskManagementModalProps> = ({
           </button>
         </div>
 
+        {/* Validation Error Banner */}
+        {validationError && (
+          <div className="mt-4 p-3 rounded-xl bg-destructive/10 border border-destructive/30 flex items-start gap-2 text-xs text-destructive">
+            <ExclamationTriangleIcon className="w-4 h-4 shrink-0 mt-0.5" />
+            <span>{validationError}</span>
+          </div>
+        )}
+
         <form onSubmit={handleSave} className="space-y-4 pt-4">
           {/* Max Trade Size */}
           <div>
@@ -95,77 +128,89 @@ export const RiskManagementModal: React.FC<RiskManagementModalProps> = ({
               </label>
               <button
                 type="button"
-                onClick={() => setIsUnlimitedTrade((prev) => !prev)}
+                onClick={() => {
+                  setMaxTradeSize(MAX_ALLOWED_TRADE_SIZE);
+                  setValidationError(null);
+                }}
                 className={`text-[11px] font-mono transition-colors cursor-pointer ${
-                  isUnlimitedTrade ? 'text-[#00ffcc] font-semibold' : 'text-muted-foreground hover:text-foreground'
+                  maxTradeSize === MAX_ALLOWED_TRADE_SIZE
+                    ? 'text-[#00ffcc] font-semibold'
+                    : 'text-muted-foreground hover:text-foreground'
                 }`}
               >
-                {isUnlimitedTrade ? '[✓ No Limit]' : 'Set Unlimited'}
+                [Max Cap: ${MAX_ALLOWED_TRADE_SIZE}]
               </button>
             </div>
-            {!isUnlimitedTrade ? (
-              <div className="relative">
-                <input
-                  type="number"
-                  step="any"
-                  min="1"
-                  value={maxTradeSize}
-                  onChange={(e) => setMaxTradeSize(parseFloat(e.target.value) || 0)}
-                  className="w-full h-10 px-3.5 pr-16 rounded-xl bg-background/80 border border-border/70 font-mono text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-primary"
-                />
-                <span className="absolute right-3.5 top-1/2 -translate-y-1/2 text-xs font-mono text-muted-foreground pointer-events-none">
-                  tUSDC
-                </span>
-              </div>
-            ) : (
-              <div className="h-10 px-3.5 flex items-center rounded-xl bg-muted/20 border border-border/40 font-mono text-xs text-[#00ffcc]">
-                Unlimited (Full Trading Balance Available)
-              </div>
-            )}
+            <div className="relative">
+              <input
+                type="number"
+                step="any"
+                min="1"
+                max={MAX_ALLOWED_TRADE_SIZE}
+                value={maxTradeSize}
+                onChange={(e) => {
+                  setMaxTradeSize(parseFloat(e.target.value) || 0);
+                  setValidationError(null);
+                }}
+                className="w-full h-10 px-3.5 pr-16 rounded-xl bg-background/80 border border-border/70 font-mono text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-primary"
+              />
+              <span className="absolute right-3.5 top-1/2 -translate-y-1/2 text-xs font-mono text-muted-foreground pointer-events-none">
+                tUSDC
+              </span>
+            </div>
+            <p className="text-[10.5px] text-muted-foreground font-mono mt-1">
+              On-chain absolute ceiling: ${MAX_ALLOWED_TRADE_SIZE} tUSDC per trade
+            </p>
           </div>
 
           {/* Daily Volume Cap */}
           <div>
             <div className="flex items-center justify-between mb-1.5">
               <label className="text-xs font-medium text-foreground">
-                Daily Volume Ceiling
+                Daily Volume Ceiling (Rolling 24h)
               </label>
               <button
                 type="button"
-                onClick={() => setIsUnlimitedDaily((prev) => !prev)}
+                onClick={() => {
+                  setDailyVolumeCap(MAX_ALLOWED_DAILY_CAP);
+                  setValidationError(null);
+                }}
                 className={`text-[11px] font-mono transition-colors cursor-pointer ${
-                  isUnlimitedDaily ? 'text-[#00ffcc] font-semibold' : 'text-muted-foreground hover:text-foreground'
+                  dailyVolumeCap === MAX_ALLOWED_DAILY_CAP
+                    ? 'text-[#00ffcc] font-semibold'
+                    : 'text-muted-foreground hover:text-foreground'
                 }`}
               >
-                {isUnlimitedDaily ? '[✓ No Limit]' : 'Set Unlimited'}
+                [Max Cap: ${MAX_ALLOWED_DAILY_CAP}]
               </button>
             </div>
-            {!isUnlimitedDaily ? (
-              <div className="relative">
-                <input
-                  type="number"
-                  step="any"
-                  min="1"
-                  value={dailyVolumeCap}
-                  onChange={(e) => setDailyVolumeCap(parseFloat(e.target.value) || 0)}
-                  className="w-full h-10 px-3.5 pr-16 rounded-xl bg-background/80 border border-border/70 font-mono text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-primary"
-                />
-                <span className="absolute right-3.5 top-1/2 -translate-y-1/2 text-xs font-mono text-muted-foreground pointer-events-none">
-                  tUSDC
-                </span>
-              </div>
-            ) : (
-              <div className="h-10 px-3.5 flex items-center rounded-xl bg-muted/20 border border-border/40 font-mono text-xs text-[#00ffcc]">
-                Unlimited (No Daily Rollover Cap)
-              </div>
-            )}
+            <div className="relative">
+              <input
+                type="number"
+                step="any"
+                min={maxTradeSize || 1}
+                max={MAX_ALLOWED_DAILY_CAP}
+                value={dailyVolumeCap}
+                onChange={(e) => {
+                  setDailyVolumeCap(parseFloat(e.target.value) || 0);
+                  setValidationError(null);
+                }}
+                className="w-full h-10 px-3.5 pr-16 rounded-xl bg-background/80 border border-border/70 font-mono text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-primary"
+              />
+              <span className="absolute right-3.5 top-1/2 -translate-y-1/2 text-xs font-mono text-muted-foreground pointer-events-none">
+                tUSDC
+              </span>
+            </div>
+            <p className="text-[10.5px] text-muted-foreground font-mono mt-1">
+              On-chain absolute ceiling: ${MAX_ALLOWED_DAILY_CAP.toLocaleString()} tUSDC per 24 hours
+            </p>
           </div>
 
           {/* Safe Isolation Note */}
           <div className="flex items-start gap-2 p-3 rounded-xl bg-muted/20 border border-border/30 text-xs text-muted-foreground">
             <InformationCircleIcon className="w-4 h-4 text-primary flex-shrink-0 mt-0.5" />
             <span>
-              Risk limits restrict how fast your deposited trading balance can be traded in a single session. Your main wallet is always isolated and can never be pulled.
+              Risk ceilings restrict autonomous agent execution on-chain. Trades exceeding ${MAX_ALLOWED_TRADE_SIZE} tUSDC or a daily volume of ${MAX_ALLOWED_DAILY_CAP.toLocaleString()} tUSDC are blocked at the smart contract level.
             </span>
           </div>
 

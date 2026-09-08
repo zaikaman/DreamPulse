@@ -1,7 +1,7 @@
 import { Router, Request, Response } from 'express';
 import { marketService } from '../services/market-service.js';
 import { anomalyService, normalizeMarketSymbol } from '../services/anomaly-service.js';
-import { sessionService } from '../services/session-service.js';
+import { sessionService, MAX_ALLOWED_TRADE_SIZE, MAX_ALLOWED_DAILY_CAP } from '../services/session-service.js';
 import { swarmRunner } from '../agents/swarm-runner.js';
 import { orderService } from '../services/order-service.js';
 import { settlementService } from '../services/settlement-service.js';
@@ -542,10 +542,36 @@ apiRouter.post('/sessions/:userAddress/risk', requireWalletAuth, async (req: Req
     if (!userAddress || !isAddress(userAddress)) {
       return res.status(400).json({ success: false, error: 'Invalid user address parameter' });
     }
+
+    const tradeSizeNum = Number(maxTradeSize);
+    const dailyCapNum = Number(dailyVolumeCap);
+
+    if (isNaN(tradeSizeNum) || tradeSizeNum <= 0) {
+      return res.status(400).json({ success: false, error: 'Invalid maxTradeSize: must be a positive number' });
+    }
+    if (tradeSizeNum > MAX_ALLOWED_TRADE_SIZE) {
+      return res.status(400).json({
+        success: false,
+        error: `Invalid maxTradeSize: exceeds maximum allowed trade size of ${MAX_ALLOWED_TRADE_SIZE} tUSDC`,
+      });
+    }
+    if (isNaN(dailyCapNum) || dailyCapNum < tradeSizeNum) {
+      return res.status(400).json({
+        success: false,
+        error: `Invalid dailyVolumeCap: must be >= maxTradeSize (${tradeSizeNum})`,
+      });
+    }
+    if (dailyCapNum > MAX_ALLOWED_DAILY_CAP) {
+      return res.status(400).json({
+        success: false,
+        error: `Invalid dailyVolumeCap: exceeds maximum allowed daily cap of ${MAX_ALLOWED_DAILY_CAP} tUSDC`,
+      });
+    }
+
     const session = await sessionService.updateSessionRisk(
       userAddress,
-      Number(maxTradeSize || 1000000000),
-      Number(dailyVolumeCap || 1000000000)
+      tradeSizeNum,
+      dailyCapNum
     );
     if (!session) {
       return res.status(404).json({ success: false, error: 'No active session found for user' });
@@ -555,7 +581,7 @@ apiRouter.post('/sessions/:userAddress/risk', requireWalletAuth, async (req: Req
       session: stripSessionSecrets(session),
     });
   } catch (err: any) {
-    return res.status(500).json({ success: false, error: err.message || 'Failed to update session risk' });
+    return res.status(400).json({ success: false, error: err.message || 'Failed to update session risk' });
   }
 });
 

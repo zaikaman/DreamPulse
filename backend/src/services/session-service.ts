@@ -55,6 +55,10 @@ export async function verifyTxHashOnChain(
   }
 }
 
+export const MAX_ALLOWED_TRADE_SIZE = 500; // 500 tUSDC (matches contract MAX_ALLOWED_TRADE_SIZE)
+export const MAX_ALLOWED_DAILY_CAP = 5000; // 5,000 tUSDC (matches contract MAX_ALLOWED_DAILY_CAP)
+export const MAX_SESSION_DURATION_SEC = 30 * 24 * 3600; // 30 days in seconds (matches contract MAX_SESSION_DURATION)
+export const MAX_SESSION_DURATION_MS = MAX_SESSION_DURATION_SEC * 1000;
 export const UNLIMITED_AMOUNT = 1_000_000_000;
 
 /**
@@ -423,8 +427,14 @@ export class SessionService {
     if (isNaN(maxTradeSize) || maxTradeSize <= 0) {
       throw new Error(`Invalid maxTradeSize: must be positive number`);
     }
-    if (isNaN(dailyVolumeCap) || (dailyVolumeCap < maxTradeSize && dailyVolumeCap < UNLIMITED_AMOUNT)) {
+    if (maxTradeSize > MAX_ALLOWED_TRADE_SIZE) {
+      throw new Error(`Invalid maxTradeSize: exceeds maximum allowed trade size of ${MAX_ALLOWED_TRADE_SIZE} tUSDC`);
+    }
+    if (isNaN(dailyVolumeCap) || dailyVolumeCap < maxTradeSize) {
       throw new Error(`Invalid dailyVolumeCap: must be >= maxTradeSize (${maxTradeSize})`);
+    }
+    if (dailyVolumeCap > MAX_ALLOWED_DAILY_CAP) {
+      throw new Error(`Invalid dailyVolumeCap: exceeds maximum allowed daily cap of ${MAX_ALLOWED_DAILY_CAP} tUSDC`);
     }
 
     const permissions = params.permissions || ['placeOrderFor', 'cancelOrderFor'];
@@ -472,7 +482,21 @@ export class SessionService {
     }
 
     const now = Date.now();
-    const expiresAt = params.expiresAt || new Date(now + 24 * 3600 * 1000).toISOString();
+    let expiresAt: string;
+    if (params.expiresAt) {
+      const expiryTimestamp = new Date(params.expiresAt).getTime();
+      if (isNaN(expiryTimestamp)) {
+        throw new Error('Invalid expiresAt: invalid timestamp format');
+      }
+      const durationSec = Math.floor((expiryTimestamp - now) / 1000);
+      // Allow 60 seconds tolerance for clock skew and network transit
+      if (durationSec > MAX_SESSION_DURATION_SEC + 60) {
+        throw new Error(`Invalid session duration: exceeds maximum allowed duration of 30 days (${MAX_SESSION_DURATION_SEC} seconds)`);
+      }
+      expiresAt = params.expiresAt;
+    } else {
+      expiresAt = new Date(now + 24 * 3600 * 1000).toISOString();
+    }
     const deadlineTimestamp = Math.floor(new Date(expiresAt).getTime() / 1000);
 
     // Verify EIP-712 signature if provided
@@ -726,8 +750,23 @@ export class SessionService {
     const session = this.sessions.get(sessionId);
     if (!session) return null;
 
-    session.maxTradeSize = maxTradeSize;
-    session.dailyVolumeCap = dailyVolumeCap;
+    const parsedMaxTrade = Number(maxTradeSize);
+    const parsedDailyCap = Number(dailyVolumeCap);
+    if (isNaN(parsedMaxTrade) || parsedMaxTrade <= 0) {
+      throw new Error('Invalid maxTradeSize: must be positive number');
+    }
+    if (parsedMaxTrade > MAX_ALLOWED_TRADE_SIZE) {
+      throw new Error(`Invalid maxTradeSize: exceeds maximum allowed trade size of ${MAX_ALLOWED_TRADE_SIZE} tUSDC`);
+    }
+    if (isNaN(parsedDailyCap) || parsedDailyCap < parsedMaxTrade) {
+      throw new Error(`Invalid dailyVolumeCap: must be >= maxTradeSize (${parsedMaxTrade})`);
+    }
+    if (parsedDailyCap > MAX_ALLOWED_DAILY_CAP) {
+      throw new Error(`Invalid dailyVolumeCap: exceeds maximum allowed daily cap of ${MAX_ALLOWED_DAILY_CAP} tUSDC`);
+    }
+
+    session.maxTradeSize = parsedMaxTrade;
+    session.dailyVolumeCap = parsedDailyCap;
     session.updatedAt = new Date().toISOString();
 
     if (isSessionPersistenceEnabled()) {
@@ -1077,8 +1116,8 @@ export class SessionService {
       return { allowed: false, reason: 'Session is inactive or revoked' };
     }
 
-    // Single trade risk guardrail (bypassed if maxTradeSize is unlimited)
-    if (session.maxTradeSize < UNLIMITED_AMOUNT && tradeCost > session.maxTradeSize) {
+    // Single trade risk guardrail
+    if (tradeCost > session.maxTradeSize) {
       return {
         allowed: false,
         reason: `Trade cost (${tradeCost.toFixed(2)} tUSDC) exceeds maximum trade size limit of ${session.maxTradeSize.toFixed(2)} tUSDC`,
@@ -1102,11 +1141,11 @@ export class SessionService {
       }
     }
 
-    // Daily volume cap guardrail (bypassed if dailyVolumeCap is unlimited).
+    // Daily volume cap guardrail.
     // Live gate-time reservations count against headroom so concurrent
     // executions cannot each pass this check and jointly overspend (TOCTOU).
     const reserved = this.liveReservationTotal(session, now);
-    if (session.dailyVolumeCap < UNLIMITED_AMOUNT && session.spentToday + reserved + tradeCost > session.dailyVolumeCap) {
+    if (session.spentToday + reserved + tradeCost > session.dailyVolumeCap) {
       const remaining = Math.max(0, session.dailyVolumeCap - session.spentToday - reserved);
       return {
         allowed: false,

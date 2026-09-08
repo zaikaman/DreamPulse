@@ -27,8 +27,9 @@ import { SOMNIA_ADDRESSES } from '../services/web3.js';
 import { Spinner } from './ui/Spinner.js';
 import { parseWeb3Error } from '../lib/errorUtils.js';
 import {
-  UNLIMITED_AMOUNT,
-  UNLIMITED_HOURS,
+  MAX_ALLOWED_TRADE_SIZE,
+  MAX_ALLOWED_DAILY_CAP,
+  MAX_SESSION_DURATION_HOURS,
   formatCapAmount,
   formatSessionTimeRemaining,
 } from '../lib/sessionUtils.js';
@@ -119,9 +120,9 @@ export const SessionDelegationModal: React.FC<SessionDelegationModalProps> = ({
     onClearError();
     try {
       await onCreateSession({
-        maxTradeSize: UNLIMITED_AMOUNT,
-        dailyVolumeCap: UNLIMITED_AMOUNT,
-        durationHours: UNLIMITED_HOURS,
+        maxTradeSize: MAX_ALLOWED_TRADE_SIZE,
+        dailyVolumeCap: MAX_ALLOWED_DAILY_CAP,
+        durationHours: MAX_SESSION_DURATION_HOURS,
         depositAmount: undefined,
         copyTradeEnabled: enableCopyTrading,
       });
@@ -686,7 +687,7 @@ export const SessionDelegationModal: React.FC<SessionDelegationModalProps> = ({
                     </div>
                   </div>
                   <span style={{ fontSize: '10px', color: '#00ffcc', fontFamily: 'var(--font-mono)', background: 'rgba(0, 255, 204, 0.1)', padding: '2px 8px', borderRadius: '4px', border: '1px solid rgba(0, 255, 204, 0.25)' }}>
-                    PERPETUAL
+                    30-DAY LIFESPAN (MAX)
                   </span>
                 </div>
 
@@ -702,19 +703,19 @@ export const SessionDelegationModal: React.FC<SessionDelegationModalProps> = ({
 
                   <div style={{ padding: '10px 12px', borderRadius: '8px', background: 'hsl(var(--card) / 0.6)', border: '1px solid hsl(var(--border) / 0.4)' }}>
                     <div style={{ fontSize: '10px', fontWeight: 600, color: 'hsl(var(--muted-foreground))', textTransform: 'uppercase', marginBottom: '4px' }}>
-                      2. Trade Forever
+                      2. On-Chain Ceilings
                     </div>
                     <p style={{ margin: 0, fontSize: '11px', color: 'hsl(var(--foreground))', lineHeight: 1.35 }}>
-                      No artificial trade caps or daily ceilings blocking you. Deposit what you want, trade freely.
+                      Max $500/trade, $5,000 rolling 24h cap, and 30-day max duration enforced by smart contracts.
                     </p>
                   </div>
 
                   <div style={{ padding: '10px 12px', borderRadius: '8px', background: 'hsl(var(--card) / 0.6)', border: '1px solid hsl(var(--border) / 0.4)' }}>
                     <div style={{ fontSize: '10px', fontWeight: 600, color: 'hsl(var(--muted-foreground))', textTransform: 'uppercase', marginBottom: '4px' }}>
-                      3. Decoupled Risk
+                      3. Customizable Risk
                     </div>
                     <p style={{ margin: 0, fontSize: '11px', color: 'hsl(var(--foreground))', lineHeight: 1.35 }}>
-                      Want tighter single-trade or daily stop limits? Configure them anytime in the Risk Limits modal.
+                      Configure tighter single-trade or daily stop limits anytime in the Risk Limits modal.
                     </p>
                   </div>
                 </div>

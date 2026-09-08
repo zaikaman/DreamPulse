@@ -22,6 +22,11 @@ import {
   watchAccount,
 } from 'wagmi/actions';
 import { wagmiConfig } from '../config/wagmi.js';
+import {
+  MAX_ALLOWED_TRADE_SIZE,
+  MAX_ALLOWED_DAILY_CAP,
+  MAX_SESSION_DURATION_HOURS,
+} from '../lib/sessionUtils.js';
 
 const configuredRpc = import.meta.env.VITE_SOMNIA_RPC_URL;
 const isStandardRpc =
@@ -1644,6 +1649,16 @@ export class Web3Service {
     dailyVolumeCap: number;
     durationHours: number;
   }): Promise<{ hash: Hex }> {
+    if (params.maxTradeSize <= 0 || params.maxTradeSize > MAX_ALLOWED_TRADE_SIZE) {
+      throw new Error(`Max trade size must be between 1 and ${MAX_ALLOWED_TRADE_SIZE} tUSDC (contract ceiling)`);
+    }
+    if (params.dailyVolumeCap < params.maxTradeSize || params.dailyVolumeCap > MAX_ALLOWED_DAILY_CAP) {
+      throw new Error(`Daily volume cap must be between maxTradeSize and ${MAX_ALLOWED_DAILY_CAP} tUSDC (contract ceiling)`);
+    }
+    if (params.durationHours <= 0 || params.durationHours > MAX_SESSION_DURATION_HOURS) {
+      throw new Error(`Session duration cannot exceed ${MAX_SESSION_DURATION_HOURS} hours / 30 days (contract ceiling)`);
+    }
+
     const wallet = await this.getWalletClient(params.userAddress);
     const maxTradeRaw = parseUnits(params.maxTradeSize.toString(), 6);
     const dailyCapRaw = parseUnits(params.dailyVolumeCap.toString(), 6);
@@ -1877,6 +1892,16 @@ export class Web3Service {
     dailyVolumeCap: number;
     durationHours: number;
   }): Promise<{ hash: Hex }> {
+    if (params.maxTradeSize <= 0 || params.maxTradeSize > MAX_ALLOWED_TRADE_SIZE) {
+      throw new Error(`Max trade size must be between 1 and ${MAX_ALLOWED_TRADE_SIZE} tUSDC (contract ceiling)`);
+    }
+    if (params.dailyVolumeCap < params.maxTradeSize || params.dailyVolumeCap > MAX_ALLOWED_DAILY_CAP) {
+      throw new Error(`Daily volume cap must be between maxTradeSize and ${MAX_ALLOWED_DAILY_CAP} tUSDC (contract ceiling)`);
+    }
+    if (params.durationHours <= 0 || params.durationHours > MAX_SESSION_DURATION_HOURS) {
+      throw new Error(`Session duration cannot exceed ${MAX_SESSION_DURATION_HOURS} hours / 30 days (contract ceiling)`);
+    }
+
     // SEC-03 migration: pin registry/module on pre-registry clones first.
     // Best-effort — on-chain fail-closed validation protects funds regardless.
     await this.ensureCloneSecurityConfig({

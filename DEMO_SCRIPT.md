@@ -102,12 +102,12 @@
 * **Visual Action**:
   1. Open **Swarm Arena** (`#arena`). Show dual-track leaderboards (AI Fleet vs Human Forecasters).
   2. Click **"Generate Proof-of-Alpha Card"** (`ProofOfAlphaModal`), switch theme, copy card image.
-  3. Close on the verified test suite badge: **498/498 tests passing (100%)**.
+  3. Close on the verified test suite badge: **499/499 tests passing (100%)**.
 
 > **Voiceover (35 words)**:  
 > *"In the Swarm Arena, track AI and forecaster leaderboards, clone winning strategies in one click, and export Proof-of-Alpha cards.*  
 > 
-> *With 498 automated tests passing and live testnet integration, DreamPulse accelerates the future of prediction markets on Somnia."*
+> *With 499 automated tests passing and live testnet integration, DreamPulse accelerates the future of prediction markets on Somnia."*
 
 ---
 
@@ -123,7 +123,7 @@
 > 
 > Behind the scenes, four autonomous agents run a 100-millisecond loop: Volt snipes stale quotes, Oracle trades volatility mispricings, Titan provides two-sided liquidity, and Groq streams their live reasoning. Traders can mirror the swarm or run isolated personal configs. And our Settlement Sweeper automatically batch-redeems winning shares from finalized pools, transferring payouts directly to your wallet.  
 > 
-> In the Swarm Arena, track AI and forecaster leaderboards, clone winning strategies in one click, and export Proof-of-Alpha cards. With 498 automated tests passing and live testnet integration, DreamPulse accelerates the future of prediction markets on Somnia."*
+> In the Swarm Arena, track AI and forecaster leaderboards, clone winning strategies in one click, and export Proof-of-Alpha cards. With 499 automated tests passing and live testnet integration, DreamPulse accelerates the future of prediction markets on Somnia."*
 
 ---
 
