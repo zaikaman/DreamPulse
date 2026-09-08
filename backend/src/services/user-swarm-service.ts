@@ -52,8 +52,8 @@ function toRecord(row: any): PersonalSwarmConfig {
     oracleEnabled: row.oracle_enabled ?? true,
     titanEnabled: row.titan_enabled ?? true,
     sweeperEnabled: row.sweeper_enabled ?? true,
-    voltConfig: row.volt_config || { ...DEFAULT_VOLT_CONFIG },
-    oracleConfig: row.oracle_config || { ...DEFAULT_ORACLE_CONFIG },
+    voltConfig: row.volt_config ? { ...row.volt_config, maxTradeSize: Math.min(50, row.volt_config.maxTradeSize ?? 20.0) } : { ...DEFAULT_VOLT_CONFIG },
+    oracleConfig: row.oracle_config ? { ...row.oracle_config, maxTradeSize: Math.min(50, row.oracle_config.maxTradeSize ?? 20.0) } : { ...DEFAULT_ORACLE_CONFIG },
     titanConfig: row.titan_config || { ...DEFAULT_TITAN_CONFIG },
     customizedAt: row.customized_at || undefined,
     createdAt: row.created_at,
@@ -320,7 +320,7 @@ export class UserSwarmService {
       }
       if (updates.voltConfig.maxTradeSize !== undefined) {
         const v = Number(updates.voltConfig.maxTradeSize);
-        if (!isNaN(v) && v >= 1 && v <= 100) next.voltConfig.maxTradeSize = v;
+        if (!isNaN(v) && v >= 1) next.voltConfig.maxTradeSize = Math.min(50, v);
       }
       next.mode = 'PERSONAL';
       next.customizedAt = now;
@@ -338,7 +338,7 @@ export class UserSwarmService {
       }
       if (updates.oracleConfig.maxTradeSize !== undefined) {
         const v = Number(updates.oracleConfig.maxTradeSize);
-        if (!isNaN(v) && v >= 1 && v <= 100) next.oracleConfig.maxTradeSize = v;
+        if (!isNaN(v) && v >= 1) next.oracleConfig.maxTradeSize = Math.min(50, v);
       }
       next.mode = 'PERSONAL';
       next.customizedAt = now;

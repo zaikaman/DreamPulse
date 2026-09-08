@@ -68,12 +68,12 @@ export const SwarmRiskModal: React.FC<SwarmRiskModalProps> = ({
       driftThreshold: Number(((config.voltConfig?.driftThreshold ?? 0.002) * 100).toFixed(2)),
       minEdge: Number(((config.voltConfig?.minEdge ?? 0.03) * 100).toFixed(1)),
       lotSize: config.voltConfig?.lotSize ?? 5.0,
-      maxTradeSize: config.voltConfig?.maxTradeSize ?? 20.0,
+      maxTradeSize: Math.min(50.0, config.voltConfig?.maxTradeSize ?? 20.0),
     });
     setOracleSliders({
       minEdge: Number(((config.oracleConfig?.minEdge ?? 0.035) * 100).toFixed(1)),
       lotSize: config.oracleConfig?.lotSize ?? 5.0,
-      maxTradeSize: config.oracleConfig?.maxTradeSize ?? 20.0,
+      maxTradeSize: Math.min(50.0, config.oracleConfig?.maxTradeSize ?? 20.0),
     });
     setTitanSliders({
       targetSpread: Number(((config.titanConfig?.targetSpread ?? 0.04) * 100).toFixed(1)),
@@ -95,8 +95,8 @@ export const SwarmRiskModal: React.FC<SwarmRiskModalProps> = ({
       setOracleSliders({ minEdge: 3.5, lotSize: 5.0, maxTradeSize: 25.0 });
       setTitanSliders({ targetSpread: 4.0, inventoryAversion: 0.015, lotSize: 2.0 });
     } else {
-      setVoltSliders({ driftThreshold: 0.10, minEdge: 1.5, lotSize: 15.0, maxTradeSize: 75.0 });
-      setOracleSliders({ minEdge: 2.0, lotSize: 15.0, maxTradeSize: 75.0 });
+      setVoltSliders({ driftThreshold: 0.10, minEdge: 1.5, lotSize: 15.0, maxTradeSize: 50.0 });
+      setOracleSliders({ minEdge: 2.0, lotSize: 15.0, maxTradeSize: 50.0 });
       setTitanSliders({ targetSpread: 2.5, inventoryAversion: 0.008, lotSize: 5.0 });
     }
   };
@@ -109,12 +109,12 @@ export const SwarmRiskModal: React.FC<SwarmRiskModalProps> = ({
           driftThreshold: voltSliders.driftThreshold / 100,
           minEdge: voltSliders.minEdge / 100,
           lotSize: voltSliders.lotSize,
-          maxTradeSize: voltSliders.maxTradeSize,
+          maxTradeSize: Math.min(50.0, voltSliders.maxTradeSize),
         },
         oracle: {
           minEdge: oracleSliders.minEdge / 100,
           lotSize: oracleSliders.lotSize,
-          maxTradeSize: oracleSliders.maxTradeSize,
+          maxTradeSize: Math.min(50.0, oracleSliders.maxTradeSize),
         },
         titan: {
           targetSpread: titanSliders.targetSpread / 100,
@@ -336,15 +336,15 @@ export const SwarmRiskModal: React.FC<SwarmRiskModalProps> = ({
               <div className="space-y-1.5">
                 <div className="flex justify-between items-center">
                   <label className="text-xs font-medium text-foreground">Max Capital Allocated per Trade</label>
-                  <span className="text-xs font-mono font-semibold text-foreground">${voltSliders.maxTradeSize} tUSDC</span>
+                  <span className="text-xs font-mono font-semibold text-foreground">${Math.min(50, voltSliders.maxTradeSize)} tUSDC</span>
                 </div>
                 <input
                   type="range"
                   min={5}
-                  max={150}
+                  max={50}
                   step={5}
-                  value={voltSliders.maxTradeSize}
-                  onChange={(e) => setVoltSliders({ ...voltSliders, maxTradeSize: Number(e.target.value) })}
+                  value={Math.min(50, voltSliders.maxTradeSize)}
+                  onChange={(e) => setVoltSliders({ ...voltSliders, maxTradeSize: Math.min(50, Number(e.target.value)) })}
                   className="w-full h-1 bg-secondary/80 rounded appearance-none cursor-pointer accent-primary"
                 />
               </div>
@@ -410,15 +410,15 @@ export const SwarmRiskModal: React.FC<SwarmRiskModalProps> = ({
               <div className="space-y-1.5">
                 <div className="flex justify-between items-center">
                   <label className="text-xs font-medium text-foreground">Max Capital Allocated per Trade</label>
-                  <span className="text-xs font-mono font-semibold text-foreground">${oracleSliders.maxTradeSize} tUSDC</span>
+                  <span className="text-xs font-mono font-semibold text-foreground">${Math.min(50, oracleSliders.maxTradeSize)} tUSDC</span>
                 </div>
                 <input
                   type="range"
                   min={5}
-                  max={150}
+                  max={50}
                   step={5}
-                  value={oracleSliders.maxTradeSize}
-                  onChange={(e) => setOracleSliders({ ...oracleSliders, maxTradeSize: Number(e.target.value) })}
+                  value={Math.min(50, oracleSliders.maxTradeSize)}
+                  onChange={(e) => setOracleSliders({ ...oracleSliders, maxTradeSize: Math.min(50, Number(e.target.value)) })}
                   className="w-full h-1 bg-secondary/80 rounded appearance-none cursor-pointer accent-primary"
                 />
               </div>
