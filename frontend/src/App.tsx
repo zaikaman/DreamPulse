@@ -89,16 +89,19 @@ export const App: React.FC = () => {
 
   const {
     isOnboardingOpen,
+    currentStep: onboardingStep,
+    setStep: setOnboardingStep,
     openOnboarding,
     closeOnboarding,
     completeOnboarding,
-  } = useOnboarding({ wallet, activeSession });
+  } = useOnboarding({ wallet, activeSession, autoOpenOnConnect: true });
 
   const [isSessionModalOpen, setIsSessionModalOpen] = useState<boolean>(false);
   const [sessionModalInitialRevoke, setSessionModalInitialRevoke] = useState<boolean>(false);
   const [isTradingWalletModalOpen, setIsTradingWalletModalOpen] = useState<boolean>(false);
   const [tradingWalletTab, setTradingWalletTab] = useState<'deposit' | 'withdraw'>('deposit');
   const [isRiskModalOpen, setIsRiskModalOpen] = useState<boolean>(false);
+  const isAnyChildModalOpen = isSessionModalOpen || isTradingWalletModalOpen || isRiskModalOpen;
 
   const handleOpenTradingWallet = useCallback((tab: 'deposit' | 'withdraw' = 'deposit') => {
     setTradingWalletTab(tab);
@@ -622,11 +625,11 @@ export const App: React.FC = () => {
       ) : null}
 
       {/* Interactive First-Run Onboarding & Setup Wizard */}
-      {isOnboardingOpen ? (
+      {isOnboardingOpen && !isAnyChildModalOpen ? (
         <ViewErrorBoundary viewName="Onboarding" variant="minimal">
           <React.Suspense fallback={null}>
             <OnboardingWizardModal
-              isOpen={isOnboardingOpen}
+              isOpen={isOnboardingOpen && !isAnyChildModalOpen}
               onClose={closeOnboarding}
               wallet={wallet}
               activeSession={activeSession}
@@ -637,6 +640,8 @@ export const App: React.FC = () => {
               onOpenSessionModal={handleOpenSessionModal}
               onNavigateView={handleNavigateView}
               onComplete={completeOnboarding}
+              currentStep={onboardingStep}
+              onStepChange={setOnboardingStep}
             />
           </React.Suspense>
         </ViewErrorBoundary>

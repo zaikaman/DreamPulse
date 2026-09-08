@@ -3,6 +3,8 @@ import type { WalletState } from './useSessionKey.js';
 import type { SessionGrant } from '../types/index.js';
 
 const LOCAL_ONBOARDING_KEY = 'dreampulse_onboarded_v1';
+const LOCAL_ONBOARDING_DISMISSED_KEY = 'dreampulse_onboarding_dismissed_v1';
+const LOCAL_ONBOARDING_AUTO_SHOWN_KEY = 'dreampulse_onboarding_auto_shown_v1';
 const LOCAL_QUEST_DISMISSED_KEY = 'dreampulse_quest_dismissed_v1';
 
 export interface OnboardingQuestItem {
@@ -18,6 +20,7 @@ export interface UseOnboardingProps {
   wallet?: WalletState;
   activeSession?: SessionGrant | null;
   ordersCount?: number;
+  autoOpenOnConnect?: boolean;
 }
 
 export interface UseOnboardingReturn {
@@ -43,10 +46,26 @@ export function useOnboarding({
   wallet,
   activeSession,
   ordersCount = 0,
+  autoOpenOnConnect = false,
 }: UseOnboardingProps = {}): UseOnboardingReturn {
   const [hasCompletedOnboarding, setHasCompletedOnboarding] = useState<boolean>(() => {
     try {
-      return localStorage.getItem(LOCAL_ONBOARDING_KEY) === 'true';
+      return (
+        localStorage.getItem(LOCAL_ONBOARDING_KEY) === 'true' ||
+        localStorage.getItem(LOCAL_ONBOARDING_DISMISSED_KEY) === 'true'
+      );
+    } catch {
+      return false;
+    }
+  });
+
+  const [hasBeenAutoShown, setHasBeenAutoShown] = useState<boolean>(() => {
+    try {
+      return (
+        localStorage.getItem(LOCAL_ONBOARDING_AUTO_SHOWN_KEY) === 'true' ||
+        localStorage.getItem(LOCAL_ONBOARDING_KEY) === 'true' ||
+        localStorage.getItem(LOCAL_ONBOARDING_DISMISSED_KEY) === 'true'
+      );
     } catch {
       return false;
     }
@@ -62,15 +81,20 @@ export function useOnboarding({
 
   const [isOnboardingOpen, setIsOnboardingOpen] = useState<boolean>(false);
   const [currentStep, setCurrentStep] = useState<number>(0);
-  const [hasTriggeredAutoOpen, setHasTriggeredAutoOpen] = useState<boolean>(false);
 
-  // Auto-open onboarding on FIRST wallet connection if user hasn't completed it
+  // Auto-open onboarding on FIRST wallet connection only if user hasn't completed/dismissed it and it hasn't appeared yet
   useEffect(() => {
-    if (wallet?.isConnected && !hasCompletedOnboarding && !hasTriggeredAutoOpen) {
+    if (!autoOpenOnConnect) return;
+    if (wallet?.isConnected && !hasCompletedOnboarding && !hasBeenAutoShown) {
       setIsOnboardingOpen(true);
-      setHasTriggeredAutoOpen(true);
+      setHasBeenAutoShown(true);
+      try {
+        localStorage.setItem(LOCAL_ONBOARDING_AUTO_SHOWN_KEY, 'true');
+      } catch {
+        // ignore
+      }
     }
-  }, [wallet?.isConnected, hasCompletedOnboarding, hasTriggeredAutoOpen]);
+  }, [wallet?.isConnected, hasCompletedOnboarding, hasBeenAutoShown, autoOpenOnConnect]);
 
   const openOnboarding = useCallback((step = 0) => {
     setCurrentStep(step);
@@ -78,27 +102,41 @@ export function useOnboarding({
   }, []);
 
   const closeOnboarding = useCallback(() => {
+    try {
+      localStorage.setItem(LOCAL_ONBOARDING_DISMISSED_KEY, 'true');
+      localStorage.setItem(LOCAL_ONBOARDING_AUTO_SHOWN_KEY, 'true');
+    } catch {
+      // ignore
+    }
+    setHasCompletedOnboarding(true);
+    setHasBeenAutoShown(true);
     setIsOnboardingOpen(false);
   }, []);
 
   const completeOnboarding = useCallback(() => {
     try {
       localStorage.setItem(LOCAL_ONBOARDING_KEY, 'true');
+      localStorage.setItem(LOCAL_ONBOARDING_DISMISSED_KEY, 'true');
+      localStorage.setItem(LOCAL_ONBOARDING_AUTO_SHOWN_KEY, 'true');
     } catch {
       // ignore
     }
     setHasCompletedOnboarding(true);
+    setHasBeenAutoShown(true);
     setIsOnboardingOpen(false);
   }, []);
 
   const resetOnboarding = useCallback(() => {
     try {
       localStorage.removeItem(LOCAL_ONBOARDING_KEY);
+      localStorage.removeItem(LOCAL_ONBOARDING_DISMISSED_KEY);
+      localStorage.removeItem(LOCAL_ONBOARDING_AUTO_SHOWN_KEY);
       localStorage.removeItem(LOCAL_QUEST_DISMISSED_KEY);
     } catch {
       // ignore
     }
     setHasCompletedOnboarding(false);
+    setHasBeenAutoShown(false);
     setIsQuestBarDismissed(false);
     setCurrentStep(0);
     setIsOnboardingOpen(true);

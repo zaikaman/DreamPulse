@@ -283,6 +283,20 @@ export const SessionStatusBar: React.FC<SessionStatusBarProps> = ({
     );
   };
 
+  // Compact number formatter for telemetry display (e.g. 50k, 1.2M)
+  const formatCompactValue = (val: number): string => {
+    if (val >= 1_000_000) {
+      return `${(val / 1_000_000).toLocaleString(undefined, { maximumFractionDigits: 1 })}M`;
+    }
+    if (val >= 10_000) {
+      return `${(val / 1_000).toLocaleString(undefined, { maximumFractionDigits: 0 })}k`;
+    }
+    if (val >= 1_000) {
+      return `${(val / 1_000).toLocaleString(undefined, { maximumFractionDigits: 1 })}k`;
+    }
+    return val.toLocaleString(undefined, { maximumFractionDigits: 1 });
+  };
+
   // Active Session Display
   if (isSessionActive && activeSession) {
     const spent = Number(activeSession.spentToday || 0);
@@ -304,6 +318,7 @@ export const SessionStatusBar: React.FC<SessionStatusBarProps> = ({
               onClick={handleCopy}
               className="session-badge-button group"
               title={sessionTooltip}
+              aria-label="Copy session key address"
             >
               <div className="session-live-beacon">
                 <span className="session-live-ping" />
@@ -368,24 +383,51 @@ export const SessionStatusBar: React.FC<SessionStatusBarProps> = ({
             )}
           </div>
 
-          {/* Cluster 2: Risk Telemetry & Execution Mode */}
+          {/* Cluster 2: Risk Telemetry HUD & Execution Mode */}
           <div className="session-bar-telemetry">
+            {/* Execution Mode */}
+            <div className="session-telemetry-item execution-mode-item">
+              <span className="session-field-label">EXECUTION MODE</span>
+              <div className="flex items-center">
+                {renderExecutionMode()}
+              </div>
+            </div>
+
+            <div className="session-telemetry-divider" />
+
             {/* Single Cap */}
-            <div className="session-telemetry-item">
+            <div className="session-telemetry-item single-cap-item">
               <span className="session-field-label">SINGLE CAP</span>
-              <span className="session-telemetry-value">{formatCapAmount(activeSession.maxTradeSize)}</span>
+              <span
+                className="session-telemetry-value"
+                title={`Max single trade ceiling: ${formatCapAmount(activeSession.maxTradeSize)}`}
+              >
+                {formatCapAmount(activeSession.maxTradeSize)}
+              </span>
             </div>
 
             <div className="session-telemetry-divider" />
 
             {/* 24H Budget Meter */}
-            <div className="session-telemetry-item budget-meter">
+            <div
+              className="session-telemetry-item budget-meter"
+              title={
+                isUnlimitedDaily
+                  ? "24H Rolling Budget: Unlimited"
+                  : `24H Rolling Budget: ${spent.toLocaleString(undefined, { minimumFractionDigits: 1, maximumFractionDigits: 2 })} / ${cap.toLocaleString()} tUSDC (${spentPercent.toFixed(1)}% used)\nRemaining today: ${(Math.max(0, cap - spent)).toLocaleString(undefined, { minimumFractionDigits: 1, maximumFractionDigits: 2 })} tUSDC`
+              }
+            >
               <div className="session-budget-header">
                 <span className="session-field-label">24H BUDGET</span>
                 <span className="session-budget-numbers">
-                  {isUnlimitedDaily
-                    ? `${spent.toFixed(1)} / Unlimited`
-                    : `${spent.toFixed(1)} / ${(cap ?? 0).toLocaleString()} tUSDC (${spentPercent.toFixed(0)}%)`}
+                  <span className="session-budget-val">
+                    {isUnlimitedDaily
+                      ? `${formatCompactValue(spent)} / ∞`
+                      : `${formatCompactValue(spent)} / ${formatCompactValue(cap)} tUSDC`}
+                  </span>
+                  <span className="session-budget-pct">
+                    ({spentPercent.toFixed(0)}%)
+                  </span>
                 </span>
               </div>
               <div className="session-budget-track">
@@ -407,20 +449,13 @@ export const SessionStatusBar: React.FC<SessionStatusBarProps> = ({
 
             <div className="session-telemetry-divider" />
 
-            {/* Execution Mode */}
-            <div className="session-telemetry-item">
-              <span className="session-field-label">EXECUTION MODE</span>
-              <div className="flex items-center">
-                {renderExecutionMode()}
-              </div>
-            </div>
-
-            <div className="session-telemetry-divider" />
-
             {/* Session Expiry */}
-            <div className="session-telemetry-item">
+            <div className="session-telemetry-item expiry-item">
               <span className="session-field-label">EXPIRES</span>
-              <div className="session-expiry-badge">
+              <div
+                className="session-expiry-badge"
+                title={`Session Expiration: ${activeSession.expiresAt ? new Date(activeSession.expiresAt).toLocaleString() : 'Perpetual'}`}
+              >
                 <ClockIcon className="w-3 h-3 text-muted-foreground" />
                 <span>{timeRemaining || 'Perpetual'}</span>
               </div>

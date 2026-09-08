@@ -34,6 +34,8 @@ interface OnboardingWizardModalProps {
   onOpenSessionModal?: (options?: { revoke?: boolean }) => void;
   onNavigateView: (view: DashboardViewType) => void;
   onComplete: () => void;
+  currentStep?: number;
+  onStepChange?: (step: number) => void;
 }
 
 export const OnboardingWizardModal: React.FC<OnboardingWizardModalProps> = ({
@@ -48,16 +50,19 @@ export const OnboardingWizardModal: React.FC<OnboardingWizardModalProps> = ({
   onOpenSessionModal,
   onNavigateView,
   onComplete,
+  currentStep: externalStep,
+  onStepChange,
 }) => {
-  const [currentStep, setCurrentStep] = useState<number>(0);
+  const [internalStep, setInternalStep] = useState<number>(externalStep ?? 0);
+  const currentStep = externalStep !== undefined ? externalStep : internalStep;
   const [isSwitchingNetwork, setIsSwitchingNetwork] = useState<boolean>(false);
   const [hasClaimedThisSession, setHasClaimedThisSession] = useState<boolean>(false);
 
   useEffect(() => {
-    if (isOpen) {
-      setCurrentStep(0);
+    if (externalStep !== undefined) {
+      setInternalStep(externalStep);
     }
-  }, [isOpen]);
+  }, [externalStep]);
 
   if (!isOpen) return null;
 
@@ -75,9 +80,20 @@ export const OnboardingWizardModal: React.FC<OnboardingWizardModalProps> = ({
     { title: 'Choose Your Journey', label: 'Launch' },
   ];
 
+  const updateStep = (stepOrFn: number | ((prev: number) => number)) => {
+    if (typeof stepOrFn === 'function') {
+      const next = stepOrFn(currentStep);
+      setInternalStep(next);
+      onStepChange?.(next);
+    } else {
+      setInternalStep(stepOrFn);
+      onStepChange?.(stepOrFn);
+    }
+  };
+
   const handleNext = () => {
     if (currentStep < steps.length - 1) {
-      setCurrentStep((prev) => prev + 1);
+      updateStep((prev) => prev + 1);
     } else {
       handleFinish('Overview');
     }
@@ -85,7 +101,7 @@ export const OnboardingWizardModal: React.FC<OnboardingWizardModalProps> = ({
 
   const handleBack = () => {
     if (currentStep > 0) {
-      setCurrentStep((prev) => prev - 1);
+      updateStep((prev) => prev - 1);
     }
   };
 
@@ -382,6 +398,13 @@ export const OnboardingWizardModal: React.FC<OnboardingWizardModalProps> = ({
                   <span>{isSessionActive ? 'Manage Session' : 'Authorize Session'}</span>
                 </Button>
               </div>
+
+              {isSessionActive && (
+                <div className="text-[11px] font-mono text-[#00e676] flex items-center gap-1.5 bg-[#00e676]/10 border border-[#00e676]/20 p-2 rounded-lg">
+                  <CheckCircleIcon className="w-3.5 h-3.5 shrink-0" />
+                  <span>Non-custodial session key authorized. Swarm copytrading active.</span>
+                </div>
+              )}
             </div>
           )}
 
@@ -571,8 +594,8 @@ export const OnboardingWizardModal: React.FC<OnboardingWizardModalProps> = ({
 
           {/* Navigation Controls Footer */}
           <div className="flex items-center justify-between pt-4 mt-2 border-t border-border/50">
-            <div>
-              {currentStep > 0 ? (
+            <div className="flex items-center gap-2">
+              {currentStep > 0 && (
                 <Button
                   variant="ghost"
                   size="sm"
@@ -582,14 +605,13 @@ export const OnboardingWizardModal: React.FC<OnboardingWizardModalProps> = ({
                   <ArrowLeftIcon className="w-3.5 h-3.5" />
                   <span>Back</span>
                 </Button>
-              ) : (
-                <button
-                  onClick={onClose}
-                  className="text-xs text-muted-foreground hover:text-foreground transition-colors cursor-pointer px-2 py-1"
-                >
-                  Skip for now
-                </button>
               )}
+              <button
+                onClick={onClose}
+                className="text-xs text-muted-foreground hover:text-foreground transition-colors cursor-pointer px-2 py-1"
+              >
+                Skip guide
+              </button>
             </div>
 
             <div className="flex items-center gap-2">

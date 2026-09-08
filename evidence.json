@@ -21,12 +21,12 @@
     "canonicalOperator": "0x93e300607c363E7D7a47e50f5c9fDf1723e859Cf"
   },
   "verificationSuite": {
-    "totalTests": 503,
-    "testSuites": 43,
+    "totalTests": 507,
+    "testSuites": 44,
     "backendTests": 422,
     "backendSuites": 35,
-    "frontendTests": 81,
-    "frontendSuites": 8,
+    "frontendTests": 85,
+    "frontendSuites": 9,
     "passingRate": "100%",
     "strictTypeScript": true,
     "coverageGates": true,
