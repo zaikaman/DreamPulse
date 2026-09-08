@@ -96,6 +96,7 @@ class TelemetryClient {
   private reconnectTimer: number | null = null;
   private reconnectAttempts = 0;
   private userAddress: string | null = null;
+  private authToken: string | null = null;
   private isDebugEnabled = false;
 
   // PERF-07: application-level watchdog. Browser WebSocket handles protocol
@@ -162,23 +163,77 @@ class TelemetryClient {
 
   private getWsUrl(): string {
     const rawWsUrl = ((import.meta as any).env?.VITE_BACKEND_WS_URL || '').trim();
+    let base: string;
     if (rawWsUrl) {
       const trimmed = rawWsUrl.replace(/\/+$/, '');
-      return trimmed.endsWith('/ws/telemetry') ? trimmed : `${trimmed}/ws/telemetry`;
+      base = trimmed.endsWith('/ws/telemetry') ? trimmed : `${trimmed}/ws/telemetry`;
+    } else {
+      const rawHttpUrl = ((import.meta as any).env?.VITE_BACKEND_HTTP_URL || '').trim();
+      if (rawHttpUrl && (rawHttpUrl.startsWith('http://') || rawHttpUrl.startsWith('https://'))) {
+        const wsProtocol = rawHttpUrl.startsWith('https://') ? 'wss://' : 'ws://';
+        const cleanHttp = rawHttpUrl.replace(/^https?:\/\//, '').replace(/\/api\/v1\/?$/, '').replace(/\/+$/, '');
+        base = `${wsProtocol}${cleanHttp}/ws/telemetry`;
+      } else {
+        const loc = window.location;
+        const protocol = loc.protocol === 'https:' ? 'wss:' : 'ws:';
+        const host = loc.hostname;
+        const port = (loc.port === '5173' || loc.port === '5174') ? '5000' : loc.port || '5000';
+        base = `${protocol}//${host}:${port}/ws/telemetry`;
+      }
     }
 
-    const rawHttpUrl = ((import.meta as any).env?.VITE_BACKEND_HTTP_URL || '').trim();
-    if (rawHttpUrl && (rawHttpUrl.startsWith('http://') || rawHttpUrl.startsWith('https://'))) {
-      const wsProtocol = rawHttpUrl.startsWith('https://') ? 'wss://' : 'ws://';
-      const cleanHttp = rawHttpUrl.replace(/^https?:\/\//, '').replace(/\/api\/v1\/?$/, '').replace(/\/+$/, '');
-      return `${wsProtocol}${cleanHttp}/ws/telemetry`;
+    // SEC-08: prove wallet ownership at handshake so the server can authorize
+    // the private user_portfolio channel. Token refreshes on every (re)connect.
+    const token = this.getAuthToken();
+    if (token) {
+      const sep = base.includes('?') ? '&' : '?';
+      return `${base}${sep}token=${encodeURIComponent(token)}`;
     }
+    return base;
+  }
 
-    const loc = window.location;
-    const protocol = loc.protocol === 'https:' ? 'wss:' : 'ws:';
-    const host = loc.hostname;
-    const port = (loc.port === '5173' || loc.port === '5174') ? '5000' : loc.port || '5000';
-    return `${protocol}//${host}:${port}/ws/telemetry`;
+  /**
+   * SEC-08: cached DreamPulse JWT (minted via POST /auth/wallet-verify).
+   * Explicitly-set token wins; otherwise read the non-expired cached JWT.
+   */
+  private getAuthToken(): string | null {
+    if (this.authToken) return this.authToken;
+    try {
+      if (typeof window !== 'undefined' && typeof localStorage !== 'undefined') {
+        const t = localStorage.getItem('dreampulse_supabase_jwt');
+        const e = localStorage.getItem('dreampulse_supabase_jwt_exp');
+        if (t && e && t.length > 20) {
+          const exp = Number(e);
+          if (Number.isFinite(exp) && exp > Math.floor(Date.now() / 1000) + 60) {
+            return t;
+          }
+        }
+      }
+    } catch {
+      // Ignore storage errors — connect unauthenticated (public channels only).
+    }
+    return null;
+  }
+
+  /** Set (or rotate) the JWT used for WS authentication. Reconnects to re-handshake if already connected. */
+  public setAuthToken(token?: string | null): void {
+    const next = token && token.length > 20 ? token : null;
+    if (this.authToken === next) return;
+    this.authToken = next;
+    if (this.ws && this.ws.readyState === WebSocket.OPEN) {
+      if (next) {
+        try {
+          this.ws.send(JSON.stringify({ action: 'auth', token: next }));
+        } catch {
+          // Ignore — resubscribe on next reconnect covers it.
+        }
+      }
+      this.resubscribeAll();
+    }
+  }
+
+  public clearAuthToken(): void {
+    this.setAuthToken(null);
   }
 
   public connect(): void {
@@ -245,7 +300,13 @@ class TelemetryClient {
   private resubscribeAll(): void {
     if (!this.ws || this.ws.readyState !== WebSocket.OPEN) return;
 
-    // 1. Markets channel
+    // 0. SEC-08: (re)authenticate first — covers token rotation between reconnects.
+    const token = this.getAuthToken();
+    if (token) {
+      this.ws.send(JSON.stringify({ action: 'auth', token }));
+    }
+
+    // 1. Markets channel (public — no identity binding)
     this.ws.send(
       JSON.stringify({
         action: 'subscribe',
@@ -253,7 +314,6 @@ class TelemetryClient {
         params: {
           symbols: ['BTC/USD', 'ETH/USD'],
           agentTypes: ['Volt', 'Oracle', 'Titan', 'Sweeper'],
-          userAddress: this.userAddress || undefined,
         },
       }),
     );
@@ -545,6 +605,12 @@ class TelemetryClient {
       }
 
       if (formatted) {
+        // SEC-08: prove ownership before subscribing — the server rejects
+        // user_portfolio for unauthenticated sockets and drops spoofed addresses.
+        const token = this.getAuthToken();
+        if (token) {
+          this.ws.send(JSON.stringify({ action: 'auth', token }));
+        }
         this.ws.send(
           JSON.stringify({
             action: 'subscribe',

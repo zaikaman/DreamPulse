@@ -2,6 +2,8 @@ import { WebSocketServer, WebSocket } from 'ws';
 import type { Server as HttpServer } from 'http';
 import type { IncomingMessage } from 'http';
 import { z } from 'zod';
+import jwt from 'jsonwebtoken';
+import { isAddress, getAddress } from 'viem';
 
 export interface ClientSubscription {
   ws: WebSocket;
@@ -9,10 +11,22 @@ export interface ClientSubscription {
   symbols: Set<string>;
   agentTypes: Set<string>;
   userAddresses: Set<string>;
+  /** Lowercased wallet proven via JWT auth (query ?token=, auth message, or dreampulse_jwt cookie). Null = unauthenticated. */
+  authenticatedAddress: string | null;
   isAlive: boolean;
   ip: string;
   connectedAt: number;
   invalidAttempts: number;
+}
+
+export interface PnlOrderUpdate {
+  orderId: string;
+  marketId: string;
+  pnl: number;
+  outcome: string;
+  winningOutcome: string;
+  /** Owner wallet (lowercased recommended). Required for per-user scoping — orders without it are never broadcast (fail-closed). */
+  userAddress?: string;
 }
 
 export interface AgentLogItem {
@@ -60,7 +74,7 @@ const ALLOWED_CHANNELS = ['markets', 'agent_thoughts', 'debug_thoughts', 'user_p
 
 const clientMessageSchema = z
   .object({
-    action: z.enum(['subscribe', 'unsubscribe', 'ping']),
+    action: z.enum(['subscribe', 'unsubscribe', 'ping', 'auth']),
     channel: z
       .string()
       .min(1)
@@ -70,6 +84,8 @@ const clientMessageSchema = z
         (v) => v === undefined || (ALLOWED_CHANNELS as readonly string[]).includes(v),
         { message: `channel must be one of: ${ALLOWED_CHANNELS.join(', ')}` },
       ),
+    // Top-level token for `auth` action (also accepted inside params for client convenience)
+    token: z.string().min(20).max(8192).optional(),
     params: z
       .object({
         symbols: z.array(z.string().min(1).max(30)).max(20).optional(),
@@ -78,6 +94,7 @@ const clientMessageSchema = z
           .string()
           .regex(/^0x[a-fA-F0-9]{40}$/, 'userAddress must be a valid 0x address')
           .optional(),
+        token: z.string().min(20).max(8192).optional(),
       })
       .strict()
       .optional(),
@@ -90,6 +107,66 @@ const clientMessageSchema = z
   });
 
 type ValidatedClientMessage = z.infer<typeof clientMessageSchema>;
+
+// ──────────────────────────────────────────────────────────────────────────────
+// SEC-08: WebSocket authentication — prove wallet ownership before user_portfolio
+// ──────────────────────────────────────────────────────────────────────────────
+function isWsTestEnv(): boolean {
+  return process.env.NODE_ENV === 'test' || process.env.VITEST === 'true';
+}
+
+function getWsJwtSecret(): string | null {
+  const raw = process.env.SUPABASE_JWT_SECRET || '';
+  const s = String(raw).trim();
+  if (!s || s.includes('mock') || s.length < 16) return null;
+  return s;
+}
+
+/**
+ * Verifies a DreamPulse/Supabase HS256 JWT (minted via POST /auth/wallet-verify).
+ * Returns the lowercased wallet address on success, null otherwise.
+ */
+function verifyWsJwtToken(token: string): string | null {
+  const secret = getWsJwtSecret();
+  if (!secret) return null;
+  try {
+    const payload: any = jwt.verify(token, secret, { algorithms: ['HS256'] });
+    const candidate = String(payload.user_address || payload.wallet || payload.sub || '').trim();
+    if (!candidate || !isAddress(candidate)) return null;
+    if (payload.exp && Number(payload.exp) <= Math.floor(Date.now() / 1000)) return null;
+    return getAddress(candidate).toLowerCase();
+  } catch {
+    return null;
+  }
+}
+
+function extractWsToken(req: IncomingMessage): string | null {
+  // 1) Query param: /ws/telemetry?token=<jwt>
+  try {
+    const url = req.url || '';
+    const qIndex = url.indexOf('?');
+    if (qIndex >= 0) {
+      const params = new URLSearchParams(url.slice(qIndex + 1));
+      const q = params.get('token');
+      if (q && q.length > 20 && q.length <= 8192) return q;
+    }
+  } catch {}
+  // 2) httpOnly cookie fallback: dreampulse_jwt (browser sends automatically)
+  try {
+    const cookieHeader = req.headers.cookie;
+    if (typeof cookieHeader === 'string' && cookieHeader) {
+      const parts = cookieHeader.split(';');
+      for (const part of parts) {
+        const [name, ...rest] = part.split('=');
+        if (name && name.trim() === 'dreampulse_jwt') {
+          const val = rest.join('=').trim();
+          if (val && val.length > 20 && val.length <= 8192) return decodeURIComponent(val);
+        }
+      }
+    }
+  } catch {}
+  return null;
+}
 
 // ──────────────────────────────────────────────────────────────────────────────
 // Helpers
@@ -205,12 +282,22 @@ export class TelemetryWebSocketServer {
 
       this.ipConnectionCount.set(ip, ipCount + 1);
 
+      // SEC-08: authenticate at handshake — ?token=<jwt> or dreampulse_jwt cookie.
+      // Unauthenticated sockets stay connected for public channels (markets/agent_thoughts)
+      // but can never subscribe to user_portfolio (enforced in handleClientMessage).
+      let authenticatedAddress: string | null = null;
+      const handshakeToken = extractWsToken(req);
+      if (handshakeToken) {
+        authenticatedAddress = verifyWsJwtToken(handshakeToken);
+      }
+
       const subscription: ClientSubscription = {
         ws,
         channels: new Set(['markets', 'agent_thoughts']), // Default channels
         symbols: new Set(['BTC/USD', 'ETH/USD']),
         agentTypes: new Set(['Volt', 'Oracle', 'Titan', 'Sweeper']),
         userAddresses: new Set(),
+        authenticatedAddress,
         isAlive: true,
         ip,
         connectedAt: Date.now(),
@@ -286,6 +373,8 @@ export class TelemetryWebSocketServer {
       this.sendToClient(ws, {
         event: 'connected',
         timestamp: Date.now(),
+        authenticated: authenticatedAddress !== null,
+        ...(authenticatedAddress ? { userAddress: authenticatedAddress } : {}),
         message: 'DreamPulse High-Frequency Telemetry Stream Connected',
       });
 
@@ -452,6 +541,7 @@ export class TelemetryWebSocketServer {
 
   /**
    * Handles incoming client messages and channel subscriptions — now fully validated.
+   * SEC-08: `user_portfolio` (and any `userAddress` binding) requires prior JWT auth.
    */
   private handleClientMessage(ws: WebSocket, message: ValidatedClientMessage): void {
     const sub = this.clients.get(ws);
@@ -462,8 +552,73 @@ export class TelemetryWebSocketServer {
       return;
     }
 
+    // ── SEC-08: in-band auth — { "action": "auth", "token": "<jwt>" } ──
+    // Lets browser clients that cannot set WS query params authenticate post-handshake.
+    if (message.action === 'auth') {
+      const token = message.token || message.params?.token;
+      if (!token) {
+        this.sendToClient(ws, { event: 'error', error: 'Auth requires token (JWT from POST /auth/wallet-verify)', timestamp: Date.now() });
+        return;
+      }
+      const verified = verifyWsJwtToken(token);
+      if (!verified) {
+        this.sendToClient(ws, { event: 'error', error: 'Invalid or expired auth token', timestamp: Date.now() });
+        return;
+      }
+      sub.authenticatedAddress = verified;
+      // Auto-bind the proven address so broadcasts can scope to it
+      if (sub.userAddresses.size < MAX_USER_ADDRESSES_PER_CLIENT) {
+        sub.userAddresses.add(verified);
+      }
+      this.sendToClient(ws, { event: 'authenticated', userAddress: verified, timestamp: Date.now() });
+      return;
+    }
+
     if (message.action === 'subscribe') {
       const channel = message.channel!;
+      // ── SEC-08: user_portfolio requires proven wallet ownership ──
+      if (channel === 'user_portfolio') {
+        if (!sub.authenticatedAddress && !isWsTestEnv()) {
+          this.sendToClient(ws, {
+            event: 'error',
+            error: 'user_portfolio requires authentication: connect with /ws/telemetry?token=<jwt> or send {"action":"auth","token":"<jwt>"} first',
+            timestamp: Date.now(),
+          });
+          return;
+        }
+        const requested = message.params?.userAddress?.toLowerCase();
+        if (requested && sub.authenticatedAddress && requested !== sub.authenticatedAddress) {
+          this.sendToClient(ws, {
+            event: 'error',
+            error: 'userAddress does not match authenticated wallet (address spoofing blocked)',
+            timestamp: Date.now(),
+          });
+          return;
+        }
+        // Bind the proven identity (or the self-claimed address in test env)
+        const toBind = sub.authenticatedAddress || requested;
+        if (!toBind) {
+          this.sendToClient(ws, {
+            event: 'error',
+            error: 'user_portfolio subscription requires params.userAddress',
+            timestamp: Date.now(),
+          });
+          return;
+        }
+        if (!sub.userAddresses.has(toBind) && sub.userAddresses.size >= MAX_USER_ADDRESSES_PER_CLIENT) {
+          this.sendToClient(ws, { event: 'error', error: `Too many userAddress subscriptions (max ${MAX_USER_ADDRESSES_PER_CLIENT})`, timestamp: Date.now() });
+          return;
+        }
+        if (!sub.channels.has(channel) && sub.channels.size >= MAX_CHANNELS_PER_CLIENT) {
+          this.sendToClient(ws, { event: 'error', error: `Too many channels (max ${MAX_CHANNELS_PER_CLIENT})`, timestamp: Date.now() });
+          return;
+        }
+        sub.channels.add(channel);
+        sub.userAddresses.add(toBind);
+        this.sendToClient(ws, { event: 'subscribed', channel, status: 'ok' });
+        return;
+      }
+
       // Enforce max channels per client to prevent Set-bloat OOM
       if (!sub.channels.has(channel) && sub.channels.size >= MAX_CHANNELS_PER_CLIENT) {
         this.sendToClient(ws, { event: 'error', error: `Too many channels (max ${MAX_CHANNELS_PER_CLIENT})`, timestamp: Date.now() });
@@ -486,10 +641,25 @@ export class TelemetryWebSocketServer {
         }
       }
       if (message.params?.userAddress) {
-        if (sub.userAddresses.size >= MAX_USER_ADDRESSES_PER_CLIENT) {
+        // SEC-08: a userAddress binding on ANY channel is identity-sensitive — it
+        // controls who receives private fills. Require it to match the proven wallet.
+        const claimed = message.params.userAddress.toLowerCase();
+        if (sub.authenticatedAddress && claimed !== sub.authenticatedAddress) {
+          this.sendToClient(ws, {
+            event: 'error',
+            error: 'userAddress does not match authenticated wallet (address spoofing blocked)',
+            timestamp: Date.now(),
+          });
+        } else if (!sub.authenticatedAddress && !isWsTestEnv()) {
+          this.sendToClient(ws, {
+            event: 'error',
+            error: 'userAddress binding requires authentication: send {"action":"auth","token":"<jwt>"} first',
+            timestamp: Date.now(),
+          });
+        } else if (sub.userAddresses.size >= MAX_USER_ADDRESSES_PER_CLIENT) {
           this.sendToClient(ws, { event: 'error', error: `Too many userAddress subscriptions (max ${MAX_USER_ADDRESSES_PER_CLIENT})`, timestamp: Date.now() });
         } else {
-          sub.userAddresses.add(message.params.userAddress.toLowerCase());
+          sub.userAddresses.add(claimed);
         }
       }
 
@@ -513,6 +683,27 @@ export class TelemetryWebSocketServer {
         status: 'ok',
       });
     }
+  }
+
+  // ──────────────────────────────────────────────────────────────────────────
+  // SEC-08: per-recipient authorization for private portfolio events
+  // ──────────────────────────────────────────────────────────────────────────
+  /**
+   * True only if this socket proved ownership of `targetUser` AND opted into
+   * `user_portfolio`. Production fails closed (no auth → no private data).
+   * In test env (no JWT secret) the legacy self-claimed userAddresses match is
+   * honored so existing unit tests exercise delivery logic without signatures.
+   */
+  private isPortfolioRecipient(sub: ClientSubscription, targetUser: string): boolean {
+    if (!targetUser) return false;
+    if (!sub.channels.has('user_portfolio')) return false;
+    if (sub.authenticatedAddress) {
+      return sub.authenticatedAddress === targetUser;
+    }
+    if (isWsTestEnv()) {
+      return sub.userAddresses.has(targetUser);
+    }
+    return false;
   }
 
   // ──────────────────────────────────────────────────────────────────────────
@@ -739,9 +930,10 @@ export class TelemetryWebSocketServer {
   }
 
   /**
-   * Broadcasts order fill confirmation to user portfolio subscribers with pre-serialization.
-   * Hardened: no wildcard leak — only delivers to clients that explicitly subscribed userAddress matching target.
-   * Clients subscribed to `user_portfolio` without a matching address no longer receive all orders.
+   * Broadcasts order fill confirmation to the owning wallet only.
+   * SEC-08: delivery requires proven ownership (JWT auth) + user_portfolio opt-in.
+   * An unauthenticated socket — even one that claims `userAddress: <victim>` —
+   * never receives another wallet's fills.
    */
   public broadcastOrderFilled(order: {
     userAddress: string;
@@ -765,18 +957,15 @@ export class TelemetryWebSocketServer {
 
     for (const [, sub] of this.clients) {
       if (sub.ws.readyState !== WebSocket.OPEN) continue;
-      // Require explicit address match — prevents info leak to wildcard subscribers
-      const hasAddressMatch = targetUser !== '' && sub.userAddresses.has(targetUser);
-      const hasChannelAndAddress = sub.channels.has('user_portfolio') && hasAddressMatch;
-      if (hasAddressMatch || hasChannelAndAddress) {
+      if (this.isPortfolioRecipient(sub, targetUser)) {
         this.safeSend(sub.ws, payloadString);
       }
     }
   }
 
   /**
-   * Broadcasts order cancellation confirmation to user portfolio subscribers with pre-serialization.
-   * Scoped to clients that subscribed to userAddress or user_portfolio.
+   * Broadcasts order cancellation confirmation to the owning wallet only.
+   * SEC-08: same ownership-scoped delivery as broadcastOrderFilled.
    */
   public broadcastOrderCancelled(order: {
     userAddress: string;
@@ -795,17 +984,15 @@ export class TelemetryWebSocketServer {
 
     for (const [, sub] of this.clients) {
       if (sub.ws.readyState !== WebSocket.OPEN) continue;
-      const hasAddressMatch = targetUser !== '' && sub.userAddresses.has(targetUser);
-      const hasChannelAndAddress = sub.channels.has('user_portfolio') && hasAddressMatch;
-      if (hasAddressMatch || hasChannelAndAddress) {
+      if (this.isPortfolioRecipient(sub, targetUser)) {
         this.safeSend(sub.ws, payloadString);
       }
     }
   }
 
   /**
-   * Broadcasts completed settlement sweep confirmation with pre-serialization.
-   * Hardened: same address-scoped delivery as broadcastOrderFilled.
+   * Broadcasts completed settlement sweep confirmation to the owning wallet only.
+   * SEC-08: same ownership-scoped delivery as broadcastOrderFilled.
    */
   public broadcastSweepCompleted(sweep: {
     userAddress: string;
@@ -823,20 +1010,22 @@ export class TelemetryWebSocketServer {
 
     for (const [, sub] of this.clients) {
       if (sub.ws.readyState !== WebSocket.OPEN) continue;
-      const hasAddressMatch = targetUser !== '' && sub.userAddresses.has(targetUser);
-      const hasChannelAndAddress = sub.channels.has('user_portfolio') && hasAddressMatch;
-      if (hasAddressMatch || hasChannelAndAddress) {
+      if (this.isPortfolioRecipient(sub, targetUser)) {
         this.safeSend(sub.ws, payloadString);
       }
     }
   }
 
   /**
-   * Broadcasts realtime PnL settlement updates — now scoped to user_portfolio subscribers only.
-   * Previously broadcast to ALL clients every tick (OOM vector). Now filtered + throttled + back-pressure aware.
+   * Broadcasts realtime PnL settlement updates — per-wallet scoped.
+   * SEC-08: each `user_portfolio` subscriber receives ONLY the order updates
+   * owned by their authenticated wallet. Orders without `userAddress` are
+   * never broadcast (fail-closed) so a global order list can never leak to an
+   * arbitrary subscriber. Previously every portfolio subscriber received the
+   * full global `updatedOrders` array.
    */
   public broadcastPnlUpdate(data: {
-    updatedOrders: Array<{ orderId: string; marketId: string; pnl: number; outcome: string; winningOutcome: string }>;
+    updatedOrders: PnlOrderUpdate[];
     timestamp: number;
   }): void {
     if (data.updatedOrders.length === 0 || this.clients.size === 0) return;
@@ -849,18 +1038,46 @@ export class TelemetryWebSocketServer {
     }
     this.lastPnlBroadcastAt = now;
 
-    const payloadString = JSON.stringify({
-      event: 'pnl_update',
-      timestamp: data.timestamp,
-      updatedOrders: data.updatedOrders,
-    });
+    // Serialize once per distinct recipient address (recipients ≪ orders).
+    const payloadCache = new Map<string, string>();
+    const payloadFor = (owner: string): string => {
+      let cached = payloadCache.get(owner);
+      if (!cached) {
+        const mine = data.updatedOrders.filter(
+          (o) => o.userAddress && o.userAddress.toLowerCase() === owner,
+        );
+        cached = JSON.stringify({
+          event: 'pnl_update',
+          timestamp: data.timestamp,
+          updatedOrders: mine,
+        });
+        payloadCache.set(owner, cached);
+      }
+      return cached;
+    };
+    const hasOwnOrders = (owner: string): boolean =>
+      data.updatedOrders.some((o) => o.userAddress && o.userAddress.toLowerCase() === owner);
 
     for (const [, sub] of this.clients) {
       if (sub.ws.readyState !== WebSocket.OPEN) continue;
-      // Only to clients interested in portfolio changes (user_portfolio) — not every markets viewer
-      const isInterested = sub.channels.has('user_portfolio') || sub.userAddresses.size > 0;
-      if (!isInterested) continue;
-      this.safeSend(sub.ws, payloadString);
+      if (!sub.channels.has('user_portfolio')) continue;
+      // Proven identity path (production)
+      if (sub.authenticatedAddress) {
+        if (!hasOwnOrders(sub.authenticatedAddress)) continue;
+        this.safeSend(sub.ws, payloadFor(sub.authenticatedAddress));
+        continue;
+      }
+      // Test-env fallback: self-claimed addresses (no JWT secret configured).
+      // Still scoped per address — never send the global list.
+      if (isWsTestEnv() && sub.userAddresses.size > 0) {
+        for (const claimed of sub.userAddresses) {
+          if (hasOwnOrders(claimed)) {
+            this.safeSend(sub.ws, payloadFor(claimed));
+            break;
+          }
+        }
+      }
+      // Unauthenticated production sockets receive nothing (fail-closed).
     }
   }
 

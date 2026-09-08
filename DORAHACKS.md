@@ -22,7 +22,7 @@ DreamDEX-style CLOB prediction markets face recurring problems: cold-start liqui
 | Empty books and wide spreads | Titan MM continuously posts inventory-aware two-sided liquidity. |
 | Spot moves faster than quotes | Volt Sniper detects short-term spot velocity and stale CLOB prices. |
 | Binary contracts are difficult to price & drift fades | Oracle Arb compares market odds with Black-Scholes fair value and realized volatility, guarded by a 3-layer quantitative defense against spot drift. |
-| Every rolling pool needs approvals & main wallet risk | Separate Smart Trading Wallet (EIP-1167 clone) with isolated balance, ephemeral session keys, on-chain risk guardrails ($500 max trade, $5,000 daily cap), and strictly owner-pinned withdrawals. |
+| Every rolling pool needs approvals & main wallet risk | Separate Smart Trading Wallet (EIP-1167 clone) with isolated balance, ephemeral session keys, on-chain risk guardrails (500 tUSDC max trade, 5,000 tUSDC daily cap), and strictly owner-pinned withdrawals. |
 | Winning positions require manual claims | Sweeper detects finalized markets, batches redemptions, and sends tUSDC directly to wallets. |
 
 ## Product
@@ -51,7 +51,7 @@ The backtesting lab replays Binance historical candles at 1m, 5m, 15m, and 1h re
 The daemon evaluates markets on a high-frequency cadence and combines quantitative pricing, risk controls, LLM telemetry, and direct DreamDEX execution.
 
 - **Volt Sniper:** momentum taker that reacts to short-term spot moves and stale quotes.
-- **Oracle Arb:** volatility-surface arbitrageur using Black-Scholes $\Phi(d_2)$, EWMA volatility, and a 3-layer quantitative defense (horizon filter $\le 15$m, trend gating, and asymmetry margin collar).
+- **Oracle Arb:** volatility-surface arbitrageur using Black-Scholes Φ(d₂), EWMA volatility, and a 3-layer quantitative defense (horizon filter ≤ 15m, trend gating, and asymmetry margin collar).
 - **Titan MM:** adaptive two-sided market maker with inventory skew and self-trade protection.
 - **Sweeper:** automated market-resolution watcher and payout daemon.
 
@@ -89,7 +89,7 @@ DreamPulse uses deterministic, production-oriented math rather than sentiment-on
 - Depth-weighted VWAP to estimate actual taker execution cost.
 - Titan reservation-price adjustments using nonlinear inventory skew.
 - Short-horizon diffusion floors, confluence weighting, temporal EMA smoothing, and directional hysteresis to reduce pin-risk instability near expiry.
-- 3-Layer Quantitative Defense Architecture for volatility arbitrage: confines pricing to rapid-convergence windows ($\le 15$m / 900s) to eliminate long-horizon drift breakdown, enforces multi-timeframe EMA/RSI trend gating to hard-block counter-trend fades, and doubles required margin of safety ($\ge 7.0\%$ edge, $\ge 16.0\%$ ROI) on asymmetric risk profiles.
+- 3-Layer Quantitative Defense Architecture for volatility arbitrage: confines pricing to rapid-convergence windows (≤ 15m / 900s) to eliminate long-horizon drift breakdown, enforces multi-timeframe EMA/RSI trend gating to hard-block counter-trend fades, and doubles required margin of safety (≥ 7.0% edge, ≥ 16.0% ROI) on asymmetric risk profiles.
 
 ## Non-Custodial Security & Smart Trading Account Model
 
@@ -99,9 +99,9 @@ DreamPulse is built on a **Separate Smart Trading Account (Clone) Architecture**
 2. **Main Wallet Isolation**: Traders deposit tUSDC into their dedicated trading account via the `TradingWalletModal`. The user's primary wallet funds are never approved to third parties or exposed to trading pools.
 3. **Trades As Itself**: The clone executes trades as the direct position and order owner (`executeOrder`). It approves target pools just-in-time for exact order amounts and immediately zeroes residual allowances.
 4. **On-Chain Policy & Ephemeral Session Keys**: The backend holds only ephemeral session keys. The clone contract enforces strict on-chain risk guardrails:
-   - Maximum single trade size ceiling ($\le 500$ tUSDC)
-   - 24-hour rolling volume cap ceiling ($\le 5,000$ tUSDC)
-   - Time-bounded session expiry ($\le 30$ days)
+   - Maximum single trade size ceiling (≤ 500 tUSDC)
+   - 24-hour rolling volume cap ceiling (≤ 5,000 tUSDC)
+   - Time-bounded session expiry (≤ 30 days)
    - Strict function selector whitelist (`placeBinaryOrder`, `cancelOrder`, `reduceOrder`)
 5. **Zero-Custody Owner-Pinned Withdrawals**: The `withdraw()` function is `onlyOwner` and cryptographically hardcoded to transfer tokens exclusively back to the user's connected wallet. Even with a compromised ephemeral key or backend breach, funds can never be sent to any third-party address. Collateral withdrawals enforce a minimum 1 tUSDC threshold and 1 tUSDC protocol fee.
 6. **Permissionless Settlement Redemption**: Anyone (including the backend Sweeper) can call `redeemWinnings()` on-chain to claim winning outcome shares from matured pools, but proceeds are locked directly into the user's clone and can only be withdrawn by the owner.

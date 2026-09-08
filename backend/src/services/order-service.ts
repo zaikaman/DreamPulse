@@ -2977,7 +2977,7 @@ export class OrderService {
     });
     if (targetOrders.length === 0) return 0;
 
-    const updatedEvents: Array<{ orderId: string; marketId: string; pnl: number; outcome: string; winningOutcome: string }> = [];
+    const updatedEvents: Array<{ orderId: string; marketId: string; pnl: number; outcome: string; winningOutcome: string; userAddress?: string }> = [];
     // PERF-04: collect settlement rows for a single batched flush (see flushOrderSettlementRows).
     const settlementRows: Array<{ id: string; pnl: number; status: string; is_settled: boolean; settled_at: string }> = [];
     const nowIso = new Date().toISOString();
@@ -3026,6 +3026,7 @@ export class OrderService {
           pnl: 0,
           outcome: order.outcome,
           winningOutcome: isVoid ? 'VOID' : winningOutcome,
+          userAddress: order.userAddress ? order.userAddress.toLowerCase() : undefined,
         });
 
         if (this.isPersistenceEnabled()) {
@@ -3060,6 +3061,7 @@ export class OrderService {
         pnl: order.pnl,
         outcome: order.outcome,
         winningOutcome: isVoid ? 'VOID' : winningOutcome,
+        userAddress: order.userAddress ? order.userAddress.toLowerCase() : undefined,
       });
 
       // Synchronize realized PnL to originating custom agent (fixes #14 — previously only syncResolvedOrdersPnLAsync updated custom_agents)
@@ -3246,7 +3248,7 @@ export class OrderService {
     }
     if (!force && now - this.lastPnlSyncAt < 700) return;
     const doSync = async () => {
-      const updatedOrderPnlEvents: Array<{ orderId: string; marketId: string; pnl: number; outcome: string; winningOutcome: string }> = [];
+      const updatedOrderPnlEvents: Array<{ orderId: string; marketId: string; pnl: number; outcome: string; winningOutcome: string; userAddress?: string }> = [];
       // PERF-04: collect settlement rows for one batched flush at the end.
       const pnlSyncRows: Array<{ id: string; pnl: number; status: string; is_settled: boolean; settled_at: string }> = [];
       // Only unsettled candidates
@@ -3477,6 +3479,7 @@ export class OrderService {
             pnl: 0,
             outcome: order.outcome,
             winningOutcome,
+            userAddress: order.userAddress ? order.userAddress.toLowerCase() : undefined,
           });
 
           if (this.isPersistenceEnabled()) {
@@ -3497,7 +3500,7 @@ export class OrderService {
         order.isSettled = true;
         order.settledAt = new Date().toISOString();
         this.restingMakerQuotes.delete(order.id);
-        updatedOrderPnlEvents.push({ orderId: order.id, marketId: order.marketId, pnl: order.pnl, outcome: order.outcome, winningOutcome });
+        updatedOrderPnlEvents.push({ orderId: order.id, marketId: order.marketId, pnl: order.pnl, outcome: order.outcome, winningOutcome, userAddress: order.userAddress ? order.userAddress.toLowerCase() : undefined });
         if (this.isPersistenceEnabled()) {
           pnlSyncRows.push({
             id: order.id,
