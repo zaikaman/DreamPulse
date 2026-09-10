@@ -134,7 +134,7 @@ The live cockpit and [`evidence.json`](./evidence.json) provide an audit trail c
 | Judging area | DreamPulse evidence |
 | --- | --- |
 | Innovation | One product unifies CLOB trading, AI, no-code agents, backtesting, autonomous liquidity, social prediction, smart trading account isolation, and settlement. |
-| Technical implementation | Direct DreamDEX SDK integration, per-user EIP-1167 Smart Trading Account clones with on-chain risk policies, ephemeral session keys, serialized nonce handling, WebSocket telemetry, and 507 passing tests (422 backend + 85 frontend) with CI coverage gates. |
+| Technical implementation | Direct DreamDEX SDK integration, per-user EIP-1167 Smart Trading Account clones with on-chain risk policies, ephemeral session keys, serialized nonce handling, WebSocket telemetry, and 512 passing tests (427 backend + 85 frontend) with CI coverage gates. |
 | User experience | Institutional terminal, visual binary charts, dedicated Trading Wallet modal with 1-click deposit/withdraw, command palette, onboarding wizard, and strategy builder. |
 | Ecosystem impact | Provides liquidity, reduces stale pricing, recycles settled capital, and makes automated prediction-market strategies accessible. |
 | Presentation | A focused 2:55 demo covers onboarding, terminal trading, Strategy Studio, swarms, telemetry, and settlement. |
@@ -204,7 +204,7 @@ npm run staging:dry-run --workspace=dreampulse-backend
 npm run verify
 ```
 
-The documented verification result is **507 tests passing across 44 suites (422 backend + 85 frontend)**, with type checking, production builds, CI-enforced money-path coverage gates, and a read-only testnet staging probe included in `npm run verify`.
+The documented verification result is **512 tests passing across 45 suites (427 backend + 85 frontend)**, with type checking, production builds, CI-enforced money-path coverage gates, and a read-only testnet staging probe included in `npm run verify`.
 
 ## Roadmap
 
