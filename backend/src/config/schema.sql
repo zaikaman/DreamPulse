@@ -298,6 +298,11 @@ CREATE INDEX IF NOT EXISTS idx_agent_strategies_session_id ON public.agent_strat
 CREATE INDEX IF NOT EXISTS idx_agent_strategies_user_lower ON public.agent_strategies(lower(user_address));
 CREATE INDEX IF NOT EXISTS idx_backtests_user ON public.backtests(user_address, created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_backtests_user_lower ON public.backtests(lower(user_address), created_at DESC);
+-- PERF-06: High-cardinality global indexes for boot hydration and unsettled scans without user filter
+CREATE INDEX IF NOT EXISTS idx_orders_created_at_desc ON public.orders(created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_orders_unsettled ON public.orders(created_at DESC) WHERE is_settled = FALSE;
+CREATE INDEX IF NOT EXISTS idx_sweeps_claimed_at_desc ON public.sweeps(claimed_at DESC);
+CREATE INDEX IF NOT EXISTS idx_sweeps_status_claimed ON public.sweeps(status, claimed_at DESC);
 
 -- ------------------------------------------------------------------------------
 -- Row Level Security (RLS) Policies — HARDENED
@@ -569,12 +574,11 @@ END $$;
 DO $$
 DECLARE
   tbl text;
-  -- SEC-01: public.sessions is INTENTIONALLY excluded. Its rows carry
-  -- session signing-key ciphertext and must never be broadcast over Supabase
-  -- Realtime CDC to browsers. Session state reaches the frontend via
-  -- backend REST (/api/v1/sessions/*, secrets stripped), never via CDC.
+  -- SEC-01: public.sessions is INTENTIONALLY excluded (signing keys).
+  -- PERF-05: public.markets is INTENTIONALLY excluded. Live orderbook / prices
+  -- stream directly via backend WebSocket gateway; streaming DB ticks via
+  -- Postgres logical replication causes massive Disk IO and WAL budget depletion.
   tables text[] := ARRAY[
-    'public.markets',
     'public.agent_strategies',
     'public.orders',
     'public.sweeps',
@@ -603,6 +607,19 @@ BEGIN
       EXECUTE format('ALTER PUBLICATION supabase_realtime ADD TABLE %s', tbl);
     END IF;
   END LOOP;
+END $$;
+
+-- PERF-05: drop any existing CDC broadcast of markets
+DO $$
+BEGIN
+  IF EXISTS (
+    SELECT 1 FROM pg_publication_tables
+    WHERE pubname = 'supabase_realtime'
+      AND schemaname = 'public'
+      AND tablename = 'markets'
+  ) THEN
+    EXECUTE 'ALTER PUBLICATION supabase_realtime DROP TABLE public.markets';
+  END IF;
 END $$;
 
 -- SEC-01: drop any pre-fix CDC broadcast of sessions (fresh deploys that ran

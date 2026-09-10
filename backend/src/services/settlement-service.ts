@@ -1,5 +1,5 @@
 import { type Hex, type Address, getAddress, isAddress } from 'viem';
-import { supabase, isPersistenceEnabled } from '../config/supabase.js';
+import { supabase, isPersistenceEnabled, isDbDegraded, recordDbFailure } from '../config/supabase.js';
 import { telemetryWsGateway } from '../websocket/server.js';
 import { marketService } from './market-service.js';
 import { orderService, resolveOnchainWinningOutcome } from './order-service.js';
@@ -309,17 +309,30 @@ export class SettlementService {
     }
 
     try {
-      let page = 0;
       const pageSize = 1000;
-      while (page < 10) {
-        const { data, error } = await supabase
+      const maxPages = 2; // Cap startup sweep cache at 2,000 recent sweeps to avoid full table scans
+      let lastClaimedAt: string | null = null;
+
+      for (let page = 0; page < maxPages; page++) {
+        let query = supabase
           .from('sweeps')
           .select('*')
           .neq('status', 'FAILED')
           .order('claimed_at', { ascending: false })
-          .range(page * pageSize, (page + 1) * pageSize - 1);
+          .limit(pageSize);
 
-        if (error || !data || data.length === 0) {
+        if (lastClaimedAt) {
+          query = query.lt('claimed_at', lastClaimedAt);
+        }
+
+        const { data, error } = await query;
+
+        if (error) {
+          recordDbFailure(error);
+          break;
+        }
+
+        if (!data || data.length === 0) {
           break;
         }
 
@@ -348,12 +361,13 @@ export class SettlementService {
           }
         }
 
+        lastClaimedAt = data[data.length - 1].claimed_at;
         if (data.length < pageSize) {
           break;
         }
-        page++;
       }
     } catch (err: any) {
+      recordDbFailure(err);
       console.warn('[SettlementService] DB load note:', err?.message || err);
     }
   }

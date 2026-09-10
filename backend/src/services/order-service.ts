@@ -1,5 +1,5 @@
 import { type Hex, type Address, parseAbi, getAddress, isAddress, encodeFunctionData, parseEventLogs } from 'viem';
-import { supabase, isPersistenceEnabled } from '../config/supabase.js';
+import { supabase, isPersistenceEnabled, isDbDegraded, recordDbFailure } from '../config/supabase.js';
 import { sessionService } from './session-service.js';
 import { telemetryWsGateway } from '../websocket/server.js';
 import { marketService } from './market-service.js';
@@ -716,7 +716,7 @@ export class OrderService {
   private async flushOrderSettlementRows(
     rows: Array<{ id: string; pnl: number; status: string; is_settled: boolean; settled_at: string }>,
   ): Promise<void> {
-    if (!this.isPersistenceEnabled() || rows.length === 0) return;
+    if (!this.isPersistenceEnabled() || isDbDegraded() || rows.length === 0) return;
     for (let i = 0; i < rows.length; i += OrderService.SETTLEMENT_BATCH_SIZE) {
       const chunk = rows.slice(i, i + OrderService.SETTLEMENT_BATCH_SIZE);
       await Promise.allSettled(
@@ -731,11 +731,17 @@ export class OrderService {
                 settled_at: r.settled_at,
               } as any)
               .eq('id', r.id);
-            if (res.error && res.error.message?.includes('is_settled')) {
-              // Legacy table without settlement columns fallback
-              await supabase.from('orders').update({ pnl: r.pnl, status: r.status } as any).eq('id', r.id);
+            if (res.error) {
+              if (res.error.message?.includes('is_settled')) {
+                // Legacy table without settlement columns fallback
+                await supabase.from('orders').update({ pnl: r.pnl, status: r.status } as any).eq('id', r.id);
+              } else {
+                recordDbFailure(res.error);
+              }
             }
-          } catch {}
+          } catch (err) {
+            recordDbFailure(err);
+          }
         }),
       );
     }
@@ -1054,22 +1060,32 @@ export class OrderService {
   }
 
   /**
-   * Loads recent orders from Supabase on startup.
+   * Loads recent orders from Supabase on startup using index-backed keyset pagination.
+   * PERF-06: Avoids 50x sequential OFFSET scans that caused PostgreSQL disk I/O exhaustion.
    */
   private async initializeFromDb(): Promise<void> {
     this.orders = [];
     this.orderMap.clear();
 
-    // Paginated fetch to bypass PostgREST max_rows=1000 (fixes #14: previously only 1000 of 5000 were loaded, causing arena vs cockpit divergence)
     const allRows: any[] = [];
     const pageSize = 1000;
-    for (let offset = 0; offset < OrderService.MAX_CACHE_SIZE; offset += pageSize) {
-      const { data, error } = await supabase
+    const maxBootOrders = 5000;
+    let lastCreatedAt: string | null = null;
+
+    for (let page = 0; page < Math.ceil(maxBootOrders / pageSize); page++) {
+      let query = supabase
         .from('orders')
         .select('*')
         .order('created_at', { ascending: false })
-        .range(offset, offset + pageSize - 1);
+        .limit(pageSize);
+
+      if (lastCreatedAt) {
+        query = query.lt('created_at', lastCreatedAt);
+      }
+
+      const { data, error } = await query;
       if (error) {
+        recordDbFailure(error);
         if (allRows.length === 0) {
           this.seedInitialOrders();
           return;
@@ -1078,7 +1094,27 @@ export class OrderService {
       }
       if (!data || data.length === 0) break;
       allRows.push(...data);
+      lastCreatedAt = data[data.length - 1].created_at;
       if (data.length < pageSize) break;
+    }
+
+    // Explicitly hydrate all unsettled orders to ensure active lifecycle reconciliation
+    try {
+      const { data: unsettledRows, error: unsettledErr } = await supabase
+        .from('orders')
+        .select('*')
+        .eq('is_settled', false)
+        .order('created_at', { ascending: false })
+        .limit(1000);
+      if (!unsettledErr && unsettledRows && unsettledRows.length > 0) {
+        for (const row of unsettledRows) {
+          if (!allRows.some((r) => r.id === row.id)) {
+            allRows.push(row);
+          }
+        }
+      }
+    } catch (err) {
+      recordDbFailure(err);
     }
 
     if (allRows.length === 0) {
@@ -1106,11 +1142,11 @@ export class OrderService {
     // Reconcile remaining unsettled orders whose market expired
     await this.syncResolvedOrdersPnLAsync({ force: true }).catch(() => {});
 
-    // Start periodic background settlement sync (every 3 seconds) for real-time order lifecycle & resolution
+    // Start periodic background settlement sync (every 10 seconds) for real-time order lifecycle & resolution
     if (process.env.NODE_ENV !== 'test') {
       setInterval(() => {
         void this.syncResolvedOrdersPnLAsync().catch(() => {});
-      }, 3000);
+      }, 10000);
     }
   }
 
@@ -3606,7 +3642,7 @@ export class OrderService {
    * Covers issue #16: materialized daily_pnl avoids full table scans on analytics hot path.
    */
   private async syncDailyPnlForOrders(settledOrders: OrderExecution[]): Promise<void> {
-    if (!this.isPersistenceEnabled() || settledOrders.length === 0) return;
+    if (!this.isPersistenceEnabled() || isDbDegraded() || settledOrders.length === 0) return;
     try {
       // Group by (user_address lower, source bucket, day)
       const bucket = new Map<string, { user_address: string; source: string; day: string; pnl: number; volume: number; trades: number; wins: number; losses: number }>();

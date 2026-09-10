@@ -9,6 +9,61 @@ if (typeof globalThis.WebSocket === 'undefined') {
 let serviceClientInstance: SupabaseClient | null = null;
 let anonClientInstance: SupabaseClient | null = null;
 
+// Circuit breaker to prevent cascading I/O starvation when Supabase is under load
+let consecutiveFailures = 0;
+let circuitBreakerCooldownUntil = 0;
+
+export function isDbDegraded(): boolean {
+  if (Date.now() < circuitBreakerCooldownUntil) {
+    return true;
+  }
+  return consecutiveFailures >= 3;
+}
+
+export function recordDbSuccess(): void {
+  consecutiveFailures = 0;
+  circuitBreakerCooldownUntil = 0;
+}
+
+export function recordDbFailure(err?: any): void {
+  consecutiveFailures++;
+  const msg = (err?.message || String(err || '')).toLowerCase();
+  const isIoOrTimeout = msg.includes('timeout') || msg.includes('aborted') || msg.includes('502') || msg.includes('503') || msg.includes('504');
+  if (consecutiveFailures >= 3 || isIoOrTimeout) {
+    // Backoff non-critical background writes for 45 seconds to let Postgres recover IOPS
+    circuitBreakerCooldownUntil = Date.now() + 45_000;
+  }
+}
+
+/**
+ * Resilient global fetch with an 8-second request timeout to prevent hanging connections.
+ */
+const fetchWithTimeout: typeof fetch = (input, init) => {
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), 8000);
+
+  if (init?.signal) {
+    init.signal.addEventListener('abort', () => controller.abort());
+  }
+
+  return fetch(input, { ...init, signal: controller.signal })
+    .then((res) => {
+      if (res.ok) {
+        recordDbSuccess();
+      } else if (res.status >= 500) {
+        recordDbFailure(new Error(`HTTP ${res.status}`));
+      }
+      return res;
+    })
+    .catch((err) => {
+      recordDbFailure(err);
+      throw err;
+    })
+    .finally(() => {
+      clearTimeout(timeoutId);
+    });
+};
+
 /**
  * Returns the Supabase client with admin/service-role privileges.
  * Backend MUST use this for all private-table writes — it bypasses RLS (see
@@ -22,6 +77,9 @@ export function getServiceSupabase(): SupabaseClient {
       auth: {
         persistSession: false,
         autoRefreshToken: false,
+      },
+      global: {
+        fetch: fetchWithTimeout,
       },
       realtime: {
         transport: WebSocket as unknown as NonNullable<NonNullable<Parameters<typeof createClient>[2]>['realtime']>['transport'],
@@ -43,6 +101,9 @@ export function getAnonSupabase(): SupabaseClient {
     anonClientInstance = createClient(env.SUPABASE_URL, env.SUPABASE_ANON_KEY, {
       auth: {
         persistSession: false,
+      },
+      global: {
+        fetch: fetchWithTimeout,
       },
       realtime: {
         transport: WebSocket as any,
