@@ -1187,7 +1187,7 @@ apiRouter.get('/orders', optionalWalletAuth, async (req: Request, res: Response)
   };
   // Use DB-aware paginated query when cache is capped (issue #13) — evicted rows remain queryable via Supabase
   const anyOrderService: any = orderService as any;
-  const result = typeof anyOrderService.queryOrdersPaginatedAsync === 'function' && (orderService as any)['orders']?.length >= 5000
+  const result = typeof anyOrderService.queryOrdersPaginatedAsync === 'function'
     ? await anyOrderService.queryOrdersPaginatedAsync(params).catch(() => orderService.queryOrdersPaginated(params))
     : orderService.queryOrdersPaginated(params);
 

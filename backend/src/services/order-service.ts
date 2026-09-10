@@ -1069,7 +1069,7 @@ export class OrderService {
 
     const allRows: any[] = [];
     const pageSize = 1000;
-    const maxBootOrders = 5000;
+    const maxBootOrders = OrderService.MAX_CACHE_SIZE;
     let lastCreatedAt: string | null = null;
 
     for (let page = 0; page < Math.ceil(maxBootOrders / pageSize); page++) {
@@ -1098,6 +1098,35 @@ export class OrderService {
       if (data.length < pageSize) break;
     }
 
+    // Explicitly ensure all canonical operator swarm orders are hydrated for complete swarm telemetry
+    try {
+      const rawOp = operatorAccount?.address || SOMNIA_ADDRESSES.operatorAccount;
+      const opAddr = isAddress(rawOp) ? getAddress(rawOp) : rawOp;
+      let lastOpCreatedAt: string | null = null;
+      for (let page = 0; page < 20; page++) {
+        let opQuery = supabase
+          .from('orders')
+          .select('*')
+          .eq('user_address', opAddr)
+          .order('created_at', { ascending: false })
+          .limit(pageSize);
+        if (lastOpCreatedAt) {
+          opQuery = opQuery.lt('created_at', lastOpCreatedAt);
+        }
+        const { data: opRows, error: opErr } = await opQuery;
+        if (opErr || !opRows || opRows.length === 0) break;
+        for (const row of opRows) {
+          if (!allRows.some((r) => r.id === row.id)) {
+            allRows.push(row);
+          }
+        }
+        lastOpCreatedAt = opRows[opRows.length - 1].created_at;
+        if (opRows.length < pageSize) break;
+      }
+    } catch (err) {
+      recordDbFailure(err);
+    }
+
     // Explicitly hydrate all unsettled orders to ensure active lifecycle reconciliation
     try {
       const { data: unsettledRows, error: unsettledErr } = await supabase
@@ -1121,6 +1150,9 @@ export class OrderService {
       this.seedInitialOrders();
       return;
     }
+
+    // Sort newest-first before indexing into orders
+    allRows.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
 
     for (const row of allRows) {
       // Exclude test mock tx artifacts

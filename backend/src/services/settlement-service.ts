@@ -310,7 +310,7 @@ export class SettlementService {
 
     try {
       const pageSize = 1000;
-      const maxPages = 2; // Cap startup sweep cache at 2,000 recent sweeps to avoid full table scans
+      const maxPages = 50; // Hydrate up to 50,000 sweeps using keyset pagination
       let lastClaimedAt: string | null = null;
 
       for (let page = 0; page < maxPages; page++) {
@@ -365,6 +365,53 @@ export class SettlementService {
         if (data.length < pageSize) {
           break;
         }
+      }
+
+      // Explicitly ensure all canonical operator sweeps are hydrated for complete settlement telemetry
+      try {
+        const rawOp = operatorAccount?.address || SOMNIA_ADDRESSES.operatorAccount;
+        const opAddr = isAddress(rawOp) ? getAddress(rawOp) : rawOp;
+        let lastOpClaimedAt: string | null = null;
+        for (let page = 0; page < 20; page++) {
+          let opSweepQuery = supabase
+            .from('sweeps')
+            .select('*')
+            .neq('status', 'FAILED')
+            .eq('user_address', opAddr)
+            .order('claimed_at', { ascending: false })
+            .limit(pageSize);
+          if (lastOpClaimedAt) {
+            opSweepQuery = opSweepQuery.lt('claimed_at', lastOpClaimedAt);
+          }
+          const { data: opData, error: opErr } = await opSweepQuery;
+          if (opErr || !opData || opData.length === 0) break;
+          for (const row of opData) {
+            if (!this.sweepsMap.has(row.id)) {
+              const sweep: SettlementSweep = {
+                id: row.id,
+                userAddress: row.user_address,
+                marketId: row.market_id,
+                winningOutcome: row.winning_outcome as OutcomeType,
+                claimableAmount: Number(row.claimable_amount),
+                payoutToken: row.payout_token || 'tUSDC',
+                isCompounded: row.is_compounded ?? false,
+                txHash: (row.tx_hash as Hex) || undefined,
+                status: row.status as 'PENDING' | 'CONFIRMED' | 'FAILED',
+                claimedAt: row.claimed_at,
+              };
+              this.sweepsMap.set(sweep.id, sweep);
+              this.sweeps.push(sweep);
+              if (sweep.status === 'CONFIRMED' && isAddress(sweep.userAddress)) {
+                const key = `${sweep.userAddress.toLowerCase()}:${sweep.marketId.toLowerCase()}`;
+                this.userSweptTotals.set(key, (this.userSweptTotals.get(key) || 0) + sweep.claimableAmount);
+              }
+            }
+          }
+          lastOpClaimedAt = opData[opData.length - 1].claimed_at;
+          if (opData.length < pageSize) break;
+        }
+      } catch (err: any) {
+        recordDbFailure(err);
       }
     } catch (err: any) {
       recordDbFailure(err);
