@@ -116,37 +116,6 @@ export const EventContractChart: React.FC<EventContractChartProps> = ({
   const isYesEdge = confluence.isYesEdge;
   const hasEdge = Math.abs(edge) >= 0.005;
 
-  const aiBadge = useMemo(() => {
-    if (confluence.convictionState === 'CAUTION_COUNTER_TREND') {
-      const text = `Caution: Divergence (Waiting)`;
-      return { text, bg: 'rgba(255,183,0,0.15)', stroke: '#ffb700', color: '#ffb700', w: 185 };
-    }
-    if (confluence.convictionState === 'HIGH_CONVICTION') {
-      const dir = confluence.recommendedAction === 'BUY_UP' ? 'UP' : 'DOWN';
-      const text = `High Conviction ${dir} (${confluence.winProbability}% Win • ${confluence.signedEdgeLabel})`;
-      const w = Math.min(260, Math.max(180, text.length * 6.5 + 16));
-      const isUp = dir === 'UP';
-      const bg = isUp ? 'rgba(0,230,118,0.15)' : 'rgba(255,51,102,0.15)';
-      const stroke = isUp ? '#00e676' : '#ff3366';
-      const color = isUp ? '#00e676' : '#ff3366';
-      return { text, bg, stroke, color, w };
-    }
-    if (hasEdge) {
-      const edgePct = (Math.abs(edge) * 100).toFixed(1);
-      const dir = isYesEdge ? 'YES' : 'NO';
-      const fairStr = (fairValueYes * 100).toFixed(1);
-      const text = `AI Fair ${fairStr}% → ${dir} +${edgePct}% Alpha`;
-      const w = Math.min(230, Math.max(170, text.length * 6.6 + 16));
-      const bg = isYesEdge ? 'rgba(0,230,118,0.14)' : 'rgba(255,51,102,0.14)';
-      const stroke = isYesEdge ? '#00e676' : '#ff3366';
-      const color = isYesEdge ? '#00e676' : '#ff3366';
-      return { text, bg, stroke, color, w };
-    }
-    const pct = fairValueYes >= 0.5 ? (fairValueYes * 100).toFixed(1) : ((1 - fairValueYes) * 100).toFixed(1);
-    const d = fairValueYes >= 0.5 ? 'UP' : 'DOWN';
-    return { text: `AI Fair ${pct}% ${d}`, bg: '#1e1035', stroke: '#7928ca', color: '#d8b4fe', w: 145 };
-  }, [fairValueYes, edge, hasEdge, isYesEdge, confluence]);
-
   // Fetch REAL price history when switching market, symbol, or timeframe range.
   // No synthetic fallback: on failure the chart shows only subsequently observed
   // live ticks (or an explicit empty state), never fabricated waves.
@@ -223,26 +192,36 @@ export const EventContractChart: React.FC<EventContractChartProps> = ({
     });
   }, [spot, timeRange, isResolving]);
 
-  // Handle responsive canvas sizing
+  // Handle responsive canvas sizing using ResizeObserver for instantaneous adaptation
   useEffect(() => {
-    const handleResize = () => {
-      if (containerRef.current) {
-        const { clientWidth, clientHeight } = containerRef.current;
-        setDimensions({
-          width: Math.max(300, clientWidth),
-          height: Math.max(280, clientHeight || 420),
-        });
+    if (!containerRef.current) return;
+    const observer = new ResizeObserver((entries) => {
+      for (const entry of entries) {
+        const { width, height } = entry.contentRect;
+        if (width > 0 && height > 0) {
+          setDimensions({
+            width: Math.max(260, Math.floor(width)),
+            height: Math.max(220, Math.floor(height)),
+          });
+        }
       }
-    };
-    handleResize();
-    window.addEventListener('resize', handleResize);
-    return () => window.removeEventListener('resize', handleResize);
+    });
+    observer.observe(containerRef.current);
+    return () => observer.disconnect();
   }, []);
 
   // Scaler functions for SVG chart
   const { width, height } = dimensions;
-  const isMobileWidth = width < 600;
-  const padding = { top: 42, right: isMobileWidth ? 60 : 90, bottom: 35, left: 15 };
+  const isCompact = width < 680;
+  const isUltraCompact = width < 480;
+
+  // Responsive padding: ensures comfortable margin for axis labels without squishing chart
+  const padding = {
+    top: 36,
+    right: isUltraCompact ? 56 : isCompact ? 68 : 84,
+    bottom: 28,
+    left: 14,
+  };
   const chartWidth = Math.max(10, width - padding.left - padding.right);
   const chartHeight = Math.max(10, height - padding.top - padding.bottom);
 
@@ -273,9 +252,11 @@ export const EventContractChart: React.FC<EventContractChartProps> = ({
   const currentY = getY(spot);
   const strikeY = getY(strike);
 
-  // Split chart into past (72% width) and future settlement zone (28% width)
-  const pastWidth = chartWidth * 0.72;
-  const futureWidth = chartWidth * 0.28;
+  // Dynamic settlement zone width:
+  // Allocate ample room (110px - 260px) for future projection cone & settlement data
+  const futureRatio = isUltraCompact ? 0.38 : isCompact ? 0.34 : 0.28;
+  const futureWidth = Math.max(isUltraCompact ? 110 : 135, Math.min(chartWidth * futureRatio, 260));
+  const pastWidth = Math.max(40, chartWidth - futureWidth);
   const splitX = padding.left + pastWidth;
 
   // Map historical points to SVG coordinates by actual timestamp so real
@@ -317,7 +298,53 @@ export const EventContractChart: React.FC<EventContractChartProps> = ({
   const aiTargetY = getY(aiPredictedTarget);
   const aiConeTopY = getY(aiPredictedTarget + strike * 0.0008);
   const aiConeBottomY = getY(aiPredictedTarget - strike * 0.0008);
-  const aiLabelY = Math.max(padding.top + 16, Math.min(padding.top + chartHeight - 12, aiTargetY > padding.top + 28 ? aiTargetY - 10 : aiTargetY + 20));
+  const aiLabelY = Math.max(
+    padding.top + 14,
+    Math.min(padding.top + chartHeight - 12, aiTargetY > padding.top + 28 ? aiTargetY - 10 : aiTargetY + 20)
+  );
+
+  // Responsive AI Badge: adapts text length and clamps width to stay strictly inside settlement zone
+  const maxBadgeWidth = Math.max(60, futureWidth - 14);
+
+  const aiBadge = useMemo(() => {
+    const useCompact = maxBadgeWidth < 185;
+
+    if (confluence.convictionState === 'CAUTION_COUNTER_TREND') {
+      const text = useCompact ? 'Caution: Waiting' : 'Caution: Divergence (Waiting)';
+      const w = Math.min(maxBadgeWidth, useCompact ? 115 : 185);
+      return { text, bg: 'rgba(255,183,0,0.15)', stroke: '#ffb700', color: '#ffb700', w };
+    }
+    if (confluence.convictionState === 'HIGH_CONVICTION') {
+      const dir = confluence.recommendedAction === 'BUY_UP' ? 'UP' : 'DOWN';
+      const text = useCompact
+        ? `${dir} (${confluence.winProbability}% Win)`
+        : `High Conviction ${dir} (${confluence.winProbability}% Win • ${confluence.signedEdgeLabel})`;
+      const w = Math.min(maxBadgeWidth, Math.max(85, text.length * 6.2 + 14));
+      const isUp = dir === 'UP';
+      const bg = isUp ? 'rgba(0,230,118,0.15)' : 'rgba(255,51,102,0.15)';
+      const stroke = isUp ? '#00e676' : '#ff3366';
+      const color = isUp ? '#00e676' : '#ff3366';
+      return { text, bg, stroke, color, w };
+    }
+    if (hasEdge) {
+      const edgePct = (Math.abs(edge) * 100).toFixed(1);
+      const dir = isYesEdge ? 'YES' : 'NO';
+      const fairStr = (fairValueYes * 100).toFixed(1);
+      const text = useCompact
+        ? `${dir} +${edgePct}% Alpha`
+        : `AI Fair ${fairStr}% → ${dir} +${edgePct}% Alpha`;
+      const w = Math.min(maxBadgeWidth, Math.max(90, text.length * 6.3 + 14));
+      const bg = isYesEdge ? 'rgba(0,230,118,0.14)' : 'rgba(255,51,102,0.14)';
+      const stroke = isYesEdge ? '#00e676' : '#ff3366';
+      const color = isYesEdge ? '#00e676' : '#ff3366';
+      return { text, bg, stroke, color, w };
+    }
+    const pct = fairValueYes >= 0.5 ? (fairValueYes * 100).toFixed(1) : ((1 - fairValueYes) * 100).toFixed(1);
+    const d = fairValueYes >= 0.5 ? 'UP' : 'DOWN';
+    const text = useCompact ? `Fair ${pct}% ${d}` : `AI Fair ${pct}% ${d}`;
+    const w = Math.min(maxBadgeWidth, Math.max(75, text.length * 6.5 + 14));
+    return { text, bg: '#1e1035', stroke: '#7928ca', color: '#d8b4fe', w };
+  }, [fairValueYes, edge, hasEdge, isYesEdge, confluence, maxBadgeWidth]);
 
   // Handle crosshair hover — snap to the nearest real point by screen x
   const handleMouseMove = (e: React.MouseEvent<SVGSVGElement>) => {
@@ -351,22 +378,25 @@ export const EventContractChart: React.FC<EventContractChartProps> = ({
   return (
     <div className="relative flex flex-col h-full w-full select-none overflow-hidden rounded-xl border border-border/40 bg-background/80 backdrop-blur-md">
       {/* Top Chart Header & Navigation Bar */}
-      <div className="flex items-center justify-between px-3 py-2 border-b border-border/30 bg-background/60 text-xs font-mono flex-wrap gap-2">
+      <div className="flex items-center justify-between px-3 py-1.5 sm:py-2 border-b border-border/30 bg-background/60 text-xs font-mono gap-2">
         {/* Left: Event Question & Status */}
-        <div className="flex items-center gap-2.5 flex-wrap">
-          <div className="flex items-center gap-1.5 font-bold text-foreground">
-            <span className="text-brand-cyan">{market.symbol}</span>
-            <span className="text-muted-foreground font-normal">
+        <div className="flex items-center gap-2 min-w-0 flex-1">
+          <div className="flex items-center gap-1.5 font-bold text-foreground truncate">
+            <span className="text-brand-cyan flex-shrink-0">{market.symbol}</span>
+            <span className="text-muted-foreground font-normal hidden md:inline truncate">
               Will {market.symbol.split('/')[0]} settle above{' '}
               <strong className="text-foreground">${strike.toLocaleString('en-US', { minimumFractionDigits: 2 })}</strong>{' '}
               at {formattedExpiry}?
             </span>
+            <span className="text-muted-foreground font-normal md:hidden text-[11px] truncate">
+              Strike <strong className="text-foreground">${strike.toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 2 })}</strong>
+            </span>
           </div>
 
-          <div className="flex items-center gap-1">
+          <div className="flex items-center gap-1 flex-shrink-0">
             <span
               className={cn(
-                "px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider flex items-center gap-1",
+                "px-1.5 sm:px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider flex items-center gap-1",
                 isITM ? "bg-[#00e676]/20 text-[#00e676] border border-[#00e676]/30" : "bg-[#ff3366]/20 text-[#ff3366] border border-[#ff3366]/30"
               )}
               title={isITM ? `Spot is $${Math.abs(spot - strike).toFixed(2)} above strike ($${strike.toLocaleString()})` : `Spot is $${Math.abs(spot - strike).toFixed(2)} below strike ($${strike.toLocaleString()})`}
@@ -378,7 +408,7 @@ export const EventContractChart: React.FC<EventContractChartProps> = ({
         </div>
 
         {/* Right: Quick Controls & Book Toggle */}
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-1.5 sm:gap-2 flex-shrink-0">
           {/* AI Forecast Toggle */}
           <button
             type="button"
@@ -398,7 +428,7 @@ export const EventContractChart: React.FC<EventContractChartProps> = ({
           {/* Data provenance: real feed only, explicit when depth is limited */}
           <span
             className={cn(
-              "hidden sm:inline-flex items-center px-2 py-0.5 rounded text-[10px] font-mono border",
+              "hidden lg:inline-flex items-center px-2 py-0.5 rounded text-[10px] font-mono border",
               historyLoading
                 ? "text-muted-foreground border-border/40 bg-secondary/30"
                 : priceHistory.length === 0
@@ -422,19 +452,19 @@ export const EventContractChart: React.FC<EventContractChartProps> = ({
               : priceHistory.length === 0
                 ? "No real ticks yet"
                 : historyMeta.isPartial
-                  ? `Recent Trades Only • ${priceHistory.length} real ticks`
-                  : `Live • Real feed • ${priceHistory.length} pts`}
+                  ? `Recent • ${priceHistory.length} ticks`
+                  : `Live • ${priceHistory.length} pts`}
           </span>
 
           {/* Timeframe Buttons */}
-          <div className="hidden md:flex items-center bg-secondary/30 rounded-lg p-0.5 border border-border/30 text-[10px]">
+          <div className="flex items-center bg-secondary/30 rounded-lg p-0.5 border border-border/30 text-[10px]">
             {(['RTC', '15m', '1h', 'ALL'] as const).map((range) => (
               <button
                 key={range}
                 type="button"
                 onClick={() => setTimeRange(range)}
                 className={cn(
-                  "px-2 py-0.5 rounded transition-colors cursor-pointer",
+                  "px-1.5 sm:px-2 py-0.5 rounded transition-colors cursor-pointer text-[10px]",
                   timeRange === range ? "bg-secondary text-foreground font-bold" : "text-muted-foreground hover:text-foreground"
                 )}
               >
@@ -553,13 +583,13 @@ export const EventContractChart: React.FC<EventContractChartProps> = ({
               />
               <circle cx={zoneRight} cy={aiTargetY} r="3.5" fill="#7928ca" filter="url(#glow)" />
               
-              {/* Edge-aware AI Badge — shows Fair vs Market so YES edge does not contradict DOWN fair */}
-              <g transform={`translate(${zoneRight - aiBadge.w - 6}, ${aiLabelY - 14})`}>
+              {/* Edge-aware AI Badge — clamped so it strictly remains within the future settlement zone */}
+              <g transform={`translate(${Math.max(splitX + 6, zoneRight - aiBadge.w - 6)}, ${aiLabelY - (isCompact ? 10 : 14)})`}>
                 <rect
                   x="0"
                   y="0"
                   width={aiBadge.w}
-                  height="20"
+                  height={isCompact ? 18 : 20}
                   rx="4"
                   fill={aiBadge.bg}
                   fillOpacity="0.9"
@@ -567,10 +597,10 @@ export const EventContractChart: React.FC<EventContractChartProps> = ({
                   strokeWidth="1"
                 />
                 <text
-                  x="8"
-                  y="14"
+                  x="6"
+                  y={isCompact ? 12.5 : 14}
                   fill={aiBadge.color}
-                  fontSize="10"
+                  fontSize={isCompact ? 9 : 10}
                   fontFamily="JetBrains Mono, monospace"
                   fontWeight="bold"
                 >
@@ -592,23 +622,41 @@ export const EventContractChart: React.FC<EventContractChartProps> = ({
           />
 
           {/* Strike Label & Value Pill */}
-          <g transform={`translate(${padding.left + chartWidth + 6}, ${strikeY})`}>
-            <rect x="0" y="-10" width="76" height="20" rx="4" fill="#18181b" stroke="#71717a" strokeWidth="1" />
-            <text x="5" y="4" fill="#e4e4e7" fontSize="10" fontFamily="JetBrains Mono, monospace" fontWeight="bold">
-              ${strike.toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 2 })}
+          <g transform={`translate(${padding.left + chartWidth + 4}, ${strikeY})`}>
+            <rect
+              x="0"
+              y="-9"
+              width={isUltraCompact ? 50 : isCompact ? 60 : 76}
+              height="18"
+              rx="4"
+              fill="#18181b"
+              stroke="#71717a"
+              strokeWidth="1"
+            />
+            <text
+              x={isCompact ? 3 : 5}
+              y="3.5"
+              fill="#e4e4e7"
+              fontSize={isUltraCompact ? 8 : isCompact ? 9 : 10}
+              fontFamily="JetBrains Mono, monospace"
+              fontWeight="bold"
+            >
+              ${strike.toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: strike < 10 ? 2 : 0 })}
             </text>
           </g>
 
-          {/* Strike Offset Indicator */}
-          <text
-            x={splitX + 8}
-            y={strikeY - 6}
-            fill="#a1a1aa"
-            fontSize="9"
-            fontFamily="JetBrains Mono, monospace"
-          >
-            Strike ${strike.toLocaleString()} — 0.00%
-          </text>
+          {/* Strike Offset Indicator — only shown when there's ample room */}
+          {futureWidth >= 160 && !isCompact && (
+            <text
+              x={splitX + 8}
+              y={strikeY - 6}
+              fill="#a1a1aa"
+              fontSize="9"
+              fontFamily="JetBrains Mono, monospace"
+            >
+              Strike ${strike.toLocaleString()} — 0.00%
+            </text>
+          )}
 
           {/* Historical Price Trail (Underlay Gradient Fill) */}
           {displayPoints.length > 1 && (
@@ -672,15 +720,15 @@ export const EventContractChart: React.FC<EventContractChartProps> = ({
           )}
 
           {/* Time Labels on Bottom Axis */}
-          <text x={padding.left + 5} y={height - 12} fill="#71717a" fontSize="10" fontFamily="JetBrains Mono, monospace">
+          <text x={padding.left + 4} y={height - 9} fill="#71717a" fontSize={isCompact ? 9 : 10} fontFamily="JetBrains Mono, monospace">
             {historyMeta.isPartial && !historyLoading
-              ? `Recent Trades Only • ${timeRange === 'RTC' ? `${market.windowDuration || '5m'} round` : timeRange}`
+              ? `Recent • ${timeRange === 'RTC' ? `${market.windowDuration || '5m'}` : timeRange}`
               : timeRange === 'RTC' ? `${market.windowDuration || '5m'} round` : `${timeRange} ago`}
           </text>
-          <text x={splitX - 35} y={height - 12} fill="#00ffcc" fontSize="10" fontFamily="JetBrains Mono, monospace" fontWeight="bold">
+          <text x={splitX - (isCompact ? 28 : 35)} y={height - 9} fill="#00ffcc" fontSize={isCompact ? 9 : 10} fontFamily="JetBrains Mono, monospace" fontWeight="bold">
             now {new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false })}
           </text>
-          <text x={zoneRight - 45} y={height - 12} fill="#a1a1aa" fontSize="10" fontFamily="JetBrains Mono, monospace">
+          <text x={Math.max(splitX + 10, zoneRight - (isCompact ? 38 : 45))} y={height - 9} fill="#a1a1aa" fontSize={isCompact ? 9 : 10} fontFamily="JetBrains Mono, monospace">
             {formattedExpiry}
           </text>
         </svg>
@@ -722,44 +770,47 @@ export const EventContractChart: React.FC<EventContractChartProps> = ({
         {/* Expiry Floating Countdown Badge in Settlement Zone */}
         <div
           className={cn(
-            "absolute z-20 flex flex-col items-center gap-0.5 px-2.5 py-1 rounded-lg border shadow-lg backdrop-blur-md transition-all",
+            "absolute z-20 flex flex-col items-center gap-0.5 px-2 py-0.5 sm:py-1 rounded-lg border shadow-lg backdrop-blur-md transition-all",
             isResolving
               ? "bg-[#ffb700]/10 border-[#ffb700]/40 text-[#ffb700]"
               : "bg-background/90 border-border/70 text-brand-cyan"
           )}
           style={{
-            left: `${splitX + 14}px`,
-            top: '8px',
+            left: `${splitX + Math.max(6, Math.min(12, (futureWidth - (isCompact ? 96 : 120)) / 2))}px`,
+            top: '6px',
           }}
         >
           <div className={cn("flex items-center gap-1.5 text-xs font-mono font-bold", isResolving ? "text-[#ffb700]" : "text-brand-cyan")}>
             {isResolving ? (
-              <ArrowPathIcon className="w-3.5 h-3.5 animate-spin text-[#ffb700]" />
+              <ArrowPathIcon className="w-3 h-3 animate-spin text-[#ffb700]" />
             ) : (
               <ClockIcon className="w-3.5 h-3.5 animate-pulse text-brand-cyan" />
             )}
-            <span>{isResolving ? 'Resolving Outcome...' : formattedCountdown}</span>
+            <span className={cn(isCompact && "text-[11px]")}>{isResolving ? 'Resolving...' : formattedCountdown}</span>
           </div>
           <div className="text-[8px] font-mono text-muted-foreground tracking-wider uppercase">
-            {isResolving ? 'Oracle Settlement' : 'Time to Settlement'}
+            {isResolving ? 'Oracle Settlement' : isCompact ? 'Settlement' : 'Time to Settlement'}
           </div>
         </div>
 
         {/* Dynamic Zone Labels */}
         <div
           className="absolute pointer-events-none text-[#00e676]/80 font-mono font-bold text-xs tracking-wider flex items-center gap-1"
-          style={{ right: `${padding.right + 12}px`, top: '10px' }}
+          style={{
+            right: `${padding.right + 10}px`,
+            top: futureWidth < 240 ? '42px' : '8px',
+          }}
         >
           <ArrowTrendingUpIcon className="w-3.5 h-3.5" />
-          <span>UP ZONE ({(impliedProbYes * 100).toFixed(0)}%)</span>
+          <span className="text-[10px] sm:text-xs font-bold">{isCompact ? `UP (${(impliedProbYes * 100).toFixed(0)}%)` : `UP ZONE (${(impliedProbYes * 100).toFixed(0)}%)`}</span>
         </div>
 
         <div
           className="absolute pointer-events-none text-[#ff3366]/80 font-mono font-bold text-xs tracking-wider flex items-center gap-1"
-          style={{ right: `${padding.right + 12}px`, bottom: `${padding.bottom + 12}px` }}
+          style={{ right: `${padding.right + 10}px`, bottom: `${padding.bottom + 8}px` }}
         >
           <ArrowTrendingDownIcon className="w-3.5 h-3.5" />
-          <span>DOWN ZONE ({((1 - impliedProbYes) * 100).toFixed(0)}%)</span>
+          <span className="text-[10px] sm:text-xs font-bold">{isCompact ? `DOWN (${((1 - impliedProbYes) * 100).toFixed(0)}%)` : `DOWN ZONE (${((1 - impliedProbYes) * 100).toFixed(0)}%)`}</span>
         </div>
       </div>
     </div>
