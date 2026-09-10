@@ -377,6 +377,7 @@ export const SweeperControls: React.FC<SweeperControlsProps> = ({
       let claimed = 0;
       let lastHash: string | undefined;
       let userCancelled = false;
+      let lastError: string | undefined;
       for (const pos of claimables) {
         if (!pos.marketIdHex || !pos.marketIdHex.startsWith('0x') || pos.winningOutcome === 'VOID') continue;
         if (!pos.rawAmount || BigInt(pos.rawAmount) <= 0n) continue;
@@ -393,6 +394,7 @@ export const SweeperControls: React.FC<SweeperControlsProps> = ({
         } catch (claimErr: any) {
           const parsed = parseWeb3Error(claimErr, 'transaction');
           console.warn(`[SweeperControls] Claim failed for ${pos.marketId}:`, parsed.message);
+          lastError = parsed.message;
           if (parsed.isUserRejection) {
             userCancelled = true;
             break;
@@ -415,7 +417,7 @@ export const SweeperControls: React.FC<SweeperControlsProps> = ({
         // User rejected in wallet — not an error state, stay silent.
         return;
       } else {
-        setSweepError('No winnings could be claimed from your wallet. They may already be claimed.');
+        setSweepError(lastError || 'No winnings could be claimed from your wallet. They may already be claimed.');
       }
     } catch (err: any) {
       console.warn('[SweeperControls] Wallet claim error:', err);

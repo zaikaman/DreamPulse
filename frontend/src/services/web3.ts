@@ -392,7 +392,7 @@ export const BINARY_MODULE_REDEEM_ABI = [
     name: 'redeem',
     stateMutability: 'nonpayable',
     inputs: [
-      { name: 'operatorId', type: 'uint256' },
+      { name: 'operatorId', type: 'uint32' },
       { name: 'venueId', type: 'bytes32' },
       { name: 'marketId', type: 'bytes32' },
       { name: 'outcomeIdx', type: 'uint8' },
@@ -402,7 +402,33 @@ export const BINARY_MODULE_REDEEM_ABI = [
   },
 ] as const;
 
+export const BINARY_MODULE_MARKETS_READ_ABI = [
+  {
+    type: 'function',
+    name: 'markets',
+    stateMutability: 'view',
+    inputs: [{ name: 'marketId', type: 'bytes32' }],
+    outputs: [
+      { name: 'oracleQuestionId', type: 'uint256' },
+      { name: 'outcomeSlotCount', type: 'uint8' },
+      { name: 'voidPolicy', type: 'uint8' },
+      { name: 'collateral', type: 'address' },
+      { name: 'originOperatorId', type: 'uint32' },
+      { name: 'originVenueId', type: 'bytes32' },
+      { name: 'oracleAdapter', type: 'address' },
+      { name: 'creator', type: 'address' },
+      { name: 'market', type: 'address' },
+      { name: 'pool', type: 'address' },
+      { name: 'yesId', type: 'uint256' },
+      { name: 'noId', type: 'uint256' },
+      { name: 'tradingStart', type: 'uint64' },
+      { name: 'expiry', type: 'uint64' },
+    ],
+  },
+] as const;
+
 export const ZERO_BYTES32 = '0x0000000000000000000000000000000000000000000000000000000000000000' as Hex;
+export const ZERO_ADDRESS = '0x0000000000000000000000000000000000000000' as Address;
 
 export const SESSION_EIP712_DOMAIN = {
   name: 'DreamPulse Operator Registry',
@@ -1577,6 +1603,7 @@ export class Web3Service {
       abi: ERC6909_OPERATOR_ABI,
       functionName: 'setOperator',
       args: [SOMNIA_ADDRESSES.binaryModule, true],
+      gas: 200_000n,
     });
     await publicClient.waitForTransactionReceipt({ hash });
     return hash;
@@ -1607,20 +1634,50 @@ export class Web3Service {
         `Connected wallet (${authorized.address}) does not match claim address (${params.userAddress}). Please switch wallets in MetaMask and try again.`,
       );
     }
-    if (params.outcomeToken) {
+
+    // Auto-resolve outcomeToken on-chain if omitted or undefined
+    let resolvedOutcomeToken = params.outcomeToken;
+    if (!resolvedOutcomeToken && params.marketIdHex) {
+      try {
+        const rec = await publicClient.readContract({
+          address: SOMNIA_ADDRESSES.binaryModule,
+          abi: BINARY_MODULE_MARKETS_READ_ABI,
+          functionName: 'markets',
+          args: [params.marketIdHex],
+        });
+        const marketAddress = rec[8] as Address;
+        if (marketAddress && marketAddress.toLowerCase() !== ZERO_ADDRESS.toLowerCase()) {
+          resolvedOutcomeToken = (await publicClient.readContract({
+            address: marketAddress,
+            abi: [{
+              type: 'function',
+              name: 'outcomeToken',
+              inputs: [],
+              outputs: [{ name: '', type: 'address' }],
+              stateMutability: 'view',
+            }],
+            functionName: 'outcomeToken',
+          })) as Address;
+        }
+      } catch (lookupErr: any) {
+        console.warn('[Web3Service] Outcome token auto-resolve notice:', lookupErr?.message || lookupErr);
+      }
+    }
+
+    if (resolvedOutcomeToken) {
       await this.ensureModuleOutcomeOperator({
         userAddress: params.userAddress,
-        outcomeToken: params.outcomeToken,
-      }).catch((err: any) => {
-        console.warn('[Web3Service] Module grant notice before claim:', err?.message || err);
+        outcomeToken: resolvedOutcomeToken,
       });
     }
+
     const wallet = await this.getWalletClient(params.userAddress);
     const hash = await wallet.writeContract({
       address: SOMNIA_ADDRESSES.binaryModule,
       abi: BINARY_MODULE_REDEEM_ABI,
       functionName: 'redeem',
-      args: [0n, ZERO_BYTES32, params.marketIdHex, params.outcomeIdx, params.amountRaw],
+      args: [0, ZERO_BYTES32, params.marketIdHex, params.outcomeIdx, params.amountRaw],
+      gas: 500_000n,
     });
     await publicClient.waitForTransactionReceipt({ hash });
     return { hash };
