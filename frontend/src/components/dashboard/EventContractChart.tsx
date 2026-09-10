@@ -74,10 +74,41 @@ export const EventContractChart: React.FC<EventContractChartProps> = ({
     count: 0,
   });
 
+  // Active display points for the chart: merges historical trail with the active live spot
+  // so the rendered price curve ALWAYS terminates precisely at the active spot dot at (splitX, currentY).
+  const displayPoints = useMemo<PricePoint[]>(() => {
+    if (!spot || isNaN(spot) || spot <= 0) {
+      return priceHistory;
+    }
+
+    if (priceHistory.length === 0) {
+      return [{ time: Date.now(), price: spot }];
+    }
+
+    const last = priceHistory[priceHistory.length - 1];
+    const now = Math.max(Date.now(), last.time);
+
+    // If the last point is already at current spot and within 500ms, use priceHistory directly
+    if (Math.abs(last.price - spot) < 0.0001 && Math.abs(now - last.time) < 500) {
+      return priceHistory;
+    }
+
+    // If the last point is very recent (within 1.5s), update it in place so micro-ticks don't bunch up
+    if (Math.abs(now - last.time) < 1500) {
+      const copy = [...priceHistory];
+      copy[copy.length - 1] = { time: now, price: spot };
+      return copy;
+    }
+
+    // Otherwise, append the active spot at 'now' to seamlessly connect the historical curve
+    // directly into the active spot head at splitX
+    return [...priceHistory, { time: now, price: spot }];
+  }, [priceHistory, spot]);
+
   // Evaluate Multi-Factor Confluence
   const confluence = useMemo(() => {
-    return evaluateTradeConfluence(market, liveTick, spot, priceHistory);
-  }, [market, liveTick, spot, priceHistory]);
+    return evaluateTradeConfluence(market, liveTick, spot, displayPoints);
+  }, [market, liveTick, spot, displayPoints]);
 
   const impliedProbYes = confluence.impliedProbYes;
   const fairValueYes = confluence.fairValueYes;
@@ -161,7 +192,16 @@ export const EventContractChart: React.FC<EventContractChartProps> = ({
   // Never fabricates history: seeds from the first observed tick when the
   // backend returned no depth yet.
   useEffect(() => {
-    if (!spot || isNaN(spot) || spot <= 0 || isResolving) return;
+    if (!spot || isNaN(spot) || spot <= 0) return;
+    if (isResolving) {
+      setPriceHistory((prev) => {
+        if (prev.length === 0) return [{ time: Date.now(), price: spot }];
+        const updated = [...prev];
+        updated[updated.length - 1] = { ...updated[updated.length - 1], price: spot };
+        return updated;
+      });
+      return;
+    }
     setPriceHistory((prev) => {
       const now = Date.now();
       if (prev.length === 0) {
@@ -208,7 +248,7 @@ export const EventContractChart: React.FC<EventContractChartProps> = ({
 
   // Dynamic Min/Max range calculation centered on strike and spot
   const { minPrice, priceRange } = useMemo(() => {
-    const validPrices = priceHistory.map((p) => p.price).filter((p) => p > 0);
+    const validPrices = displayPoints.map((p) => p.price).filter((p) => p > 0);
     if (strike > 0) validPrices.push(strike);
     if (spot > 0) validPrices.push(spot);
     const fallbackBase = strike > 0 ? strike : spot > 0 ? spot : 100;
@@ -222,7 +262,7 @@ export const EventContractChart: React.FC<EventContractChartProps> = ({
       minPrice: finalMin,
       priceRange: finalMax - finalMin || 1,
     };
-  }, [priceHistory, strike, spot]);
+  }, [displayPoints, strike, spot]);
 
   // Map price to Y coordinate
   const getY = (price: number) => {
@@ -230,7 +270,10 @@ export const EventContractChart: React.FC<EventContractChartProps> = ({
     return padding.top + chartHeight - ratio * chartHeight;
   };
 
-  // Split chart into past (70% width) and future settlement zone (30% width)
+  const currentY = getY(spot);
+  const strikeY = getY(strike);
+
+  // Split chart into past (72% width) and future settlement zone (28% width)
   const pastWidth = chartWidth * 0.72;
   const futureWidth = chartWidth * 0.28;
   const splitX = padding.left + pastWidth;
@@ -238,11 +281,11 @@ export const EventContractChart: React.FC<EventContractChartProps> = ({
   // Map historical points to SVG coordinates by actual timestamp so real
   // exchange candles and live ticks keep true time spacing (no resampling).
   const timeDomain = useMemo(() => {
-    if (priceHistory.length === 0) return null;
-    const from = priceHistory[0].time;
-    const to = priceHistory[priceHistory.length - 1].time;
+    if (displayPoints.length === 0) return null;
+    const from = displayPoints[0].time;
+    const to = displayPoints[displayPoints.length - 1].time;
     return { from, to, span: Math.max(1, to - from) };
-  }, [priceHistory]);
+  }, [displayPoints]);
 
   const getX = (time: number) => {
     if (!timeDomain) return padding.left;
@@ -251,18 +294,16 @@ export const EventContractChart: React.FC<EventContractChartProps> = ({
   };
 
   const svgPoints = useMemo(() => {
-    if (priceHistory.length === 0 || !timeDomain) return '';
-    return priceHistory
-      .map((p) => {
-        const x = getX(p.time);
-        const y = getY(p.price);
+    if (displayPoints.length === 0 || !timeDomain) return '';
+    const lastIdx = displayPoints.length - 1;
+    return displayPoints
+      .map((p, i) => {
+        const x = i === lastIdx ? splitX : getX(p.time);
+        const y = i === lastIdx ? currentY : getY(p.price);
         return `${x.toFixed(1)},${y.toFixed(1)}`;
       })
       .join(' ');
-  }, [priceHistory, timeDomain, pastWidth, minPrice, priceRange, chartHeight, padding.top, padding.left]);
-
-  const currentY = getY(spot);
-  const strikeY = getY(strike);
+  }, [displayPoints, timeDomain, pastWidth, minPrice, priceRange, chartHeight, padding.top, padding.left, splitX, currentY]);
 
   // Settlement Zone coordinates
   const zoneTop = padding.top;
@@ -282,13 +323,13 @@ export const EventContractChart: React.FC<EventContractChartProps> = ({
   const handleMouseMove = (e: React.MouseEvent<SVGSVGElement>) => {
     const rect = e.currentTarget.getBoundingClientRect();
     const mouseX = e.clientX - rect.left;
-    if (mouseX < padding.left || mouseX > splitX || priceHistory.length === 0) {
+    if (mouseX < padding.left || mouseX > splitX || displayPoints.length === 0) {
       setHoverPoint(null);
       return;
     }
-    let nearest = priceHistory[0];
+    let nearest = displayPoints[0];
     let nearestDist = Infinity;
-    for (const p of priceHistory) {
+    for (const p of displayPoints) {
       const dist = Math.abs(getX(p.time) - mouseX);
       if (dist < nearestDist) {
         nearestDist = dist;
@@ -570,7 +611,7 @@ export const EventContractChart: React.FC<EventContractChartProps> = ({
           </text>
 
           {/* Historical Price Trail (Underlay Gradient Fill) */}
-          {priceHistory.length > 1 && (
+          {displayPoints.length > 1 && (
             <polygon
               points={`${padding.left},${padding.top + chartHeight} ${svgPoints} ${splitX},${padding.top + chartHeight}`}
               fill="url(#priceAreaGrad)"
@@ -578,7 +619,7 @@ export const EventContractChart: React.FC<EventContractChartProps> = ({
           )}
 
           {/* Historical Price Curve Line */}
-          {priceHistory.length > 1 && (
+          {displayPoints.length > 1 && (
             <polyline
               points={svgPoints}
               fill="none"
@@ -645,7 +686,7 @@ export const EventContractChart: React.FC<EventContractChartProps> = ({
         </svg>
 
         {/* Empty state: no real ticks yet — never render fabricated data */}
-        {!historyLoading && priceHistory.length === 0 && (
+        {!historyLoading && displayPoints.length === 0 && (
           <div className="absolute inset-0 z-20 flex flex-col items-center justify-center gap-1.5 bg-background/60 backdrop-blur-[1px] text-center px-6">
             <div className="text-xs font-mono font-bold text-[#ffb700] border border-[#ffb700]/40 bg-[#ffb700]/10 rounded px-2 py-0.5">
               Recent Trades Only
