@@ -12,6 +12,9 @@ import {
   ShieldExclamationIcon,
   ArrowPathIcon,
   InformationCircleIcon,
+  ChevronDownIcon,
+  ChevronUpIcon,
+  CheckIcon,
 } from '@heroicons/react/24/outline';
 import type { Market, AgentThoughtLog, OrderExecution, SessionGrant } from '../../types/index.js';
 import type { MarketTickData } from '../../hooks/useTelemetry.js';
@@ -24,6 +27,14 @@ import { soundEngine } from '../../services/audio.js';
 import { Badge } from '../ui/badge.js';
 import { Spinner } from '../ui/Spinner.js';
 import { cn } from '../../lib/utils.js';
+
+export type OrderExecutionMode =
+  | 'MARKET'
+  | 'LIMIT'
+  | 'STOP_MARKET'
+  | 'STOP_LIMIT'
+  | 'TAKE_PROFIT_MARKET'
+  | 'TAKE_PROFIT_LIMIT';
 
 export interface LadderPrefillData {
   outcome: 'YES' | 'NO';
@@ -101,6 +112,11 @@ export const TraderCockpitTicket: React.FC<TraderCockpitTicketProps> = ({
 
   // Order Configuration State
   const [outcome, setOutcome] = useState<'YES' | 'NO'>('YES');
+  const [orderTab, setOrderTab] = useState<OrderExecutionMode>('MARKET');
+  const [limitPriceInput, setLimitPriceInput] = useState<string>('');
+  const [triggerPriceInput, setTriggerPriceInput] = useState<string>('');
+  const [isAdvancedOpen, setIsAdvancedOpen] = useState<boolean>(false);
+  const advancedDropdownRef = useRef<HTMLDivElement>(null);
   const [price, setPrice] = useState<number | null>(null);
   const [sizingMode, setSizingMode] = useState<'COLLATERAL' | 'SHARES'>('COLLATERAL');
   const [amountInput, setAmountInput] = useState<string>('10');
@@ -124,6 +140,22 @@ export const TraderCockpitTicket: React.FC<TraderCockpitTicketProps> = ({
   } | null>(null);
   const [pulseEffect, setPulseEffect] = useState<boolean>(false);
   const [isFauceting, setIsFauceting] = useState<boolean>(false);
+
+  // Close advanced dropdown on click outside
+  useEffect(() => {
+    if (!isAdvancedOpen) return;
+    const handleClickOutside = (e: MouseEvent | TouchEvent) => {
+      if (advancedDropdownRef.current && !advancedDropdownRef.current.contains(e.target as Node)) {
+        setIsAdvancedOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    document.addEventListener('touchstart', handleClickOutside);
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+      document.removeEventListener('touchstart', handleClickOutside);
+    };
+  }, [isAdvancedOpen]);
 
   const spotPrice = currentSpotPrice || liveTick?.spotPrice || market.strikePrice || 0;
   const strike = market.strikePrice || 0;
@@ -153,13 +185,51 @@ export const TraderCockpitTicket: React.FC<TraderCockpitTicketProps> = ({
   const defaultUpPrice = realBestAsk;
   const defaultDownPrice = realBestBid !== null ? Number((1.0 - realBestBid).toFixed(2)) : null;
 
+  const isLimitOrder = orderTab === 'LIMIT' || orderTab === 'STOP_LIMIT' || orderTab === 'TAKE_PROFIT_LIMIT';
+  const isTriggerOrder = orderTab === 'STOP_MARKET' || orderTab === 'STOP_LIMIT' || orderTab === 'TAKE_PROFIT_MARKET' || orderTab === 'TAKE_PROFIT_LIMIT';
+  const isAdvancedSelected = isTriggerOrder;
+
+  const activeBidPrice = useMemo(() => {
+    if (outcome === 'YES') {
+      return realBestBid;
+    } else {
+      return realBestAsk !== null ? Number((1.0 - realBestAsk).toFixed(2)) : null;
+    }
+  }, [outcome, realBestBid, realBestAsk]);
+
+  const activeAskPrice = useMemo(() => {
+    if (outcome === 'YES') {
+      return realBestAsk;
+    } else {
+      return defaultDownPrice;
+    }
+  }, [outcome, realBestAsk, defaultDownPrice]);
+
+  const activeMidPrice = useMemo(() => {
+    if (activeBidPrice !== null && activeAskPrice !== null) {
+      return Number(((activeBidPrice + activeAskPrice) / 2).toFixed(2));
+    }
+    return activeAskPrice || activeBidPrice || 0.50;
+  }, [activeBidPrice, activeAskPrice]);
+
+  const handleStepPrice = (delta: number) => {
+    const cur = parseFloat(limitPriceInput) || price || (outcome === 'YES' ? defaultUpPrice : defaultDownPrice) || 0.50;
+    const next = Math.max(0.01, Math.min(0.99, Number((cur + delta).toFixed(2))));
+    setLimitPriceInput(next.toFixed(2));
+    setPrice(next);
+    setIsManualPrice(true);
+  };
+
   // Handle Ladder prefill triggers
   useEffect(() => {
     if (prefillData && prefillData.timestamp !== lastPrefillTimestampRef.current) {
       lastPrefillTimestampRef.current = prefillData.timestamp;
       prevOutcomeRef.current = prefillData.outcome;
       setOutcome(prefillData.outcome);
-      setPrice(Number(prefillData.price.toFixed(2)));
+      setOrderTab('LIMIT');
+      const formatted = prefillData.price.toFixed(2);
+      setLimitPriceInput(formatted);
+      setPrice(Number(formatted));
       setIsManualPrice(true);
       if (prefillData.lotSize && prefillData.lotSize > 0) {
         if (sizingMode === 'SHARES') {
@@ -184,6 +254,9 @@ export const TraderCockpitTicket: React.FC<TraderCockpitTicketProps> = ({
       setIsManualPrice(false);
       const defaultPrice = outcome === 'YES' ? defaultUpPrice : defaultDownPrice;
       setPrice(defaultPrice);
+      if (defaultPrice !== null) {
+        setLimitPriceInput(defaultPrice.toFixed(2));
+      }
       prevOutcomeRef.current = outcome;
       return;
     }
@@ -192,22 +265,29 @@ export const TraderCockpitTicket: React.FC<TraderCockpitTicketProps> = ({
     prevOutcomeRef.current = outcome;
 
     if (isOutcomeToggled) {
-      if (isManualPrice && price !== null && !isNaN(price) && price > 0 && price < 1) {
-        // Recalibrate manual price to complementary value (1.0 - currentPrice) to prevent inversion risk
-        const invertedPrice = Math.max(0.01, Math.min(0.99, Number((1.0 - price).toFixed(2))));
-        setPrice(invertedPrice);
+      if (isLimitOrder && limitPriceInput) {
+        const curPrice = parseFloat(limitPriceInput);
+        if (!isNaN(curPrice) && curPrice > 0 && curPrice < 1) {
+          const invertedPrice = Math.max(0.01, Math.min(0.99, Number((1.0 - curPrice).toFixed(2))));
+          setLimitPriceInput(invertedPrice.toFixed(2));
+          setPrice(invertedPrice);
+        }
       } else {
-        // Fall back to market best ask for the toggled outcome
         const defaultPrice = outcome === 'YES' ? defaultUpPrice : defaultDownPrice;
         setPrice(defaultPrice);
+        if (defaultPrice !== null) {
+          setLimitPriceInput(defaultPrice.toFixed(2));
+        }
         setIsManualPrice(false);
       }
-    } else if (!isManualPrice) {
-      // Keep tracking market best ask updates when not in manual price mode
+    } else if (orderTab === 'MARKET') {
       const defaultPrice = outcome === 'YES' ? defaultUpPrice : defaultDownPrice;
       setPrice(defaultPrice);
+      if (defaultPrice !== null) {
+        setLimitPriceInput(defaultPrice.toFixed(2));
+      }
     }
-  }, [outcome, defaultUpPrice, defaultDownPrice, isManualPrice, price, market.id]);
+  }, [outcome, defaultUpPrice, defaultDownPrice, isLimitOrder, limitPriceInput, orderTab, market.id]);
 
   // Available trading collateral balance from isolated Smart Account Clone wallet
   const tradingBalance = useMemo(() => {
@@ -269,15 +349,23 @@ export const TraderCockpitTicket: React.FC<TraderCockpitTicketProps> = ({
     };
   };
 
+  const parsedLimitPrice = useMemo(() => {
+    if (isLimitOrder) {
+      const parsed = parseFloat(limitPriceInput);
+      return !isNaN(parsed) && parsed >= 0.01 && parsed <= 0.99 ? parsed : price;
+    }
+    return null;
+  }, [isLimitOrder, limitPriceInput, price]);
+
   const upCalculations = useMemo(() => {
-    const targetPrice = outcome === 'YES' && isManualPrice ? price : defaultUpPrice;
+    const targetPrice = isLimitOrder ? (parsedLimitPrice ?? defaultUpPrice) : defaultUpPrice;
     return calculateTicketMetrics(targetPrice, numericAmount, sizingMode);
-  }, [outcome, isManualPrice, price, defaultUpPrice, numericAmount, sizingMode]);
+  }, [isLimitOrder, parsedLimitPrice, defaultUpPrice, numericAmount, sizingMode]);
 
   const downCalculations = useMemo(() => {
-    const targetPrice = outcome === 'NO' && isManualPrice ? price : defaultDownPrice;
+    const targetPrice = isLimitOrder ? (parsedLimitPrice ?? defaultDownPrice) : defaultDownPrice;
     return calculateTicketMetrics(targetPrice, numericAmount, sizingMode);
-  }, [outcome, isManualPrice, price, defaultDownPrice, numericAmount, sizingMode]);
+  }, [isLimitOrder, parsedLimitPrice, defaultDownPrice, numericAmount, sizingMode]);
 
   const calculations = outcome === 'YES' ? upCalculations : downCalculations;
 
@@ -346,9 +434,33 @@ export const TraderCockpitTicket: React.FC<TraderCockpitTicketProps> = ({
       return;
     }
 
-    if (!calculations || calculations.lotSize <= 0 || price === null || price <= 0) {
-      setExecutionError('No liquidity available in orderbook. Select a price from the ladder to place a limit order.');
+    const orderExecPrice = isLimitOrder
+      ? parsedLimitPrice
+      : (outcome === 'YES' ? defaultUpPrice : defaultDownPrice);
+
+    if (isLimitOrder && (!orderExecPrice || orderExecPrice < 0.01 || orderExecPrice > 0.99)) {
+      setExecutionError('Please enter a valid Limit Price between $0.01 and $0.99.');
       return;
+    }
+
+    if (!isLimitOrder && (orderExecPrice === null || orderExecPrice <= 0)) {
+      setExecutionError('No liquidity available in orderbook for instant execution. Switch to Limit tab to place a quote.');
+      return;
+    }
+
+    if (!calculations || calculations.lotSize <= 0) {
+      setExecutionError('Invalid order size. Please enter an amount.');
+      return;
+    }
+
+    let parsedTriggerPrice: number | undefined;
+    if (isTriggerOrder) {
+      const tp = parseFloat(triggerPriceInput);
+      if (isNaN(tp) || tp < 0.01 || tp > 0.99) {
+        setExecutionError('Please enter a valid Trigger Price between $0.01 and $0.99.');
+        return;
+      }
+      parsedTriggerPrice = tp;
     }
 
     if (activeSession && activeSession.isActive && calculations.totalCost > tradingBalance) {
@@ -362,6 +474,9 @@ export const TraderCockpitTicket: React.FC<TraderCockpitTicketProps> = ({
     setExecutionError(null);
 
     try {
+      const finalPrice = orderExecPrice || 0.50;
+      const finalOrderType = orderTab === 'MARKET' ? 'IOC' : orderTab;
+
       if (activeSession && activeSession.isActive) {
         // Path 1: Zero-Gas Session Execution via Backend Operator
         const res = await apiClient.placeOrder({
@@ -369,9 +484,10 @@ export const TraderCockpitTicket: React.FC<TraderCockpitTicketProps> = ({
           marketId: market.id,
           outcome,
           direction: 'BUY',
-          orderType: 'LIMIT',
-          price,
+          orderType: finalOrderType as any,
+          price: finalPrice,
           lotSize: calculations.lotSize,
+          triggerPrice: parsedTriggerPrice,
         });
 
         if (res.success && res.data) {
@@ -405,8 +521,8 @@ export const TraderCockpitTicket: React.FC<TraderCockpitTicketProps> = ({
           userAddress: wallet.address,
           poolAddress: poolAddr,
           outcome,
-          orderType: 'LIMIT',
-          price,
+          orderType: orderTab === 'MARKET' ? 'IOC' : 'LIMIT',
+          price: finalPrice,
           lotSize: calculations.lotSize,
         });
 
@@ -417,9 +533,10 @@ export const TraderCockpitTicket: React.FC<TraderCockpitTicketProps> = ({
             marketId: market.id,
             outcome,
             direction: 'BUY',
-            orderType: 'LIMIT',
-            price,
+            orderType: finalOrderType as any,
+            price: finalPrice,
             lotSize: calculations.lotSize,
+            triggerPrice: parsedTriggerPrice,
             txHash: walletRes.hash,
           });
         } catch (indexErr: any) {
@@ -430,7 +547,7 @@ export const TraderCockpitTicket: React.FC<TraderCockpitTicketProps> = ({
         setLastExecutedOrder({
           id: indexed?.data?.id || `tx-${walletRes.hash.slice(2, 10)}`,
           txHash: walletRes.hash,
-          price,
+          price: finalPrice,
           lotSize: calculations.lotSize,
           outcome,
           totalCost: calculations.totalCost,
@@ -530,7 +647,246 @@ export const TraderCockpitTicket: React.FC<TraderCockpitTicketProps> = ({
         </p>
       </div>
 
-      {/* 2. Amount Input & Quick Percentages with Dual Mode (tUSDC vs Shares) */}
+      {/* 2. Order Type Tabs: Market | Limit | Advanced (Stop Market, Stop Limit, TP Market, TP Limit) */}
+      <div className="mb-3 flex-shrink-0">
+        <div className="flex items-center gap-1.5 relative">
+          {/* Market Tab */}
+          <button
+            type="button"
+            onClick={() => {
+              setOrderTab('MARKET');
+              setIsAdvancedOpen(false);
+            }}
+            className={cn(
+              "flex-1 py-1.5 px-2.5 rounded-lg text-xs font-semibold transition-all border cursor-pointer text-center",
+              orderTab === 'MARKET'
+                ? "bg-secondary text-foreground border-border/80 shadow-xs font-bold"
+                : "bg-secondary/20 text-muted-foreground border-border/20 hover:text-foreground hover:bg-secondary/40"
+            )}
+          >
+            Market
+          </button>
+
+          {/* Limit Tab */}
+          <button
+            type="button"
+            onClick={() => {
+              setOrderTab('LIMIT');
+              setIsAdvancedOpen(false);
+              if (!limitPriceInput) {
+                const cur = (outcome === 'YES' ? defaultUpPrice : defaultDownPrice) || 0.50;
+                setLimitPriceInput(cur.toFixed(2));
+                setPrice(cur);
+              }
+            }}
+            className={cn(
+              "flex-1 py-1.5 px-2.5 rounded-lg text-xs font-semibold transition-all border cursor-pointer text-center",
+              orderTab === 'LIMIT'
+                ? "bg-brand-cyan/20 text-brand-cyan border-brand-cyan/40 shadow-xs font-bold"
+                : "bg-secondary/20 text-muted-foreground border-border/20 hover:text-foreground hover:bg-secondary/40"
+            )}
+          >
+            Limit
+          </button>
+
+          {/* Advanced Tab Dropdown */}
+          <div className="relative flex-1" ref={advancedDropdownRef}>
+            <button
+              type="button"
+              onClick={() => setIsAdvancedOpen(!isAdvancedOpen)}
+              className={cn(
+                "w-full py-1.5 px-2.5 rounded-lg text-xs font-semibold transition-all border cursor-pointer flex items-center justify-between gap-1",
+                isAdvancedSelected
+                  ? "bg-purple-500/20 text-purple-300 border-purple-500/40 shadow-xs font-bold"
+                  : "bg-secondary/20 text-muted-foreground border-border/20 hover:text-foreground hover:bg-secondary/40"
+              )}
+            >
+              <span className="truncate">
+                {orderTab === 'STOP_MARKET'
+                  ? 'Stop Mkt'
+                  : orderTab === 'STOP_LIMIT'
+                  ? 'Stop Lmt'
+                  : orderTab === 'TAKE_PROFIT_MARKET'
+                  ? 'TP Mkt'
+                  : orderTab === 'TAKE_PROFIT_LIMIT'
+                  ? 'TP Lmt'
+                  : 'Advanced'}
+              </span>
+              {isAdvancedOpen ? (
+                <ChevronUpIcon className="w-3.5 h-3.5 shrink-0" />
+              ) : (
+                <ChevronDownIcon className="w-3.5 h-3.5 shrink-0" />
+              )}
+            </button>
+
+            {isAdvancedOpen && (
+              <div className="absolute top-full right-0 mt-1 w-48 rounded-xl bg-background/95 backdrop-blur-md border border-border/80 shadow-2xl p-1 z-50 flex flex-col gap-0.5">
+                {[
+                  { type: 'STOP_MARKET', label: 'Stop Market' },
+                  { type: 'STOP_LIMIT', label: 'Stop Limit' },
+                  { type: 'TAKE_PROFIT_MARKET', label: 'Take Profit Market' },
+                  { type: 'TAKE_PROFIT_LIMIT', label: 'Take Profit Limit' },
+                ].map((item) => (
+                  <button
+                    key={item.type}
+                    type="button"
+                    onClick={() => {
+                      setOrderTab(item.type as OrderExecutionMode);
+                      setIsAdvancedOpen(false);
+                      if (!triggerPriceInput) {
+                        const cur = (outcome === 'YES' ? defaultUpPrice : defaultDownPrice) || 0.50;
+                        setTriggerPriceInput(cur.toFixed(2));
+                      }
+                      if (!limitPriceInput) {
+                        const cur = (outcome === 'YES' ? defaultUpPrice : defaultDownPrice) || 0.50;
+                        setLimitPriceInput(cur.toFixed(2));
+                        setPrice(cur);
+                      }
+                    }}
+                    className={cn(
+                      "px-2.5 py-1.5 rounded-lg text-left text-xs font-medium transition-colors cursor-pointer flex items-center justify-between",
+                      orderTab === item.type
+                        ? "bg-purple-500/20 text-purple-300 font-bold"
+                        : "text-muted-foreground hover:text-foreground hover:bg-secondary/50"
+                    )}
+                  >
+                    <span>{item.label}</span>
+                    {orderTab === item.type && <CheckIcon className="w-3.5 h-3.5 text-purple-400" />}
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
+
+      {/* Trigger Price Field (Only shown for Advanced Stop / Take Profit orders) */}
+      {isTriggerOrder && (
+        <div className="mb-3 flex-shrink-0">
+          <div className="flex items-center justify-between text-xs text-muted-foreground mb-1.5">
+            <span className="font-bold text-foreground">Trigger Price</span>
+            <span className="text-[10px] text-purple-400 font-medium">
+              Activates when reached
+            </span>
+          </div>
+          <div className="relative">
+            <input
+              type="number"
+              min="0.01"
+              max="0.99"
+              step="0.01"
+              value={triggerPriceInput}
+              onChange={(e) => setTriggerPriceInput(e.target.value)}
+              className="w-full px-3 py-2 bg-secondary/30 border border-border/60 rounded-xl text-sm font-mono text-foreground focus:outline-none focus:border-purple-400 transition-all [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+              placeholder="0.50"
+            />
+            <span className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground font-mono text-xs font-bold pointer-events-none">
+              tUSDC
+            </span>
+          </div>
+        </div>
+      )}
+
+      {/* Limit Price Field (Only shown if it is a Limit order or Trigger Limit order) */}
+      {isLimitOrder && (
+        <div className="mb-3 flex-shrink-0">
+          <div className="flex items-center justify-between text-xs text-muted-foreground mb-1.5">
+            <span className="font-bold text-foreground">Limit Price</span>
+            <div className="flex items-center gap-1">
+              <button
+                type="button"
+                onClick={() => {
+                  setLimitPriceInput(activeMidPrice.toFixed(2));
+                  setPrice(activeMidPrice);
+                  setIsManualPrice(true);
+                }}
+                className="px-1.5 py-0.5 rounded bg-secondary/60 hover:bg-secondary text-[10px] font-mono font-bold text-brand-cyan border border-border/40 cursor-pointer transition-colors"
+                title="Snap to Order Book Midpoint"
+              >
+                MID
+              </button>
+              {activeBidPrice !== null && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setLimitPriceInput(activeBidPrice.toFixed(2));
+                    setPrice(activeBidPrice);
+                    setIsManualPrice(true);
+                  }}
+                  className="px-1.5 py-0.5 rounded bg-secondary/40 hover:bg-secondary text-[10px] font-mono text-muted-foreground hover:text-foreground border border-border/30 cursor-pointer transition-colors"
+                  title="Snap to Best Bid"
+                >
+                  BID
+                </button>
+              )}
+              {activeAskPrice !== null && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setLimitPriceInput(activeAskPrice.toFixed(2));
+                    setPrice(activeAskPrice);
+                    setIsManualPrice(true);
+                  }}
+                  className="px-1.5 py-0.5 rounded bg-secondary/40 hover:bg-secondary text-[10px] font-mono text-muted-foreground hover:text-foreground border border-border/30 cursor-pointer transition-colors"
+                  title="Snap to Best Ask"
+                >
+                  ASK
+                </button>
+              )}
+            </div>
+          </div>
+
+          <div className="relative">
+            <div className="flex items-center">
+              <button
+                type="button"
+                onClick={() => handleStepPrice(-0.01)}
+                className="px-2.5 py-2 bg-secondary/50 hover:bg-secondary border border-r-0 border-border/60 rounded-l-xl text-xs font-mono font-bold text-muted-foreground hover:text-foreground cursor-pointer transition-colors"
+                title="Decrease price by $0.01"
+              >
+                -1¢
+              </button>
+              <input
+                type="number"
+                min="0.01"
+                max="0.99"
+                step="0.01"
+                value={limitPriceInput}
+                onChange={(e) => {
+                  setLimitPriceInput(e.target.value);
+                  const p = parseFloat(e.target.value);
+                  if (!isNaN(p) && p >= 0.01 && p <= 0.99) {
+                    setPrice(p);
+                    setIsManualPrice(true);
+                  }
+                }}
+                className={cn(
+                  "flex-1 px-3 py-2 bg-secondary/30 border-y border-border/60 text-sm font-mono text-foreground text-center focus:outline-none focus:border-brand-cyan transition-all [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none",
+                  pulseEffect && "ring-1 ring-brand-cyan"
+                )}
+                placeholder="0.50"
+              />
+              <button
+                type="button"
+                onClick={() => handleStepPrice(0.01)}
+                className="px-2.5 py-2 bg-secondary/50 hover:bg-secondary border border-l-0 border-border/60 rounded-r-xl text-xs font-mono font-bold text-muted-foreground hover:text-foreground cursor-pointer transition-colors"
+                title="Increase price by $0.01"
+              >
+                +1¢
+              </button>
+            </div>
+          </div>
+
+          {parsedLimitPrice !== null && (
+            <div className="flex items-center justify-between text-[10px] font-mono text-muted-foreground mt-1 px-0.5">
+              <span>Implied: <strong className="text-foreground">{Math.round(parsedLimitPrice * 100)}% odds</strong></span>
+              <span>Payout: <strong className="text-brand-cyan">{(1 / parsedLimitPrice).toFixed(2)}x</strong> ($1.00/sh)</span>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* 3. Amount Input & Quick Percentages with Dual Mode (tUSDC vs Shares) */}
       <div className="mb-3.5 flex-shrink-0">
         <div className="flex items-center justify-between text-xs text-muted-foreground mb-1.5">
           <div className="flex items-center gap-1.5">
@@ -1158,13 +1514,18 @@ export const TraderCockpitTicket: React.FC<TraderCockpitTicketProps> = ({
               </>
             ) : !calculations ? (
               <span className="text-[#060709] font-bold">
-                No Book Liquidity for {outcome === 'YES' ? 'UP' : 'DOWN'}
+                {orderTab === 'MARKET' ? `No Market Liquidity for ${outcome === 'YES' ? 'UP' : 'DOWN'}` : `Enter Valid ${outcome === 'YES' ? 'UP' : 'DOWN'} Limit Price`}
               </span>
             ) : (
               <>
                 {activeSession?.isActive && <BoltIcon className="w-4 h-4 text-[#060709]" />}
                 <span className="text-[#060709] font-bold">
-                  {outcome === 'YES' ? 'Buy UP' : 'Buy DOWN'} • ${calculations.totalCost.toFixed(2)} tUSDC ({calculations.lotSize.toLocaleString()} {calculations.lotSize === 1 ? 'Share' : 'Shares'})
+                  {orderTab === 'MARKET'
+                    ? `Buy ${outcome === 'YES' ? 'UP' : 'DOWN'} (Market) • $${calculations.totalCost.toFixed(2)} tUSDC`
+                    : orderTab === 'LIMIT'
+                    ? `Place ${outcome === 'YES' ? 'UP' : 'DOWN'} Limit Quote @ $${calculations.validPrice.toFixed(2)} • $${calculations.totalCost.toFixed(2)} tUSDC`
+                    : `Place ${outcome === 'YES' ? 'UP' : 'DOWN'} ${orderTab.replace(/_/g, ' ')} • $${calculations.totalCost.toFixed(2)} tUSDC`
+                  }
                 </span>
               </>
             )}

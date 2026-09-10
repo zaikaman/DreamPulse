@@ -8,7 +8,7 @@ import { settlementService } from '../services/settlement-service.js';
 import { backtestService } from '../services/backtest-service.js';
 import { customAgentService } from '../services/custom-agent-service.js';
 import { operatorAccount, SOMNIA_ADDRESSES, publicClient, somniaExchange } from '../config/somnia.js';
-import type { MarketStatus, AgentType, OrderStatus } from '../types/index.js';
+import type { MarketStatus, AgentType, OrderStatus, OrderType } from '../types/index.js';
 import { type Address, type Hex, isAddress, getAddress, parseAbi } from 'viem';
 import { analyticsService, type AnalyticsRange } from '../services/analytics-service.js';
 import { userSwarmService } from '../services/user-swarm-service.js';
@@ -1258,7 +1258,7 @@ apiRouter.get('/orders/:id', async (req: Request, res: Response) => {
 apiRouter.post('/orders/place', requireWalletAuth, async (req: Request, res: Response) => {
   try {
     const effectiveUserAddress = (req.walletAddress || req.body.userAddress) as string;
-    const { marketId, outcome, direction, orderType, price, lotSize, txHash } = req.body;
+    const { marketId, outcome, direction, orderType, price, lotSize, triggerPrice, txHash } = req.body;
 
     if (!effectiveUserAddress || typeof effectiveUserAddress !== 'string' || !isAddress(effectiveUserAddress)) {
       return res.status(400).json({ success: false, error: 'Valid userAddress is required' });
@@ -1272,9 +1272,10 @@ apiRouter.post('/orders/place', requireWalletAuth, async (req: Request, res: Res
       return res.status(400).json({ success: false, error: 'Outcome must be YES or NO' });
     }
 
-    const numPrice = Number(price);
-    if (isNaN(numPrice) || numPrice <= 0 || numPrice >= 1.0) {
-      return res.status(400).json({ success: false, error: 'Price must be between 0.01 and 0.99' });
+    const validOrderTypes = ['LIMIT', 'IOC', 'MARKET', 'STOP_MARKET', 'STOP_LIMIT', 'TAKE_PROFIT_MARKET', 'TAKE_PROFIT_LIMIT'];
+    const normOrderType = (orderType === 'IOC' || orderType === 'MARKET') ? 'IOC' : (orderType || 'LIMIT');
+    if (!validOrderTypes.includes(orderType) && !validOrderTypes.includes(normOrderType)) {
+      return res.status(400).json({ success: false, error: `Invalid orderType '${orderType}'` });
     }
 
     const numLotSize = Number(lotSize);
@@ -1282,7 +1283,25 @@ apiRouter.post('/orders/place', requireWalletAuth, async (req: Request, res: Res
       return res.status(400).json({ success: false, error: 'Lot size must be greater than 0' });
     }
 
-    const normOrderType = orderType === 'IOC' || orderType === 'MARKET' ? 'IOC' : 'LIMIT';
+    const isLimitType = normOrderType === 'LIMIT' || normOrderType === 'STOP_LIMIT' || normOrderType === 'TAKE_PROFIT_LIMIT';
+    const isTriggerType = normOrderType === 'STOP_MARKET' || normOrderType === 'STOP_LIMIT' || normOrderType === 'TAKE_PROFIT_MARKET' || normOrderType === 'TAKE_PROFIT_LIMIT';
+
+    let numTriggerPrice: number | undefined;
+    if (isTriggerType) {
+      numTriggerPrice = Number(triggerPrice);
+      if (isNaN(numTriggerPrice) || numTriggerPrice <= 0 || numTriggerPrice >= 1.0) {
+        return res.status(400).json({ success: false, error: 'Trigger price must be between 0.01 and 0.99' });
+      }
+    }
+
+    let numPrice = Number(price);
+    if (isNaN(numPrice) || numPrice <= 0 || numPrice >= 1.0) {
+      if (isLimitType) {
+        return res.status(400).json({ success: false, error: 'Price must be between 0.01 and 0.99' });
+      }
+      numPrice = numTriggerPrice || 0.50;
+    }
+
     const normDirection = direction === 'SELL' ? 'SELL' : 'BUY';
 
     const order = await orderService.submitUserOrder({
@@ -1290,9 +1309,10 @@ apiRouter.post('/orders/place', requireWalletAuth, async (req: Request, res: Res
       marketId,
       outcome,
       direction: normDirection,
-      orderType: normOrderType,
+      orderType: normOrderType as OrderType,
       price: numPrice,
       lotSize: numLotSize,
+      triggerPrice: numTriggerPrice,
       txHash: typeof txHash === 'string' && txHash.startsWith('0x') ? (txHash as Hex) : undefined,
     });
 

@@ -74,9 +74,10 @@ export interface UserOrderSubmissionParams {
   marketId: string;
   outcome: OutcomeType;
   direction?: OrderDirection;
-  orderType: 'LIMIT' | 'IOC';
+  orderType: OrderType;
   price: number;
   lotSize: number;
+  triggerPrice?: number;
   txHash?: Hex;
 }
 
@@ -794,6 +795,7 @@ export class OrderService {
       price: Number(row.price),
       lotSize: Number(row.lot_size),
       totalCost: Number(row.total_cost),
+      triggerPrice: row.trigger_price != null ? Number(row.trigger_price) : undefined,
       status: row.status as OrderStatus,
       txHash: (row.tx_hash as Hex) || undefined,
       cancelTxHash: (row.cancel_tx_hash as Hex) || undefined,
@@ -2175,6 +2177,73 @@ export class OrderService {
 
     if (isZeroMarketId) {
       throw new Error(`Cannot submit order: market ${params.marketId} is not a valid on-chain market`);
+    }
+
+    const isTriggerType = orderType === 'STOP_MARKET' || orderType === 'STOP_LIMIT' || orderType === 'TAKE_PROFIT_MARKET' || orderType === 'TAKE_PROFIT_LIMIT';
+    if (isTriggerType) {
+      const orderId = crypto.randomUUID();
+      const now = new Date().toISOString();
+      const orderExecution: OrderExecution = {
+        id: orderId,
+        userAddress: params.userAddress,
+        sessionId: session.id,
+        marketId: params.marketId,
+        agentType: 'Manual',
+        source: 'TERMINAL',
+        outcome,
+        direction,
+        orderType,
+        price: quantizedPrice,
+        lotSize: quantizedSize,
+        triggerPrice: params.triggerPrice,
+        totalCost,
+        status: 'PENDING',
+        pnl: 0,
+        isSettled: false,
+        createdAt: now,
+        marketSnapshot: market
+          ? {
+              symbol: market.symbol,
+              strikePrice: market.strikePrice,
+              closeTimestamp: market.closeTimestamp,
+              settlementPrice: market.settlementPrice,
+              winningOutcome: market.winningOutcome,
+              windowDuration: market.windowDuration,
+              recommendedOutcome: market.recommendedOutcome,
+            }
+          : undefined,
+      };
+
+      this.insertIntoCache(orderExecution);
+      this.notifyStateChange();
+
+      if (this.isPersistenceEnabled()) {
+        try {
+          await marketService.ensureMarketPersisted(params.marketId, market?.symbol);
+          await supabase.from('orders').insert({
+            id: orderId,
+            user_address: params.userAddress,
+            session_id: session.id,
+            market_id: params.marketId,
+            agent_type: 'Manual',
+            source: 'TERMINAL',
+            outcome,
+            direction,
+            order_type: orderType,
+            price: quantizedPrice,
+            lot_size: quantizedSize,
+            total_cost: totalCost,
+            status: 'PENDING',
+            pnl: 0,
+            is_settled: false,
+            created_at: now,
+          });
+        } catch (dbErr: any) {
+          console.warn('[OrderService] Supabase trigger order insert notice:', dbErr?.message || dbErr);
+        }
+      }
+
+      return orderExecution;
     }
 
     const decision: IAgentDecision = {

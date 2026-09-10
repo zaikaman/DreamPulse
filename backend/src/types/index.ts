@@ -7,7 +7,14 @@ import type { Hex } from 'viem';
 export type MarketStatus = 'Open' | 'Closed' | 'Resolving' | 'Finalized';
 export type OutcomeType = 'YES' | 'NO' | 'VOID';
 export type OrderDirection = 'BUY' | 'SELL';
-export type OrderType = 'LIMIT' | 'IOC' | 'POST_ONLY';
+export type OrderType =
+  | 'LIMIT'
+  | 'IOC'
+  | 'POST_ONLY'
+  | 'STOP_MARKET'
+  | 'STOP_LIMIT'
+  | 'TAKE_PROFIT_MARKET'
+  | 'TAKE_PROFIT_LIMIT';
 export type OrderStatus = 'PENDING' | 'FILLED' | 'PARTIALLY_FILLED' | 'CANCELLED' | 'REJECTED' | 'EXPIRED';
 export type OrderSource = 'SWARM' | 'TERMINAL' | 'COPY_TRADE';
 export type SwarmAgentType = 'Volt' | 'Oracle' | 'Titan' | 'Sweeper';
@@ -102,6 +109,7 @@ export interface OrderExecution {
   price: number;
   lotSize: number;
   totalCost: number;
+  triggerPrice?: number;
   status: OrderStatus;
   txHash?: `0x${string}`;
   cancelTxHash?: `0x${string}`;

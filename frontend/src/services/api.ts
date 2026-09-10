@@ -2,6 +2,7 @@ import type {
   Market,
   OrderBookDepth,
   OrderExecution,
+  OrderType,
   SessionGrant,
   SwarmStatusSummary,
   AgentThoughtLog,
@@ -371,9 +372,10 @@ export const apiClient = {
     marketId: string;
     outcome: 'YES' | 'NO';
     direction?: 'BUY' | 'SELL';
-    orderType: 'LIMIT' | 'IOC';
+    orderType: OrderType | 'MARKET';
     price: number;
     lotSize: number;
+    triggerPrice?: number;
     txHash?: string;
   }): Promise<{ success: boolean; message: string; data: OrderExecution }> {
     return fetchJson<{ success: boolean; message: string; data: OrderExecution }>('/orders/place', {
