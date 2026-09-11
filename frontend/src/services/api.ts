@@ -439,6 +439,18 @@ export const apiClient = {
     return fetchJson(`/sweeper/unclaimed?userAddress=${encodeURIComponent(userAddress)}`);
   },
 
+  async recordSweepClaim(params: {
+    marketId: string;
+    winningOutcome: string;
+    claimableAmount: number;
+    txHash?: string;
+  }): Promise<{ success: boolean; sweep?: SettlementSweep }> {
+    return fetchJson('/sweeper/record-claim', {
+      method: 'POST',
+      body: JSON.stringify(params),
+    });
+  },
+
   async getBacktestHistory(userAddress?: string): Promise<{ success: boolean; data: any[] }> {
     const q = userAddress ? `?userAddress=${encodeURIComponent(userAddress)}` : '';
     return fetchJson(`/backtest/history${q}`);

@@ -8,7 +8,7 @@ import { settlementService } from '../services/settlement-service.js';
 import { backtestService } from '../services/backtest-service.js';
 import { customAgentService } from '../services/custom-agent-service.js';
 import { operatorAccount, SOMNIA_ADDRESSES, publicClient, somniaExchange } from '../config/somnia.js';
-import type { MarketStatus, AgentType, OrderStatus, OrderType } from '../types/index.js';
+import type { MarketStatus, AgentType, OrderStatus, OrderType, SettlementSweep } from '../types/index.js';
 import { type Address, type Hex, isAddress, getAddress, parseAbi } from 'viem';
 import { analyticsService, type AnalyticsRange } from '../services/analytics-service.js';
 import { userSwarmService } from '../services/user-swarm-service.js';
@@ -1495,6 +1495,38 @@ apiRouter.post('/sweeper/trigger', requireWalletAuth, async (req: Request, res: 
     });
   } catch (err: any) {
     res.status(500).json({ success: false, error: err.message || 'Failed to trigger settlement sweep' });
+  }
+});
+
+apiRouter.post('/sweeper/record-claim', requireWalletAuth, async (req: Request, res: Response) => {
+  try {
+    const rawTarget = req.walletAddress || req.body?.userAddress;
+    if (!rawTarget || typeof rawTarget !== 'string' || !isAddress(rawTarget.trim())) {
+      return res.status(401).json({ success: false, error: 'Valid wallet authentication required' });
+    }
+    const userAddress = getAddress(rawTarget.trim()) as Address;
+    const { marketId, winningOutcome, claimableAmount, txHash } = req.body || {};
+    if (!marketId || typeof claimableAmount !== 'number' || claimableAmount <= 0) {
+      return res.status(400).json({ success: false, error: 'Valid marketId and positive claimableAmount required' });
+    }
+    const validOutcome = winningOutcome === 'NO' ? 'NO' : 'YES';
+    const sweep: SettlementSweep = {
+      id: crypto.randomUUID(),
+      userAddress,
+      marketId,
+      winningOutcome: validOutcome,
+      claimableAmount: Number(claimableAmount.toFixed(4)),
+      payoutToken: 'tUSDC (direct)',
+      isCompounded: false,
+      txHash: txHash && typeof txHash === 'string' && txHash.startsWith('0x') ? (txHash as Hex) : undefined,
+      status: 'CONFIRMED',
+      claimedAt: new Date().toISOString(),
+    };
+    settlementService.recordSweep(sweep, true);
+    settlementService.invalidateCache(userAddress);
+    return res.json({ success: true, sweep });
+  } catch (err: any) {
+    return res.status(500).json({ success: false, error: err.message || 'Failed to record settlement claim' });
   }
 });
 

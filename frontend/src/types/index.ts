@@ -161,18 +161,12 @@ export interface UserClaimablePosition {
   status?: string;
 }
 
-export interface SweeperSummary {  unclaimedAmount: number;
+export interface SweeperSummary {
+  unclaimedAmount: number;
   totalClaimedAllTime: number;
   claimableMarketsCount: number;
   confirmedSweepsCount: number;
-  unclaimedPositions: Array<{
-    marketId: string;
-    symbol: string;
-    winningOutcome: OutcomeType;
-    claimableAmount: number;
-    isVoided: boolean;
-    status: string;
-  }>;
+  unclaimedPositions: UserClaimablePosition[];
 }
 
 export interface AgentThoughtLog {

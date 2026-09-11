@@ -7,6 +7,7 @@ import {
   defineChain,
   parseUnits,
   formatUnits,
+  encodeFunctionData,
   type Address,
   type Hex,
   type PublicClient,
@@ -1598,12 +1599,30 @@ export class Web3Service {
       if (already) return undefined;
     } catch {}
     const wallet = await this.getWalletClient(params.userAddress);
+    let operatorGas: bigint | undefined;
+    try {
+      const estimated = await publicClient.estimateGas({
+        account: params.userAddress,
+        to: params.outcomeToken,
+        data: encodeFunctionData({
+          abi: ERC6909_OPERATOR_ABI,
+          functionName: 'setOperator',
+          args: [SOMNIA_ADDRESSES.binaryModule, true],
+        }),
+      });
+      operatorGas = (estimated * 130n) / 100n;
+      if (operatorGas < 500_000n) operatorGas = 500_000n;
+    } catch (estErr) {
+      console.warn('[Web3Service] Gas estimation for setOperator notice:', estErr);
+      operatorGas = 600_000n;
+    }
+
     const hash = await wallet.writeContract({
       address: params.outcomeToken,
       abi: ERC6909_OPERATOR_ABI,
       functionName: 'setOperator',
       args: [SOMNIA_ADDRESSES.binaryModule, true],
-      gas: 200_000n,
+      gas: operatorGas,
     });
     await publicClient.waitForTransactionReceipt({ hash });
     return hash;
@@ -1672,12 +1691,31 @@ export class Web3Service {
     }
 
     const wallet = await this.getWalletClient(params.userAddress);
+    let redeemGas: bigint | undefined;
+    try {
+      const estimated = await publicClient.estimateGas({
+        account: params.userAddress,
+        to: SOMNIA_ADDRESSES.binaryModule,
+        data: encodeFunctionData({
+          abi: BINARY_MODULE_REDEEM_ABI,
+          functionName: 'redeem',
+          args: [0, ZERO_BYTES32, params.marketIdHex, params.outcomeIdx, params.amountRaw],
+        }),
+      });
+      // Add 30% safety buffer; enforce minimum 2,500,000 gas floor for multi-contract Somnia settlement
+      redeemGas = (estimated * 130n) / 100n;
+      if (redeemGas < 2_500_000n) redeemGas = 2_500_000n;
+    } catch (estErr) {
+      console.warn('[Web3Service] Gas estimation for redeem notice, using safe floor:', estErr);
+      redeemGas = 3_000_000n;
+    }
+
     const hash = await wallet.writeContract({
       address: SOMNIA_ADDRESSES.binaryModule,
       abi: BINARY_MODULE_REDEEM_ABI,
       functionName: 'redeem',
       args: [0, ZERO_BYTES32, params.marketIdHex, params.outcomeIdx, params.amountRaw],
-      gas: 500_000n,
+      gas: redeemGas,
     });
     await publicClient.waitForTransactionReceipt({ hash });
     return { hash };

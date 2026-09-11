@@ -209,6 +209,15 @@ export const SweeperControls: React.FC<SweeperControlsProps> = ({
         setTotalClaimedAllTime(tClaimed);
         setClaimableMarketsCount(cCount);
         setConfirmedSweepsCount(sCount);
+
+        // Sync claimables directly from summary data if connected so manual claims are immediate
+        if (isWalletConnected && Array.isArray(summaryRes.data.unclaimedPositions)) {
+          const userPositions = summaryRes.data.unclaimedPositions.filter(
+            (p) => (p.claimableAmount || 0) > 0 && p.rawAmount && BigInt(p.rawAmount) > 0n,
+          );
+          setClaimables(userPositions);
+        }
+
         try {
           localStorage.setItem(
             `${SWEEPER_SUMMARY_CACHE_KEY}${addr}`,
@@ -306,14 +315,17 @@ export const SweeperControls: React.FC<SweeperControlsProps> = ({
       const res = await apiClient.triggerSweep(sweepAddress);
       if (res.success) {
         const claimedNum = parseFloat(res.totalClaimedAmount.replace(/[^0-9.]/g, '')) || 0;
+        const userClaimableList = Array.isArray(res.userClaimable) ? res.userClaimable : [];
         if (claimedNum > 0) {
           setCelebrationState({ isOpen: true, amount: res.totalClaimedAmount, txHash: res.txHash });
         }
         // Non-custodial model: user-owned winnings cannot be swept by the
         // backend — surface them for one-click wallet claims instead.
-        setClaimables(Array.isArray(res.userClaimable) ? res.userClaimable : []);
+        setClaimables(userClaimableList);
         setTotalClaimedAllTime((prev) => Number((prev + claimedNum).toFixed(2)));
-        setUnclaimedAmount(0);
+        if (claimedNum > 0 && userClaimableList.length === 0) {
+          setUnclaimedAmount(0);
+        }
         await fetchSweeperData();
         if (onRefreshPortfolio) onRefreshPortfolio();
       } else {
@@ -382,15 +394,27 @@ export const SweeperControls: React.FC<SweeperControlsProps> = ({
         if (!pos.marketIdHex || !pos.marketIdHex.startsWith('0x') || pos.winningOutcome === 'VOID') continue;
         if (!pos.rawAmount || BigInt(pos.rawAmount) <= 0n) continue;
         try {
+          const targetOutcomeIdx: 0 | 1 = pos.outcomeIdx !== undefined
+            ? (pos.outcomeIdx === 1 ? 1 : 0)
+            : (pos.winningOutcome === 'NO' ? 1 : 0);
+
           const { hash } = await web3Service.claimMarketWinnings({
             userAddress: claimAddress,
             marketIdHex: pos.marketIdHex as `0x${string}`,
-            outcomeIdx: pos.winningOutcome === 'NO' ? 1 : 0,
+            outcomeIdx: targetOutcomeIdx,
             amountRaw: BigInt(pos.rawAmount),
             outcomeToken: pos.outcomeToken as `0x${string}` | undefined,
           });
           lastHash = hash;
           claimed += pos.claimableAmount || 0;
+
+          // Record user-side confirmed claim to backend history
+          void apiClient.recordSweepClaim({
+            marketId: pos.marketId,
+            winningOutcome: pos.winningOutcome,
+            claimableAmount: pos.claimableAmount,
+            txHash: hash,
+          }).catch((rErr) => console.warn('[SweeperControls] Record sweep notice:', rErr));
         } catch (claimErr: any) {
           const parsed = parseWeb3Error(claimErr, 'transaction');
           console.warn(`[SweeperControls] Claim failed for ${pos.marketId}:`, parsed.message);
@@ -865,7 +889,7 @@ export const SweeperControls: React.FC<SweeperControlsProps> = ({
                             <ClockIcon className="w-3 h-3 text-amber-400" />
                             <span>Pending Payout</span>
                           </span>
-                        ) : sweep.payoutToken?.includes('clone') || effectiveCloneAddress ? (
+                        ) : sweep.payoutToken?.includes('clone') ? (
                           <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-semibold border bg-emerald-500/10 border-emerald-500/30 text-emerald-400">
                             <BanknotesIcon className="w-3 h-3 text-emerald-400" />
                             <span>Trading Wallet</span>
