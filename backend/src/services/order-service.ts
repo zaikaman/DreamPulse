@@ -816,12 +816,9 @@ export class OrderService {
       list = [];
       this.userOrdersMap.set(userKey, list);
     }
-    const idx = list.findIndex((o) => o.id === order.id);
-    if (idx >= 0) {
-      list[idx] = order;
-    } else {
-      list.unshift(order);
-    }
+    const filtered = list.filter((o) => o.id !== order.id);
+    filtered.unshift(order);
+    this.userOrdersMap.set(userKey, filtered);
   }
 
   private deindexUserOrder(order: OrderExecution): void {
@@ -859,12 +856,9 @@ export class OrderService {
    * Preserves evicted trade metrics in baseline accumulators so all-time stats never drop.
    */
   public insertIntoCache(order: OrderExecution): void {
-    const existingIdx = this.orders.findIndex((o) => o.id === order.id);
-    if (existingIdx >= 0) {
-      this.orders[existingIdx] = order;
-      this.orderMap.set(order.id, order);
-      this.indexUserOrder(order);
-      return;
+    // Defensively filter out all occurrences of order.id before inserting to guarantee zero duplicates
+    if (this.orderMap.has(order.id) || this.orders.some((o) => o.id === order.id)) {
+      this.orders = this.orders.filter((o) => o.id !== order.id);
     }
     this.orderMap.set(order.id, order);
     this.orders.unshift(order);
@@ -1066,10 +1060,8 @@ export class OrderService {
    * PERF-06: Avoids 50x sequential OFFSET scans that caused PostgreSQL disk I/O exhaustion.
    */
   private async initializeFromDb(): Promise<void> {
-    this.orders = [];
-    this.orderMap.clear();
-
     const allRows: any[] = [];
+    const seenDbIds = new Set<string>();
     const pageSize = 1000;
     const maxBootOrders = OrderService.MAX_CACHE_SIZE;
     let lastCreatedAt: string | null = null;
@@ -1088,14 +1080,19 @@ export class OrderService {
       const { data, error } = await query;
       if (error) {
         recordDbFailure(error);
-        if (allRows.length === 0) {
+        if (allRows.length === 0 && this.orders.length === 0) {
           this.seedInitialOrders();
           return;
         }
         break;
       }
       if (!data || data.length === 0) break;
-      allRows.push(...data);
+      for (const row of data) {
+        if (!seenDbIds.has(row.id)) {
+          seenDbIds.add(row.id);
+          allRows.push(row);
+        }
+      }
       lastCreatedAt = data[data.length - 1].created_at;
       if (data.length < pageSize) break;
     }
@@ -1118,7 +1115,8 @@ export class OrderService {
         const { data: opRows, error: opErr } = await opQuery;
         if (opErr || !opRows || opRows.length === 0) break;
         for (const row of opRows) {
-          if (!allRows.some((r) => r.id === row.id)) {
+          if (!seenDbIds.has(row.id)) {
+            seenDbIds.add(row.id);
             allRows.push(row);
           }
         }
@@ -1139,7 +1137,8 @@ export class OrderService {
         .limit(1000);
       if (!unsettledErr && unsettledRows && unsettledRows.length > 0) {
         for (const row of unsettledRows) {
-          if (!allRows.some((r) => r.id === row.id)) {
+          if (!seenDbIds.has(row.id)) {
+            seenDbIds.add(row.id);
             allRows.push(row);
           }
         }
@@ -1148,12 +1147,26 @@ export class OrderService {
       recordDbFailure(err);
     }
 
-    if (allRows.length === 0) {
-      this.seedInitialOrders();
-      return;
+    // Preserve any live orders inserted into memory concurrently during boot await phases
+    const concurrentOrders = [...this.orders];
+
+    // Reset collections cleanly before canonical re-indexing
+    this.orders = [];
+    this.orderMap.clear();
+    this.userOrdersMap.clear();
+
+    // Index concurrent orders first (they contain the freshest in-memory state & telemetry)
+    const indexedOrderIds = new Set<string>();
+    for (const ord of concurrentOrders) {
+      if (!indexedOrderIds.has(ord.id)) {
+        indexedOrderIds.add(ord.id);
+        this.orderMap.set(ord.id, ord);
+        this.orders.push(ord);
+        this.indexUserOrder(ord);
+      }
     }
 
-    // Sort newest-first before indexing into orders
+    // Sort DB rows newest-first before indexing remaining orders
     allRows.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
 
     for (const row of allRows) {
@@ -1161,11 +1174,19 @@ export class OrderService {
       if (row.tx_hash === '0x1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef') {
         continue;
       }
+      // If order was already inserted in-memory during boot, preserve that freshest version
+      if (indexedOrderIds.has(row.id)) {
+        continue;
+      }
+      indexedOrderIds.add(row.id);
       const order = this.rowToOrder(row);
       this.orderMap.set(order.id, order);
       this.orders.push(order);
       this.indexUserOrder(order);
     }
+
+    // Ensure cache is strictly sorted newest-first by createdAt
+    this.orders.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
 
     // Hydrate missing market snapshots from DB so old orders (without snapshot) can still settle to accurate PnL even if market evicted from memory
     await this.hydrateMarketSnapshotsFromDb().catch(() => {});
@@ -2639,6 +2660,7 @@ export class OrderService {
     const limit = params?.limit && params.limit > 0 ? params.limit : undefined;
     const result: OrderExecution[] = [];
     let matchIdx = 0;
+    const seenIds = new Set<string>();
 
     const ordersList = criteria.normalizedUser
       ? (this.userOrdersMap.get(criteria.normalizedUser) || [])
@@ -2646,6 +2668,8 @@ export class OrderService {
     const len = ordersList.length;
     for (let i = 0; i < len; i++) {
       const o = ordersList[i];
+      if (seenIds.has(o.id)) continue;
+      seenIds.add(o.id);
       if (!this.matchesOrderCriteria(o, criteria)) continue;
 
       if (matchIdx >= offset) {
@@ -2704,6 +2728,7 @@ export class OrderService {
       // When caller wants all (limit undefined), paginate in 1000-row chunks up to 10k for analytics safety
       if (params?.limit === undefined && params?.pageSize === undefined && params?.offset === undefined) {
         const all: OrderExecution[] = [];
+        const seenChunkIds = new Set<string>();
         let total = 0;
         const chunkSize = 1000;
         let from = 0;
@@ -2711,8 +2736,13 @@ export class OrderService {
           const { data, count, error } = await query.range(from, from + chunkSize - 1);
           if (error || !data) break;
           if (iter === 0 && count !== null) total = count;
-          const mapped = data.filter((r: any) => r.tx_hash !== '0x1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef').map((r: any) => this.rowToOrder(r));
-          all.push(...mapped);
+          for (const r of data) {
+            if (r.tx_hash === '0x1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef') continue;
+            if (!seenChunkIds.has(r.id)) {
+              seenChunkIds.add(r.id);
+              all.push(this.rowToOrder(r));
+            }
+          }
           if (data.length < chunkSize) break;
           from += chunkSize;
           if (all.length >= (count ?? 0)) break;
@@ -2722,7 +2752,15 @@ export class OrderService {
 
       const { data, count, error } = await query.range(offset, offset + pageSize - 1);
       if (error || !data) return { orders: [], total: 0 };
-      const mapped = data.filter((r: any) => r.tx_hash !== '0x1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef').map((r: any) => this.rowToOrder(r));
+      const seenPageIds = new Set<string>();
+      const mapped: OrderExecution[] = [];
+      for (const r of data) {
+        if (r.tx_hash === '0x1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef') continue;
+        if (!seenPageIds.has(r.id)) {
+          seenPageIds.add(r.id);
+          mapped.push(this.rowToOrder(r));
+        }
+      }
       return { orders: mapped, total: count ?? mapped.length };
     } catch {
       return { orders: [], total: 0 };
@@ -2918,8 +2956,11 @@ export class OrderService {
 
     const ordersList = this.orders;
     const len = ordersList.length;
+    const seenStatsIds = new Set<string>();
     for (let i = 0; i < len; i++) {
       const o = ordersList[i];
+      if (seenStatsIds.has(o.id)) continue;
+      seenStatsIds.add(o.id);
       if (!this.matchesOrderCriteria(o, criteria)) continue;
       totalCount++;
       if (o.status === 'FILLED' || o.status === 'PARTIALLY_FILLED') {
@@ -2999,8 +3040,11 @@ export class OrderService {
 
     const ordersList = this.orders;
     const len = ordersList.length;
+    const seenPaginatedIds = new Set<string>();
     for (let i = 0; i < len; i++) {
       const o = ordersList[i];
+      if (seenPaginatedIds.has(o.id)) continue;
+      seenPaginatedIds.add(o.id);
       if (!this.matchesOrderCriteria(o, criteria)) continue;
 
       if (totalCount >= startIndex && totalCount < endIndex) {

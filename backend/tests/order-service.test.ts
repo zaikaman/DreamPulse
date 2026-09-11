@@ -1074,5 +1074,50 @@ describe('OrderService Comprehensive Suite', () => {
       expect(scalarSpend).toBe(13);
     });
   });
+
+  describe('Deduplication & Cache Integrity', () => {
+    it('guarantees insertIntoCache never produces duplicate orders in memory', () => {
+      const duplicateId = 'order-dup-123';
+      const orderA: any = {
+        id: duplicateId,
+        userAddress,
+        marketId: 'market-dup',
+        agentType: 'Titan',
+        source: 'SWARM',
+        outcome: 'YES',
+        direction: 'BUY',
+        orderType: 'LIMIT',
+        price: 0.5,
+        lotSize: 10,
+        totalCost: 5,
+        status: 'FILLED',
+        createdAt: '2026-09-11T11:00:00.000Z',
+      };
+
+      const orderB: any = {
+        ...orderA,
+        status: 'FILLED',
+        totalCost: 5,
+        createdAt: '2026-09-11T11:00:00.000+00:00',
+      };
+
+      // Insert first version
+      service.insertIntoCache(orderA);
+      // Insert second version (e.g. from DB hydration or concurrent sync)
+      service.insertIntoCache(orderB);
+
+      const paginated = service.queryOrdersPaginated({ scope: 'SWARM', swarmOnly: true });
+      const matchingOrders = paginated.orders.filter((o) => o.id === duplicateId);
+      expect(matchingOrders.length).toBe(1);
+
+      const userOrders = service.getUserOrders(userAddress);
+      const userMatching = userOrders.filter((o) => o.id === duplicateId);
+      expect(userMatching.length).toBe(1);
+
+      const stats = service.getOrderStats({ scope: 'SWARM', swarmOnly: true });
+      // Total count should only count the unique order once
+      expect(matchingOrders.length).toBe(1);
+    });
+  });
 });
 

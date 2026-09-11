@@ -128,6 +128,17 @@ function getParsedMarketDetails(order: OrderExecution): ParsedMarketInfo {
   return parsed;
 }
 
+function dedupeOrders(list?: OrderExecution[]): OrderExecution[] {
+  if (!Array.isArray(list)) return [];
+  const seen = new Set<string>();
+  return list.filter((o) => {
+    if (!o || !o.id) return false;
+    if (seen.has(o.id)) return false;
+    seen.add(o.id);
+    return true;
+  });
+}
+
 export const OrderHistoryTable: React.FC<OrderHistoryTableProps> = ({
   userAddress,
   onConnectWallet,
@@ -295,7 +306,7 @@ export const OrderHistoryTable: React.FC<OrderHistoryTableProps> = ({
         });
         if (ac.signal.aborted || fetchIdRef.current !== fetchId) return;
         window.clearTimeout(timeoutId);
-        setOrders(res.data ?? []);
+        setOrders(dedupeOrders(res.data ?? []));
         setTotal((res.total ?? res.count) ?? 0);
         setTotalFills(res.totalFills ?? 0);
         setTotalVolume(res.totalVolume ?? 0);
@@ -381,7 +392,7 @@ export const OrderHistoryTable: React.FC<OrderHistoryTableProps> = ({
           // Only apply if user hasn't navigated away from this page/filter since WS fired
           if (latestParamsRef.current.currentPage !== cp || latestParamsRef.current.pageSize !== ps) return;
           if (latestParamsRef.current.scope !== s || latestParamsRef.current.selectedAgent !== ag || latestParamsRef.current.selectedOutcome !== oc || latestParamsRef.current.debouncedSearch !== ds) return;
-          setOrders(res.data ?? []);
+          setOrders(dedupeOrders(res.data ?? []));
           setTotal((res.total ?? res.count) ?? 0);
           setTotalFills(res.totalFills ?? 0);
           setTotalVolume(res.totalVolume ?? 0);
@@ -425,6 +436,7 @@ export const OrderHistoryTable: React.FC<OrderHistoryTableProps> = ({
     if (next !== scope) {
       setScope(next);
       setCurrentPage(1);
+      setOrders([]);
     }
   };
   const handleAgent = (next: string) => {
