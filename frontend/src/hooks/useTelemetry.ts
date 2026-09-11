@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import type { AgentThoughtLog } from '../types/index.js';
+import { api } from '../services/api.js';
 import {
   telemetryClient,
   type MarketTickData,
@@ -63,6 +64,66 @@ export function useTelemetry(userAddress?: string) {
       telemetryClient.setDebugEnabled(nextVal);
       return nextVal;
     });
+  }, []);
+
+  // Hydrate initial historical thoughts & execution reasoning from REST on mount
+  useEffect(() => {
+    let isMounted = true;
+
+    const loadInitialThoughts = async () => {
+      try {
+        const res = await api.getAgentLogs(undefined, 100);
+        if (!isMounted || !res?.logs || !Array.isArray(res.logs)) return;
+
+        const executions: AgentThoughtLog[] = [];
+        const debugs: AgentThoughtLog[] = [];
+
+        for (const log of res.logs) {
+          const item: AgentThoughtLog = {
+            id: log.id,
+            agentType: log.agentType || 'Volt',
+            marketId: log.marketId,
+            triggerEvent: log.triggerEvent || 'EXECUTION_CONFIRMED',
+            confidence: typeof log.confidence === 'number' ? log.confidence : 0.94,
+            actionTaken: log.actionTaken || 'EXECUTED',
+            reasoningText: log.reasoningText || 'Evaluated Shannon CLOB market.',
+            txHash: log.txHash || (log.metadata as any)?.txHash,
+            isExecution: log.isExecution ?? Boolean(log.txHash || (log.metadata as any)?.txHash),
+            price: log.price ?? (log.metadata as any)?.price,
+            lotSize: log.lotSize ?? (log.metadata as any)?.lotSize,
+            outcome: log.outcome ?? (log.metadata as any)?.outcome,
+            metadata: log.metadata,
+            createdAt: log.createdAt || new Date().toISOString(),
+          };
+
+          if (item.isExecution || item.txHash) {
+            executions.push(item);
+          } else {
+            debugs.push(item);
+          }
+        }
+
+        setAgentThoughts((prev) => {
+          const existingIds = new Set(prev.map((t) => t.id));
+          const newItems = executions.filter((t) => !existingIds.has(t.id));
+          return [...prev, ...newItems].slice(0, 100);
+        });
+
+        setDebugThoughts((prev) => {
+          const existingIds = new Set(prev.map((t) => t.id));
+          const newItems = debugs.filter((t) => !existingIds.has(t.id));
+          return [...prev, ...newItems].slice(0, 100);
+        });
+      } catch (err) {
+        console.warn('[useTelemetry] Non-critical: could not pre-hydrate thoughts:', err);
+      }
+    };
+
+    loadInitialThoughts();
+
+    return () => {
+      isMounted = false;
+    };
   }, []);
 
   useEffect(() => {

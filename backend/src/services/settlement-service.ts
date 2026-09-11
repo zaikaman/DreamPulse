@@ -1149,6 +1149,18 @@ export class SettlementService {
                       console.info(
                         `[SettlementService] Sweeper redeemed ${claimedHuman} tUSDC into clone ${cloneAddress} for ${normalizedUser} on market ${pos.marketId} (tx: ${redeemHash})`,
                       );
+                      telemetryWsGateway.broadcastAgentThought({
+                        id: `sweep-${sweep.id}`,
+                        agent: 'Sweeper',
+                        marketId: pos.marketId,
+                        confidence: 0.99,
+                        action: 'SWEEPER_REDEEM_WINNINGS',
+                        thought: `[AUTONOMOUS SWEEPER] Auto-redeemed winning payout (+${claimedHuman} tUSDC) into clone contract for trader ${normalizedUser.slice(0, 6)}...${normalizedUser.slice(-4)} on market ${pos.symbol || pos.marketId.slice(0, 10)}.`,
+                        txHash: redeemHash,
+                        outcome: pos.winningOutcome || 'YES',
+                        isExecution: true,
+                        timestamp: Date.now(),
+                      });
                       continue;
                     } catch (cloneErr: any) {
                       console.warn(

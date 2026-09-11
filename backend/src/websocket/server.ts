@@ -4,6 +4,7 @@ import type { IncomingMessage } from 'http';
 import { z } from 'zod';
 import jwt from 'jsonwebtoken';
 import { isAddress, getAddress } from 'viem';
+import { supabase, isPersistenceEnabled, isDbDegraded } from '../config/supabase.js';
 
 export interface ClientSubscription {
   ws: WebSocket;
@@ -41,6 +42,7 @@ export interface AgentLogItem {
   price?: number;
   lotSize?: number;
   outcome?: string;
+  isExecution?: boolean;
   metadata?: Record<string, unknown>;
   createdAt: string;
 }
@@ -668,6 +670,53 @@ export class TelemetryWebSocketServer {
         channel,
         status: 'ok',
       });
+
+      // Send recent thought backlog immediately upon subscription so client feed is populated
+      if (channel === 'agent_thoughts') {
+        const recentThoughts = this.getRecentAgentLogs(undefined, 30);
+        for (let i = recentThoughts.length - 1; i >= 0; i--) {
+          const t = recentThoughts[i];
+          this.safeSend(
+            ws,
+            JSON.stringify({
+              event: 'agent_thought',
+              timestamp: new Date(t.createdAt).getTime(),
+              isExecution: Boolean(t.txHash),
+              id: t.id,
+              agent: t.agentType,
+              marketId: t.marketId,
+              confidence: t.confidence,
+              action: t.actionTaken,
+              thought: t.reasoningText,
+              txHash: t.txHash,
+              price: t.price,
+              lotSize: t.lotSize,
+              outcome: t.outcome,
+              metadata: t.metadata,
+            }),
+          );
+        }
+      } else if (channel === 'debug_thoughts') {
+        const recentDebugs = this.getRecentAgentLogs(undefined, 30).filter((l) => !l.txHash);
+        for (let i = recentDebugs.length - 1; i >= 0; i--) {
+          const t = recentDebugs[i];
+          this.safeSend(
+            ws,
+            JSON.stringify({
+              event: 'debug_thought',
+              timestamp: new Date(t.createdAt).getTime(),
+              isExecution: false,
+              id: t.id,
+              agent: t.agentType,
+              marketId: t.marketId,
+              confidence: t.confidence,
+              action: t.actionTaken,
+              thought: t.reasoningText,
+              metadata: t.metadata,
+            }),
+          );
+        }
+      }
     } else if (message.action === 'unsubscribe') {
       if (message.channel) {
         sub.channels.delete(message.channel);
@@ -862,6 +911,36 @@ export class TelemetryWebSocketServer {
       this.recentAgentLogs.pop();
     }
 
+    // Persist executed agent thoughts to Supabase agent_logs table asynchronously
+    if (isPersistenceEnabled() && !isDbDegraded()) {
+      const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(logItem.id);
+      void (async () => {
+        try {
+          const { error } = await supabase.from('agent_logs').insert({
+            id: isUuid ? logItem.id : undefined,
+            agent_type: logItem.agentType,
+            market_id: logItem.marketId || null,
+            trigger_event: logItem.triggerEvent,
+            confidence: Number(logItem.confidence ?? 0.94),
+            action_taken: logItem.actionTaken,
+            reasoning_text: logItem.reasoningText,
+            metadata: {
+              ...thought,
+              txHash: logItem.txHash,
+              price: logItem.price,
+              lotSize: logItem.lotSize,
+              outcome: logItem.outcome,
+              isExecution: logItem.isExecution ?? true,
+            },
+            created_at: logItem.createdAt,
+          });
+          if (error && !error.message.includes('duplicate')) {
+            console.warn('[TelemetryWs] agent_logs insert notice:', error.message);
+          }
+        } catch {}
+      })();
+    }
+
     const payloadString = JSON.stringify({
       event: 'agent_thought',
       timestamp: thought.timestamp || Date.now(),
@@ -873,7 +952,9 @@ export class TelemetryWebSocketServer {
       if (
         sub.ws.readyState === WebSocket.OPEN &&
         sub.channels.has('agent_thoughts') &&
-        (sub.agentTypes.size === 0 || sub.agentTypes.has(thought.agent))
+        (sub.agentTypes.size === 0 ||
+          thought.agent.toLowerCase() === 'custom' ||
+          Array.from(sub.agentTypes).some((a) => a.toLowerCase() === thought.agent.toLowerCase()))
       ) {
         this.safeSend(sub.ws, payloadString);
       }
@@ -922,7 +1003,9 @@ export class TelemetryWebSocketServer {
       if (
         sub.ws.readyState === WebSocket.OPEN &&
         sub.channels.has('debug_thoughts') &&
-        (sub.agentTypes.size === 0 || sub.agentTypes.has(thought.agent))
+        (sub.agentTypes.size === 0 ||
+          thought.agent.toLowerCase() === 'custom' ||
+          Array.from(sub.agentTypes).some((a) => a.toLowerCase() === thought.agent.toLowerCase()))
       ) {
         this.safeSend(sub.ws, payloadString);
       }

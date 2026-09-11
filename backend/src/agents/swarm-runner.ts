@@ -453,6 +453,22 @@ export class MultiAgentSwarmRunner {
                     console.log(
                       `[SwarmRunner] Instant copy-trade executed for user ${sessionGrant.userAddress} (Order: ${copyRes.id}, tx: ${copyRes.txHash || 'filled'})`,
                     );
+                    if (copyRes.txHash) {
+                      telemetryWsGateway.broadcastAgentThought({
+                        id: `copy-${copyRes.id}`,
+                        agent: decision.agentType,
+                        marketId: decision.targetMarketId,
+                        confidence: decision.confidence,
+                        action: decision.action + (decision.targetOutcome ? `_${decision.targetOutcome}` : ''),
+                        thought: `[COPY-TRADE ${sessionGrant.userAddress.slice(0, 6)}...${sessionGrant.userAddress.slice(-4)}] ${decision.rationale || `Copied ${decision.action} on ${decision.targetMarketId} at ${(decision.price ?? 0).toFixed(2)}`}`,
+                        txHash: copyRes.txHash,
+                        price: copyRes.price ?? decision.price,
+                        lotSize: copyRes.lotSize ?? decision.lotSize,
+                        outcome: decision.targetOutcome || 'YES',
+                        isExecution: true,
+                        timestamp: Date.now(),
+                      });
+                    }
                   }
                   return copyRes;
                 })

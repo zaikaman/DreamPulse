@@ -66,7 +66,7 @@ export const AgentThoughtFeed: React.FC<AgentThoughtFeedProps> = ({
     if (selectedFilter === 'DEBUG_TRACE') {
       return debugThoughts;
     }
-    if (isDebugEnabled && selectedFilter === 'ALL') {
+    if (isDebugEnabled) {
       const combined = [...thoughts, ...debugThoughts];
       return combined.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
     }
@@ -406,7 +406,11 @@ export const AgentThoughtFeed: React.FC<AgentThoughtFeedProps> = ({
       >
         <FunnelIcon className="w-3.5 h-3.5 text-muted-foreground mr-1 flex-shrink-0" />
         {[
-          { id: 'ALL', label: `Executions (${thoughts.length})`, Icon: BoltIcon },
+          {
+            id: 'ALL',
+            label: isDebugEnabled ? `All Events (${thoughts.length + debugThoughts.length})` : `Executions (${thoughts.length})`,
+            Icon: BoltIcon,
+          },
           { id: 'HIGH_CONVICTION', label: 'High Conviction (≥80%)', Icon: FireIcon },
           ...(isDebugEnabled ? [{ id: 'DEBUG_TRACE', label: `Eval Traces (${debugThoughts.length})`, Icon: CpuChipIcon }] : []),
           { id: 'Volt', label: 'Volt (Sniper)', Icon: BoltIcon },
