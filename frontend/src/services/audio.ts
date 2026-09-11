@@ -6,16 +6,32 @@
 class SoundEngine {
   private ctx: AudioContext | null = null;
   private isMuted: boolean = false;
+  private lastThoughtSoundTime: number = 0;
+  private lastExecutionSoundTime: number = 0;
 
   constructor() {
     // Check saved preference
     try {
-      const saved = localStorage.getItem('dreampulse_audio_muted');
+      const saved = typeof localStorage !== 'undefined' ? localStorage.getItem('dreampulse_audio_muted') : null;
       if (saved !== null) {
         this.isMuted = saved === 'true';
       }
     } catch {
       this.isMuted = false;
+    }
+
+    // Auto-unlock Web Audio context on first user gesture across browser environments
+    if (typeof window !== 'undefined') {
+      const unlock = () => {
+        const ctx = this.initCtx();
+        if (ctx && ctx.state === 'suspended') {
+          ctx.resume().catch(() => {});
+        }
+      };
+      window.addEventListener('pointerdown', unlock, { passive: true });
+      window.addEventListener('keydown', unlock, { passive: true });
+      window.addEventListener('touchstart', unlock, { passive: true });
+      window.addEventListener('click', unlock, { passive: true });
     }
   }
 
@@ -39,6 +55,14 @@ class SoundEngine {
     } catch {
       // ignore
     }
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(new CustomEvent('dreampulse:audio-mute-changed', { detail: { isMuted: this.isMuted } }));
+      window.dispatchEvent(new Event('audio_mute_toggled'));
+    }
+    if (!this.isMuted) {
+      // Affirmative chirp when unmuting
+      this.playTradeFill();
+    }
     return this.isMuted;
   }
 
@@ -47,12 +71,80 @@ class SoundEngine {
   }
 
   public setMuted(muted: boolean): void {
+    if (this.isMuted === muted) return;
     this.isMuted = muted;
     try {
       localStorage.setItem('dreampulse_audio_muted', String(this.isMuted));
     } catch {
       // ignore
     }
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(new CustomEvent('dreampulse:audio-mute-changed', { detail: { isMuted: this.isMuted } }));
+      window.dispatchEvent(new Event('audio_mute_toggled'));
+    }
+  }
+
+  /**
+   * Subtle, futuristic micro-tick cue when a real-time autonomous agent thought arrives.
+   * Throttled with a 220ms cooldown to prevent audio distortion or cacophony during high-frequency telemetry bursts.
+   */
+  public playAgentThought(): void {
+    if (this.isMuted) return;
+    const now = typeof performance !== 'undefined' ? performance.now() : Date.now();
+    if (now - this.lastThoughtSoundTime < 220) return;
+    this.lastThoughtSoundTime = now;
+
+    const ctx = this.initCtx();
+    if (!ctx) return;
+
+    try {
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+
+      osc.type = 'sine';
+      osc.frequency.setValueAtTime(1450, ctx.currentTime);
+      osc.frequency.exponentialRampToValueAtTime(1950, ctx.currentTime + 0.03);
+
+      gain.gain.setValueAtTime(0.04, ctx.currentTime);
+      gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.035);
+
+      osc.connect(gain);
+      gain.connect(ctx.destination);
+
+      osc.start();
+      osc.stop(ctx.currentTime + 0.035);
+    } catch {}
+  }
+
+  /**
+   * Crisp, authoritative dual-tone execution chime when a Swarm trade is placed on-chain.
+   */
+  public playAgentExecution(): void {
+    if (this.isMuted) return;
+    const now = typeof performance !== 'undefined' ? performance.now() : Date.now();
+    if (now - this.lastExecutionSoundTime < 120) return;
+    this.lastExecutionSoundTime = now;
+
+    const ctx = this.initCtx();
+    if (!ctx) return;
+
+    try {
+      const osc1 = ctx.createOscillator();
+      const gain1 = ctx.createGain();
+
+      osc1.type = 'triangle';
+      osc1.frequency.setValueAtTime(880, ctx.currentTime); // A5
+      osc1.frequency.exponentialRampToValueAtTime(1318.51, ctx.currentTime + 0.05); // E6
+
+      gain1.gain.setValueAtTime(0.09, ctx.currentTime);
+      gain1.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.08);
+
+      osc1.connect(gain1);
+      gain1.connect(ctx.destination);
+
+      osc1.start();
+      osc1.stop(ctx.currentTime + 0.08);
+    } catch {}
   }
 
   /**

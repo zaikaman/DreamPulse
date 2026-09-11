@@ -2,6 +2,7 @@ import { useState, useEffect, useRef, useCallback } from 'react';
 import type { AgentThoughtLog } from '../types/index.js';
 import { api } from '../services/api.js';
 import { subscribeToTable, removeRealtimeChannel } from '../services/supabase.js';
+import { soundEngine } from '../services/audio.js';
 import {
   telemetryClient,
   type MarketTickData,
@@ -152,6 +153,15 @@ export function useTelemetry(userAddress?: string) {
       setAgentThoughts((prev) => {
         const isDup = prev.slice(0, 15).some((t) => (item.txHash && t.txHash === item.txHash) || t.id === item.id);
         if (isDup) return prev;
+
+        if (item.isExecution || item.txHash) {
+          soundEngine.playAgentExecution();
+        } else if (item.confidence >= 0.95) {
+          soundEngine.playAnomalyAlert();
+        } else {
+          soundEngine.playAgentThought();
+        }
+
         return [item, ...prev.slice(0, 99)];
       });
 
@@ -220,6 +230,15 @@ export function useTelemetry(userAddress?: string) {
           (t) => (t.txHash && t.txHash === thought.txHash) || t.id === thought.id,
         );
         if (isDuplicate) return prev;
+
+        if (thought.isExecution || thought.txHash) {
+          soundEngine.playAgentExecution();
+        } else if (thought.confidence >= 0.95) {
+          soundEngine.playAnomalyAlert();
+        } else {
+          soundEngine.playAgentThought();
+        }
+
         return [thought, ...prev.slice(0, 79)];
       });
     });
@@ -231,6 +250,7 @@ export function useTelemetry(userAddress?: string) {
           (t) => t.agentType === thought.agentType && t.reasoningText === thought.reasoningText,
         );
         if (isDuplicate) return prev;
+        soundEngine.playAgentThought();
         return [thought, ...prev.slice(0, 99)];
       });
     });
@@ -238,11 +258,13 @@ export function useTelemetry(userAddress?: string) {
     // 6. User Order Fills
     const unsubOrder = telemetryClient.on('order_filled', (order: OrderFillData) => {
       setRecentOrders((prev) => [order, ...prev.slice(0, 19)]);
+      soundEngine.playTradeFill();
     });
 
     // 7. Sweeper Claims
     const unsubSweep = telemetryClient.on('sweep_completed', (sweep: SweepCompleteData) => {
       setLastSweep(sweep);
+      soundEngine.playWinChime();
     });
 
     // 8. PnL Updates

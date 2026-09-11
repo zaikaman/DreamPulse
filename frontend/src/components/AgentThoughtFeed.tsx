@@ -16,8 +16,11 @@ import {
   SignalIcon,
   FireIcon,
   XMarkIcon,
+  SpeakerWaveIcon,
+  SpeakerXMarkIcon,
 } from '@heroicons/react/24/outline';
 import type { AgentThoughtLog, CustomAgentDefinition } from '../types/index.js';
+import { soundEngine } from '../services/audio.js';
 import { AgentThoughtFeedSkeleton } from './ui/Skeleton.js';
 import { Pagination } from './ui/Pagination.js';
 
@@ -49,7 +52,19 @@ export const AgentThoughtFeed: React.FC<AgentThoughtFeedProps> = ({
   const [isHoverPauseSuppressed, setIsHoverPauseSuppressed] = useState<boolean>(false);
   const [frozenThoughts, setFrozenThoughts] = useState<AgentThoughtLog[] | null>(null);
   const [nowTime, setNowTime] = useState<number>(Date.now());
+  const [isSoundMuted, setIsSoundMuted] = useState<boolean>(() => soundEngine.getMuted());
   const containerRef = useRef<HTMLDivElement>(null);
+
+  // Synchronize sound mute state across header and thought feed controls
+  useEffect(() => {
+    const handleMuteChange = () => setIsSoundMuted(soundEngine.getMuted());
+    window.addEventListener('dreampulse:audio-mute-changed', handleMuteChange);
+    window.addEventListener('audio_mute_toggled', handleMuteChange);
+    return () => {
+      window.removeEventListener('dreampulse:audio-mute-changed', handleMuteChange);
+      window.removeEventListener('audio_mute_toggled', handleMuteChange);
+    };
+  }, []);
 
   // Update clock every second for live relative timestamps
   useEffect(() => {
@@ -393,6 +408,27 @@ export const AgentThoughtFeed: React.FC<AgentThoughtFeedProps> = ({
           >
             {isPaused ? <PlayIcon className="w-3 h-3" /> : <PauseIcon className="w-3 h-3" />}
             <span>{isPaused ? 'Resume' : 'Pause'}</span>
+          </button>
+
+          <button
+            id="btn-toggle-thought-sound"
+            type="button"
+            onClick={() => {
+              soundEngine.toggleMute();
+            }}
+            title={isSoundMuted ? 'Unmute Swarm Sound FX (M)' : 'Mute Swarm Sound FX (M)'}
+            className={`inline-flex items-center gap-1.5 px-2.5 py-1 text-[11px] font-mono font-medium rounded-md border transition-colors cursor-pointer ${
+              !isSoundMuted
+                ? 'bg-secondary text-[var(--brand-cyan)] border-border'
+                : 'bg-secondary/40 text-muted-foreground border-border/50 hover:text-foreground hover:bg-secondary/60'
+            }`}
+          >
+            {!isSoundMuted ? (
+              <SpeakerWaveIcon className="w-3.5 h-3.5 text-[var(--brand-cyan)]" />
+            ) : (
+              <SpeakerXMarkIcon className="w-3.5 h-3.5 text-muted-foreground" />
+            )}
+            <span className="hidden sm:inline">{!isSoundMuted ? 'Audio ON' : 'Muted'}</span>
           </button>
         </div>
       </div>

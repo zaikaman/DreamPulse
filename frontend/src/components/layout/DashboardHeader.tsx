@@ -57,6 +57,17 @@ const DashboardHeaderComponent: React.FC<DashboardHeaderProps> = ({
   onSwitchNetwork,
 }) => {
   const { isTrader, isOperator } = useUserRole(wallet);
+  const [isMuted, setIsMuted] = React.useState<boolean>(() => soundEngine.getMuted());
+
+  React.useEffect(() => {
+    const handleMuteChange = () => setIsMuted(soundEngine.getMuted());
+    window.addEventListener('dreampulse:audio-mute-changed', handleMuteChange);
+    window.addEventListener('audio_mute_toggled', handleMuteChange);
+    return () => {
+      window.removeEventListener('dreampulse:audio-mute-changed', handleMuteChange);
+      window.removeEventListener('audio_mute_toggled', handleMuteChange);
+    };
+  }, []);
 
   const topTabs = [
     { id: 'Overview', label: 'Overview', Icon: Squares2X2Icon },
@@ -187,12 +198,11 @@ const DashboardHeaderComponent: React.FC<DashboardHeaderProps> = ({
           className="sidebar-toggle-btn"
           onClick={() => {
             soundEngine.toggleMute();
-            window.dispatchEvent(new Event('audio_mute_toggled'));
           }}
-          title={soundEngine.getMuted() ? 'Unmute Sound Effects (M)' : 'Mute Sound Effects (M)'}
+          title={isMuted ? 'Unmute Sound Effects (M)' : 'Mute Sound Effects (M)'}
           style={{ width: '32px', height: '32px' }}
         >
-          {soundEngine.getMuted() ? <SpeakerXMarkIcon className="w-3.5 h-3.5" style={{ color: 'var(--muted-foreground)' }} /> : <SpeakerWaveIcon className="w-3.5 h-3.5" style={{ color: 'var(--brand-cyan)' }} />}
+          {isMuted ? <SpeakerXMarkIcon className="w-3.5 h-3.5" style={{ color: 'var(--muted-foreground)' }} /> : <SpeakerWaveIcon className="w-3.5 h-3.5" style={{ color: 'var(--brand-cyan)' }} />}
         </button>
 
         {/* Session Delegation & Wallet Status Action */}
