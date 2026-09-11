@@ -6,7 +6,7 @@ It exits non-zero on any FAIL. Everything below is what automation
 cannot honestly prove and must be verified by a human per deploy.
 
 ## 1. Automated gates (must all be green)
-- [ ] `npm run verify` passes (typecheck + backend 400+ tests + frontend 80+ tests + prod builds)
+- [ ] `npm run verify` passes (typecheck + backend 420+ tests + frontend 90+ tests + prod builds)
 - [ ] `staging:dry-run` reports STAGING READY (13/13)
 - [ ] CI: `test-and-coverage` green, money-path coverage gate green
 
