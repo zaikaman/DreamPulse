@@ -451,18 +451,19 @@ class TelemetryClient {
         case 'agent_thought':
           const execThought: AgentThoughtLog = {
             id: payload.id || `exec-${now}-${Math.random().toString(36).slice(2, 6)}`,
-            agentType: payload.agent || payload.agentType || 'Volt',
+            agentType: payload.agentType || payload.agent || 'Volt',
             marketId: payload.marketId,
-            triggerEvent: payload.triggerEvent || 'EXECUTION_CONFIRMED',
-            confidence: payload.confidence ?? 0.94,
-            actionTaken: payload.action || 'EXECUTED',
-            reasoningText: payload.thought || 'Trade executed on Somnia Shannon CLOB.',
+            triggerEvent: payload.triggerEvent || (payload.isExecution ? 'EXECUTION_CONFIRMED' : 'ALPHA_SIGNAL'),
+            confidence: typeof payload.confidence === 'number' ? payload.confidence : 0.94,
+            actionTaken: payload.actionTaken || payload.action || 'EXECUTED',
+            reasoningText: payload.reasoningText || payload.thought || 'Evaluated Shannon CLOB market.',
             txHash: payload.txHash,
-            isExecution: payload.isExecution ?? true,
+            isExecution: payload.isExecution ?? Boolean(payload.txHash),
             price: payload.price,
             lotSize: payload.lotSize,
             outcome: payload.outcome,
-            createdAt: new Date(payload.timestamp || now).toISOString(),
+            metadata: payload.metadata,
+            createdAt: payload.createdAt || new Date(payload.timestamp || now).toISOString(),
           };
           this.emit('agent_thought', execThought);
           break;
@@ -470,15 +471,15 @@ class TelemetryClient {
         case 'debug_thought':
           const debugThought: AgentThoughtLog = {
             id: payload.id || `debug-${now}-${Math.random().toString(36).slice(2, 6)}`,
-            agentType: payload.agent || payload.agentType || 'Volt',
+            agentType: payload.agentType || payload.agent || 'Volt',
             marketId: payload.marketId,
             triggerEvent: payload.triggerEvent || 'EVALUATION_TICK',
-            confidence: payload.confidence ?? 0.90,
-            actionTaken: payload.action || 'EVALUATE',
-            reasoningText: payload.thought || 'Continuous depth evaluation.',
+            confidence: typeof payload.confidence === 'number' ? payload.confidence : 0.90,
+            actionTaken: payload.actionTaken || payload.action || 'EVALUATE',
+            reasoningText: payload.reasoningText || payload.thought || 'Continuous depth evaluation.',
             isExecution: false,
             metadata: payload.metadata,
-            createdAt: new Date(payload.timestamp || now).toISOString(),
+            createdAt: payload.createdAt || new Date(payload.timestamp || now).toISOString(),
           };
           this.emit('debug_thought', debugThought);
           break;

@@ -880,31 +880,46 @@ export class TelemetryWebSocketServer {
    */
   public broadcastAgentThought(thought: {
     id?: string;
-    agent: string;
+    agent?: string;
+    agentType?: string;
     marketId?: string;
     confidence?: number;
-    action: string;
-    thought: string;
+    action?: string;
+    actionTaken?: string;
+    thought?: string;
+    reasoningText?: string;
     txHash?: string;
     price?: number;
     lotSize?: number;
     outcome?: string;
     isExecution?: boolean;
     timestamp?: number;
+    triggerEvent?: string;
+    metadata?: Record<string, unknown>;
+    createdAt?: string;
   }): void {
+    const agentName = String(thought.agentType || thought.agent || 'Volt');
+    const actionName = String(thought.actionTaken || thought.action || 'EXECUTED');
+    const reasoning = String(thought.reasoningText || thought.thought || 'Evaluated Shannon CLOB market.');
+    const isExec = thought.isExecution ?? Boolean(thought.txHash);
+    const trigger = thought.triggerEvent || (isExec ? 'ORDER_EXECUTION' : 'ALPHA_SIGNAL');
+    const ts = thought.timestamp || (thought.createdAt ? new Date(thought.createdAt).getTime() : Date.now());
+    const createdAtIso = thought.createdAt || new Date(ts).toISOString();
+
     const logItem: AgentLogItem = {
       id: thought.id || crypto.randomUUID(),
-      agentType: thought.agent,
+      agentType: agentName,
       marketId: thought.marketId,
-      triggerEvent: thought.isExecution ? 'ORDER_EXECUTION' : 'ALPHA_SIGNAL',
-      confidence: thought.confidence,
-      actionTaken: thought.action,
-      reasoningText: thought.thought,
+      triggerEvent: trigger,
+      confidence: typeof thought.confidence === 'number' ? thought.confidence : 0.94,
+      actionTaken: actionName,
+      reasoningText: reasoning,
       txHash: thought.txHash,
       price: thought.price,
       lotSize: thought.lotSize,
       outcome: thought.outcome,
-      createdAt: new Date(thought.timestamp || Date.now()).toISOString(),
+      metadata: thought.metadata,
+      createdAt: createdAtIso,
     };
     this.recentAgentLogs.unshift(logItem);
     if (this.recentAgentLogs.length > 500) {
@@ -926,11 +941,14 @@ export class TelemetryWebSocketServer {
             reasoning_text: logItem.reasoningText,
             metadata: {
               ...thought,
+              agentType: agentName,
+              actionTaken: actionName,
+              reasoningText: reasoning,
               txHash: logItem.txHash,
               price: logItem.price,
               lotSize: logItem.lotSize,
               outcome: logItem.outcome,
-              isExecution: logItem.isExecution ?? true,
+              isExecution: isExec,
             },
             created_at: logItem.createdAt,
           });
@@ -943,18 +961,33 @@ export class TelemetryWebSocketServer {
 
     const payloadString = JSON.stringify({
       event: 'agent_thought',
-      timestamp: thought.timestamp || Date.now(),
-      isExecution: thought.isExecution ?? true,
-      ...thought,
+      timestamp: ts,
+      createdAt: createdAtIso,
+      isExecution: isExec,
+      id: logItem.id,
+      agent: agentName,
+      agentType: agentName,
+      marketId: logItem.marketId,
+      confidence: logItem.confidence,
+      action: actionName,
+      actionTaken: actionName,
+      thought: reasoning,
+      reasoningText: reasoning,
+      txHash: logItem.txHash,
+      price: logItem.price,
+      lotSize: logItem.lotSize,
+      outcome: logItem.outcome,
+      metadata: logItem.metadata,
     });
 
+    const agentLower = agentName.toLowerCase();
     for (const [, sub] of this.clients) {
       if (
         sub.ws.readyState === WebSocket.OPEN &&
         sub.channels.has('agent_thoughts') &&
         (sub.agentTypes.size === 0 ||
-          thought.agent.toLowerCase() === 'custom' ||
-          Array.from(sub.agentTypes).some((a) => a.toLowerCase() === thought.agent.toLowerCase()))
+          agentLower === 'custom' ||
+          Array.from(sub.agentTypes).some((a) => a.toLowerCase() === agentLower))
       ) {
         this.safeSend(sub.ws, payloadString);
       }
@@ -966,26 +999,37 @@ export class TelemetryWebSocketServer {
    */
   public broadcastDebugThought(thought: {
     id?: string;
-    agent: string;
+    agent?: string;
+    agentType?: string;
     marketId?: string;
     confidence?: number;
-    action: string;
-    thought: string;
+    action?: string;
+    actionTaken?: string;
+    thought?: string;
+    reasoningText?: string;
     triggerEvent?: string;
     metadata?: Record<string, unknown>;
     isExecution?: boolean;
     timestamp?: number;
+    createdAt?: string;
   }): void {
+    const agentName = String(thought.agentType || thought.agent || 'Volt');
+    const actionName = String(thought.actionTaken || thought.action || 'EVALUATE');
+    const reasoning = String(thought.reasoningText || thought.thought || 'Continuous depth evaluation.');
+    const trigger = thought.triggerEvent || 'ALPHA_SIGNAL';
+    const ts = thought.timestamp || (thought.createdAt ? new Date(thought.createdAt).getTime() : Date.now());
+    const createdAtIso = thought.createdAt || new Date(ts).toISOString();
+
     const logItem: AgentLogItem = {
       id: thought.id || crypto.randomUUID(),
-      agentType: thought.agent,
+      agentType: agentName,
       marketId: thought.marketId,
-      triggerEvent: thought.triggerEvent || 'ALPHA_SIGNAL',
-      confidence: thought.confidence,
-      actionTaken: thought.action,
-      reasoningText: thought.thought,
+      triggerEvent: trigger,
+      confidence: typeof thought.confidence === 'number' ? thought.confidence : 0.90,
+      actionTaken: actionName,
+      reasoningText: reasoning,
       metadata: thought.metadata,
-      createdAt: new Date(thought.timestamp || Date.now()).toISOString(),
+      createdAt: createdAtIso,
     };
     this.recentAgentLogs.unshift(logItem);
     if (this.recentAgentLogs.length > 500) {
@@ -994,18 +1038,29 @@ export class TelemetryWebSocketServer {
 
     const payloadString = JSON.stringify({
       event: 'debug_thought',
-      timestamp: thought.timestamp || Date.now(),
+      timestamp: ts,
+      createdAt: createdAtIso,
       isExecution: false,
-      ...thought,
+      id: logItem.id,
+      agent: agentName,
+      agentType: agentName,
+      marketId: logItem.marketId,
+      confidence: logItem.confidence,
+      action: actionName,
+      actionTaken: actionName,
+      thought: reasoning,
+      reasoningText: reasoning,
+      metadata: logItem.metadata,
     });
 
+    const agentLower = agentName.toLowerCase();
     for (const [, sub] of this.clients) {
       if (
         sub.ws.readyState === WebSocket.OPEN &&
         sub.channels.has('debug_thoughts') &&
         (sub.agentTypes.size === 0 ||
-          thought.agent.toLowerCase() === 'custom' ||
-          Array.from(sub.agentTypes).some((a) => a.toLowerCase() === thought.agent.toLowerCase()))
+          agentLower === 'custom' ||
+          Array.from(sub.agentTypes).some((a) => a.toLowerCase() === agentLower))
       ) {
         this.safeSend(sub.ws, payloadString);
       }

@@ -121,7 +121,7 @@ export class MultiAgentSwarmRunner {
         this.lastThoughtTimes.set(agentType, now);
         this.lastThoughtTexts.set(agentType, thought.reasoningText);
 
-        telemetryWsGateway.broadcastDebugThought({
+        const thoughtPayload = {
           id: thought.id,
           agent: thought.agentType,
           marketId: thought.marketId,
@@ -132,7 +132,10 @@ export class MultiAgentSwarmRunner {
           metadata: thought.metadata,
           isExecution: false,
           timestamp: now,
-        });
+        };
+
+        telemetryWsGateway.broadcastAgentThought(thoughtPayload);
+        telemetryWsGateway.broadcastDebugThought(thoughtPayload);
       });
     });
   }

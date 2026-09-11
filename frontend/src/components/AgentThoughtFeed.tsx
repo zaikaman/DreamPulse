@@ -64,13 +64,18 @@ export const AgentThoughtFeed: React.FC<AgentThoughtFeedProps> = ({
   // Live pool of thoughts from WebSocket stream
   const liveSourceList = useMemo(() => {
     if (selectedFilter === 'DEBUG_TRACE') {
-      return debugThoughts;
+      return debugThoughts.length > 0 ? debugThoughts : thoughts.filter((t) => !t.isExecution);
     }
-    if (isDebugEnabled) {
-      const combined = [...thoughts, ...debugThoughts];
-      return combined.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+    const combined = isDebugEnabled ? [...thoughts, ...debugThoughts] : thoughts;
+    const seen = new Set<string>();
+    const unique: AgentThoughtLog[] = [];
+    for (const item of combined) {
+      if (!seen.has(item.id)) {
+        seen.add(item.id);
+        unique.push(item);
+      }
     }
-    return thoughts;
+    return unique.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
   }, [thoughts, debugThoughts, isDebugEnabled, selectedFilter]);
 
   // When paused, freeze the displayed pool snapshot so new stream events do not push rows downward

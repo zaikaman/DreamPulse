@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import type { AgentThoughtLog } from '../types/index.js';
 import { api } from '../services/api.js';
+import { subscribeToTable, removeRealtimeChannel } from '../services/supabase.js';
 import {
   telemetryClient,
   type MarketTickData,
@@ -66,63 +67,114 @@ export function useTelemetry(userAddress?: string) {
     });
   }, []);
 
-  // Hydrate initial historical thoughts & execution reasoning from REST on mount
+  // Hydrate initial historical thoughts & maintain real-time sync via Supabase Realtime + polling heartbeat
   useEffect(() => {
     let isMounted = true;
 
-    const loadInitialThoughts = async () => {
+    const parseLogItem = (raw: any): AgentThoughtLog => {
+      const meta = raw.metadata || {};
+      const tx = raw.txHash || raw.tx_hash || meta.txHash;
+      const isExec = raw.isExecution ?? (meta.isExecution ?? Boolean(tx));
+      const agent = raw.agentType || raw.agent_type || raw.agent || 'Volt';
+      const action = raw.actionTaken || raw.action_taken || raw.action || (isExec ? 'EXECUTED' : 'ALPHA_SIGNAL');
+      const reasoning = raw.reasoningText || raw.reasoning_text || raw.thought || (meta.rationale ?? 'Evaluated Shannon CLOB market.');
+
+      return {
+        id: String(raw.id || `log-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`),
+        agentType: agent,
+        marketId: raw.marketId || raw.market_id || meta.marketId,
+        triggerEvent: raw.triggerEvent || raw.trigger_event || (isExec ? 'EXECUTION_CONFIRMED' : 'ALPHA_SIGNAL'),
+        confidence: typeof raw.confidence === 'number' ? raw.confidence : (meta.confidence ?? 0.94),
+        actionTaken: action,
+        reasoningText: reasoning,
+        txHash: tx,
+        isExecution: isExec,
+        price: raw.price ?? meta.price,
+        lotSize: raw.lotSize ?? meta.lotSize,
+        outcome: raw.outcome ?? meta.outcome,
+        metadata: meta,
+        createdAt: raw.createdAt || raw.created_at || new Date().toISOString(),
+      };
+    };
+
+    const loadThoughts = async () => {
       try {
         const res = await api.getAgentLogs(undefined, 100);
         if (!isMounted || !res?.logs || !Array.isArray(res.logs)) return;
 
-        const executions: AgentThoughtLog[] = [];
-        const debugs: AgentThoughtLog[] = [];
-
-        for (const log of res.logs) {
-          const item: AgentThoughtLog = {
-            id: log.id,
-            agentType: log.agentType || 'Volt',
-            marketId: log.marketId,
-            triggerEvent: log.triggerEvent || 'EXECUTION_CONFIRMED',
-            confidence: typeof log.confidence === 'number' ? log.confidence : 0.94,
-            actionTaken: log.actionTaken || 'EXECUTED',
-            reasoningText: log.reasoningText || 'Evaluated Shannon CLOB market.',
-            txHash: log.txHash || (log.metadata as any)?.txHash,
-            isExecution: log.isExecution ?? Boolean(log.txHash || (log.metadata as any)?.txHash),
-            price: log.price ?? (log.metadata as any)?.price,
-            lotSize: log.lotSize ?? (log.metadata as any)?.lotSize,
-            outcome: log.outcome ?? (log.metadata as any)?.outcome,
-            metadata: log.metadata,
-            createdAt: log.createdAt || new Date().toISOString(),
-          };
-
-          if (item.isExecution || item.txHash) {
-            executions.push(item);
-          } else {
-            debugs.push(item);
-          }
-        }
+        const allParsed = res.logs.map(parseLogItem);
+        const sorted = allParsed.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
 
         setAgentThoughts((prev) => {
-          const existingIds = new Set(prev.map((t) => t.id));
-          const newItems = executions.filter((t) => !existingIds.has(t.id));
-          return [...prev, ...newItems].slice(0, 100);
+          const map = new Map<string, AgentThoughtLog>();
+          // Existing newest stream items take precedence
+          for (const item of prev) {
+            map.set(item.id, item);
+          }
+          for (const item of sorted) {
+            if (!map.has(item.id)) {
+              map.set(item.id, item);
+            }
+          }
+          return Array.from(map.values())
+            .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
+            .slice(0, 100);
         });
 
+        const debugOnly = sorted.filter((t) => !t.isExecution);
         setDebugThoughts((prev) => {
-          const existingIds = new Set(prev.map((t) => t.id));
-          const newItems = debugs.filter((t) => !existingIds.has(t.id));
-          return [...prev, ...newItems].slice(0, 100);
+          const map = new Map<string, AgentThoughtLog>();
+          for (const item of prev) {
+            map.set(item.id, item);
+          }
+          for (const item of debugOnly) {
+            if (!map.has(item.id)) {
+              map.set(item.id, item);
+            }
+          }
+          return Array.from(map.values())
+            .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
+            .slice(0, 100);
         });
       } catch (err) {
-        console.warn('[useTelemetry] Non-critical: could not pre-hydrate thoughts:', err);
+        console.warn('[useTelemetry] Non-critical: could not sync thoughts:', err);
       }
     };
 
-    loadInitialThoughts();
+    // Initial load
+    loadThoughts();
+
+    // Redundant Supabase Realtime channel for instant DB push notifications
+    const realtimeChannel = subscribeToTable('agent_logs', (newRow) => {
+      if (!isMounted || !newRow) return;
+      const item = parseLogItem(newRow);
+
+      setAgentThoughts((prev) => {
+        const isDup = prev.slice(0, 15).some((t) => (item.txHash && t.txHash === item.txHash) || t.id === item.id);
+        if (isDup) return prev;
+        return [item, ...prev.slice(0, 99)];
+      });
+
+      if (!item.isExecution) {
+        setDebugThoughts((prev) => {
+          const isDup = prev.slice(0, 15).some((t) => t.id === item.id);
+          if (isDup) return prev;
+          return [item, ...prev.slice(0, 99)];
+        });
+      }
+    });
+
+    // 4-second polling heartbeat as bulletproof fallback when tab is visible
+    const interval = setInterval(() => {
+      if (!isMounted) return;
+      if (typeof document !== 'undefined' && document.hidden) return;
+      loadThoughts();
+    }, 4000);
 
     return () => {
       isMounted = false;
+      clearInterval(interval);
+      removeRealtimeChannel(realtimeChannel);
     };
   }, []);
 
